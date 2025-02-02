@@ -1,20 +1,27 @@
 # ROS Bag Filter Tool
 
-![splash screen](screenshot-splash.png)
-![tui](screenshot-main.png)
-
 A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
 >inspired by [rosbag_editor](https://github.com/klekkala/rosbag_editor)
 
-## Overview
 
-- Filter ROS bag files using topic whitelists or manually select topics
+![splash screen](screenshot-splash.png)
+![tui](screenshot-main.png)
+
+
+
+## Key Features
+
 - High-performance C++ processing core
-- Python bindings via pybind11
 - Interactive TUI for easy operation
 - Command-line interface for automation
+- Filter ROS bag files 
+  - [ ] with whitelists 
+  - [ ] with manually selected topics
+  - [ ] by time range
 - Docker support for cross-platform usage
+- [ ] Asynchronous processing support
+- [ ] Batch processing in TUI
 
 ## Getting Started
 
