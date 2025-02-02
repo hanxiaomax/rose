@@ -234,7 +234,7 @@ class SplashScreen(Screen):
         yield Vertical(
             Static(txt2art, id="logo"),
             Static("Yet another ros bag editor", id="subtitle"),
-            Static("Press any key to continue", id="prompt"),
+            Static("Press H to continue", id="prompt"),
             id="splash-content"
         )
 
