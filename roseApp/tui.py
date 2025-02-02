@@ -128,14 +128,7 @@ class BagSelector(DirectoryTree):
         return label
 
 
-    def load_bag(self, path: Path) -> 'tuple[list, list, tuple[float, float]]':
-        """Load bag file and return topics, connections and time range"""
-        try:
-            #lower level C++ code which is synchronous
-            return Operation.load_bag(str(path))
-        except Exception as e:
-            # self.app.query_one("#status").update(f"Error loading bag: {str(e)}")
-            return [], [], (0.0, 0.0)
+
 
     @work
     async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
@@ -159,15 +152,22 @@ class BagSelector(DirectoryTree):
             self.app.selected_bag = str(path)
             
             # Load bag and update UI
-            topics, connections, (start_time, end_time) = self.load_bag(path)
-            
+            try:
+                topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
+            except Exception as e:
+                status.update_status(f"Error loading bag file: {str(e)}", "error")
+                return
+
+            start_str = Operation.to_datetime(start_time)
+            end_str = Operation.to_datetime(end_time)
+   
             # Update TopicTree
             topic_tree = self.app.query_one(TopicTree)
             topic_tree.set_topics(topics)
             
             # Update ControlPanel
             control_panel = self.app.query_one(ControlPanel)
-            control_panel.set_time_range(start_time, end_time)
+            control_panel.set_time_range(start_str, end_str)
             control_panel.set_output_file(f"{path.stem}_filtered.bag")
             
             # 加载bag后应用白名单
@@ -209,18 +209,23 @@ class ControlPanel(Container):
     
     def get_time_range(self) -> 'tuple[float, float]':
         """Get the current time range from inputs, converting to milliseconds"""
-        start_time = float(self.query_one("#start-time").value or "0")
-        end_time = float(self.query_one("#end-time").value or "0")
+        start_time = Operation.from_datetime(self.query_one("#start-time").value)
+        end_time = Operation.from_datetime(self.query_one("#end-time").value)
+
+        # make sure start and end are within range of output bag file
+        start_time = (start_time[0] - 1, start_time[1])
+        end_time = (end_time[0] + 1, end_time[1]) 
+        
         return start_time, end_time
     
     def get_output_file(self) -> str:
         """Get the output file name"""
         return self.query_one("#output-file").value or "output.bag"
     
-    def set_time_range(self, start_time: float, end_time: float) -> None:
+    def set_time_range(self, start_time_st: str, end_time_str: str) -> None:
         """Set the time range in inputs, converting from milliseconds to seconds"""
-        self.query_one("#start-time").value = str(start_time / 1000)
-        self.query_one("#end-time").value = str(end_time / 1000)
+        self.query_one("#start-time").value = start_time_st
+        self.query_one("#end-time").value = end_time_str
 
     def set_output_file(self, output_file: str) -> None:
         """Set the output file name"""
@@ -347,7 +352,7 @@ class MainScreen(Screen):
             control_panel = self.query_one(ControlPanel)
             output_file = control_panel.get_output_file()
             start_time, end_time = control_panel.get_time_range()
-            time_range = ((int(start_time*1000),0), (int(end_time*1000),0))
+            time_range = (start_time, end_time)
             topic_tree = self.query_one(TopicTree)
             selected_topics = topic_tree.get_selected_topics()
             

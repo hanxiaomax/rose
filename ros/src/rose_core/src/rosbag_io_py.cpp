@@ -24,8 +24,13 @@ PYBIND11_MODULE(rosbag_io_py, m)
               "Get all topic-to-datatype mappings from the loaded bag")
          .def("get_topics", &rosbag_io::get_topics,
               "Get list of all topics in the loaded bag")
-         .def("get_time_range", &rosbag_io::get_time_range,
-              "Get the time range of messages in the bag")
+         .def("get_time_range", [](rosbag_io &self)
+              {
+            auto time_range = self.get_time_range();
+            return py::make_tuple(
+                py::make_tuple(time_range.first.sec, time_range.first.nsec),
+                py::make_tuple(time_range.second.sec, time_range.second.nsec)
+            ); }, "Get the time range of messages in the bag as a tuple of (start_time, end_time), where each time is a tuple of (seconds, nanoseconds)")
          .def("dump", [](rosbag_io &self, const std::string &output_bag, const std::vector<std::string> &topics, const py::tuple &time_range)
               {
             if (time_range.size() != 2) {

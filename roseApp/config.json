@@ -1,5 +1,5 @@
 {
-    "show_splash_screen": true,
+    "show_splash_screen": false,
     "whitelists": {
         "demo": "./whitelists/example.txt",
         "radar": "./whitelists/radar.txt",

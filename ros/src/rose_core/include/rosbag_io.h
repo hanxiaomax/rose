@@ -52,9 +52,9 @@ public:
   /**
    * @brief Get the time range of messages in the loaded bag
    *
-   * @return std::pair<std::time_t, std::time_t> Pair of (start_time, end_time) in Unix timestamp
+   * @return std::pair<ros::Time, ros::Time> Pair of (start_time, end_time) in Unix timestamp
    */
-  std::pair<std::time_t, std::time_t> get_time_range();
+  std::pair<ros::Time, ros::Time> get_time_range();
 
   /**
    * @brief Export selected topics to a new bag file with optional time range filtering

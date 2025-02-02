@@ -61,3 +61,43 @@ class Operation():
             return "\n".join(result)
         except Exception as e:
             raise Exception(f"Error inspecting bag file: {e}")
+
+    @staticmethod
+    def to_datetime(time_tuple):
+        """Convert (seconds, nanoseconds) tuple to [YY/MM/DD HH:MM:SS] formatted string"""
+        if not time_tuple or len(time_tuple) != 2:
+            return "N.A"
+        
+        seconds, nanoseconds = time_tuple
+        total_seconds = seconds + nanoseconds / 1e9
+        return time.strftime("%y/%m/%d %H:%M:%S", time.localtime(total_seconds))
+
+    @staticmethod
+    def from_datetime(time_str):
+        """Convert [YY/MM/DD HH:MM:SS] formatted string to (seconds, nanoseconds) tuple"""
+        try:
+            # Parse time string to time struct
+            time_struct = time.strptime(time_str, "%y/%m/%d %H:%M:%S")
+            # Convert to Unix timestamp
+            total_seconds = time.mktime(time_struct)
+            # Return (seconds, nanoseconds) tuple
+            return (int(total_seconds), 0)
+        except ValueError:
+            raise ValueError(f"Invalid time format: {time_str}. Expected format: YY/MM/DD HH:MM:SS")
+
+    @staticmethod
+    def create_time_range(start_time_str, end_time_str):
+        """Create time range from start and end time strings"""
+        start_time = Operation.from_datetime(start_time_str)
+        end_time = Operation.from_datetime(end_time_str)
+        return (start_time, end_time)
+
+    @staticmethod
+    def get_time_range(start_time_str, end_time_str):
+        """Convert input time strings to ROS formatted time range"""
+        try:
+            start_time = Operation.from_datetime(start_time_str)
+            end_time = Operation.from_datetime(end_time_str)
+            return (start_time, end_time)
+        except ValueError as e:
+            raise ValueError(f"Invalid time range format: {e}")

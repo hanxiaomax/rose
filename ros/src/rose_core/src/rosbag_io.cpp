@@ -58,17 +58,17 @@ std::vector<std::string> rosbag_io::get_topics() const
     return topics;
 }
 
-std::pair<std::time_t, std::time_t> rosbag_io::get_time_range()
+std::pair<ros::Time, ros::Time> rosbag_io::get_time_range()
 {
     if (_view->size() == 0)
     {
-        return {0, 0};
+        return {ros::Time(0), ros::Time(0)};
     }
 
     ros::Time start_time = _view->getBeginTime();
     ros::Time end_time = _view->getEndTime();
 
-    return {start_time.sec, end_time.sec};
+    return {start_time, end_time};
 }
 
 void rosbag_io::dump(const std::string &output_bag,
