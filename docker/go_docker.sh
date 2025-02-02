@@ -1,12 +1,8 @@
 #!/bin/bash
-
-# 获取当前目录绝对路径
-CURRENT_DIR=$(pwd)
-
-# 运行容器并挂载当前目录
+CURRENT_DIR=$(dirname "$(pwd)")
 docker run -it --rm \
     -v "$CURRENT_DIR":/workspace \
     -w /workspace \
-    -e PYTHONPATH=devel/lib:$PYTHONPATH \
+    -p 127.0.0.1:8000:8000 \
     $(env | grep -E '^(ROS_|PYTHON)' | sed 's/^/-e /') \
     rose:latest
