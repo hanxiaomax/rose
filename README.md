@@ -24,6 +24,10 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 - [ ] Fuzzy search topic in TUI
 - [ ] Message view in TUI
 
+## TODOs
+- [ ] Fix theme color
+- [ ] Support dynamic file/whitelist refresh in TUI 
+
 ## Getting Started
 
 ### Prerequisites
