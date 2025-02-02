@@ -202,7 +202,7 @@ class ControlPanel(Container):
                     yield Input(placeholder="End Time", id="end-time", classes="time-input")
                 with Vertical(id="output-file-container"):
                     yield Label("Output File:")
-                    yield Input(placeholder="Output File", id="output-file", classes="file-input")
+                    yield Input(placeholder="", id="output-file", classes="file-input")
             with Horizontal():
                 with Container(id="add-task-btn-container"):
                     yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
