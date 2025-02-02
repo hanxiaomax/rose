@@ -1,0 +1,4 @@
+# Automatically generated whitelist
+/radar/points
+/radar/range
+/radar/tracks

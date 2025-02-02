@@ -1,0 +1,31 @@
+# ROS workspace
+build/
+devel/
+install/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# Other
+*.swp
+*.swo
+*.log
+*.bak
+*~
+*.bag
+.cursor/rules/rules.mdc
+.DS_Store

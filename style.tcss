@@ -1,0 +1,243 @@
+Screen {
+    layout: grid;
+    grid-size: 1;
+    grid-rows: 1fr;
+}
+
+
+
+#bag-filter-switch > .switch--slider {
+    background: dodgerblue;
+    color: $warning;
+    border: solid $secondary;
+}
+
+
+#status-bar {
+    dock: bottom;
+    height: 2;
+    margin: 0;
+    padding: 0 1;
+}
+
+#status {
+    width: 100%;
+    height: 1;
+    content-align: left middle;
+    padding: 0 1;
+    color: $text;
+}
+
+#status.success {
+    color: green;
+}
+
+#status.error {
+    color: $text-error;
+}
+
+#status.warning {
+    color: $text-warning;
+}
+
+#left-column {
+    width: 30%;
+    height: 100%;
+    dock: left;
+}
+
+#main-area {
+    width: 100%;
+    height: 100%;
+}
+
+
+
+DirectoryTree > .tree--cursor {
+    background: $primary;
+    color:$secondary
+}
+
+DirectoryTree > .tree--guides {
+    color: $accent;
+}
+
+BagSelector {
+    border: solid $secondary;
+    background: $panel;
+    padding: 1; 
+    height: 100%;
+}
+
+
+#topics-area {
+    height: 52%;
+}
+
+TopicTree {
+    border: solid $secondary;
+    background: $panel;
+    padding: 1; 
+}
+
+#topics-container {
+    width: 60%;
+    background: $panel;
+}
+
+#right-panel {
+    width: 40%;
+    border: solid $secondary;
+    background: $panel;
+    padding: 1;
+}
+
+ControlPanel {
+    height: 18%;
+    width: 100%;
+    layout: horizontal;
+    padding: 1;
+}
+
+ControlPanel .time-input {
+    width: 15%;
+    margin: 0 1;
+    height: 5vh;
+    border: none;
+}
+
+ControlPanel .file-input {
+    width: 100%;
+    margin: 0 1;
+    height: 5vh;
+    border: none;
+}
+
+#add-task-btn-container {
+    align: right bottom;
+}
+
+ControlPanel .task-btn {
+    width: 15%;
+    margin: 0 1;
+    min-width: 10;
+    border: none;
+    align: center middle ;
+}
+
+
+
+
+
+#main-container {
+    layout: horizontal;
+    background: $surface;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#right-top {
+    height: 40%;
+    layout: horizontal;
+}
+
+#right-top-left, #right-top-right {
+    width: 40%;
+    height: 100%;
+    border: solid $primary;
+    margin: 1;
+}
+
+#right-middle {
+    height: 20%;
+    border: solid $warning;
+    margin: 1;
+}
+
+#right-bottom {
+    height: 30%;
+    layout: horizontal;
+}
+
+#right-bottom-left, #right-bottom-right {
+    width: 50%;
+    height: 100%;
+    border: solid $primary;
+    margin: 1;
+}
+
+
+#splash-content {
+    align: center middle;
+}
+
+#logo {
+    color: $warning;
+    content-align-horizontal: center;
+}
+
+#subtitle {
+    background: $primary;
+    color: $warning;
+    content-align-horizontal: center;
+}
+
+#prompt {
+    dock: bottom;
+    content-align-horizontal: center;
+    color: $warning;
+}
+
+
+
+TaskTable {
+    height: 100%;
+    width: 100%;
+    border: solid $secondary;
+    background: $panel;
+}
+
+
+
+TaskTable.has-header > .datatable--header {
+    background: $primary;
+    color: $text;
+}
+
+WhitelistScreen {
+    align: center middle;
+}
+
+#whitelist-container {
+    width: 60;
+    height: auto;
+    border: solid green;
+    padding: 1;
+}
+
+#whitelist-header {
+    content-align: center middle;
+    height: 3;
+    margin-bottom: 1;
+}
+
+#whitelist-list {
+    width: 100%;
+    height: auto;
+    margin: 1;
+}
+
+.whitelist-btn {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#back-btn-container {
+    align: right bottom;
+}
+
+#back-btn {
+    margin-top: 2;
+}
+
