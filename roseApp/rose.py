@@ -23,7 +23,7 @@ def tui():
 @cli.command()
 @click.argument('input_bag')
 @click.argument('output_bag')
-@click.option('--whitelist', default='src/rose_core/src/topic_whitelist.txt',
+@click.option('--whitelist', default='../roseApp/whitelists/example.txt',
               help='Path to topic whitelist file')
 def filter(input_bag, output_bag, whitelist):
     """Filter ROS bag by topic whitelist"""

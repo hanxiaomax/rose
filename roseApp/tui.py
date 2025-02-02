@@ -316,7 +316,7 @@ class MainScreen(Screen):
         with Container():
             with Vertical(id="left-column"):
                 with Container(id="file-explorer"):
-                    yield BagSelector("../workspace")
+                    yield BagSelector(str(Path(__file__).parent))
 
             with Vertical(id="main-area"):
                 with Horizontal(id="topics-area"):
