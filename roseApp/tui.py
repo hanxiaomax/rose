@@ -191,12 +191,15 @@ class ControlPanel(Container):
         """Create child widgets for the control panel"""
         with Vertical():
             with Horizontal():
-                yield Label("From:")
-                yield Input(placeholder="Start Time", id="start-time", classes="time-input")
-                yield Label("To:")
-                yield Input(placeholder="End Time", id="end-time", classes="time-input")
-                yield Label("Output File:")
-                yield Input(placeholder="Output File", id="output-file", classes="file-input")
+                with Vertical(id="time-range-container1"):
+                    yield Label("From:")
+                    yield Input(placeholder="Start Time", id="start-time", classes="time-input")
+                with Vertical(id="time-range-container2"):
+                    yield Label("To:")
+                    yield Input(placeholder="End Time", id="end-time", classes="time-input")
+                with Vertical(id="output-file-container"):
+                    yield Label("Output File:")
+                    yield Input(placeholder="Output File", id="output-file", classes="file-input")
             with Horizontal():
                 with Container(id="add-task-btn-container"):
                     yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")

@@ -99,8 +99,15 @@ ControlPanel {
     padding: 1;
 }
 
+#time-range-container1 {
+    width: 25%;
+}
+
+#time-range-container2 {
+    width: 25%;
+}
 ControlPanel .time-input {
-    width: 15%;
+    width: 100%;
     margin: 0 1;
     height: 5vh;
     border: none;
