@@ -4,14 +4,11 @@ Screen {
     grid-rows: 1fr;
 }
 
-
-
 #bag-filter-switch > .switch--slider {
-    background: dodgerblue;
+    background: $accent;
     color: $warning;
-    border: solid $secondary;
+    border: $border;
 }
-
 
 #status-bar {
     dock: bottom;
@@ -25,19 +22,19 @@ Screen {
     height: 1;
     content-align: left middle;
     padding: 0 1;
-    color: $text;
+    color: $foreground;
 }
 
 #status.success {
-    color: green;
+    color: $success;
 }
 
 #status.error {
-    color: $text-error;
+    color: $error;
 }
 
 #status.warning {
-    color: $text-warning;
+    color: $warning;
 }
 
 #left-column {
@@ -54,8 +51,8 @@ Screen {
 
 
 DirectoryTree > .tree--cursor {
-    background: $primary;
-    color:$secondary
+    background: $block-cursor-background;
+    color: $block-cursor-foreground;
 }
 
 DirectoryTree > .tree--guides {
@@ -63,32 +60,31 @@ DirectoryTree > .tree--guides {
 }
 
 BagSelector {
-    border: solid $secondary;
-    background: $panel;
+    background: $surface;
+    border: $border;
     padding: 1; 
     height: 100%;
 }
-
 
 #topics-area {
     height: 52%;
 }
 
 TopicTree {
-    border: solid $secondary;
-    background: $panel;
+    background: $surface;
+    border: $border;
     padding: 1; 
 }
 
 #topics-container {
     width: 60%;
-    background: $panel;
+    background: $surface;
 }
 
 #right-panel {
     width: 40%;
-    border: solid $secondary;
-    background: $panel;
+    border: $border;
+    background: $surface;
     padding: 1;
 }
 
@@ -138,7 +134,6 @@ ControlPanel .task-btn {
 
 #main-container {
     layout: horizontal;
-    background: $surface;
     height: 100%;
     margin: 0;
     padding: 0;
@@ -152,14 +147,16 @@ ControlPanel .task-btn {
 #right-top-left, #right-top-right {
     width: 40%;
     height: 100%;
-    border: solid $primary;
+    border: $border;
     margin: 1;
+    background: $surface;
 }
 
 #right-middle {
     height: 20%;
-    border: solid $warning;
+    border: $border;
     margin: 1;
+    background: $surface;
 }
 
 #right-bottom {
@@ -170,23 +167,23 @@ ControlPanel .task-btn {
 #right-bottom-left, #right-bottom-right {
     width: 50%;
     height: 100%;
-    border: solid $primary;
+    border: $border;
     margin: 1;
+    background: $surface;
 }
-
 
 #splash-content {
     align: center middle;
 }
 
 #logo {
-    color: $warning;
+    color: $primary;
     content-align-horizontal: center;
 }
 
 #subtitle {
-    background: $primary;
-    color: $warning;
+    background: $surface;
+    color: $accent;
     content-align-horizontal: center;
 }
 
@@ -196,20 +193,17 @@ ControlPanel .task-btn {
     color: $warning;
 }
 
-
-
 TaskTable {
     height: 100%;
     width: 100%;
-    border: solid $secondary;
-    background: $panel;
+    border: $border;
+    background: $surface;
+    color: $foreground;
 }
 
-
-
-TaskTable.has-header > .datatable--header {
-    background: $primary;
-    color: $text;
+TaskTable.has-header  > .datatable--header {
+    background: $primary-darken-2;
+    color: $background;
 }
 
 WhitelistScreen {
@@ -219,14 +213,16 @@ WhitelistScreen {
 #whitelist-container {
     width: 60;
     height: auto;
-    border: solid green;
+    border: $border;
     padding: 1;
+    background: $surface;
 }
 
 #whitelist-header {
     content-align: center middle;
     height: 3;
     margin-bottom: 1;
+    color: $foreground;
 }
 
 #whitelist-list {
@@ -238,6 +234,13 @@ WhitelistScreen {
 .whitelist-btn {
     width: 100%;
     margin-bottom: 1;
+    background: $surface;
+    color: $button-foreground;
+    border: $border;
+}
+
+.whitelist-btn:hover {
+    background: $primary-darken-2;
 }
 
 #back-btn-container {
@@ -246,5 +249,12 @@ WhitelistScreen {
 
 #back-btn {
     margin-top: 2;
+    background: $surface;
+    color: $button-foreground;
+    border: $border;
+}
+
+#back-btn:hover {
+    background: $primary-darken-2;
 }
 
