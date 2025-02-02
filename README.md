@@ -18,7 +18,7 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 - Filter ROS bag files 
   - [X] with whitelists 
   - [X] with manually selected topics
-  - [ ] by time range
+  - [X] by time range (only TUI tested)
 - Docker support for cross-platform usage
 - [ ] Batch processing in TUI
 - [ ] Fuzzy search topic in TUI
