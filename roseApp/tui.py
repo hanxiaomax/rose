@@ -158,8 +158,7 @@ class BagSelector(DirectoryTree):
                 status.update_status(f"Error loading bag file: {str(e)}", "error")
                 return
 
-            start_str = Operation.to_datetime(start_time)
-            end_str = Operation.to_datetime(end_time)
+            
    
             # Update TopicTree
             topic_tree = self.app.query_one(TopicTree)
@@ -167,6 +166,7 @@ class BagSelector(DirectoryTree):
             
             # Update ControlPanel
             control_panel = self.app.query_one(ControlPanel)
+            start_str, end_str = Operation.convert_time_range_to_str(start_time, end_time)
             control_panel.set_time_range(start_str, end_str)
             control_panel.set_output_file(f"{path.stem}_filtered.bag")
             
@@ -207,16 +207,9 @@ class ControlPanel(Container):
         self.query_one("#start-time").value = "N.A"
         self.query_one("#end-time").value = "N.A"
     
-    def get_time_range(self) -> 'tuple[float, float]':
+    def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
-        start_time = Operation.from_datetime(self.query_one("#start-time").value)
-        end_time = Operation.from_datetime(self.query_one("#end-time").value)
-
-        # make sure start and end are within range of output bag file
-        start_time = (start_time[0] - 1, start_time[1])
-        end_time = (end_time[0] + 1, end_time[1]) 
-        
-        return start_time, end_time
+        return self.query_one("#start-time").value, self.query_one("#end-time").value
     
     def get_output_file(self) -> str:
         """Get the output file name"""
@@ -351,8 +344,7 @@ class MainScreen(Screen):
             
             control_panel = self.query_one(ControlPanel)
             output_file = control_panel.get_output_file()
-            start_time, end_time = control_panel.get_time_range()
-            time_range = (start_time, end_time)
+            start_time_str, end_time_str = control_panel.get_time_range()
             topic_tree = self.query_one(TopicTree)
             selected_topics = topic_tree.get_selected_topics()
             
@@ -366,7 +358,7 @@ class MainScreen(Screen):
                     self.app.selected_bag,
                     output_file,
                     selected_topics,
-                    time_range
+                    Operation.convert_time_range_to_tuple(start_time_str, end_time_str)
                 )
                 end_time = time.time()  
                 time_cost = int(end_time - start_time)

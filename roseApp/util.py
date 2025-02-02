@@ -36,6 +36,9 @@ class Operation():
     @staticmethod
     def load_bag(bag_path):
         io = rosbag_io_py.rosbag_io()
+        # TODO: support load with whitelist and time range
+        # in case whitelist or time range is set before loading bag
+        # it betters to load bag partially. dose it make sense?
         io.load(bag_path)
         
         topics = io.get_topics()
@@ -56,7 +59,6 @@ class Operation():
             for topic in topics:
                 result.append("{:<40} {:<30}".format(topic, connections[topic]))
             
-            # start_time, end_time = io.get_time_range()
             result.append(f"\nTime range: {start_time} - {end_time}")
             return "\n".join(result)
         except Exception as e:
@@ -86,18 +88,21 @@ class Operation():
             raise ValueError(f"Invalid time format: {time_str}. Expected format: YY/MM/DD HH:MM:SS")
 
     @staticmethod
-    def create_time_range(start_time_str, end_time_str):
-        """Create time range from start and end time strings"""
-        start_time = Operation.from_datetime(start_time_str)
-        end_time = Operation.from_datetime(end_time_str)
-        return (start_time, end_time)
-
-    @staticmethod
-    def get_time_range(start_time_str, end_time_str):
-        """Convert input time strings to ROS formatted time range"""
+    def convert_time_range_to_tuple(start_time_str: str, end_time_str:str):
+        """Create time range from start and end time strings to tuple"""
         try:
             start_time = Operation.from_datetime(start_time_str)
             end_time = Operation.from_datetime(end_time_str)
+            # make sure start and end are within range of output bag file
+            start_time = (start_time[0] - 1, start_time[1])
+            end_time = (end_time[0] + 1, end_time[1]) 
             return (start_time, end_time)
         except ValueError as e:
             raise ValueError(f"Invalid time range format: {e}")
+        
+    @staticmethod
+    def convert_time_range_to_str(start_time: tuple, end_time: tuple):
+        """Convert time range to string"""
+        start_str = Operation.to_datetime(start_time)
+        end_str = Operation.to_datetime(end_time)
+        return start_str, end_str
