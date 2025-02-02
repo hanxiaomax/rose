@@ -64,11 +64,11 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
    ./build_rosecode.sh
    ```
 
-2. Set up environment:
+2. Set up environment which will make sure rosbag_io_py add to `PYTHONPATH`
    ```bash
    source setup.sh
    ```
-  this will make sure rosbag_io_py add to PYTHONPATH
+  
 
 ## Usage
 
