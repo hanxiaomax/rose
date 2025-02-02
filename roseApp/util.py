@@ -1,6 +1,7 @@
 import rosbag_io_py
 import time
 
+
 class Operation():
 
     @staticmethod
@@ -12,21 +13,24 @@ class Operation():
                 if line.strip() and not line.strip().startswith('#'):
                     topics.append(line.strip())
             return topics
+        
     @staticmethod
-    def filter_bag(input_bag, output_bag, whitelist):
+    def filter_bag(input_bag, output_bag, whitelist, time_range):
         """Filter rosbag using C++ interface"""
         try:
             start_time = time.time()
             
             io = rosbag_io_py.rosbag_io()
-            io.load(input_bag, whitelist)
-            io.dump(output_bag, whitelist)
+            ## TODO: support load with whitelist and time range
+            io.load(input_bag)
+            io.dump(output_bag, whitelist,time_range)
             
             end_time = time.time()
             elapsed = end_time - start_time
             mins, secs = divmod(elapsed, 60)
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
         except Exception as e:
+            print(e)
             raise Exception(f"Error filtering bag: {e}")
 
     @staticmethod

@@ -347,7 +347,7 @@ class MainScreen(Screen):
             control_panel = self.query_one(ControlPanel)
             output_file = control_panel.get_output_file()
             start_time, end_time = control_panel.get_time_range()
-            
+            time_range = ((int(start_time*1000),0), (int(end_time*1000),0))
             topic_tree = self.query_one(TopicTree)
             selected_topics = topic_tree.get_selected_topics()
             
@@ -357,10 +357,11 @@ class MainScreen(Screen):
             
             try:
                 start_time = time.time()  
-                result = Operation.filter_bag(
+                Operation.filter_bag(
                     self.app.selected_bag,
                     output_file,
-                    selected_topics
+                    selected_topics,
+                    time_range
                 )
                 end_time = time.time()  
                 time_cost = int(end_time - start_time)

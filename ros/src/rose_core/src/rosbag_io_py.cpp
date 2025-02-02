@@ -26,9 +26,21 @@ PYBIND11_MODULE(rosbag_io_py, m)
               "Get list of all topics in the loaded bag")
          .def("get_time_range", &rosbag_io::get_time_range,
               "Get the time range of messages in the bag")
-         .def("dump", py::overload_cast<const std::string &, const std::vector<std::string> &, const std::pair<ros::Time, ros::Time> &>(&rosbag_io::dump),
-              "Export selected topics to a new bag file with time range filtering",
-              py::arg("output_bag"),
-              py::arg("topics"),
-              py::arg("time_range"));
+         .def("dump", [](rosbag_io &self, const std::string &output_bag, const std::vector<std::string> &topics, const py::tuple &time_range)
+              {
+            if (time_range.size() != 2) {
+                throw py::value_error("time_range must be a tuple of two elements (start_time, end_time)");
+            }
+
+            py::tuple start_time = time_range[0].cast<py::tuple>();
+            py::tuple end_time = time_range[1].cast<py::tuple>();
+
+            if (start_time.size() != 2 || end_time.size() != 2) {
+                throw py::value_error("Each time in time_range must be a tuple of two elements (seconds, nanoseconds)");
+            }
+
+            ros::Time start(start_time[0].cast<int32_t>(), start_time[1].cast<int32_t>());
+            ros::Time end(end_time[0].cast<int32_t>(), end_time[1].cast<int32_t>());
+
+            self.dump(output_bag, topics, std::make_pair(start, end)); }, "Export selected topics to a new bag file with time range filtering", py::arg("output_bag"), py::arg("topics"), py::arg("time_range"));
 }

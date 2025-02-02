@@ -36,7 +36,6 @@ def filter(input_bag, output_bag, whitelist):
     
     click.echo(f"Filtering {input_bag} to {output_bag}")
     click.echo(f"Whitelisted topics: {whitelist_topics}")
-    
     result = Operation.filter_bag(input_bag, output_bag, whitelist_topics)
     click.echo(result)
 
