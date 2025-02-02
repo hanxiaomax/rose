@@ -6,7 +6,6 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 
 
 ![splash screen](screenshot-splash.png)
-![tui](screenshot-main.png)
 
 
 
@@ -86,9 +85,12 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
 
 ### TUI Interface
 
+![tui](screenshot-main.png)
+
+#### Usage
 1. Launch the TUI:
    ```bash
-   ./rose.py tui
+   python3 rose.py tui
    ```
 
 2. Key Bindings:
@@ -98,14 +100,18 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
    - `s`: to save whitelist
    - `a`: to toggle select all topics
 
-### Whitelist Management
+#### Whitelist Management
 
-Create topic whitelist from command line:
+Create whitelist
+
+1. Create topic whitelist from command line:
 ```bash
 ./rose.py inspect input.bag | awk '{print $1}' > whitelist/example.txt
 ```
 
-Create topic whitelist with your favorite text editor and save it to `whitelist/` directory:
+2. Create topic whitelist with your favorite text editor and save it to `whitelist/` directory:
+
+3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
 
 
 Configure whitelists in `config.json`:
