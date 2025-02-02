@@ -21,6 +21,8 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
   - [ ] by time range
 - Docker support for cross-platform usage
 - [ ] Batch processing in TUI
+- [ ] Fuzzy search topic in TUI
+- [ ] Message view in TUI
 
 ## Getting Started
 
