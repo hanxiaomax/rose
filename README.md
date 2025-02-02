@@ -2,7 +2,7 @@
 
 A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
->inspired by [rosbag_editor](https://github.com/klekkala/rosbag_editor)
+>inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
 
 ![splash screen](screenshot-splash.png)
