@@ -264,24 +264,25 @@ class TaskTable(DataTable):
         except FileNotFoundError:
             return "0.00 B"
 
-    def add_task(self, input_bag: str, output_bag: str, time_cost: float) -> None:
+    def add_task(self, input_bag: str, output_bag: str, time_cost: float, time_range: tuple) -> None:
         """Add a new task to the table"""
         if self.task_count == 0:
-            self.add_columns("ID", "Input", "Size", "Output", "Size", "Time Cost")
+            self.add_columns("ID", "Input", "Output", "Time Range", "Size", "Time Elapsed")
             self.add_class("has-header") 
 
         self.task_count += 1
 
         input_size = self.get_file_size(input_bag)
         output_size = self.get_file_size(output_bag)
+        start_time, end_time = Operation.convert_time_range_to_str(*time_range)
 
         self.add_row(
             str(self.task_count),
             Path(input_bag).name,
-            input_size,
             Path(output_bag).name,
-            output_size,
-            f"{time_cost}s",
+            f"{start_time} - {end_time}",
+            f"{input_size} -> {output_size}",
+            f"{time_cost}s"
         )
 
 class StatusBar(Static):
@@ -364,7 +365,7 @@ class MainScreen(Screen):
                 time_cost = int(end_time - start_time)
                                 
                 task_table = self.query_one(TaskTable)
-                task_table.add_task(self.app.selected_bag, output_file, time_cost)
+                task_table.add_task(self.app.selected_bag, output_file, time_cost, Operation.convert_time_range_to_tuple(start_time_str, end_time_str))
                 
                 status.update_status(f"Task completed successfully in {time_cost}s", "success")
                 
