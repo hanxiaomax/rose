@@ -1,5 +1,8 @@
 # ROS Bag Filter Tool
 
+![splash screen](screenshot-splash.png)
+![tui](screenshot-main.png)
+
 A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
 >inspired by [rosbag_editor](https://github.com/klekkala/rosbag_editor)
@@ -46,7 +49,7 @@ Choose one of the following setup methods:
 
 ### Building and Setup
 
-roseApp depends on rosebag_io_py lib and you need to build it first.
+roseApp depends on rosbag_io_py lib and you need to build it first.
 
 1. Build the ROS project:
    ```bash
@@ -58,6 +61,7 @@ roseApp depends on rosebag_io_py lib and you need to build it first.
    ```bash
    source setup.sh
    ```
+  this will make sure rosbag_io_py add to PYTHONPATH
 
 ## Usage
 
