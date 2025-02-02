@@ -1,146 +1,103 @@
 # ROS Bag Filter Tool
 
-A high-performance tool for filtering ROS bag files using a topic whitelist, built with C++ and exposed via pybind11.
+A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
-## Features
+>inspired by [rosbag_editor](https://github.com/klekkala/rosbag_editor)
 
-- **Textual TUI Interface**:
-  - Interactive file explorer
-  - Topic selection with multi-select support
-  - Task management with progress tracking
-  - Real-time status updates
+## Overview
 
-- **Command Line Interface**:
-  - Bag file inspection
-  - Topic filtering with whitelist
-  - Performance measurement
+- Filter ROS bag files using topic whitelists or manually select topics
+- High-performance C++ processing core
+- Python bindings via pybind11
+- Interactive TUI for easy operation
+- Command-line interface for automation
+- Docker support for cross-platform usage
 
-## TUI Usage
+## Getting Started
 
-1. **Start the TUI**:
-```bash
-./rose.py tui
-```
+### Prerequisites
 
-2. **Main Interface**:
-   - Left Panel: File explorer
-   - Middle Panel: Topic selection
-   - Right Panel: Task management
-   - Bottom: Status bar
+Choose one of the following setup methods:
 
-3. **Key Bindings**:
-   - `q`: Quit the application
-   - `f`: Toggle show only bag files
-   - `w`: Load whitelist
+#### Option 1: Native Linux Installation
+1. Install ROS Noetic (Ubuntu 20.04)
+   ```bash
+   # Follow ROS Noetic installation guide
+   sudo apt install ros-noetic-desktop-full
+   ```
 
-4. **Filtering Process**:
-   1. Select a bag file from the file explorer
-   2. Choose topics to filter
-   3. Set output file name
-   4. Click "Add Task" to start filtering
+2. Clone the repository
+   ```bash
+   git clone https://github.com/your-repo/rose.git
+   cd rose
+   ```
 
-5. **Task Management**:
-   - Completed tasks are shown in the task table
-   - Each task shows:
-     - ID
-     - Input bag file
-     - Output bag file
-     - Processing time
-
-## Docker Usage
-
+#### Option 2: Docker Installation
 1. Build the Docker image:
+   ```bash
+   cd docker
+   docker build -t rose .
+   ```
+
+2. Run the container:
+   ```bash
+   ./go_docker.sh
+   ```
+
+### Building and Setup
+
+roseApp depends on rosebag_io_py lib and you need to build it first.
+
+1. Build the ROS project:
+   ```bash
+   cd ros
+   ./build_rosecode.sh
+   ```
+
+2. Set up environment:
+   ```bash
+   source setup.sh
+   ```
+
+## Usage
+
+### Command Line Interface
+
+1. Inspect bag file contents:
+   ```bash
+   ./rose.py inspect input.bag
+   ```
+
+2. Filter bag file with whitelist:
+   ```bash
+   ./rose.py filter input.bag output.bag --whitelist topics.txt
+   ```
+
+### TUI Interface
+
+1. Launch the TUI:
+   ```bash
+   ./rose.py tui
+   ```
+
+2. Key Bindings:
+   - `q`: to quit
+   - `f`: to filter bag files
+   - `w`: to load whitelist
+   - `s`: to save whitelist
+   - `a`: to toggle select all topics
+
+### Whitelist Management
+
+Create topic whitelist from command line:
 ```bash
-docker build -t rose .
+./rose.py inspect input.bag | awk '{print $1}' > whitelist/example.txt
 ```
 
-2. Run the container with directory mounting:
-```bash
-./run.sh
-```
+Create topic whitelist with your favorite text editor and save it to `whitelist/` directory:
 
-The container will:
-- Mount current directory to /workspace
-- Preserve all ROS and Python environment variables
-- Provide an interactive terminal
 
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/your-repo/rose.git
-cd rose
-```
-
-2. Build the project:
-```bash
-./build_rosecode.sh
-```
-
-3. Source the environment:
-```bash
-source env.sh
-```
-
-## Command Line Usage
-
-### Basic Commands
-
-1. **List topics in a bag file**:
-```bash
-./filter_rosbag.py input.bag --inspect
-```
-
-2. **Filter a bag file using whitelist**:
-```bash
-./filter_rosbag.py input.bag output.bag --whitelist path/to/whitelist.txt
-```
-
-### Whitelist Creation
-
-1. Create a whitelist by inspecting your bag file:
-```bash
-./filter_rosbag.py input.bag --inspect
-```
-
-2. You can automatically generate a whitelist using grep and awk:
-```bash
-# Example: Create whitelist of all topics containing 'lidar'
-./filter_rosbag.py input.bag --inspect | grep lidar | awk '{print $1}' > topic_whitelist.txt
-
-# Example: Create whitelist of all topics except diagnostics
-./filter_rosbag.py input.bag --inspect | grep -v diagnostics | awk '{print $1}' > topic_whitelist.txt
-```
-
-3. Copy the topics you want to keep into `src/rose_core/src/topic_whitelist.txt`
-
-4. Edit the whitelist file:
-- Keep one topic per line
-- Remove topics you don't want to keep
-- Lines starting with # are comments
-
-Example whitelist:
-```
-# Auto-generated topic whitelist
-/camera/image_raw
-/imu/data
-/odom
-```
-
-## Demo Bag
-
-download from [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag)
-
-## Whitelist Management
-
-1. **Create Whitelist**:
-```bash
-mkdir -p whitelist
-echo -e "/camera/image_raw\n/imu/data\n/odom" > whitelist/example.txt
-```
-
-2. **Add Whitelist to Config**:
-Edit `config.json` to add your whitelist:
+Configure whitelists in `config.json`:
 ```json
 {
     "whitelists": {
@@ -149,11 +106,44 @@ Edit `config.json` to add your whitelist:
 }
 ```
 
-3. **Use Whitelist in TUI**:
-- Press `w` to load whitelist
-- Select topics from the whitelist
+## Development
 
-```bash
-./rose.py tui
+## Key Technologies
+
+- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI (Text User Interface) applications. Used for creating the interactive terminal interface.
+- **[Click](https://click.palletsprojects.com/)**: A Python package for creating beautiful command line interfaces in a composable way. Used for building the CLI interface.
+- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation of both CLI and TUI.
+- **[Pybind11](https://pybind11.readthedocs.io/)**: A lightweight header-only library that exposes C++ types in Python and vice versa. Used for wrapping ROS C++ interfaces to Python.
+
+
+### Project Structure
 ```
+project_root/
+├── ros/            # ROS C++ core
+│   ├── CMakeLists.txt
+│   ├── devel/      # ros development folder
+│   ├── build/      # build folder
+│   ├── src/        # source code folder
+|   ├── setup.sh    # setup script
+|   └── build_rosecode.sh # build script
+├── roseApp/        # Python application
+│   ├── rose.py     # main script
+│   ├── whitelists/ # topic whitelist folder
+│   ├── config.json # config file
+│   └── style.css   # style sheet
+├── docker/              # Docker support
+│   └── Dockerfile
+│   └── go_docker.sh
+├── docs/         # documentation
+├── requirements.txt # dependencies
+├── README.md     
+```
+
+
+## Resources
+
+- Demo bag file: [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag)
+- [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
+
+
 
