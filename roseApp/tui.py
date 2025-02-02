@@ -22,6 +22,9 @@ from textual.widgets import (
     Placeholder, Static, Switch, Tree, Select
 )
 from textual.widgets.directory_tree import DirEntry
+from cassette_theme import CASSETTE_THEME
+
+
 
 from util import Operation
 
@@ -568,8 +571,9 @@ class RoseTUI(App):
             self.switch_mode("splash")
         else:
             self.switch_mode("main")
-        self.theme = "monokai"
-
+        # self.theme = "monokai"
+        self.register_theme(CASSETTE_THEME)
+        self.theme = "cassette"
     
 
 if __name__ == "__main__":
