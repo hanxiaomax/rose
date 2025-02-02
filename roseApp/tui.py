@@ -23,7 +23,6 @@ from textual.widgets import (
 )
 from textual.widgets.directory_tree import DirEntry
 
-# Local application imports
 from util import Operation
 
 logging.basicConfig(
