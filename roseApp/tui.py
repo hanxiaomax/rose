@@ -49,7 +49,7 @@ class TopicTree(Tree):
     def __init__(self):
         super().__init__("Topics")
         self.selected_topics = set()
-        self.topic_counts = {}  # 存储topic出现次数
+        self.topic_counts = {}  # Store topic occurrence counts
         self.border_title = "Topics"
         self.border_subtitle = "Selected: 0"
     
@@ -109,7 +109,12 @@ class TopicTree(Tree):
         return list(self.selected_topics)
 
     def merge_topics(self, new_topics: list) -> None:
-        """合并新的topics并更新计数"""
+        """
+        Merge new topics and update their occurrence counts.
+        
+        Args:
+            new_topics (list): List of new topics to merge
+        """
         for topic in new_topics:
             self.topic_counts[topic] = self.topic_counts.get(topic, 0) + 1
             if topic not in [node.data.get("topic") for node in self.root.children]:
@@ -119,7 +124,7 @@ class TopicTree(Tree):
                     allow_expand=False
                 )
             else:
-                # 更新已存在topic的显示
+                # Update display for existing topics
                 for node in self.root.children:
                     if node.data.get("topic") == topic:
                         node.label = Text(f"{topic} [{self.topic_counts[topic]}]")
@@ -139,24 +144,35 @@ class BagSelector(DirectoryTree):
         self.show_root = True  
         self.show_guides = True
         self.show_only_bags = False
-        self.multi_select_mode = False  # 添加多选模式标志
-        self.selected_bags = set()  # 存储已选择的bag文件
+        self.multi_select_mode = False  # Flag for multi-select mode
+        self.selected_bags = set()  # Store selected bag files
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagSelector")
 
     def update_border_title(self):
-        """更新标题显示多选模式状态"""
+        """Update title to show multi-select mode status"""
         mode = "Multi-Select Mode" if self.multi_select_mode else "Normal Mode"
         count = f" ({len(self.selected_bags)} selected)" if self.multi_select_mode else ""
         self.border_title = f"File Explorer - {mode}{count}"
 
     def toggle_multi_select_mode(self):
-        """切换多选模式"""
+        """
+        Toggle multi-select mode on/off.
+        
+        When enabled:
+        - Clears previous selections
+        - Shows only bag files
+        - Disables control panel inputs
+        """
         self.multi_select_mode = not self.multi_select_mode
         self.selected_bags.clear()
-        self.show_only_bags = self.multi_select_mode  # 多选模式下自动只显示bag文件
+        self.show_only_bags = self.multi_select_mode
         self.reload()
         self.update_border_title()
+        
+        control_panel = self.app.query_one(ControlPanel)
+        control_panel.set_enabled(not self.multi_select_mode)
+        
         status = self.app.query_one(StatusBar)
         status.update_status(f"{'Entered' if self.multi_select_mode else 'Exited'} multi-select mode")
 
@@ -176,7 +192,7 @@ class BagSelector(DirectoryTree):
 
     @work
     async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
-        """处理文件选择，支持多选模式"""
+        """Handle file selection with support for multi-select mode"""
         path = event.node.data.path
         self.current_node = event.node
         self.show_guides = True
@@ -199,7 +215,6 @@ class BagSelector(DirectoryTree):
             return
 
         if self.multi_select_mode:
-            # 多选模式下的处理逻辑
             if str(path) in self.selected_bags:
                 self.selected_bags.remove(str(path))
                 event.node.label = Text(path.name)
@@ -286,6 +301,17 @@ class ControlPanel(Container):
     def set_output_file(self, output_file: str) -> None:
         """Set the output file name"""
         self.query_one("#output-file").value = output_file
+
+    def set_enabled(self, enabled: bool) -> None:
+        """
+        Enable or disable all input controls in the panel.
+        
+        Args:
+            enabled (bool): Whether to enable the controls
+        """
+        for input_widget in self.query("Input"):
+            input_widget.disabled = not enabled
+        self.border_title = "Control Panel" if enabled else "Control Panel (Disabled)"
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
@@ -650,7 +676,7 @@ class MainScreen(Screen):
             self.app.notify(f"Error saving whitelist: {str(e)}", title="Error", severity="error")
 
     def action_toggle_multi_select(self) -> None:
-        """切换多选模式"""
+        """Toggle multi-select mode"""
         bag_selector = self.query_one(BagSelector)
         bag_selector.toggle_multi_select_mode()
 
