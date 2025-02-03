@@ -227,10 +227,16 @@ WhitelistScreen {
 }
 
 #whitelist-container {
-    width: 60;
+    width: 40%;
     height: auto;
     padding: 1;
     color: $primary;
+}
+
+#whitelist-preview {
+    width: 60%;
+    height: auto;
+    padding: 1;
 }
 
 #whitelist-header {
@@ -239,6 +245,18 @@ WhitelistScreen {
     margin-bottom: 1;
 }
 
+#whitelist-preview-header {
+    content-align: center middle;
+    height: 3;
+    margin-bottom: 1;
+}
+
 #whitelist-select {
     color:$primary;
+}
+
+Pretty {
+    width: 1fr;
+    border: solid $accent;
+    color: $primary;
 }

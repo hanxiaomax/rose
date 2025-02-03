@@ -19,7 +19,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList
+    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList, Pretty
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
@@ -510,40 +510,43 @@ class MainScreen(Screen):
 class WhitelistScreen(Screen):
     """Screen for selecting whitelists"""
     
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("y", "confirm", "Confirm Selection"),
+    ]
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the whitelist screen"""
-        with Vertical(id="whitelist-container"):
-            yield Static("Select a whitelist to apply", id="whitelist-header")
-            whitelist_names = list(self.app.config.get("whitelists", {}).keys())
-            yield SelectionList(
-                *[(name, name) for name in whitelist_names],  # Use tuples for prompt and value
-                id="whitelist-select"
-            )
+        with Horizontal():
+            # Left panel - Whitelist selection
+            with Vertical(id="whitelist-container"):
+                yield Static("Shall we select a whitelist?", id="whitelist-header")
+                whitelist_names = list(self.app.config.get("whitelists", {}).keys())
+                yield SelectionList(
+                    *[(name, name) for name in whitelist_names],
+                    id="whitelist-select"
+                )
+            
+            # Right panel - Preview
+            with Vertical(id="whitelist-preview-container"):
+                yield Static("Selected whitelist", id="whitelist-preview-header")
+                yield Pretty([], id="whitelist-preview")
+        
         yield Footer()
 
     def action_quit(self) -> None:
         """Handle q key press to quit whitelist selection"""
         self.app.switch_mode("main")
-
-    def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
-        """Handle whitelist selection and apply if topics are loaded"""
-        selection_list = event.selection_list
+    
+    def action_confirm(self) -> None:
+        """Handle y key press to confirm selection and apply whitelist"""
+        selection_list = self.query_one("#whitelist-select")
         selected_values = selection_list.selected
-        
-        # Ensure single selection by clearing previous selections
-        if len(selected_values) > 1:
-            # Keep only the last selected item
-            last_selected = selected_values[-1]
-            selection_list.deselect_all()
-            selection_list.select(last_selected)
-            return
         
         if not selected_values:
             return
         
-        whitelist_name = selected_values[0]  # Get the first selected value
+        whitelist_name = selected_values[0]
         whitelist_path = self.app.config["whitelists"].get(whitelist_name)
         
         if not whitelist_path:
@@ -560,7 +563,42 @@ class WhitelistScreen(Screen):
             topic_tree.update_border_title()
 
         status = self.app.query_one(StatusBar)
-        status.update_status(f"Selected whitelist: {Path(whitelist_path).stem}", "success")
+        status.update_status(f"Applied whitelist: {Path(whitelist_path).stem}", "success")
+
+    def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
+        """Handle whitelist selection and show preview"""
+        selection_list = event.selection_list
+        selected_values = selection_list.selected
+        preview = self.query_one("#whitelist-preview")
+        
+        # Ensure single selection by clearing previous selections
+        if len(selected_values) > 1:
+            last_selected = selected_values[-1]
+            selection_list.deselect_all()
+            selection_list.select(last_selected)
+            selected_values = [last_selected]
+        
+        if not selected_values:
+            preview.update([])
+            return
+        
+        whitelist_name = selected_values[0]
+        whitelist_path = self.app.config["whitelists"].get(whitelist_name)
+        
+        if not whitelist_path:
+            preview.update("Error: Whitelist path not found")
+            return
+        
+        try:
+            # Load and display whitelist content
+            with open(whitelist_path, 'r') as f:
+                whitelist_content = [
+                    line.strip() for line in f.readlines() 
+                    if line.strip() and not line.strip().startswith('#')
+                ]
+            preview.update(whitelist_content)
+        except Exception as e:
+            preview.update(f"Error loading whitelist: {str(e)}")
 
 class RoseTUI(App):
     """Textual TUI for filtering ROS bags"""
