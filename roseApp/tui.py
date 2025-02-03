@@ -22,10 +22,7 @@ from textual.widgets import (
     Placeholder, Static, Switch, Tree, Select
 )
 from textual.widgets.directory_tree import DirEntry
-from cassette_theme import CASSETTE_THEME
-
-
-
+from themes.cassette_theme import CASSETTE_THEME
 from util import Operation
 
 logging.basicConfig(
