@@ -140,9 +140,11 @@ Modify `config.json` to specify your preferred theme:
    - `s`: to save whitelist
    - `a`: to toggle select all topics
 
-#### Whitelist Management
+#### Whitelist
 
-Create whitelist
+You can filter bag files with pre-configured whitelist. To select pre-configured whitelists, press `w` in TUI. But before that, you need to create your own whitelist.
+
+You can create your own whitelist in 3 ways:
 
 1. Create topic whitelist from command line:
 ```bash
@@ -153,8 +155,7 @@ Create whitelist
 
 3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
 
-
-Configure whitelists in `config.json`:
+And add your whitelist to `config.json` so RoseApp can find it:
 ```json
 {
     "whitelists": {
@@ -185,6 +186,7 @@ project_root/
 |   └── build_rosecode.sh # build script
 ├── roseApp/        # Python application
 │   ├── rose.py     # main script
+│   ├── themes/     # theme folder
 │   ├── whitelists/ # topic whitelist folder
 │   ├── config.json # config file
 │   └── style.css   # style sheet
