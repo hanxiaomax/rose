@@ -359,7 +359,6 @@ class ControlPanel(Container):
                 with Vertical(id="output-file-container"):
                     yield Label("Output File:")
                     yield Input(placeholder="", id="output-file", classes="file-input")
-
             
             with Container(id="add-task-btn-container"):
                 yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
@@ -398,6 +397,11 @@ class ControlPanel(Container):
         if input_widget.disabled:
             self.query_one("#start-time").value = ""
             self.query_one("#end-time").value = ""
+            # Update button text for multi-select mode
+            self.query_one("#add-task-btn").label = "Add Tasks"
+        else:
+            # Reset button text for single-select mode
+            self.query_one("#add-task-btn").label = "Add Task"
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
