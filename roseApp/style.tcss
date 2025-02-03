@@ -59,17 +59,15 @@ BagSelector {
 }
 
 #topics-area {
-    height: 50%;
+    height: 60%;
 }
-#control-panel-container{
-    height: 20%;
-}
+
 #tasks-table-container{
-    height: 30%;
+    height: 40%;
 }
 
 TopicTreeWrap {
-    width: 60%;
+    width: 50%;
     background: $surface;
     border: $border;
     padding: 0 1;
@@ -82,32 +80,28 @@ TopicTreeWrap {
     background: $panel;
 }
 
-Placeholder {
-    width: 40%;
-    background: $surface;
-    border: $border;
-}
+
 
 ControlPanel {
-    width: 100%;
+    width: 50%;
     layout: horizontal;
-    padding: 1;
+    border: $border;    
+
 }
 
-#control-panel-top{
-    height: 60%;
-}
-#control-panel-bottom{
-    height: 40%;
+#add-task-btn-container {
+    align: right bottom;
+    padding: 0;
+    margin: 0;
 }
 
 
 #time-range-container1, #time-range-container2{
-    width: 25%;
+    width: 100%;
     padding: 0 1;
 }
 #output-file-container {
-    width: 50%;
+    width: 100%;
     padding: 0 1;
 }
 
@@ -146,11 +140,8 @@ TaskTable.has-header  > .datatable--header {
     background: $primary;
     color: $foreground;
 }
-#add-task-btn-container {
-    align: right bottom;
-    padding: 0;
-    margin: 0;
-}
+
+
 
 Button {
     width: 15%;

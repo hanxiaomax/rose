@@ -348,7 +348,7 @@ class ControlPanel(Container):
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
         with Vertical():
-            with Horizontal(id="control-panel-top"):
+            with Vertical():
                 with Vertical(id="time-range-container1"):
                     yield Label("From:")
                     yield Input(placeholder="Start Time", id="start-time", classes="time-input")
@@ -359,15 +359,15 @@ class ControlPanel(Container):
                     yield Label("Output File:")
                     yield Input(placeholder="", id="output-file", classes="file-input")
 
-            with Horizontal(id="control-panel-bottom"):
-                with Container(id="add-task-btn-container"):
-                    yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
+            
+            with Container(id="add-task-btn-container"):
+                yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
     
     def on_mount(self) -> None:
         """Initialize control panel"""
         self.border_title = "Control Panel"
-        self.query_one("#start-time").value = "N.A"
-        self.query_one("#end-time").value = "N.A"
+        self.query_one("#start-time").value = "start time"
+        self.query_one("#end-time").value = "end time"
     
     def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
@@ -552,10 +552,7 @@ class MainScreen(Screen):
             with Vertical(id="main-area"):
                 with Horizontal(id="topics-area"):
                     yield TopicTreeWrap()
-                    yield Placeholder()
-                with Container(id="control-panel-container"):
                     yield ControlPanel()
-
                 with Container(id="tasks-table-container"):
                     yield TaskTable()
         
