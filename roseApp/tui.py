@@ -402,7 +402,7 @@ class SplashScreen(Screen):
     
     # 添加按键绑定
     BINDINGS = [
-        ("space", "continue", "Continue to Main"),
+        ("space", "continue", "Enter"),
         ("q", "quit", "Quit"),
         ("h", "help", "Help")
     ]
@@ -413,7 +413,7 @@ class SplashScreen(Screen):
             yield Vertical(
                 Static(txt2art, id="logo"),
                 Static("Yet another ros bag editor", id="subtitle"),
-                Static("Press SPACE to continue, H for help, Q to quit", id="prompt"),
+                Static("Press SPACE to Enter, H for help, Q to quit", id="prompt"),
                 id="splash-content"
             )
 
@@ -526,11 +526,11 @@ class ConfirmDialog(Screen):
 class MainScreen(Screen):
     """Main screen of the app."""
     BINDINGS = [
-        ("f", "toggle_bags_only", "Toggle Bags Only"),
+        ("f", "toggle_bags_only", "Filter Bags"),
         ("w", "load_whitelist", "Load Whitelist"),
         ("s", "save_whitelist", "Save Whitelist"),
-        ("a", "toggle_select_all_topics", "Toggle Select All Topics"),
-        ("m", "toggle_multi_select", "Toggle Multi-Select Mode"),
+        ("a", "toggle_select_all_topics", "Select All"),
+        ("m", "toggle_multi_select", "Multi Mode"),
         ("q", "quit", "Quit"),  # Add quit binding
     ]
     
