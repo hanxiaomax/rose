@@ -26,19 +26,20 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 ## Key Features and Todos
 
 - High-performance C++ processing core
-  - [ ] make C++ interface asynchronous
-- Interactive TUI for easy operation
+  - 🚧 make C++ interface asynchronous
+- 🌟 Interactive TUI for easy operation
 - Command-line interface for automation
 - Filter ROS bag files 
-  - [X] with whitelists 
-  - [X] with manually selected topics
-  - [X] by time range (only TUI tested)
+  - 🌟 with whitelists 
+  - with manually selected topics
+  - by time range (only TUI tested)
+- 🌟 Fuzzy search topic in TUI
+- 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
+   - 🚧 parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
-- [X] Batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
-- [ ] Fuzzy search topic in TUI
-- [ ] Message view in TUI
-- [X] cassette futurism theme, dark and light
-- [ ] Support dynamic file/whitelist refresh in TUI 
+- 🌟 cassette futurism theme for dark and light mode
+- 🚧 Message view in TUI
+- 🚧 Support dynamic file/whitelist refresh in TUI 
 
 ## Getting Started
 
