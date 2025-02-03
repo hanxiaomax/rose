@@ -19,7 +19,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList, Pretty
+    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList, TextArea
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
@@ -517,20 +517,22 @@ class WhitelistScreen(Screen):
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the whitelist screen"""
-        with Horizontal():
-            # Left panel - Whitelist selection
-            with Vertical(id="whitelist-container"):
-                yield Static("Shall we select a whitelist?", id="whitelist-header")
+        with Vertical(id="whitelist-container"):
+            yield Static("Shall we select a whitelist?", id="whitelist-header")
+            with Horizontal(id="whitelist-container"):
                 whitelist_names = list(self.app.config.get("whitelists", {}).keys())
                 yield SelectionList(
                     *[(name, name) for name in whitelist_names],
-                    id="whitelist-select"
+                    id="whitelist-select",
                 )
-            
-            # Right panel - Preview
-            with Vertical(id="whitelist-preview-container"):
-                yield Static("Selected whitelist", id="whitelist-preview-header")
-                yield Pretty([], id="whitelist-preview")
+                
+                yield TextArea(
+                    "No whitelist selected",
+                    id="whitelist-preview",
+                    language="text",
+                    read_only=True,
+                    show_line_numbers=True
+                )
         
         yield Footer()
 
@@ -579,26 +581,23 @@ class WhitelistScreen(Screen):
             selected_values = [last_selected]
         
         if not selected_values:
-            preview.update([])
+            preview.load_text("No whitelist selected")
             return
         
         whitelist_name = selected_values[0]
         whitelist_path = self.app.config["whitelists"].get(whitelist_name)
         
         if not whitelist_path:
-            preview.update("Error: Whitelist path not found")
+            preview.load_text("Error: Whitelist path not found")
             return
         
         try:
-            # Load and display whitelist content
+            # Load and display the complete whitelist file content
             with open(whitelist_path, 'r') as f:
-                whitelist_content = [
-                    line.strip() for line in f.readlines() 
-                    if line.strip() and not line.strip().startswith('#')
-                ]
-            preview.update(whitelist_content)
+                whitelist_content = f.read()
+            preview.load_text(whitelist_content)
         except Exception as e:
-            preview.update(f"Error loading whitelist: {str(e)}")
+            preview.load_text(f"Error loading whitelist: {str(e)}")
 
 class RoseTUI(App):
     """Textual TUI for filtering ROS bags"""
