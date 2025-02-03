@@ -2,8 +2,23 @@
 
 A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
+
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
+
+## Aesthetic 
+
+The TUI embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
+
+- **Nostalgic minimalism**: Low-resolution displays and monochromatic schemes that evoke 1980s computing
+- **Tactile authenticity**: Visual metaphors of physical media like magnetic tapes and CRT textures
+- **Humanized technology**: Warm color palettes and "imperfect" interfaces that resist digital sterility
+
+More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
+
+> A humble analog relic transformed into a cyberpunk artifact, reminding us that technological progress needn't erase material humanity. Those chunky buttons, whirring tape drives, and limited storage capacities become vessels of cultural memory.
+
+Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Cassette_futurism).
 
 | Dark Theme | Light Theme |
 |------------|-------------|
@@ -92,19 +107,7 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
 
 ### TUI Interface
 
-#### Aesthetic 
-
-The TUI embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
-
-- **Nostalgic minimalism**: Low-resolution displays and monochromatic schemes that evoke 1980s computing
-- **Tactile authenticity**: Visual metaphors of physical media like magnetic tapes and CRT textures
-- **Humanized technology**: Warm color palettes and "imperfect" interfaces that resist digital sterility
-
-More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
-
-> A humble analog relic transformed into a cyberpunk artifact, reminding us that technological progress needn't erase material humanity. Those chunky buttons, whirring tape drives, and limited storage capacities become vessels of cultural memory.
-
-Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Cassette_futurism).
+RoseApp TUI provides two built-in themes: `cassette-light` (default) and `cassette-dark`. You can configure the theme in two ways:
 
 | cassette-light | cassette-dark |
 |------------|-------------|
