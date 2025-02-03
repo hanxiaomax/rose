@@ -409,7 +409,7 @@ class MainScreen(Screen):
                 self.logger.info(f"Task completed successfully in {time_cost}s")
                 self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
                               title="Success", 
-                              severity="success")
+                              severity="information")
                 
             except Exception as e:
                 self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
@@ -533,7 +533,7 @@ class MainScreen(Screen):
             with open("config.json", "w") as f:
                 json.dump(self.config, f, indent=4)
             
-            self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="success")
+            self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="information")
         except Exception as e:
             self.app.notify(f"Error saving whitelist: {str(e)}", title="Error", severity="error")
 
