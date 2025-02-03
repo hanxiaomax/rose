@@ -19,7 +19,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Select, Rule
+    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
@@ -517,9 +517,8 @@ class WhitelistScreen(Screen):
         with Vertical(id="whitelist-container"):
             yield Static("Select a whitelist to apply", id="whitelist-header")
             whitelist_names = list(self.app.config.get("whitelists", {}).keys())
-            yield Select(
-                options=[(name, name) for name in whitelist_names],
-                prompt="Select whitelist",
+            yield SelectionList(
+                *[(name, name) for name in whitelist_names],  # Use tuples for prompt and value
                 id="whitelist-select"
             )
         yield Footer()
@@ -528,9 +527,23 @@ class WhitelistScreen(Screen):
         """Handle q key press to quit whitelist selection"""
         self.app.switch_mode("main")
 
-    def on_select_changed(self, event: Select.Changed) -> None:
+    def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Handle whitelist selection and apply if topics are loaded"""
-        whitelist_name = event.value
+        selection_list = event.selection_list
+        selected_values = selection_list.selected
+        
+        # Ensure single selection by clearing previous selections
+        if len(selected_values) > 1:
+            # Keep only the last selected item
+            last_selected = selected_values[-1]
+            selection_list.deselect_all()
+            selection_list.select(last_selected)
+            return
+        
+        if not selected_values:
+            return
+        
+        whitelist_name = selected_values[0]  # Get the first selected value
         whitelist_path = self.app.config["whitelists"].get(whitelist_name)
         
         if not whitelist_path:

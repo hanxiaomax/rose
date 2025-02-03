@@ -240,6 +240,5 @@ WhitelistScreen {
 }
 
 #whitelist-select {
-    color: #FF8C00;  /* darkorange (橘红色) */
-    background: $button-foreground;
+    color:$primary;
 }
