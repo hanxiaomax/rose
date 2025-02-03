@@ -22,8 +22,6 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 
 
-Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Cassette_futurism).
-
 | Dark Theme | Light Theme |
 |------------|-------------|
 | <img src="splash-dark.png" alt="Dark Theme Splash Screen" width="100%"> | <img src="splash-light.png" alt="Light Theme Splash Screen" width="100%"> |
@@ -139,8 +137,7 @@ RoseApp TUI provides two built-in themes: `cassette-light` (default) and `casset
 |------------|-------------|
 | ![Light Theme TUI](main-light.png) | ![Dark Theme TUI](main-dark.png) |
 
-1. Config File
-Modify `config.json` to specify your preferred theme:
+1. Modify `config.json` to specify your preferred theme:
 
 ```json
 {
