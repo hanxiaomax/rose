@@ -5,8 +5,5 @@
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
         "invalid": "./whitelists/invalid.txt",
-        "whitelist_20250202_105241": "whitelists/whitelist_20250202_105241.txt",
-        "whitelist_20250203_094532": "whitelists/whitelist_20250203_094532.txt",
-        "whitelist_20250203_103404": "whitelists/whitelist_20250203_103404.txt"
     }
 }

@@ -1,6 +1,6 @@
 # ROSE - Yet Another ROS Bag Filter Tool
 
-A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
+A high-performance ROS bag filtering tool that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
@@ -29,7 +29,7 @@ Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Casset
 | <img src="splash-dark.png" alt="Dark Theme Splash Screen" width="100%"> | <img src="splash-light.png" alt="Light Theme Splash Screen" width="100%"> |
 
 
-## Key Features
+## Key Features and Todos
 
 - High-performance C++ processing core
   - [ ] make C++ interface asynchronous
@@ -44,56 +44,45 @@ Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Casset
 - [ ] Fuzzy search topic in TUI
 - [ ] Message view in TUI
 - [X] cassette futurism theme, dark and light
-
-## TODOs
 - [ ] Support dynamic file/whitelist refresh in TUI 
 
 ## Getting Started
 
-### Prerequisites
+First, Clone the repository
+```bash
+git clone https://github.com/your-repo/rose.git
+cd rose
+```
 
-Choose one of the following setup methods:
+Second, since Rose depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
 
-#### Option 1: Native Linux Installation
-1. Install ROS Noetic (Ubuntu 20.04)
-   ```bash
-   # Follow ROS Noetic installation guide
-   sudo apt install ros-noetic-desktop-full
-   ```
+#### Option 1: Install ROS Noetic (Ubuntu 20.04), refer to [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
 
-2. Clone the repository
-   ```bash
-   git clone https://github.com/your-repo/rose.git
-   cd rose
-   ```
-
-#### Option 2: Docker Installation
+#### Option 2: Use docker image
 1. Build the Docker image:
    ```bash
    cd docker
    docker build -t rose .
    ```
-
 2. Run the container:
    ```bash
    ./go_docker.sh
    ```
 
-### Building and Setup
-
-roseApp depends on rosbag_io_py lib and you need to build it first.
+Once you have ros environment installed, you can build `rosbag_io_py` lib which is required by roseApp to operate.
 
 1. Build the ROS project:
    ```bash
    cd ros
-   ./build_rosecode.sh
+   ./build.sh
    ```
 
-2. Set up environment which will make sure rosbag_io_py add to `PYTHONPATH`
+2. Set up environment which will make sure `rosbag_io_py` add to `PYTHONPATH`
    ```bash
    source setup.sh
    ```
   
+**You are all set! Now you can use RoseApp to filter ROS bag files.**
 
 ## Usage
 
@@ -111,6 +100,39 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
 
 ### TUI Interface
 
+To launch the TUI:
+```bash
+python3 rose.py tui
+```
+
+2. Some key bindings:
+   - `q`: to quit
+   - `f`: to filter bag files
+   - `w`: to load whitelist
+   - `s`: to save whitelist
+   - `a`: to toggle select all topics
+
+#### Configuration
+
+Rose is configured with `roseApp/config.json`.
+```json
+{
+    "show_splash_screen": true,
+    "theme": "cassette-light",
+    "whitelists": {
+        "demo": "./whitelists/demo.txt",
+        "radar": "./whitelists/radar.txt",
+        "invalid": "./whitelists/invalid.txt",
+    }
+}
+```
+
+- `show_splash_screen`: whether to show the splash screen, default is true
+- `theme`: the theme of the TUI, default is `cassette-light`,check [Theme](#theme) for more details
+- `whitelists`: the whitelists of the TUI, default is empty,check [Whitelist](#whitelist) for more details
+
+
+#### Theme
 RoseApp TUI provides two built-in themes: `cassette-light` (default) and `cassette-dark`. You can configure the theme in two ways:
 
 | cassette-light | cassette-dark |
@@ -127,18 +149,6 @@ Modify `config.json` to specify your preferred theme:
 ```
 2. Switch Theme in TUI with command palette(the buttom in bottom right corner or keybinding ^p)
 
-#### Usage
-1. Launch the TUI:
-   ```bash
-   python3 rose.py tui
-   ```
-
-2. Key Bindings:
-   - `q`: to quit
-   - `f`: to filter bag files
-   - `w`: to load whitelist
-   - `s`: to save whitelist
-   - `a`: to toggle select all topics
 
 #### Whitelist
 
@@ -147,26 +157,30 @@ You can filter bag files with pre-configured whitelist. To select pre-configured
 You can create your own whitelist in 3 ways:
 
 1. Create topic whitelist from command line:
-```bash
-./rose.py inspect input.bag | awk '{print $1}' > whitelist/example.txt
-```
+   ```bash
+   ./rose.py inspect input.bag | awk '{print $1}' > whitelist/example.txt
+   ```
 
-2. Create topic whitelist with your favorite text editor and save it to `whitelist/` directory:
+2. Create topic whitelist with your favorite text editor and save it to `whitelist/`:
 
 3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
 
-And add your whitelist to `config.json` so RoseApp can find it:
+After whitelist created, add it to `config.json` so RoseApp can find it:
 ```json
 {
     "whitelists": {
-        "example": "whitelist/example.txt"
+        "demo": "./whitelists/demo.txt",
+        "radar": "./whitelists/radar.txt",
+        "invalid": "./whitelists/invalid.txt",
     }
 }
 ```
 
 ## Development
 
-## Key Technologies
+Use Dev container(build with ./docker/Dockerfile-dev) or local environment to develop RoseApp. refer [devtoos](https://textual.textualize.io/guide/devtools/) when debugging TUI.
+
+### Tech stack
 
 - **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI (Text User Interface) applications. Used for creating the interactive terminal interface.
 - **[Click](https://click.palletsprojects.com/)**: A Python package for creating beautiful command line interfaces in a composable way. Used for building the CLI interface.
