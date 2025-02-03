@@ -23,23 +23,27 @@ from textual.widgets import (
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME
-from util import Operation
+from util import Operation, setup_logging
 
-logging.basicConfig(
-    level="NOTSET",
-    handlers=[TextualHandler()],
-)
+# Initialize logging at the start of the file
+logger = setup_logging()
 
 def load_config():
     """Load configuration from config.json"""
     try:
         with open("config.json", "r") as f:
-            return json.load(f)
+            config = json.load(f)
+            logger.info("Successfully loaded config.json")
+            return config
     except FileNotFoundError:
+        logger.warning("config.json not found, using default configuration")
         return {"show_splash_screen": True}  # Default value
+    except json.JSONDecodeError:
+        logger.error("Error parsing config.json, using default configuration")
+        return {"show_splash_screen": True}
 
 class TopicTree(Tree):
-    """Tree view for displaying bag topics with multi-selection support"""
+    """A tree widget for displaying ROS bag topics with multi-selection capability"""
     
     def __init__(self):
         super().__init__("Topics")
@@ -102,7 +106,7 @@ class TopicTree(Tree):
         return list(self.selected_topics)
 
 class BagSelector(DirectoryTree):
-    """Directory tree for selecting bag files"""
+    """A directory tree widget specialized for selecting ROS bag files"""
 
     def __init__(self, init_path: str = "."):
         super().__init__(path=init_path)
@@ -112,6 +116,7 @@ class BagSelector(DirectoryTree):
         self.show_guides = True
         self.show_only_bags = False
         self.border_title = "File Explorer"
+        self.logger = logger.getChild("BagSelector")
 
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter paths based on show_only_bags setting"""
@@ -127,9 +132,6 @@ class BagSelector(DirectoryTree):
             label.stylize(Style(color="#ea5949", bold=True))
         return label
 
-
-
-
     @work
     async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
         """Handle file selection with improved directory navigation"""
@@ -139,7 +141,6 @@ class BagSelector(DirectoryTree):
         status = self.app.query_one(StatusBar)
 
         if path.is_dir():
-            # Handle directory selection
             if path == self.current_path:
                 self.path = self.current_path.parent
             else:
@@ -148,13 +149,12 @@ class BagSelector(DirectoryTree):
             status.update_status(f"Entering directory: {path}", "success")
 
         elif str(path).endswith('.bag'):
-            # Handle bag file selection
             self.app.selected_bag = str(path)
             
-            # Load bag and update UI
             try:
                 topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
             except Exception as e:
+                self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
                 status.update_status(f"Error loading bag file: {str(e)}", "error")
                 return
 
@@ -170,7 +170,7 @@ class BagSelector(DirectoryTree):
             control_panel.set_time_range(start_str, end_str)
             control_panel.set_output_file(f"{path.stem}_filtered.bag")
             
-            # 加载bag后应用白名单
+            # Apply whitelist after loading bag
             main_screen = self.app.query_one(MainScreen)
             main_screen.apply_whitelist(topics)
             
@@ -185,7 +185,7 @@ class BagSelector(DirectoryTree):
             status.update_status(f"File: {path} is not a bag file", "error")
 
 class ControlPanel(Container):
-    """Control panel for bag file operations"""
+    """A container widget providing controls for ROS bag file operations"""
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
@@ -308,8 +308,11 @@ class MainScreen(Screen):
                 ("a", "toggle_select_all_topics", "Toggle Select All Topics")]
     
     selected_bag = reactive(None)
+    selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
 
-    def on_mount(self) -> None:
+    def __init__(self):
+        super().__init__()
+        self.logger = logger.getChild("MainScreen")
         self.config = load_config()
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -343,6 +346,7 @@ class MainScreen(Screen):
         
         if event.button.id == "add-task-btn":
             if not self.app.selected_bag:
+                self.logger.warning("Attempted to add task without selecting bag file")
                 status.update_status("Please select a bag file first", "error")
                 return
             
@@ -357,6 +361,7 @@ class MainScreen(Screen):
                 return
             
             try:
+                self.logger.info(f"Starting bag filtering task: {self.app.selected_bag} -> {output_file}")
                 start_time = time.time()  
                 Operation.filter_bag(
                     self.app.selected_bag,
@@ -370,9 +375,11 @@ class MainScreen(Screen):
                 task_table = self.query_one(TaskTable)
                 task_table.add_task(self.app.selected_bag, output_file, time_cost, Operation.convert_time_range_to_tuple(start_time_str, end_time_str))
                 
+                self.logger.info(f"Task completed successfully in {time_cost}s")
                 status.update_status(f"Task completed successfully in {time_cost}s", "success")
                 
             except Exception as e:
+                self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
                 status.update_status(f"Error: {str(e)}", "error")
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
@@ -388,6 +395,7 @@ class MainScreen(Screen):
             return
             
         try:
+            self.logger.info(f"Applying whitelist from: {self.app.selected_whitelist_path}")
             whitelist = self.load_whitelist(self.app.selected_whitelist_path)
             topic_tree = self.app.query_one(TopicTree)
             
@@ -410,6 +418,7 @@ class MainScreen(Screen):
             status.update_status(f"Applied whitelist: {Path(self.app.selected_whitelist_path).stem}", "success")
             
         except Exception as e:
+            self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
             status = self.app.query_one(StatusBar)
             status.update_status(f"Error applying whitelist: {str(e)}", "error")
 
@@ -555,18 +564,22 @@ class RoseTUI(App):
         "whitelist": WhitelistScreen,  
     }
     selected_bag = reactive(None)
-    selected_whitelist_path = reactive(None)  # 将selected_whitelist_path移到App级别
+    selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
     
     def __init__(self):
         super().__init__()
         self.config = load_config()
+        self.logger = logger.getChild("RoseTUI")
+        self.logger.info("Initializing RoseTUI application")
         
 
     def on_mount(self) -> None:
         """Start with the splash screen or main screen based on config"""
         if self.config.get("show_splash_screen", True):
+            self.logger.info("Starting with splash screen")
             self.switch_mode("splash")
         else:
+            self.logger.info("Starting with main screen")
             self.switch_mode("main")
         # self.theme = "monokai"
         self.register_theme(CASSETTE_THEME)

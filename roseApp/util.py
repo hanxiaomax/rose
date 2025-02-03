@@ -1,5 +1,8 @@
 import rosbag_io_py
 import time
+import logging
+from pathlib import Path
+from textual.logging import TextualHandler
 
 
 class Operation():
@@ -106,3 +109,28 @@ class Operation():
         start_str = Operation.to_datetime(start_time)
         end_str = Operation.to_datetime(end_time)
         return start_str, end_str
+
+def setup_logging():
+    """Configure logging settings for the application"""
+    log_file = Path("rose_tui.log")
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    
+    # Textual handler
+    textual_handler = TextualHandler()
+    textual_handler.setFormatter(formatter)
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.WARNING)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(textual_handler)
+    
+    return root_logger
