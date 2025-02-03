@@ -18,7 +18,6 @@ CASSETTE_THEME_DARK = Theme(
     variables={
         "border": "#00FFFF 60%",  
         "scrollbar": "#4D4D4D",   
-        "link-color": "#00FFFF",   
         "button-background": "#00FF00",
         "button-color-foreground": "#1A1A1A",
         "footer-key-foreground": "#00FFFF"
@@ -42,7 +41,6 @@ CASSETTE_THEME_LIGHT = Theme(
     variables={
         "border": "#1E90FF 60%",  # dodgerblue
         "scrollbar": "#C0C0C0",   # silver
-        "link-color": "#1E90FF",   # dodgerblue
         "button-background": "#F4A460",
         "button-color-foreground": "#FFFFFF",
         "footer-key-foreground": "#F4A460"

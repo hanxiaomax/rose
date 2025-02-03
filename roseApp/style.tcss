@@ -201,7 +201,18 @@ Button {
     color: $foreground;
 }
 
+#about {
+    align: center bottom;
+    padding: 1;
+}
 
+#about-divider {
+    height: 1;
+}
+.about-link {
+    color: $primary;
+    background: $link-background;
+}
 
 #whitelist-header{
     text-align: center;

@@ -19,7 +19,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Select, Rule, SelectionList, TextArea
+    Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
@@ -240,12 +240,29 @@ class SplashScreen(Screen):
 
     def compose(self) -> ComposeResult:
         txt2art = text2art("ROSE",font="big")
-        yield Vertical(
-            Static(txt2art, id="logo"),
-            Static("Yet another ros bag editor", id="subtitle"),
-            Static("Press SPACE to continue, H for help, Q to quit", id="prompt"),
-            id="splash-content"
-        )
+        with Vertical(id="splash-content"):
+            yield Vertical(
+                Static(txt2art, id="logo"),
+                Static("Yet another ros bag editor", id="subtitle"),
+                Static("Press SPACE to continue, H for help, Q to quit", id="prompt"),
+                id="splash-content"
+            )
+
+            with Container():
+                with Horizontal(id="about"):  
+                    yield Link(
+                        "Project Page: https://github.com/hanxiaomax/rose",
+                        url="https://github.com/hanxiaomax/rose",
+                        tooltip="Ctrl + Click to open in browser",
+                        classes="about-link",
+                    )
+                    yield Rule(orientation="vertical",id="about-divider")
+                    yield Link(
+                        "Author: Lingfeng_Ai",
+                        url="https://github.com/hanxiaomax",
+                        tooltip="Ctrl + Click to open in browser",
+                        classes="about-link",
+                    )
         yield Footer()
 
     def action_continue(self) -> None:
@@ -361,7 +378,7 @@ class MainScreen(Screen):
         if event.button.id == "add-task-btn":
             if not self.app.selected_bag:
                 self.logger.warning("Attempted to add task without selecting bag file")
-                status.update_status("Please select a bag file first", "error")
+                self.app.notify("Please select a bag file first", title="Error", severity="error")
                 return
             
             control_panel = self.query_one(ControlPanel)
@@ -371,7 +388,7 @@ class MainScreen(Screen):
             selected_topics = topic_tree.get_selected_topics()
             
             if not selected_topics:
-                status.update_status("Please select at least one topic", "error")
+                self.app.notify("Please select at least one topic", title="Error", severity="error")
                 return
             
             try:
@@ -390,11 +407,13 @@ class MainScreen(Screen):
                 task_table.add_task(self.app.selected_bag, output_file, time_cost, Operation.convert_time_range_to_tuple(start_time_str, end_time_str))
                 
                 self.logger.info(f"Task completed successfully in {time_cost}s")
-                status.update_status(f"Task completed successfully in {time_cost}s", "success")
+                self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
+                              title="Success", 
+                              severity="success")
                 
             except Exception as e:
                 self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
-                status.update_status(f"Error: {str(e)}", "error")
+                self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
         """Handle switch toggle"""
@@ -563,12 +582,14 @@ class WhitelistScreen(Screen):
         selected_values = selection_list.selected
         
         if not selected_values:
+            self.app.notify("No whitelist selected", title="Warning", severity="warning")
             return
         
         whitelist_name = selected_values[0]
         whitelist_path = self.app.config["whitelists"].get(whitelist_name)
         
         if not whitelist_path:
+            self.app.notify("Whitelist path not found", title="Error", severity="error")
             return
         
         self.app.selected_whitelist_path = whitelist_path
@@ -581,8 +602,9 @@ class WhitelistScreen(Screen):
         elif topic_tree:
             topic_tree.update_border_title()
 
-        status = self.app.query_one(StatusBar)
-        status.update_status(f"Applied whitelist: {Path(whitelist_path).stem}", "success")
+        self.app.notify(f"Whitelist '{Path(whitelist_path).stem}' applied successfully", 
+                       title="Whitelist Loaded", 
+                       severity="information")
 
     def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Handle whitelist selection and show preview"""
