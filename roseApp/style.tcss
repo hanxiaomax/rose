@@ -43,6 +43,13 @@ TopicTree > .tree--guides {
     color: $primary;
 }
 
+#topic-search {
+    width: 100%;
+    height: 1;
+    background: $surface;
+    border: none;
+}
+
 BagSelector {
     background: $surface;
     border: $border;
@@ -64,7 +71,7 @@ TopicTree {
     width: 60%;
     background: $surface;
     border: $border;
-    padding: 1; 
+    padding: 2 1; 
 }
 Placeholder {
     width: 40%;
@@ -121,7 +128,9 @@ TaskTable {
     border: $border;
     background: $surface;
     color: $foreground;
+    
 }
+
 
 
 TaskTable.has-header  > .datatable--header {

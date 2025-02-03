@@ -24,6 +24,7 @@ from textual.widgets import (
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from util import Operation, setup_logging
+from textual.fuzzy import FuzzySearch
 
 # Initialize logging at the start of the file
 logger = setup_logging()
@@ -47,32 +48,73 @@ class TopicTree(Tree):
     """A tree widget for displaying ROS bag topics with multi-selection capability"""
     
     def __init__(self):
-        super().__init__("Topics")
+        """Initialize TopicTree with basic attributes"""
+        super().__init__("Topics")  # Initialize parent Tree with label
         self.selected_topics = set()
         self.topic_counts = {}  # Store topic occurrence counts
+        self.all_topics = []  # Store all topics for filtering
         self.border_title = "Topics"
         self.border_subtitle = "Selected: 0"
-    
-    async def on_mount(self) -> None:
+        self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets for the topic tree"""
+        yield Input(
+            placeholder="Search topics...",
+            id="topic-search",
+        )
+
+    def on_mount(self) -> None:
         """Initialize when the widget is mounted"""
-        self.theme = "gruvbox"
+        super().on_mount()  # Call parent's on_mount first
+        self.search_input = self.query_one("#topic-search")
         self.root.expand()
-    
-    def update_border_subtitle(self):
-        """Update subtitle with selected topics count"""
-        self.border_subtitle = f"Topic selected: {len(self.selected_topics)}"
-    
-    def update_border_title(self):
-        """Update title with whitelist info if available"""
-        if self.app.selected_whitelist_path:
-            self.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """
+        Handle search input changes with fuzzy search.
+        Uses Textual's FuzzySearch for intelligent matching.
+        """
+        search_text = event.value
+        self.root.remove_children()
+        
+        # If no search text, show all topics
+        if not search_text:
+            filtered_topics = self.all_topics
         else:
-            self.border_title = "Topics"
+            # Use fuzzy search to find and score matches
+            scored_topics = [
+                (topic, self.fuzzy_searcher.match(search_text, topic)[0])
+                for topic in self.all_topics
+            ]
+            # Filter and sort by score (higher score = better match)
+            filtered_topics = [
+                topic for topic, score in sorted(
+                    scored_topics,
+                    key=lambda x: x[1],
+                    reverse=True
+                ) if score > 0
+            ]
+        
+        # Add filtered topics to tree
+        for topic in filtered_topics:
+            count = self.topic_counts.get(topic, 1)
+            label = f"{topic} [{count}]"
+            if topic in self.selected_topics:
+                label = "☑️ " + label
+            
+            self.root.add(
+                label,
+                data={"topic": topic, "selected": topic in self.selected_topics},
+                allow_expand=False
+            )
 
     def set_topics(self, topics: list) -> None:
         """Set topics and clear previous selections"""
-        self.root.remove_children()
+        self.all_topics = topics  # Store all topics for filtering
         self.selected_topics.clear()
+        self.topic_counts.clear()
+        self.root.remove_children()
         
         for topic in sorted(topics):
             self.root.add(
@@ -83,6 +125,17 @@ class TopicTree(Tree):
         
         self.update_border_subtitle()
         self.update_border_title()
+
+    def update_border_subtitle(self):
+        """Update subtitle with selected topics count"""
+        self.border_subtitle = f"Topic selected: {len(self.selected_topics)}"
+    
+    def update_border_title(self):
+        """Update title with whitelist info if available"""
+        if self.app.selected_whitelist_path:
+            self.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
+        else:
+            self.border_title = "Topics"
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle topic selection toggle"""
