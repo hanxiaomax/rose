@@ -234,21 +234,24 @@ class BagSelector(DirectoryTree):
         self.selected_bags = set()  # Store selected bag files
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagSelector")
+    
+    def on_mount(self) -> None:
+        """Initialize when mounted"""
+        self.update_border_subtitle()
 
-    def update_border_title(self):
-        """Update title to show multi-select mode status"""
-        mode = "Multi-Select Mode" if self.multi_select_mode else "Normal Mode"
+    def update_border_subtitle(self):
+        """Update subtitle to show multi-select mode status"""
+        mode = "Multi-Select Mode" if self.multi_select_mode else ""
         count = f" ({len(self.selected_bags)} selected)" if self.multi_select_mode else ""
-        self.border_title = f"File Explorer - {mode}{count}"
+        self.border_subtitle = f"{mode}{count}"
 
     def toggle_multi_select_mode(self):
         """Toggle multi-select mode on/off."""
         self.multi_select_mode = not self.multi_select_mode
         self.selected_bags.clear()
         self.show_only_bags = self.multi_select_mode
-        self.reload()
-        self.update_border_title()
-        
+        self.reload()   
+        self.update_border_subtitle()
         control_panel = self.app.query_one(ControlPanel)
         control_panel.set_enabled(not self.multi_select_mode)
         
@@ -257,9 +260,7 @@ class BagSelector(DirectoryTree):
         topic_tree.multi_select_mode = self.multi_select_mode
         topic_tree.filter_topics("")  # Refresh display
         
-        status = self.app.query_one(StatusBar)
-        status.update_status(f"{'Entered' if self.multi_select_mode else 'Exited'} multi-select mode")
-
+    
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter paths based on show_only_bags setting"""
         paths = super().filter_paths(paths)
@@ -351,10 +352,10 @@ class ControlPanel(Container):
             with Vertical():
                 with Vertical(id="time-range-container1"):
                     yield Label("From:")
-                    yield Input(placeholder="Start Time", id="start-time", classes="time-input")
+                    yield Input(placeholder="[YY/MM/DD HH:MM:SS]", id="start-time", classes="time-input")
                 with Vertical(id="time-range-container2"):
                     yield Label("To:")
-                    yield Input(placeholder="End Time", id="end-time", classes="time-input")
+                    yield Input(placeholder="[YY/MM/DD HH:MM:SS]", id="end-time", classes="time-input")
                 with Vertical(id="output-file-container"):
                     yield Label("Output File:")
                     yield Input(placeholder="", id="output-file", classes="file-input")
@@ -366,8 +367,6 @@ class ControlPanel(Container):
     def on_mount(self) -> None:
         """Initialize control panel"""
         self.border_title = "Control Panel"
-        self.query_one("#start-time").value = "start time"
-        self.query_one("#end-time").value = "end time"
     
     def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
@@ -396,6 +395,9 @@ class ControlPanel(Container):
         for input_widget in self.query("Input"):
             input_widget.disabled = not enabled
         self.border_title = "Control Panel" if enabled else "Control Panel (Disabled)"
+        if input_widget.disabled:
+            self.query_one("#start-time").value = ""
+            self.query_one("#end-time").value = ""
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
