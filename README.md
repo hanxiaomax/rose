@@ -1,4 +1,4 @@
-# ROS Bag Filter Tool
+# ROSE - Yet Another ROS Bag Filter Tool
 
 A high-performance ROS bag filtering tool  that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
 
@@ -8,6 +8,10 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 
 ## Aesthetic 
 
+> The cassette tape, a modest analog artifact, has evolved into a retro-futurism icon, demonstrating that technological advancement can coexist with human touch. Its tactile interface and physical limitations serve as poignant reminders of our technological heritage.
+
+> 磁带盒不仅是一种技术遗物，更是复古未来主义的艺术品和精神图腾。简单的按钮、褪色的塑料外壳和有限的存储容量，既是怀旧的载体，也是对数字霸权的温柔反抗。它时刻提醒着我们：技术的突飞猛进不应该以牺牲人性为代价，克制的设计往往更能打动人心。
+
 The TUI embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
 
 - **Nostalgic minimalism**: Low-resolution displays and monochromatic schemes that evoke 1980s computing
@@ -16,7 +20,7 @@ The TUI embraces the **cassette futurism** aesthetic - a design philosophy that 
 
 More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
 
-> A humble analog relic transformed into a cyberpunk artifact, reminding us that technological progress needn't erase material humanity. Those chunky buttons, whirring tape drives, and limited storage capacities become vessels of cultural memory.
+
 
 Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Cassette_futurism).
 
