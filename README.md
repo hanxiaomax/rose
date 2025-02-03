@@ -38,7 +38,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
   - [X] with manually selected topics
   - [X] by time range (only TUI tested)
 - Docker support for cross-platform usage
-- [ ] Batch processing in TUI
+- [X] Batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
 - [ ] Fuzzy search topic in TUI
 - [ ] Message view in TUI
 - [X] cassette futurism theme, dark and light
