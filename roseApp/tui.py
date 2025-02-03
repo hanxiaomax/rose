@@ -146,7 +146,7 @@ class BagSelector(DirectoryTree):
             else:
                 self.path = path
             self.current_path = self.path
-            status.update_status(f"Entering directory: {path}", "success")
+            status.update_status(f"Entering directory: {path}")
 
         elif str(path).endswith('.bag'):
             self.app.selected_bag = str(path)
@@ -174,7 +174,7 @@ class BagSelector(DirectoryTree):
             main_screen = self.app.query_one(MainScreen)
             main_screen.apply_whitelist(topics)
             
-            status.update_status(f"File: {path} loaded successfully", "success")
+            status.update_status(f"File: {path} loaded successfully")
         
         else:
             # Clear TopicTree when selecting non-bag files
@@ -182,7 +182,7 @@ class BagSelector(DirectoryTree):
             topic_tree.set_topics([])
             self.app.selected_bag = None
 
-            status.update_status(f"File: {path} is not a bag file", "error")
+            status.update_status(f"File: {path} is not a bag file", "warning")
 
 class ControlPanel(Container):
     """A container widget providing controls for ROS bag file operations"""
@@ -447,13 +447,10 @@ class MainScreen(Screen):
             topic_tree.update_border_subtitle()
             topic_tree.update_border_title()
             
-            status = self.app.query_one(StatusBar)
-            status.update_status(f"Applied whitelist: {Path(self.app.selected_whitelist_path).stem}", "success")
-            
+
         except Exception as e:
             self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
-            status = self.app.query_one(StatusBar)
-            status.update_status(f"Error applying whitelist: {str(e)}", "error")
+            self.app.notify(f"Error applying whitelist: {str(e)}", title="Error", severity="error")
 
     def load_whitelist(self, path: str) -> 'list[str]':
         """Load whitelist from file"""
@@ -472,8 +469,7 @@ class MainScreen(Screen):
     def action_load_whitelist(self) -> None:
         """Load whitelist from config"""
         if not self.config.get("whitelists"):
-            status = self.query_one(StatusBar)
-            status.update_status("No whitelists configured", "error")
+            self.app.notify("No whitelists configured", title="Error", severity="warning")
             return
     
         self.app.switch_mode("whitelist")
@@ -503,9 +499,9 @@ class MainScreen(Screen):
         topic_tree.update_border_subtitle()
         status = self.query_one(StatusBar)
         if all_selected:
-            status.update_status("Deselected all topics", "success")
+            status.update_status("Deselected all topics")
         else:
-            status.update_status(f"Selected all {len(topic_tree.selected_topics)} topics", "success")
+            status.update_status(f"Selected all {len(topic_tree.selected_topics)} topics")
 
     def action_save_whitelist(self) -> None:
         """Save currently selected topics as a whitelist"""
@@ -537,11 +533,9 @@ class MainScreen(Screen):
             with open("config.json", "w") as f:
                 json.dump(self.config, f, indent=4)
             
-            status = self.query_one(StatusBar)
-            status.update_status(f"Whitelist saved to {whitelist_path}", "success")
+            self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="success")
         except Exception as e:
-            status = self.query_one(StatusBar)
-            status.update_status(f"Error saving whitelist: {str(e)}", "error")
+            self.app.notify(f"Error saving whitelist: {str(e)}", title="Error", severity="error")
 
 class WhitelistScreen(Screen):
     """Screen for selecting whitelists"""
