@@ -4,6 +4,6 @@
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt",
+        "invalid": "./whitelists/invalid.txt"
     }
 }

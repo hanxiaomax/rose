@@ -38,8 +38,9 @@ def load_config():
     except FileNotFoundError:
         logger.warning("config.json not found, using default configuration")
         return {"show_splash_screen": True}  # Default value
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.error("Error parsing config.json, using default configuration")
+        logger.error(f"Error: {e}")
         return {"show_splash_screen": True}
 
 class TopicTree(Tree):
@@ -48,6 +49,7 @@ class TopicTree(Tree):
     def __init__(self):
         super().__init__("Topics")
         self.selected_topics = set()
+        self.topic_counts = {}  # 存储topic出现次数
         self.border_title = "Topics"
         self.border_subtitle = "Selected: 0"
     
@@ -105,6 +107,27 @@ class TopicTree(Tree):
         """Return list of selected topics"""
         return list(self.selected_topics)
 
+    def merge_topics(self, new_topics: list) -> None:
+        """合并新的topics并更新计数"""
+        for topic in new_topics:
+            self.topic_counts[topic] = self.topic_counts.get(topic, 0) + 1
+            if topic not in [node.data.get("topic") for node in self.root.children]:
+                self.root.add(
+                    f"{topic} [{self.topic_counts[topic]}]",
+                    data={"topic": topic, "selected": False},
+                    allow_expand=False
+                )
+            else:
+                # 更新已存在topic的显示
+                for node in self.root.children:
+                    if node.data.get("topic") == topic:
+                        node.label = Text(f"{topic} [{self.topic_counts[topic]}]")
+                        if node.data.get("selected"):
+                            node.label = Text("☑️ ") + Text(f"{topic} [{self.topic_counts[topic]}]")
+                        break
+
+        self.update_border_subtitle()
+
 class BagSelector(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
 
@@ -115,8 +138,26 @@ class BagSelector(DirectoryTree):
         self.show_root = True  
         self.show_guides = True
         self.show_only_bags = False
+        self.multi_select_mode = False  # 添加多选模式标志
+        self.selected_bags = set()  # 存储已选择的bag文件
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagSelector")
+
+    def update_border_title(self):
+        """更新标题显示多选模式状态"""
+        mode = "Multi-Select Mode" if self.multi_select_mode else "Normal Mode"
+        count = f" ({len(self.selected_bags)} selected)" if self.multi_select_mode else ""
+        self.border_title = f"File Explorer - {mode}{count}"
+
+    def toggle_multi_select_mode(self):
+        """切换多选模式"""
+        self.multi_select_mode = not self.multi_select_mode
+        self.selected_bags.clear()
+        self.show_only_bags = self.multi_select_mode  # 多选模式下自动只显示bag文件
+        self.reload()
+        self.update_border_title()
+        status = self.app.query_one(StatusBar)
+        status.update_status(f"{'Entered' if self.multi_select_mode else 'Exited'} multi-select mode")
 
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter paths based on show_only_bags setting"""
@@ -134,7 +175,7 @@ class BagSelector(DirectoryTree):
 
     @work
     async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
-        """Handle file selection with improved directory navigation"""
+        """处理文件选择，支持多选模式"""
         path = event.node.data.path
         self.current_node = event.node
         self.show_guides = True
@@ -147,42 +188,59 @@ class BagSelector(DirectoryTree):
                 self.path = path
             self.current_path = self.path
             status.update_status(f"Entering directory: {path}")
+            return
 
-        elif str(path).endswith('.bag'):
-            self.app.selected_bag = str(path)
-            
-            try:
-                topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
-            except Exception as e:
-                self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
-                status.update_status(f"Error loading bag file: {str(e)}", "error")
-                return
-
-            
-   
-            # Update TopicTree
-            topic_tree = self.app.query_one(TopicTree)
-            topic_tree.set_topics(topics)
-            
-            # Update ControlPanel
-            control_panel = self.app.query_one(ControlPanel)
-            start_str, end_str = Operation.convert_time_range_to_str(start_time, end_time)
-            control_panel.set_time_range(start_str, end_str)
-            control_panel.set_output_file(f"{path.stem}_filtered.bag")
-            
-            # Apply whitelist after loading bag
-            main_screen = self.app.query_one(MainScreen)
-            main_screen.apply_whitelist(topics)
-            
-            status.update_status(f"File: {path} loaded successfully")
-        
-        else:
-            # Clear TopicTree when selecting non-bag files
+        if not str(path).endswith('.bag'):
             topic_tree = self.app.query_one(TopicTree)
             topic_tree.set_topics([])
             self.app.selected_bag = None
-
             status.update_status(f"File: {path} is not a bag file", "warning")
+            return
+
+        if self.multi_select_mode:
+            # 多选模式下的处理逻辑
+            if str(path) in self.selected_bags:
+                self.selected_bags.remove(str(path))
+                event.node.label = Text(path.name)
+                status.update_status(f"Deselected: {path}")
+            else:
+                self.selected_bags.add(str(path))
+                event.node.label = Text("☑️ ") + Text(path.name)
+                status.update_status(f"Selected: {path}")
+                
+                try:
+                    topics, _, _ = Operation.load_bag(str(path))
+                    topic_tree = self.app.query_one(TopicTree)
+                    topic_tree.merge_topics(topics)
+                except Exception as e:
+                    self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
+                    status.update_status(f"Error loading bag file: {str(e)}", "error")
+                    return
+
+            self.update_border_title()
+            return
+
+        # 单选模式下的原有逻辑
+        self.app.selected_bag = str(path)
+        try:
+            topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
+        except Exception as e:
+            self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
+            status.update_status(f"Error loading bag file: {str(e)}", "error")
+            return
+
+        topic_tree = self.app.query_one(TopicTree)
+        topic_tree.set_topics(topics)
+        
+        control_panel = self.app.query_one(ControlPanel)
+        start_str, end_str = Operation.convert_time_range_to_str(start_time, end_time)
+        control_panel.set_time_range(start_str, end_str)
+        control_panel.set_output_file(f"{path.stem}_filtered.bag")
+        
+        main_screen = self.app.query_one(MainScreen)
+        main_screen.apply_whitelist(topics)
+        
+        status.update_status(f"File: {path} loaded successfully")
 
 class ControlPanel(Container):
     """A container widget providing controls for ROS bag file operations"""
@@ -337,10 +395,13 @@ class StatusBar(Static):
 
 class MainScreen(Screen):
     """Main screen of the app."""
-    BINDINGS = [("f", "toggle_bags_only", "Toggle Bags Only"),
-                ("w", "load_whitelist", "Load Whitelist"),
-                ("s", "save_whitelist", "Save Whitelist"),
-                ("a", "toggle_select_all_topics", "Toggle Select All Topics")]
+    BINDINGS = [
+        ("f", "toggle_bags_only", "Toggle Bags Only"),
+        ("w", "load_whitelist", "Save Whitelist"),
+        ("s", "save_whitelist", "Save Whitelist"),
+        ("a", "toggle_select_all_topics", "Toggle Select All Topics"),
+        ("m", "toggle_multi_select", "Toggle Multi-Select Mode"),  # 添加多选模式快捷键
+    ]
     
     selected_bag = reactive(None)
     selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
@@ -376,40 +437,90 @@ class MainScreen(Screen):
         status = self.query_one(StatusBar)
         
         if event.button.id == "add-task-btn":
-            if not self.app.selected_bag:
-                self.logger.warning("Attempted to add task without selecting bag file")
-                self.app.notify("Please select a bag file first", title="Error", severity="error")
-                return
-            
+            bag_selector = self.query_one(BagSelector)
             control_panel = self.query_one(ControlPanel)
-            output_file = control_panel.get_output_file()
-            start_time_str, end_time_str = control_panel.get_time_range()
             topic_tree = self.query_one(TopicTree)
             selected_topics = topic_tree.get_selected_topics()
             
             if not selected_topics:
                 self.app.notify("Please select at least one topic", title="Error", severity="error")
                 return
-            
+
             try:
-                self.logger.info(f"Starting bag filtering task: {self.app.selected_bag} -> {output_file}")
-                start_time = time.time()  
-                Operation.filter_bag(
-                    self.app.selected_bag,
-                    output_file,
-                    selected_topics,
-                    Operation.convert_time_range_to_tuple(start_time_str, end_time_str)
-                )
-                end_time = time.time()  
-                time_cost = int(end_time - start_time)
-                                
-                task_table = self.query_one(TaskTable)
-                task_table.add_task(self.app.selected_bag, output_file, time_cost, Operation.convert_time_range_to_tuple(start_time_str, end_time_str))
+                if bag_selector.multi_select_mode:
+                    # 多选模式下处理多个bag文件
+                    if not bag_selector.selected_bags:
+                        self.app.notify("Please select at least one bag file", title="Error", severity="error")
+                        return
+
+                    success_count = 0
+                    
+                    for bag_path in bag_selector.selected_bags:
+                        try:
+                            # 获取bag文件的完整时间范围
+                            _, _, bag_time_range = Operation.load_bag(bag_path)
+                            output_file = f"{Path(bag_path).stem}_filtered.bag"
+                            
+                            process_start = time.time()
+                            Operation.filter_bag(
+                                bag_path,
+                                output_file,
+                                selected_topics,
+                                bag_time_range  # 使用bag自己的时间范围
+                            )
+                            process_end = time.time()
+                            time_cost = int(process_end - process_start)
+                            
+                            task_table = self.query_one(TaskTable)
+                            task_table.add_task(
+                                bag_path, 
+                                output_file, 
+                                time_cost,
+                                bag_time_range  # 使用bag自己的时间范围
+                            )
+                            success_count += 1
+                            
+                        except Exception as e:
+                            self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
+                            self.app.notify(f"Error processing {Path(bag_path).name}: {str(e)}", 
+                                          title="Error", 
+                                          severity="error")
+                            continue
+                    
+                    if success_count > 0:
+                        self.app.notify(f"Successfully processed {success_count} of {len(bag_selector.selected_bags)} bag files", 
+                                      title="Success", 
+                                      severity="information")
                 
-                self.logger.info(f"Task completed successfully in {time_cost}s")
-                self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
-                              title="Success", 
-                              severity="information")
+                else:
+                    # 单选模式下的处理逻辑
+                    if not self.app.selected_bag:
+                        self.app.notify("Please select a bag file first", title="Error", severity="error")
+                        return
+
+                    self.logger.info(f"Starting bag filtering task: {self.app.selected_bag} -> {control_panel.get_output_file()}")
+                    start_time = time.time()
+                    Operation.filter_bag(
+                        self.app.selected_bag,
+                        control_panel.get_output_file(),
+                        selected_topics,
+                        Operation.convert_time_range_to_tuple(*control_panel.get_time_range())
+                    )
+                    end_time = time.time()
+                    time_cost = int(end_time - start_time)
+                    
+                    task_table = self.query_one(TaskTable)
+                    task_table.add_task(
+                        self.app.selected_bag, 
+                        control_panel.get_output_file(), 
+                        time_cost, 
+                        Operation.convert_time_range_to_tuple(*control_panel.get_time_range())
+                    )
+                    
+                    self.logger.info(f"Task completed successfully in {time_cost}s")
+                    self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
+                                  title="Success", 
+                                  severity="information")
                 
             except Exception as e:
                 self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
@@ -536,6 +647,11 @@ class MainScreen(Screen):
             self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="information")
         except Exception as e:
             self.app.notify(f"Error saving whitelist: {str(e)}", title="Error", severity="error")
+
+    def action_toggle_multi_select(self) -> None:
+        """切换多选模式"""
+        bag_selector = self.query_one(BagSelector)
+        bag_selector.toggle_multi_select_mode()
 
 class WhitelistScreen(Screen):
     """Screen for selecting whitelists"""
