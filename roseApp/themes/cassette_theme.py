@@ -4,42 +4,47 @@ from textual.theme import Theme
 # Dark Theme (Terminal-safe)
 CASSETTE_THEME_DARK = Theme(
     name="cassette-dark",
-    primary="#00FF00",        # ansi_bright_green (荧光绿)
-    secondary="#0000FF",     # ansi_bright_blue (电子蓝)
-    accent="#FF8C00",        # darkorange (工业橙)
-    background="#1A1A1A",    # grey10 (工业黑)
-    foreground="#B2B2B2",    # grey70 (金属银)
-    success="#008000",       # ansi_green (信号绿)
-    warning="#FFFF00",       # ansi_yellow (警示黄)
-    error="#FF0000",        # ansi_red (警报红)
-    surface="#262626",      # grey15 (机械灰)
-    panel="#333333",        # grey20 (工业灰)
+    primary="#00FF00",       
+    secondary="#00FFFF",     
+    accent="#FF8C00",        
+    background="#1A1A1A",    
+    foreground="#B2B2B2",    
+    success="#008000",       
+    warning="#FFFF00",      
+    error="#FF0000",        
+    surface="#262626",      
+    panel="#333333",        
     dark=True,
     variables={
-        "border": "#00FFFF 60%",  # ansi_bright_cyan
-        "scrollbar": "#4D4D4D",   # grey30
-        "link-color": "#00FFFF",   # ansi_bright_cyan
+        "border": "#00FFFF 60%",  
+        "scrollbar": "#4D4D4D",   
+        "link-color": "#00FFFF",   
+        "button-background": "#00FF00",
+        "button-color-foreground": "#1A1A1A",
+        "footer-key-foreground": "#00FFFF"
     }
 )
 
 # Light Theme (Web-safe)
 CASSETTE_THEME_LIGHT = Theme(
     name="cassette-light",
-    primary="#F4A460",        # ansi_green (品牌绿)
-    secondary="#00FFFF",      # darkorange (工业橙)
-    accent="#008000",         # ansi_blue (电子蓝)
-    background="#F5F5F5",     # whitesmoke (米白)
-    foreground="#333333",     # grey20 (工业黑)
-    success="#006400",        # darkgreen (深信号绿)
-    warning="#DAA520",        # goldenrod (琥珀橙)
-    error="#8B0000",         # darkred (深警报红)
-    surface="#DCDCDC",       # gainsboro (浅机械灰)
-    panel="#FFFFFF",         # white (纯白)
+    primary="#F4A460",       
+    secondary="#00FFFF",      
+    accent="#008000",        
+    background="#F5F5F5",    
+    foreground="#333333",     
+    success="#00FFFF",       
+    warning="#DAA520",       
+    error="#FF4500",        
+    surface="#DCDCDC",       
+    panel="#C0C0C0",         
     dark=False,
     variables={
         "border": "#1E90FF 60%",  # dodgerblue
         "scrollbar": "#C0C0C0",   # silver
         "link-color": "#1E90FF",   # dodgerblue
-        "button-foreground": "#F4A460",
+        "button-background": "#F4A460",
+        "button-color-foreground": "#FFFFFF",
+        "footer-key-foreground": "#F4A460"
     }
 )

@@ -4,29 +4,22 @@ Screen {
     grid-rows: 1fr;
 }
 
-#bag-filter-switch > .switch--slider {
-    background: $accent;
-    color: $warning;
-    border: $border;
-}
 
 #status-bar {
     dock: bottom;
     height: 2;
     margin: 0;
     padding: 0 1;
+    background: $foreground;
 }
 
-#status {
-    width: 100%;
-    height: 1;
-    content-align: left middle;
-    padding: 0 1;
-    color: $foreground;
+*{
+    border-subtitle-color: $primary;
+    border-title-color: $primary;
 }
 
 #status.success {
-    color: $success;
+    color: $success-darken-2;
 }
 
 #status.error {
@@ -36,8 +29,6 @@ Screen {
 #status.warning {
     color: $warning;
 }
-
-
 
 #file-explorer-area {
     width: 30%;
@@ -85,6 +76,7 @@ Placeholder {
 ControlPanel {
     width: 100%;
     layout: horizontal;
+    padding: 1;
 }
 
 #control-panel-top{
@@ -106,7 +98,8 @@ ControlPanel {
 
 
 #time-range-container1 > .time-input,
-#time-range-container2 > .time-input {
+#time-range-container2 > .time-input,
+#output-file-container > .file-input {
     width: 100%;
     padding: 0;
     background: $panel;
@@ -115,24 +108,13 @@ ControlPanel {
 }
 
 #time-range-container1 > .time-input:hover,
-#time-range-container2 > .time-input:hover {
-    border: none;
-    padding: 0;
-    color: $accent;
-}
-
-#output-file-container > .file-input {
-    width: 100%;
-    padding: 0;
-    background: $panel;
-    border: none;
-}
-
+#time-range-container2 > .time-input:hover,
 #output-file-container > .file-input:hover {
     border: none;
     padding: 0;
-    color: $accent;
+    color: $secondary;
 }
+
 
 TaskTable {
     width: 100%;
@@ -144,8 +126,8 @@ TaskTable {
 
 
 TaskTable.has-header  > .datatable--header {
-    background: $primary-darken-2;
-    color: $background;
+    background: $primary;
+    color: $foreground;
 }
 #add-task-btn-container {
     align: right bottom;
@@ -157,10 +139,7 @@ Button {
     width: 15%;
     margin: 0 1;
     border: none;
-    background: $button-foreground;
 }
-
-
 #main-container {
     layout: horizontal;
     height: 100%;

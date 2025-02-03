@@ -111,7 +111,7 @@ class BagSelector(DirectoryTree):
     def __init__(self, init_path: str = "."):
         super().__init__(path=init_path)
         self.current_path = Path(init_path)
-        self.guide_depth = 4
+        self.guide_depth = 2
         self.show_root = True  
         self.show_guides = True
         self.show_only_bags = False
