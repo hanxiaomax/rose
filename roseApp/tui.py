@@ -48,8 +48,7 @@ class TopicTree(Tree):
     """A tree widget for displaying ROS bag topics with multi-selection capability"""
     
     def __init__(self):
-        """Initialize TopicTree with basic attributes"""
-        super().__init__("Topics")  # Initialize parent Tree with label
+        super().__init__("Topics")
         self.selected_topics = set()
         self.topic_counts = {}  # Store topic occurrence counts
         self.all_topics = []  # Store all topics for filtering
@@ -57,25 +56,18 @@ class TopicTree(Tree):
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
 
-    def compose(self) -> ComposeResult:
-        """Create child widgets for the topic tree"""
-        yield Input(
-            placeholder="Search topics...",
-            id="topic-search",
-        )
-
     def on_mount(self) -> None:
-        """Initialize when the widget is mounted"""
-        super().on_mount()  # Call parent's on_mount first
-        self.search_input = self.query_one("#topic-search")
+        """Initialize when mounted"""
+        super().on_mount()
         self.root.expand()
 
-    def on_input_changed(self, event: Input.Changed) -> None:
+    def filter_topics(self, search_text: str) -> None:
         """
-        Handle search input changes with fuzzy search.
-        Uses Textual's FuzzySearch for intelligent matching.
+        Filter topics based on search text using fuzzy search.
+        
+        Args:
+            search_text (str): Text to search for
         """
-        search_text = event.value
         self.root.remove_children()
         
         # If no search text, show all topics
@@ -186,6 +178,48 @@ class TopicTree(Tree):
                         break
 
         self.update_border_subtitle()
+
+class TopicTreeWrap(Container):
+    """A wrapper component that contains a search input and a topic tree"""
+    
+    def __init__(self):
+        super().__init__()
+        self.topic_tree = None
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets"""
+        yield Input(
+            placeholder="Search topics...",
+            id="topic-search",
+        )
+        self.topic_tree = TopicTree()
+        yield self.topic_tree
+
+    def on_mount(self) -> None:
+        """Initialize when mounted"""
+        self.border_title = "Topics"
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle search input changes"""
+        if event.input.id == "topic-search":
+            self.topic_tree.filter_topics(event.value)
+
+    # Delegate methods to TopicTree
+    def set_topics(self, topics: list) -> None:
+        """Set topics in the tree"""
+        self.topic_tree.set_topics(topics)
+
+    def get_selected_topics(self) -> list:
+        """Get selected topics from the tree"""
+        return self.topic_tree.get_selected_topics()
+
+    def merge_topics(self, new_topics: list) -> None:
+        """Merge new topics into the tree"""
+        self.topic_tree.merge_topics(new_topics)
+
+    def update_border_title(self):
+        """Update the border title"""
+        self.topic_tree.update_border_title()
 
 class BagSelector(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
@@ -500,7 +534,7 @@ class MainScreen(Screen):
 
             with Vertical(id="main-area"):
                 with Horizontal(id="topics-area"):
-                    yield TopicTree()
+                    yield TopicTreeWrap()
                     yield Placeholder()
                 with Container(id="control-panel-container"):
                     yield ControlPanel()
@@ -519,7 +553,7 @@ class MainScreen(Screen):
         if event.button.id == "add-task-btn":
             bag_selector = self.query_one(BagSelector)
             control_panel = self.query_one(ControlPanel)
-            topic_tree = self.query_one(TopicTree)
+            topic_tree = self.query_one(TopicTreeWrap)
             selected_topics = topic_tree.get_selected_topics()
             
             if not selected_topics:
@@ -621,7 +655,7 @@ class MainScreen(Screen):
         try:
             self.logger.info(f"Applying whitelist from: {self.app.selected_whitelist_path}")
             whitelist = self.load_whitelist(self.app.selected_whitelist_path)
-            topic_tree = self.app.query_one(TopicTree)
+            topic_tree = self.app.query_one(TopicTreeWrap)
             
             topic_tree.selected_topics.clear()
             
@@ -635,7 +669,6 @@ class MainScreen(Screen):
                     node.data["selected"] = False
                     node.label = topic
                     
-            topic_tree.update_border_subtitle()
             topic_tree.update_border_title()
             
 
@@ -667,7 +700,7 @@ class MainScreen(Screen):
     
     def action_toggle_select_all_topics(self) -> None:
         """Toggle select all topics in the topic tree"""
-        topic_tree = self.app.query_one(TopicTree)
+        topic_tree = self.app.query_one(TopicTreeWrap)
         if not topic_tree.root.children:
             status = self.query_one(StatusBar)
             status.update_status("No topics available to select", "error")
@@ -687,7 +720,7 @@ class MainScreen(Screen):
                 topic_tree.selected_topics.discard(topic)
                 node.label = topic
         
-        topic_tree.update_border_subtitle()
+        topic_tree.update_border_title()
         status = self.query_one(StatusBar)
         if all_selected:
             status.update_status("Deselected all topics")
@@ -696,7 +729,7 @@ class MainScreen(Screen):
 
     def action_save_whitelist(self) -> None:
         """Save currently selected topics as a whitelist"""
-        topic_tree = self.app.query_one(TopicTree)
+        topic_tree = self.app.query_one(TopicTreeWrap)
         selected_topics = topic_tree.get_selected_topics()
         
         if not selected_topics:
@@ -785,7 +818,7 @@ class WhitelistScreen(Screen):
         self.app.selected_whitelist_path = whitelist_path
         self.app.switch_mode("main")
         
-        topic_tree = self.app.query_one(TopicTree)
+        topic_tree = self.app.query_one(TopicTreeWrap)
         if topic_tree and topic_tree.root.children:
             main_screen = self.app.query_one(MainScreen)
             main_screen.apply_whitelist([node.data.get("topic") for node in topic_tree.root.children])

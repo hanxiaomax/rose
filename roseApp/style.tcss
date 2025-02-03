@@ -48,6 +48,7 @@ TopicTree > .tree--guides {
     height: 1;
     background: $surface;
     border: none;
+    margin-bottom: 1;
 }
 
 BagSelector {
@@ -67,12 +68,20 @@ BagSelector {
     height: 30%;
 }
 
-TopicTree {
+TopicTreeWrap {
     width: 60%;
     background: $surface;
     border: $border;
-    padding: 2 1; 
+    padding: 0 1;
+    layout: vertical;
 }
+
+#topic-search {
+    border: none;
+    padding: 0;
+    background: $panel;
+}
+
 Placeholder {
     width: 40%;
     background: $surface;
