@@ -239,5 +239,30 @@ Button {
     padding: 1;
 }
 
+#dialog-container {
+    layout: vertical;
+    background: $surface;
+    padding: 1;
+    width: 40;
+    height: 8;
+    border: thick $primary;
+    align: center middle;
+}
+
+#dialog-buttons {
+    layout: horizontal;
+    align-horizontal: center;
+    margin-top: 1;
+}
+
+#dialog-buttons Button {
+    margin: 0 1;
+    min-width: 8;
+}
+
+ConfirmDialog {
+    align: center middle;
+}
+
 
 

@@ -504,14 +504,34 @@ class StatusBar(Static):
         
         self.update(message)
 
+class ConfirmDialog(Screen):
+    """Dialog screen for confirming actions"""
+    
+    def compose(self) -> ComposeResult:
+        """Create dialog content"""
+        with Vertical(id="dialog-container"):
+            yield Label("Are you sure you want to quit?")
+            with Horizontal(id="dialog-buttons"):
+                yield Button("No", id="confirm-no")
+                yield Button("Yes",id="confirm-yes")
+                
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses"""
+        if event.button.id == "confirm-yes":
+            self.app.exit()
+        else:
+            self.app.pop_screen()
+
 class MainScreen(Screen):
     """Main screen of the app."""
     BINDINGS = [
         ("f", "toggle_bags_only", "Toggle Bags Only"),
-        ("w", "load_whitelist", "Save Whitelist"),
+        ("w", "load_whitelist", "Load Whitelist"),
         ("s", "save_whitelist", "Save Whitelist"),
         ("a", "toggle_select_all_topics", "Toggle Select All Topics"),
-        ("m", "toggle_multi_select", "Toggle Multi-Select Mode"),  # 添加多选模式快捷键
+        ("m", "toggle_multi_select", "Toggle Multi-Select Mode"),
+        ("q", "quit", "Quit"),  # Add quit binding
     ]
     
     selected_bag = reactive(None)
@@ -762,6 +782,10 @@ class MainScreen(Screen):
         """Toggle multi-select mode"""
         bag_selector = self.query_one(BagSelector)
         bag_selector.toggle_multi_select_mode()
+
+    def action_quit(self) -> None:
+        """Show confirmation dialog before quitting"""
+        self.app.push_screen(ConfirmDialog())
 
 class WhitelistScreen(Screen):
     """Screen for selecting whitelists"""
