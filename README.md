@@ -21,11 +21,7 @@ The TUI embraces the **cassette futurism** aesthetic - a design philosophy that 
 More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
 
 
-
-| Dark Theme | Light Theme |
-|------------|-------------|
-| <img src="splash-dark.png" alt="Dark Theme Splash Screen" width="100%"> | <img src="splash-light.png" alt="Light Theme Splash Screen" width="100%"> |
-
+![splash](splash.png)
 
 ## Key Features and Todos
 
