@@ -230,19 +230,36 @@ class ControlPanel(Container):
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
+    
+    # 添加按键绑定
+    BINDINGS = [
+        ("space", "continue", "Continue to Main"),
+        ("q", "quit", "Quit"),
+        ("h", "help", "Help")
+    ]
 
     def compose(self) -> ComposeResult:
         txt2art = text2art("ROSE",font="big")
         yield Vertical(
             Static(txt2art, id="logo"),
             Static("Yet another ros bag editor", id="subtitle"),
-            Static("Press H to continue", id="prompt"),
+            Static("Press SPACE to continue, H for help, Q to quit", id="prompt"),
             id="splash-content"
         )
+        yield Footer()
 
-    def on_key(self) -> None:
-        """Switch to the main screen when any key is pressed."""
+    def action_continue(self) -> None:
+        """Handle space key press to switch to main screen"""
         self.app.switch_mode("main")
+
+    def action_quit(self) -> None:
+        """Handle q key press to quit the app"""
+        self.app.exit()
+
+    def action_help(self) -> None:
+        """Handle h key press to show help screen"""
+        # 这里可以添加切换到帮助页面的逻辑
+        self.app.notify("Help screen not implemented yet", title="Help")
 
 class TaskTable(DataTable):
     """Table for displaying tasks"""
