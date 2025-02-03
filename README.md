@@ -5,8 +5,9 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
 
-![splash screen](screenshot-splash.png)
-
+| Dark Theme | Light Theme |
+|------------|-------------|
+| <img src="splash-dark.png" alt="Dark Theme Splash Screen" width="100%"> | <img src="splash-light.png" alt="Light Theme Splash Screen" width="100%"> |
 
 
 ## Key Features
@@ -91,7 +92,33 @@ roseApp depends on rosbag_io_py lib and you need to build it first.
 
 ### TUI Interface
 
-![tui](screenshot-main.png)
+#### Aesthetic 
+
+The TUI embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
+
+- **Nostalgic minimalism**: Low-resolution displays and monochromatic schemes that evoke 1980s computing
+- **Tactile authenticity**: Visual metaphors of physical media like magnetic tapes and CRT textures
+- **Humanized technology**: Warm color palettes and "imperfect" interfaces that resist digital sterility
+
+More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
+
+> A humble analog relic transformed into a cyberpunk artifact, reminding us that technological progress needn't erase material humanity. Those chunky buttons, whirring tape drives, and limited storage capacities become vessels of cultural memory.
+
+Explore the cultural context on [Wikipedia](https://en.wikipedia.org/wiki/Cassette_futurism).
+
+| cassette-light | cassette-dark |
+|------------|-------------|
+| ![Light Theme TUI](main-light.png) | ![Dark Theme TUI](main-dark.png) |
+
+1. Config File
+Modify `config.json` to specify your preferred theme:
+
+```json
+{
+    "theme": "cassette-dark",
+}
+```
+2. Switch Theme in TUI with command palette(the buttom in bottom right corner or keybinding ^p)
 
 #### Usage
 1. Launch the TUI:

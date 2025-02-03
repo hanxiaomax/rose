@@ -20,7 +20,7 @@ CASSETTE_THEME_DARK = Theme(
         "scrollbar": "#4D4D4D",   
         "button-background": "#00FF00",
         "button-color-foreground": "#1A1A1A",
-        "footer-key-foreground": "#00FFFF"
+        "footer-key-foreground": "#FF8C00"
     }
 )
 
