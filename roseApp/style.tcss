@@ -222,22 +222,15 @@ Button {
     color: $warning;
 }
 
-WhitelistScreen {
-    align: center middle;
+
+
+#whitelist-header{
+    text-align: center;
 }
 
 #whitelist-container {
-    width: 100%;
     padding: 1;
 }
 
-#whitelist-select {
-    width: 40%;
-    height: auto;
 
-}
 
-#whitelist-header{
-    padding: 1;
-    text-align: center;
-}
