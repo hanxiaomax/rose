@@ -23,9 +23,9 @@ A high-performance ROS bag filtering tool  that allows you to extract specific t
 - [ ] Batch processing in TUI
 - [ ] Fuzzy search topic in TUI
 - [ ] Message view in TUI
+- [X] cassette futurism theme, dark and light
 
 ## TODOs
-- [ ] Fix theme color
 - [ ] Support dynamic file/whitelist refresh in TUI 
 
 ## Getting Started

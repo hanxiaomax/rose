@@ -190,15 +190,15 @@ Button {
 }
 
 #subtitle {
-    background: $surface;
-    color: $accent;
+    background: $primary;
+    color: $foreground;
     content-align-horizontal: center;
 }
 
 #prompt {
-    dock: bottom;
+    background:$secondary;
     content-align-horizontal: center;
-    color: $warning;
+    color: $foreground;
 }
 
 
