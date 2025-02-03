@@ -27,5 +27,6 @@ __pycache__/
 *.bak
 *~
 *.bag
-.cursor/rules/rules.mdc
+.cursor/rules/*
 .DS_Store
+.cursorrules
