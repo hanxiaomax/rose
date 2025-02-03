@@ -93,13 +93,14 @@ class TopicTree(Tree):
         if data:
             data["selected"] = not data["selected"]
             topic = data["topic"]
+            count = self.topic_counts.get(topic, 1)
             
             if data["selected"]:
                 self.selected_topics.add(topic)
-                event.node.label = Text("☑️ ")+Text(topic)
+                event.node.label = Text("☑️ ") + Text(f"{topic} [{count}]")
             else:
                 self.selected_topics.discard(topic)
-                event.node.label = topic
+                event.node.label = Text(f"{topic} [{count}]")
                 
             self.update_border_subtitle()
 
