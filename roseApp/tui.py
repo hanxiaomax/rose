@@ -19,10 +19,10 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Select
+    Placeholder, Static, Switch, Tree, Select, Rule
 )
 from textual.widgets.directory_tree import DirEntry
-from themes.cassette_theme import CASSETTE_THEME
+from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from util import Operation, setup_logging
 
 # Initialize logging at the start of the file
@@ -129,7 +129,7 @@ class BagSelector(DirectoryTree):
     def render_label(self, node: DirEntry, base_style, style) -> Text:
         label = super().render_label(node, base_style, style)
         if node.data.path.suffix.lower() == ".bag":
-            label.stylize(Style(color="#ea5949", bold=True))
+            label.stylize(Style(italic=True))
         return label
 
     @work
@@ -190,7 +190,7 @@ class ControlPanel(Container):
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
         with Vertical():
-            with Horizontal():
+            with Horizontal(id="control-panel-top"):
                 with Vertical(id="time-range-container1"):
                     yield Label("From:")
                     yield Input(placeholder="Start Time", id="start-time", classes="time-input")
@@ -200,7 +200,8 @@ class ControlPanel(Container):
                 with Vertical(id="output-file-container"):
                     yield Label("Output File:")
                     yield Input(placeholder="", id="output-file", classes="file-input")
-            with Horizontal():
+
+            with Horizontal(id="control-panel-bottom"):
                 with Container(id="add-task-btn-container"):
                     yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
     
@@ -319,21 +320,17 @@ class MainScreen(Screen):
         yield Header()
         
         with Container():
-            with Vertical(id="left-column"):
-                with Container(id="file-explorer"):
-                    yield BagSelector(str(Path(__file__).parent))
+            with Vertical(id="file-explorer-area"):
+                yield BagSelector(str(Path(__file__).parent))
 
             with Vertical(id="main-area"):
                 with Horizontal(id="topics-area"):
-                    with Container(id="topics-container"):
-                        yield TopicTree()
+                    yield TopicTree()
+                    yield Placeholder()
+                with Container(id="control-panel-container"):
+                    yield ControlPanel()
 
-                    with Container(id="right-panel"):
-                        yield Placeholder()
-
-                yield ControlPanel()
-
-                with Container(id="tasks-table"):
+                with Container(id="tasks-table-container"):
                     yield TaskTable()
         
         with Container(id="status-bar"):
@@ -517,7 +514,6 @@ class WhitelistScreen(Screen):
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the whitelist screen"""
-        yield Header()
         with Vertical(id="whitelist-container"):
             yield Static("Select a whitelist to apply", id="whitelist-header")
             whitelist_names = list(self.app.config.get("whitelists", {}).keys())
@@ -582,8 +578,9 @@ class RoseTUI(App):
             self.logger.info("Starting with main screen")
             self.switch_mode("main")
         # self.theme = "monokai"
-        self.register_theme(CASSETTE_THEME)
-        self.theme = "cassette"
+        self.register_theme(CASSETTE_THEME_DARK)
+        self.register_theme(CASSETTE_THEME_LIGHT)
+        self.theme = self.config.get("theme", "cassette-dark")
     
 
 if __name__ == "__main__":

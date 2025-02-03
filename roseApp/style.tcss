@@ -37,26 +37,20 @@ Screen {
     color: $warning;
 }
 
-#left-column {
+
+
+#file-explorer-area {
     width: 30%;
     height: 100%;
     dock: left;
 }
 
-#main-area {
-    width: 100%;
-    height: 100%;
-}
-
-
-
-DirectoryTree > .tree--cursor {
-    background: $block-cursor-background;
-    color: $block-cursor-foreground;
-}
-
 DirectoryTree > .tree--guides {
-    color: $accent;
+    color: $primary;
+}
+
+TopicTree > .tree--guides {
+    color: $primary;
 }
 
 BagSelector {
@@ -67,69 +61,104 @@ BagSelector {
 }
 
 #topics-area {
-    height: 52%;
+    height: 50%;
+}
+#control-panel-container{
+    height: 20%;
+}
+#tasks-table-container{
+    height: 30%;
 }
 
 TopicTree {
+    width: 60%;
     background: $surface;
     border: $border;
     padding: 1; 
 }
-
-#topics-container {
-    width: 60%;
-    background: $surface;
-}
-
-#right-panel {
+Placeholder {
     width: 40%;
-    border: $border;
     background: $surface;
-    padding: 1;
+    border: $border;
 }
 
 ControlPanel {
-    height: 18%;
     width: 100%;
     layout: horizontal;
-    padding: 1;
 }
 
-#time-range-container1 {
-    width: 25%;
+#control-panel-top{
+    height: 60%;
+}
+#control-panel-bottom{
+    height: 40%;
 }
 
-#time-range-container2 {
+
+#time-range-container1, #time-range-container2{
     width: 25%;
+    padding: 0 1;
 }
-ControlPanel .time-input {
+#output-file-container {
+    width: 50%;
+    padding: 0 1;
+}
+
+
+#time-range-container1 > .time-input,
+#time-range-container2 > .time-input {
     width: 100%;
-    margin: 0 1;
-    height: 5vh;
+    padding: 0;
+    background: $panel;
+    border: none;
+    text-align: center;
+}
+
+#time-range-container1 > .time-input:hover,
+#time-range-container2 > .time-input:hover {
+    border: none;
+    padding: 0;
+    color: $accent;
+}
+
+#output-file-container > .file-input {
+    width: 100%;
+    padding: 0;
+    background: $panel;
     border: none;
 }
 
-ControlPanel .file-input {
-    width: 100%;
-    margin: 0 1;
-    height: 5vh;
+#output-file-container > .file-input:hover {
     border: none;
+    padding: 0;
+    color: $accent;
 }
 
+TaskTable {
+    width: 100%;
+    height: 100%;
+    border: $border;
+    background: $surface;
+    color: $foreground;
+}
+
+
+TaskTable.has-header  > .datatable--header {
+    background: $primary-darken-2;
+    color: $background;
+}
 #add-task-btn-container {
     align: right bottom;
+    padding: 0;
+    margin: 0;
 }
 
-ControlPanel .task-btn {
+Button {
     width: 15%;
     margin: 0 1;
-    min-width: 10;
     border: none;
-    align: center middle ;
+    background: $button-foreground;
 }
-
-
-
 
 
 #main-container {
@@ -193,19 +222,6 @@ ControlPanel .task-btn {
     color: $warning;
 }
 
-TaskTable {
-    height: 100%;
-    width: 100%;
-    border: $border;
-    background: $surface;
-    color: $foreground;
-}
-
-TaskTable.has-header  > .datatable--header {
-    background: $primary-darken-2;
-    color: $background;
-}
-
 WhitelistScreen {
     align: center middle;
 }
@@ -213,48 +229,17 @@ WhitelistScreen {
 #whitelist-container {
     width: 60;
     height: auto;
-    border: $border;
     padding: 1;
-    background: $surface;
+    color: $primary;
 }
 
 #whitelist-header {
     content-align: center middle;
     height: 3;
     margin-bottom: 1;
-    color: $foreground;
 }
 
-#whitelist-list {
-    width: 100%;
-    height: auto;
-    margin: 1;
+#whitelist-select {
+    color: #FF8C00;  /* darkorange (橘红色) */
+    background: $button-foreground;
 }
-
-.whitelist-btn {
-    width: 100%;
-    margin-bottom: 1;
-    background: $surface;
-    color: $button-foreground;
-    border: $border;
-}
-
-.whitelist-btn:hover {
-    background: $primary-darken-2;
-}
-
-#back-btn-container {
-    align: right bottom;
-}
-
-#back-btn {
-    margin-top: 2;
-    background: $surface;
-    color: $button-foreground;
-    border: $border;
-}
-
-#back-btn:hover {
-    background: $primary-darken-2;
-}
-
