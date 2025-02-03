@@ -55,31 +55,43 @@ class TopicTree(Tree):
         self.border_title = "Topics"
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
+        self.multi_select_mode = False  # Add flag for multi-select mode
+        self.show_root = False
 
     def on_mount(self) -> None:
         """Initialize when mounted"""
         super().on_mount()
         self.root.expand()
 
-    def filter_topics(self, search_text: str) -> None:
+    def get_node_label(self, topic: str, selected: bool = False) -> Text:
         """
-        Filter topics based on search text using fuzzy search.
+        Get the label for a topic node based on mode and selection state.
         
         Args:
-            search_text (str): Text to search for
+            topic: The topic name
+            selected: Whether the topic is selected
         """
+        if self.multi_select_mode:
+            count = self.topic_counts.get(topic, 1)
+            label = f"{topic} [{count}]"
+        else:
+            label = topic
+            
+        if selected:
+            return Text("☑️ ") + Text(label)
+        return Text(label)
+
+    def filter_topics(self, search_text: str) -> None:
+        """Filter topics based on search text using fuzzy search."""
         self.root.remove_children()
         
-        # If no search text, show all topics
         if not search_text:
             filtered_topics = self.all_topics
         else:
-            # Use fuzzy search to find and score matches
             scored_topics = [
                 (topic, self.fuzzy_searcher.match(search_text, topic)[0])
                 for topic in self.all_topics
             ]
-            # Filter and sort by score (higher score = better match)
             filtered_topics = [
                 topic for topic, score in sorted(
                     scored_topics,
@@ -88,29 +100,23 @@ class TopicTree(Tree):
                 ) if score > 0
             ]
         
-        # Add filtered topics to tree
         for topic in filtered_topics:
-            count = self.topic_counts.get(topic, 1)
-            label = f"{topic} [{count}]"
-            if topic in self.selected_topics:
-                label = "☑️ " + label
-            
             self.root.add(
-                label,
+                self.get_node_label(topic, topic in self.selected_topics),
                 data={"topic": topic, "selected": topic in self.selected_topics},
                 allow_expand=False
             )
 
     def set_topics(self, topics: list) -> None:
         """Set topics and clear previous selections"""
-        self.all_topics = topics  # Store all topics for filtering
+        self.all_topics = topics
         self.selected_topics.clear()
         self.topic_counts.clear()
         self.root.remove_children()
         
         for topic in sorted(topics):
             self.root.add(
-                topic,
+                self.get_node_label(topic),
                 data={"topic": topic, "selected": False},
                 allow_expand=False
             )
@@ -131,22 +137,20 @@ class TopicTree(Tree):
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle topic selection toggle"""
-        if event.node.allow_expand or "Time range" in event.node.label:
+        if event.node.allow_expand:
             return
             
         data = event.node.data
         if data:
             data["selected"] = not data["selected"]
             topic = data["topic"]
-            count = self.topic_counts.get(topic, 1)
             
             if data["selected"]:
                 self.selected_topics.add(topic)
-                event.node.label = Text("☑️ ") + Text(f"{topic} [{count}]")
             else:
                 self.selected_topics.discard(topic)
-                event.node.label = Text(f"{topic} [{count}]")
                 
+            event.node.label = self.get_node_label(topic, data["selected"])
             self.update_border_subtitle()
 
     def get_selected_topics(self) -> list:
@@ -154,27 +158,22 @@ class TopicTree(Tree):
         return list(self.selected_topics)
 
     def merge_topics(self, new_topics: list) -> None:
-        """
-        Merge new topics and update their occurrence counts.
-        
-        Args:
-            new_topics (list): List of new topics to merge
-        """
+        """Merge new topics and update their occurrence counts."""
         for topic in new_topics:
             self.topic_counts[topic] = self.topic_counts.get(topic, 0) + 1
             if topic not in [node.data.get("topic") for node in self.root.children]:
                 self.root.add(
-                    f"{topic} [{self.topic_counts[topic]}]",
+                    self.get_node_label(topic),
                     data={"topic": topic, "selected": False},
                     allow_expand=False
                 )
             else:
-                # Update display for existing topics
                 for node in self.root.children:
                     if node.data.get("topic") == topic:
-                        node.label = Text(f"{topic} [{self.topic_counts[topic]}]")
-                        if node.data.get("selected"):
-                            node.label = Text("☑️ ") + Text(f"{topic} [{self.topic_counts[topic]}]")
+                        node.label = self.get_node_label(
+                            topic, 
+                            node.data.get("selected", False)
+                        )
                         break
 
         self.update_border_subtitle()
@@ -243,14 +242,7 @@ class BagSelector(DirectoryTree):
         self.border_title = f"File Explorer - {mode}{count}"
 
     def toggle_multi_select_mode(self):
-        """
-        Toggle multi-select mode on/off.
-        
-        When enabled:
-        - Clears previous selections
-        - Shows only bag files
-        - Disables control panel inputs
-        """
+        """Toggle multi-select mode on/off."""
         self.multi_select_mode = not self.multi_select_mode
         self.selected_bags.clear()
         self.show_only_bags = self.multi_select_mode
@@ -259,6 +251,11 @@ class BagSelector(DirectoryTree):
         
         control_panel = self.app.query_one(ControlPanel)
         control_panel.set_enabled(not self.multi_select_mode)
+        
+        # Update TopicTree mode
+        topic_tree = self.app.query_one(TopicTreeWrap).topic_tree
+        topic_tree.multi_select_mode = self.multi_select_mode
+        topic_tree.filter_topics("")  # Refresh display
         
         status = self.app.query_one(StatusBar)
         status.update_status(f"{'Entered' if self.multi_select_mode else 'Exited'} multi-select mode")
