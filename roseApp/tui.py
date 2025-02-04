@@ -20,7 +20,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea
+    Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea, RichLog
 )
 from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
@@ -1031,6 +1031,86 @@ class WhitelistScreen(Screen):
         except Exception as e:
             preview.load_text(f"Error loading whitelist: {str(e)}")
 
+class LogsScreen(Screen):
+    """Screen for displaying application logs"""
+    
+    BINDINGS = [
+        ("q", "quit", "Back"),
+        ("r", "reload", "Reload"),
+        ("j", "scroll_end", "Scroll to End"),
+        ("k", "scroll_home", "Scroll to Top"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets for the logs screen"""
+        yield Header(show_clock=True)
+        
+        with Container(id="logs-container"):
+            yield RichLog(
+                highlight=True,
+                markup=True,
+                wrap=True,
+                id="log-viewer",
+                classes="logs"
+            )
+            
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """Load logs when screen is mounted"""
+        self.load_logs()
+
+    def load_logs(self) -> None:
+        """Load and display logs from file"""
+        log_viewer = self.query_one(RichLog)
+        log_viewer.clear()
+        
+        try:
+            log_path = Path("rose_tui.log")
+            if not log_path.exists():
+                log_viewer.write("[red]No log file found at rose_tui.log[/red]")
+                return
+                
+            with open(log_path, "r") as f:
+                log_content = f.read()
+                
+            # Split content into lines and add syntax highlighting
+            from rich.syntax import Syntax
+            log_viewer.write(
+                Syntax(
+                    log_content, 
+                    "log",
+                    theme="monokai",
+                    line_numbers=True,
+                    word_wrap=True
+                )
+            )
+            
+            # Scroll to end by default
+            log_viewer.scroll_end(animate=False)
+            
+        except Exception as e:
+            log_viewer.write(f"[red]Error loading logs: {str(e)}[/red]")
+
+    def action_quit(self) -> None:
+        """Handle q key press to return to previous screen"""
+        self.app.pop_screen()
+
+    def action_reload(self) -> None:
+        """Handle r key press to reload logs"""
+        self.load_logs()
+        self.notify("Logs reloaded", severity="information")
+
+    def action_scroll_end(self) -> None:
+        """Handle end key press to scroll to bottom"""
+        log_viewer = self.query_one(RichLog)
+        log_viewer.scroll_end(animate=True)
+
+    def action_scroll_home(self) -> None:
+        """Handle home key press to scroll to top"""
+        log_viewer = self.query_one(RichLog)
+        log_viewer.scroll_home(animate=True)
+
 class RoseTUI(App):
     """Textual TUI for filtering ROS bags"""
     
@@ -1081,6 +1161,14 @@ class RoseTUI(App):
             "Quit the application as soon as possible",
             super().action_quit,
         )
+        yield SystemCommand(
+            "Show Logs",
+            "Show Logs",
+            self.show_logs,
+        )
+
+    def show_logs(self):
+        self.push_screen(LogsScreen())
 
     def toggle_dark_mode(self):
         self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
