@@ -49,7 +49,7 @@ async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None
 
 ```python
 @work(thread=True)
-async def long_operation(self) -> None:
+def long_operation(self) -> None:
     time.sleep(5)  
 
 @work()
@@ -57,4 +57,4 @@ async def long_operation(self) -> None:
     await asyncio.sleep(5)  
 ```
 
-上面两种形式的操作都可以避免阻塞UI，但是第一种由于`time.sleep`是阻塞的，所以使用线程的方式，第二种形式则是纯异步的。注意，被`@work`装饰的函数，都需要是async的。
+上面两种形式的操作都可以避免阻塞UI，但是第一种由于`time.sleep`是阻塞的，所以使用线程的方式，第二种形式则是纯异步的。注意，被`@work`装饰的函数，不是async的。

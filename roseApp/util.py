@@ -22,7 +22,6 @@ class Operation():
         """Filter rosbag using C++ interface"""
         try:
             start_time = time.time()
-            
             io = rosbag_io_py.rosbag_io()
             ## TODO: support load with whitelist and time range
             io.load(input_bag)
