@@ -261,7 +261,7 @@ class TopicTree(Tree):
         self.update_border_subtitle()
         return all_selected, len(self.selected_topics)
 
-class TopicTreeWrap(Container):
+class TopicTreePanel(Container):
     """A wrapper component that contains a search input and a topic tree"""
     
     def __init__(self):
