@@ -251,5 +251,30 @@ ConfirmDialog {
     align: center middle;
 }
 
+LogsScreen {
+    align: center middle;
+}
+
+#logs-container {
+    width: 95%;
+    height: 90%;
+    border: solid $primary;
+}
+.logs {
+    background: $surface-darken-1;
+    color: $text;
+    height: 100%;
+    border: none;
+    overflow-y: scroll;
+}
+
+
+.logs:hover {
+    scrollbar-background: $surface-lighten-1;
+    scrollbar-color: $primary-lighten-1;
+    scrollbar-color-hover: $primary-lighten-2;
+    scrollbar-color-active: $primary-lighten-3;
+}
+
 
 
