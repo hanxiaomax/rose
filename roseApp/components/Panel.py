@@ -35,7 +35,6 @@ class TopicManager:
     def remove_bag(self, bag_path: str) -> 'tuple[list[str], list[str]]':
         """
         Remove a bag and update topic counts.
-        
         Args:
             bag_path: Path to the bag file
             
@@ -50,20 +49,17 @@ class TopicManager:
         removed_topics = []
         updated_topics = []
         
-        # 获取这个bag包含的所有topics
+
         topics = self.bag_topics[bag_path]
-        
-        # 从每个topic的bags集合中移除这个bag
+
         for topic in topics:
             self.topic_bags[topic].remove(bag_path)
-            # 如果topic不再被任何bag包含，则应该被删除
             if not self.topic_bags[topic]:
                 removed_topics.append(topic)
                 del self.topic_bags[topic]
             else:
                 updated_topics.append(topic)
-        
-        # 删除bag的记录
+
         del self.bag_topics[bag_path]
         
         return removed_topics, updated_topics
@@ -81,8 +77,8 @@ class TopicTree(Tree):
     
     def __init__(self, topic_manager: TopicManager):
         super().__init__("Topics")
-        self.selected_topics = set()
-        self.topic_manager = topic_manager  # 使用传入的 topic_manager
+        self.selected_topics = set() # selected topics used for filtering
+        self.topic_manager = topic_manager  # manager for topic-bag relationships
         self.all_topics = []  # Store all topics for filtering
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
@@ -193,14 +189,12 @@ class TopicTree(Tree):
         
         for topic in new_topics:
             if topic not in [node.data.get("topic") for node in self.root.children]:
-                # 添加新topic节点
                 self.root.add(
                     self.get_node_label(topic),
                     data={"topic": topic, "selected": False},
                     allow_expand=False
                 )
             else:
-                # 更新已存在topic的显示
                 for node in self.root.children:
                     if node.data.get("topic") == topic:
                         node.label = self.get_node_label(
@@ -276,7 +270,7 @@ class TopicTreePanel(Container):
             placeholder="Search topics...",
             id="topic-search",
         )
-        self._topic_tree = TopicTree(self._topic_manager)  # 传入 topic_manager
+        self._topic_tree = TopicTree(self._topic_manager)  
         yield self._topic_tree
 
     def on_mount(self) -> None:

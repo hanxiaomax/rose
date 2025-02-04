@@ -20,7 +20,7 @@ from textual.widgets import (
     Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea, RichLog
 )
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
-from util import Operation, setup_logging
+from core.util import Operation, setup_logging
 from textual.fuzzy import FuzzySearch
 from textual.worker import Worker, WorkerState
 from components.Panel import TopicTreePanel

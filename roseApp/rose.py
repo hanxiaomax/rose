@@ -2,7 +2,7 @@
 
 import os
 import click
-from util import Operation
+from core.util import Operation
 from tui import RoseTUI     
 
 
