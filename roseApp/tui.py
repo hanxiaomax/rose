@@ -6,8 +6,6 @@ import logging
 import time
 from pathlib import Path
 from typing import Iterable
-from collections import defaultdict
-from dataclasses import dataclass
 
 # Third-party imports
 from art import text2art
@@ -26,6 +24,7 @@ from util import Operation, setup_logging
 from textual.fuzzy import FuzzySearch
 from textual.worker import Worker, WorkerState
 from components.TopicTreePanel import TopicTreeWrap
+from components.Dialog import ConfirmDialog
 
 # Initialize logging at the start of the file
 logger = setup_logging()
@@ -379,53 +378,6 @@ class ControlPanel(Container):
         #        f"Task started, please wait...",
         #        title="INFO",severity="information")
 
-class SplashScreen(Screen):
-    """Splash screen for the app."""
-    
-    BINDINGS = [
-        ("space", "continue", "Enter"),
-        ("q", "quit", "Quit"),
-        ("h", "help", "Help")
-    ]
-
-    def compose(self) -> ComposeResult:
-        txt2art = text2art("ROSE",font="big")
-        with Vertical(id="splash-content"):
-            yield Vertical(
-                Static(txt2art, id="logo"),
-                Static("Yet another ros bag editor", id="subtitle"),
-                Static("Press SPACE to Enter, H for help, Q to quit", id="prompt"),
-                id="splash-content"
-            )
-
-            with Container():
-                with Horizontal(id="about"):  
-                    yield Link(
-                        "Project Page: https://github.com/hanxiaomax/rose",
-                        url="https://github.com/hanxiaomax/rose",
-                        tooltip="Ctrl + Click to open in browser",
-                        classes="about-link",
-                    )
-                    yield Rule(orientation="vertical",id="about-divider")
-                    yield Link(
-                        "Author: Lingfeng_Ai",
-                        url="https://github.com/hanxiaomax",
-                        tooltip="Ctrl + Click to open in browser",
-                        classes="about-link",
-                    )
-        yield Footer()
-
-    def action_continue(self) -> None:
-        """Handle space key press to switch to main screen"""
-        self.app.switch_mode("main")
-
-    def action_quit(self) -> None:
-        """Handle q key press to quit the app"""
-        self.app.exit()
-
-    def action_help(self) -> None:
-        """Handle h key press to show help screen"""
-        self.app.notify("Help screen not implemented yet", title="Help")
 
 class TaskTable(DataTable):
     """Table for displaying tasks"""
@@ -485,24 +437,55 @@ class StatusBar(Static):
         
         self.update(message)
 
-class ConfirmDialog(Screen):
-    """Dialog screen for confirming actions"""
-    
-    def compose(self) -> ComposeResult:
-        """Create dialog content"""
-        with Vertical(id="dialog-container"):
-            yield Label("Are you sure you want to quit?")
-            with Horizontal(id="dialog-buttons"):
-                yield Button("No", id="confirm-no")
-                yield Button("Yes",id="confirm-yes")
-                
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses"""
-        if event.button.id == "confirm-yes":
-            self.app.exit()
-        else:
-            self.app.pop_screen()
+class SplashScreen(Screen):
+    """Splash screen for the app."""
+    
+    BINDINGS = [
+        ("space", "continue", "Enter"),
+        ("q", "quit", "Quit"),
+        ("h", "help", "Help")
+    ]
+
+    def compose(self) -> ComposeResult:
+        txt2art = text2art("ROSE",font="big")
+        with Vertical(id="splash-content"):
+            yield Vertical(
+                Static(txt2art, id="logo"),
+                Static("Yet another ros bag editor", id="subtitle"),
+                Static("Press SPACE to Enter, H for help, Q to quit", id="prompt"),
+                id="splash-content"
+            )
+
+            with Container():
+                with Horizontal(id="about"):  
+                    yield Link(
+                        "Project Page: https://github.com/hanxiaomax/rose",
+                        url="https://github.com/hanxiaomax/rose",
+                        tooltip="Ctrl + Click to open in browser",
+                        classes="about-link",
+                    )
+                    yield Rule(orientation="vertical",id="about-divider")
+                    yield Link(
+                        "Author: Lingfeng_Ai",
+                        url="https://github.com/hanxiaomax",
+                        tooltip="Ctrl + Click to open in browser",
+                        classes="about-link",
+                    )
+        yield Footer()
+
+    def action_continue(self) -> None:
+        """Handle space key press to switch to main screen"""
+        self.app.switch_mode("main")
+
+    def action_quit(self) -> None:
+        """Handle q key press to quit the app"""
+        self.app.exit()
+
+    def action_help(self) -> None:
+        """Handle h key press to show help screen"""
+        self.app.notify("Help screen not implemented yet", title="Help")
+
 
 class MainScreen(Screen):
     """Main screen of the app."""
@@ -650,7 +633,7 @@ class MainScreen(Screen):
 
     def action_quit(self) -> None:
         """Show confirmation dialog before quitting"""
-        self.app.push_screen(ConfirmDialog())
+        self.app.push_screen(ConfirmDialog("Are you sure you want to quit?",self.app.exit,self.app.pop_screen))
 
 class WhitelistScreen(Screen):
     """Screen for selecting whitelists"""
