@@ -303,7 +303,7 @@ class BagSelector(DirectoryTree):
             self._deselect_bag(path, event, status)
         else:
             self._select_bag(path, event, status)
-        self.update_border_title()
+        self.update_border_subtitle()
 
     def _deselect_bag(self, path: Path, event, status: "StatusBar") -> None:
         """Handle bag file deselection"""
