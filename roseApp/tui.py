@@ -739,7 +739,7 @@ class TaskTable(DataTable):
     def add_task(self, input_bag: str, output_bag: str, time_cost: float, time_range: tuple) -> None:
         """Add a new task to the table"""
         if self.task_count == 0:
-            self.add_columns("ID", "Input", "Output", "Time Range", "Size", "Time Elapsed")
+            self.add_columns("ID", "Status", "Input", "Output", "Time Range", "Size", "Time Elapsed")
             self.add_class("has-header") 
 
         self.task_count += 1
@@ -750,9 +750,10 @@ class TaskTable(DataTable):
 
         self.add_row(
             str(self.task_count),
+            "done",
             Path(input_bag).name,
             Path(output_bag).name,
-            f"{start_time} - {end_time}",
+            f"{start_time[9:]} - {end_time[9:]}", #only display time in HH:MM:SS
             f"{input_size} -> {output_size}",
             f"{time_cost}s"
         )
