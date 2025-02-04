@@ -594,6 +594,29 @@ class ControlPanel(Container):
             self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
 
     @work(thread=True)
+    def _process(self,task_table, bag_path: str, selected_topics: list,time_range:tuple,output_file:str) -> None:
+        """Handle task creation for single bag"""
+        process_start = time.time()
+        
+        Operation.filter_bag(
+            bag_path,
+            output_file,
+            selected_topics,
+            time_range
+        )
+        process_end = time.time()
+        time_cost = int(process_end - process_start)
+        
+        # update UI
+        self.app.call_from_thread(
+            task_table.add_task,
+            bag_path,
+            output_file,
+            time_cost,
+            time_range
+        )
+            
+
     def _handle_multi_bag_task(self, bag_selector: BagSelector, selected_topics: list) -> None:
         """Handle task creation for multiple bags"""
         if not bag_selector.selected_bags:
@@ -607,45 +630,22 @@ class ControlPanel(Container):
             try:
                 _, _, bag_time_range = Operation.load_bag(bag_path)
                 output_file = f"{Path(bag_path).stem}_filtered.bag"
-                
-                process_start = time.time()
-                Operation.filter_bag(
-                    bag_path,
-                    output_file,
-                    selected_topics,
-                    bag_time_range
-                )
-                process_end = time.time()
-                time_cost = int(process_end - process_start)
-                
-                # 使用 call_from_thread 安全地更新 UI
-                self.app.call_from_thread(
-                    task_table.add_task,
-                    bag_path,
-                    output_file,
-                    time_cost,
-                    bag_time_range
-                )
+                self._process(task_table,bag_path,selected_topics,bag_time_range,output_file)
                 success_count += 1
                 
             except Exception as e:
                 self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
-                self.app.call_from_thread(
-                    self.app.notify,
-                    f"Error processing {Path(bag_path).name}: {str(e)}",
-                    title="Error",
-                    severity="error"
-                )
+                self.app.notify(f"Error processing {Path(bag_path).name}: {str(e)}",
+                title="Error",
+                severity="error")
         
         if success_count > 0:
-            self.app.call_from_thread(
-                self.app.notify,
+            self.app.notify(
                 f"Successfully processed {success_count} of {len(bag_selector.selected_bags)} bag files",
-                title="Success",
-                severity="information"
-            )
+                title="Success",severity="information")
+            
+            
 
-    @work(thread=True)
     def _handle_single_bag_task(self, selected_topics: list) -> None:
         """Handle task creation for single bag"""
         if not self.app.selected_bag:
@@ -661,42 +661,19 @@ class ControlPanel(Container):
             self.logger.debug(f"Starting bag filtering task: {self.app.selected_bag} -> {self.get_output_file()}")
             start_time = time.time()
             time_range = Operation.convert_time_range_to_tuple(*self.get_time_range())
-            
-            Operation.filter_bag(
-                self.app.selected_bag,
-                self.get_output_file(),
-                selected_topics,
-                time_range
-            )
-            
-            end_time = time.time()
-            time_cost = int(end_time - start_time)
-            
             task_table = self.app.query_one(TaskTable)
-            # 使用 call_from_thread 安全地更新 UI
-            self.app.call_from_thread(
-                task_table.add_task,
-                self.app.selected_bag,
-                self.get_output_file(),
-                time_cost,
-                time_range
-            )
+
+            self._process(task_table,self.app.selected_bag,selected_topics,time_range,self.get_output_file())
             
-            self.app.call_from_thread(
-                self.app.notify,
-                f"Bag conversion completed in {time_cost} seconds",
+            self.app.notify(f"Bag conversion completed",
                 title="Success",
-                severity="information"
-            )
-            
+                severity="information")
+
         except Exception as e:
             self.logger.error(f"Error processing bag: {str(e)}", exc_info=True)
-            self.app.call_from_thread(
-                self.app.notify,
-                f"Error processing bag: {str(e)}",
+            self.app.notify(f"Error processing bag: {str(e)}",
                 title="Error",
-                severity="error"
-            )
+                severity="error")
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
