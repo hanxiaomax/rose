@@ -1,0 +1,50 @@
+@startuml BagManager Design
+
+class BagManager {
+    - bags: dict[str, BagMeta]
+    - observers: list[Callable]
+    
+    + add_bag(bag_path: str, topics: set[str], meta: dict) → None
+    + remove_bag(bag_path: str) → None
+    + get_bag_meta(bag_path: str) → BagMeta
+    + get_all_bags() → list[str]
+    + get_processing_status(bag_path: str) → ProcessingStatus
+    + get_common_topics() → set[str]
+    + register_observer(callback: Callable) → None
+    + notify_observers() → None
+}
+
+class BagMeta {
+    + path: str
+    + size: int
+    + topics: set[str]
+    + time_range: tuple[float, float]
+    + message_count: int
+    + status: ProcessingStatus
+    + last_modified: float
+}
+
+enum ProcessingStatus {
+    IDLE
+    PROCESSING
+    SUCCESS
+    FAILED
+}
+
+class BagSelector {
+    - multi_select_mode: bool
+    + on_bag_selected(bag_path: str) → None
+    + on_bag_deselected(bag_path: str) → None
+    + toggle_multi_select_mode() → None
+}
+
+class TopicTreePanel {
+    + update_display() → None
+    + get_selected_topics() → set[str]
+}
+
+App --> BagManager
+BagSelector --> BagManager
+TopicTreePanel --> BagManager
+
+@enduml
