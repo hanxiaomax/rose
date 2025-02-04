@@ -43,7 +43,6 @@ class Operation():
         # in case whitelist or time range is set before loading bag
         # it betters to load bag partially. dose it make sense?
         io.load(bag_path)
-        
         topics = io.get_topics()
         connections = io.get_connections()
         timerange = io.get_time_range()

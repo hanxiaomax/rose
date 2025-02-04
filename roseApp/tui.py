@@ -6,6 +6,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Iterable
+from collections import defaultdict
 
 # Third-party imports
 from art import text2art
@@ -43,13 +44,80 @@ def load_config():
         logger.error(f"Error: {e}")
         return {"show_splash_screen": True}
 
+class TopicManager:
+    """Manager for handling topic-bag relationships and counts"""
+    
+    def __init__(self):
+        # 存储每个topic对应的bag set
+        self.topic_bags: dict[str, 'set[str]'] = defaultdict(set)
+        # 存储每个bag对应的topics list，用于快速查找bag包含的所有topics
+        self.bag_topics: dict[str, 'list[str]'] = {}
+        
+    def add_bag(self, bag_path: str, topics: 'list[str]') -> None:
+        """
+        Add a bag and its topics to the manager.
+        
+        Args:
+            bag_path: Path to the bag file
+            topics: List of topics in the bag
+        """
+        # 记录bag包含的topics
+        self.bag_topics[bag_path] = topics
+        # 为每个topic添加这个bag
+        for topic in topics:
+            self.topic_bags[topic].add(bag_path)
+    
+    def remove_bag(self, bag_path: str) -> 'tuple[list[str], list[str]]':
+        """
+        Remove a bag and update topic counts.
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            tuple[list[str], list[str]]: (removed_topics, updated_topics)
+            - removed_topics: Topics that should be removed (count became 0)
+            - updated_topics: Topics that still exist but count decreased
+        """
+        if bag_path not in self.bag_topics:
+            return [], []
+            
+        removed_topics = []
+        updated_topics = []
+        
+        # 获取这个bag包含的所有topics
+        topics = self.bag_topics[bag_path]
+        
+        # 从每个topic的bags集合中移除这个bag
+        for topic in topics:
+            self.topic_bags[topic].remove(bag_path)
+            # 如果topic不再被任何bag包含，则应该被删除
+            if not self.topic_bags[topic]:
+                removed_topics.append(topic)
+                del self.topic_bags[topic]
+            else:
+                updated_topics.append(topic)
+        
+        # 删除bag的记录
+        del self.bag_topics[bag_path]
+        
+        return removed_topics, updated_topics
+    
+    def get_topic_count(self, topic: str) -> int:
+        """Get the number of bags containing a topic"""
+        return len(self.topic_bags.get(topic, set()))
+    
+    def get_topics(self) -> 'list[str]':
+        """Get all current topics"""
+        return list(self.topic_bags.keys())
+
 class TopicTree(Tree):
     """A tree widget for displaying ROS bag topics with multi-selection capability"""
     
     def __init__(self):
         super().__init__("Topics")
         self.selected_topics = set()
-        self.topic_counts = {}  # Store topic occurrence counts
+        self.topic_manager = TopicManager()  # 使用新的topic管理器
         self.all_topics = []  # Store all topics for filtering
         self.border_title = "Topics"
         self.border_subtitle = "Selected: 0"
@@ -71,7 +139,7 @@ class TopicTree(Tree):
             selected: Whether the topic is selected
         """
         if self.multi_select_mode:
-            count = self.topic_counts.get(topic, 1)
+            count = self.topic_manager.get_topic_count(topic)
             label = f"{topic} [{count}]"
         else:
             label = topic
@@ -110,7 +178,6 @@ class TopicTree(Tree):
         """Set topics and clear previous selections"""
         self.all_topics = topics
         self.selected_topics.clear()
-        self.topic_counts.clear()
         self.root.remove_children()
         
         for topic in sorted(topics):
@@ -156,17 +223,20 @@ class TopicTree(Tree):
         """Return list of selected topics"""
         return list(self.selected_topics)
 
-    def merge_topics(self, new_topics: list) -> None:
-        """Merge new topics and update their occurrence counts."""
+    def merge_topics(self, bag_path: str, new_topics: list) -> None:
+        """Add topics from a bag"""
+        self.topic_manager.add_bag(bag_path, new_topics)
+        
         for topic in new_topics:
-            self.topic_counts[topic] = self.topic_counts.get(topic, 0) + 1
             if topic not in [node.data.get("topic") for node in self.root.children]:
+                # 添加新topic节点
                 self.root.add(
                     self.get_node_label(topic),
                     data={"topic": topic, "selected": False},
                     allow_expand=False
                 )
             else:
+                # 更新已存在topic的显示
                 for node in self.root.children:
                     if node.data.get("topic") == topic:
                         node.label = self.get_node_label(
@@ -177,7 +247,31 @@ class TopicTree(Tree):
 
         self.update_border_subtitle()
 
-    def toggle_select_all(self) -> 'tuple[bool, int]':
+    def remove_bag_topics(self, bag_path: str) -> None:
+        """Remove topics from a bag"""
+        removed_topics, updated_topics = self.topic_manager.remove_bag(bag_path)
+        
+        # 移除不再存在的topics
+        for topic in removed_topics:
+            self.selected_topics.discard(topic)
+            for node in list(self.root.children): 
+                if node.data.get("topic") == topic:
+                    node.remove()  
+                    break
+        
+        # 更新计数减少但仍存在的topics
+        for topic in updated_topics:
+            for node in self.root.children:
+                if node.data.get("topic") == topic:
+                    node.label = self.get_node_label(
+                        topic,
+                        node.data.get("selected", False)
+                    )
+                    break
+        
+        self.update_border_subtitle()
+
+    def toggle_select_all(self, event: Tree.NodeSelected) -> 'tuple[bool, int]':
         """
         Toggle selection state of all topics.
         
@@ -238,9 +332,9 @@ class TopicTreeWrap(Container):
         """Get selected topics from the tree"""
         return self.topic_tree.get_selected_topics()
 
-    def merge_topics(self, new_topics: list) -> None:
+    def merge_topics(self, bag_path: str, new_topics: list) -> None:
         """Merge new topics into the tree"""
-        self.topic_tree.merge_topics(new_topics)
+        self.topic_tree.merge_topics(bag_path, new_topics)
 
     def update_border_title(self):
         """Update the border title"""
@@ -343,9 +437,22 @@ class BagSelector(DirectoryTree):
 
     def _deselect_bag(self, path: Path, event, status: "StatusBar") -> None:
         """Handle bag file deselection"""
-        self.selected_bags.remove(str(path))
-        event.node.label = Text(path.name)
-        status.update_status(f"Deselected: {path}")
+        try:
+            # Get topics from the bag before removing it
+            topics, _, _ = Operation.load_bag(str(path))
+            
+            # Remove the bag from selected bags
+            self.selected_bags.remove(str(path))
+            event.node.label = Text(path.name)
+            
+            # Remove topics from TopicTree
+            topic_tree = self.app.query_one(TopicTree)
+            topic_tree.remove_bag_topics(str(path))
+            
+            status.update_status(f"Deselected: {path}")
+        except Exception as e:
+            self.logger.error(f"Error deselecting bag file: {str(e)}", exc_info=True)
+            status.update_status(f"Error deselecting bag file: {str(e)}", "error")
 
     def _select_bag(self, path: Path, event, status: "StatusBar") -> None:
         """Handle bag file selection"""
@@ -356,7 +463,7 @@ class BagSelector(DirectoryTree):
         try:
             topics, _, _ = Operation.load_bag(str(path))
             topic_tree = self.app.query_one(TopicTree)
-            topic_tree.merge_topics(topics)
+            topic_tree.merge_topics(str(path), topics)
         except Exception as e:
             self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
             status.update_status(f"Error loading bag file: {str(e)}", "error")
