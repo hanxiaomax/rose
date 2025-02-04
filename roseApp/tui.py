@@ -915,13 +915,23 @@ class RoseTUI(App):
     
     # command palette
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        # copy some of the useful commands from the default implementation
+        yield SystemCommand("Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
+        if screen.maximized is not None:
+            yield SystemCommand(
+                "Minimize",
+                "Minimize the widget and restore to normal size",
+                screen.action_minimize,
+            )
+        elif screen.focused is not None and screen.focused.allow_maximize:
+            yield SystemCommand(
+                "Maximize", "Maximize the focused widget", screen.action_maximize
+            )
         yield SystemCommand(
             "Quit the application",
             "Quit the application as soon as possible",
             super().action_quit,
         )
-        yield SystemCommand("Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
-
 
     def toggle_dark_mode(self):
         self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
