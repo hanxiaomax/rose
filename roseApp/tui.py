@@ -659,8 +659,6 @@ class ControlPanel(Container):
             task_table = self.app.query_one(TaskTable)
 
             self._process(task_table,self.app.selected_bag,selected_topics,time_range,self.get_output_file())
-            
-            
 
         except Exception as e:
             self.logger.error(f"Error processing bag: {str(e)}", exc_info=True)
@@ -674,17 +672,17 @@ class ControlPanel(Container):
         state = event.state
         bag_name = Path(worker.description.split(",")[1]).stem
         if state == WorkerState.SUCCESS:
-            self.app.notify(f"{bag_name} completed",
+            self.app.notify(f"Successfully processed {bag_name}",
                 title="Success",
                 severity="information")
         elif state == WorkerState.ERROR:
-            self.app.notify(f"Task failed",
+            self.app.notify(f"Failed when processing {bag_name} ",
                 title="Error",
                 severity="error")
-        elif state == WorkerState.RUNNING:
-            self.app.notify(
-                f"Task started, please wait...",
-                title="INFO",severity="information")
+        #elif state == WorkerState.RUNNING:
+        #    self.app.notify(
+        #        f"Task started, please wait...",
+        #        title="INFO",severity="information")
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
