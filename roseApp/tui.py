@@ -27,6 +27,7 @@ from textual.widgets.directory_tree import DirEntry
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from util import Operation, setup_logging
 from textual.fuzzy import FuzzySearch
+from textual.worker import Worker, get_current_worker,WorkerState
 
 # Initialize logging at the start of the file
 logger = setup_logging()
@@ -641,7 +642,7 @@ class ControlPanel(Container):
         
         if task_count > 0:
             self.app.notify(
-                f"Successfully add {task_count} tasks, processing...",
+                f"Successfully add {task_count} tasks",
                 title="INFO",severity="information")
                
 
@@ -659,15 +660,31 @@ class ControlPanel(Container):
 
             self._process(task_table,self.app.selected_bag,selected_topics,time_range,self.get_output_file())
             
-            self.app.notify(
-                f"Task started, please wait...",
-                title="INFO",severity="information")
+            
 
         except Exception as e:
             self.logger.error(f"Error processing bag: {str(e)}", exc_info=True)
             self.app.notify(f"Error processing bag: {str(e)}",
                 title="Error",
                 severity="error")
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """Called when the worker state changes."""
+        worker = event.worker
+        state = event.state
+        bag_name = Path(worker.description.split(",")[1]).stem
+        if state == WorkerState.SUCCESS:
+            self.app.notify(f"{bag_name} completed",
+                title="Success",
+                severity="information")
+        elif state == WorkerState.ERROR:
+            self.app.notify(f"Task failed",
+                title="Error",
+                severity="error")
+        elif state == WorkerState.RUNNING:
+            self.app.notify(
+                f"Task started, please wait...",
+                title="INFO",severity="information")
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
