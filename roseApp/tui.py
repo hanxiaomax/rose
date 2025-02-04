@@ -818,13 +818,6 @@ class MainScreen(Screen):
                 self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
                 self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
 
-    def on_switch_changed(self, event: Switch.Changed) -> None:
-        """Handle switch toggle"""
-        if event.switch.id == "bag-filter-switch":
-            bag_selector = self.query_one(BagSelector)
-            bag_selector.show_only_bags = event.value
-            bag_selector.reload()
-
     def apply_whitelist(self, topics: list) -> None:
         """Apply whitelist to loaded topics"""
         if not self.app.selected_whitelist_path:
