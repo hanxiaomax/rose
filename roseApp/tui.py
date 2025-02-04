@@ -272,7 +272,8 @@ class BagSelector(DirectoryTree):
         label = super().render_label(node, base_style, style)
         if node.data.path.suffix.lower() == ".bag":
             label = Text("💾 ") + Text(node.data.path.name)
-            label.stylize(Style(italic=True))
+            # pass the style to the label to keep default render
+            label.stylize(style)
         return label
 
     @work
