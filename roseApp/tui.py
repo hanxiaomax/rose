@@ -34,7 +34,6 @@ def load_config():
     try:
         with open("config.json", "r") as f:
             config = json.load(f)
-            logger.info("Successfully loaded config.json")
             return config
     except FileNotFoundError:
         logger.warning("config.json not found, using default configuration")
@@ -628,7 +627,7 @@ class MainScreen(Screen):
                         self.app.notify("Please select a bag file first", title="Error", severity="error")
                         return
 
-                    self.logger.info(f"Starting bag filtering task: {self.app.selected_bag} -> {control_panel.get_output_file()}")
+                    self.logger.debug(f"Starting bag filtering task: {self.app.selected_bag} -> {control_panel.get_output_file()}")
                     start_time = time.time()
                     Operation.filter_bag(
                         self.app.selected_bag,
@@ -647,7 +646,6 @@ class MainScreen(Screen):
                         Operation.convert_time_range_to_tuple(*control_panel.get_time_range())
                     )
                     
-                    self.logger.info(f"Task completed successfully in {time_cost}s")
                     self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
                                   title="Success", 
                                   severity="information")
@@ -669,7 +667,6 @@ class MainScreen(Screen):
             return
             
         try:
-            self.logger.info(f"Applying whitelist from: {self.app.selected_whitelist_path}")
             whitelist = self.load_whitelist(self.app.selected_whitelist_path)
             topic_tree = self.app.query_one(TopicTreeWrap)
             
@@ -904,10 +901,8 @@ class RoseTUI(App):
     def on_mount(self) -> None:
         """Start with the splash screen or main screen based on config"""
         if self.config.get("show_splash_screen", True):
-            self.logger.info("Starting with splash screen")
             self.switch_mode("splash")
         else:
-            self.logger.info("Starting with main screen")
             self.switch_mode("main")
         self.register_theme(CASSETTE_THEME_DARK)
         self.register_theme(CASSETTE_THEME_LIGHT)
