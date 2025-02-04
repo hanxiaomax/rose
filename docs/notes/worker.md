@@ -46,3 +46,15 @@ async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None
 上面代码中，由于Operation.load_bag(str(path))是阻塞的，所以load_bag函数不能使用普通的work，只能使用[Thread Workers](https://textual.textualize.io/guide/workers/#thread-workers)。然后在执行完成后，根据work的状态更新topic tree和control panel。因此暂时将on_tree_node_selected作为work来使用。后续可以使用线程或者将底层函数实现为异步。
 
 在异步编程中，通常建议将阻塞操作放在最内层的函数中，并使用@work装饰器。这样可以让调用链中的其他函数保持异步特性，并且更容易管理异步任务。
+
+```python
+@work(thread=True)
+async def long_operation(self) -> None:
+    time.sleep(5)  
+
+@work()
+async def long_operation(self) -> None:
+    await asyncio.sleep(5)  
+```
+
+上面两种形式的操作都可以避免阻塞UI，但是第一种由于`time.sleep`是阻塞的，所以使用线程的方式，第二种形式则是纯异步的。注意，被`@work`装饰的函数，都需要是async的。
