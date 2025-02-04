@@ -509,6 +509,10 @@ class BagSelector(DirectoryTree):
 class ControlPanel(Container):
     """A container widget providing controls for ROS bag file operations"""
     
+    def __init__(self):
+        super().__init__()
+        self.logger = logger.getChild("ControlPanel")
+    
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
         with Vertical():
@@ -563,6 +567,102 @@ class ControlPanel(Container):
             self.query_one("#add-task-btn").label = "Add Tasks"
         else:
             self.query_one("#add-task-btn").label = "Add Task"
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events"""
+        if event.button.id == "add-task-btn":
+            self._handle_add_task()
+
+    def _handle_add_task(self) -> None:
+        """Handle add task button press"""
+        bag_selector = self.app.query_one(BagSelector)
+        topic_tree = self.app.query_one(TopicTreeWrap)
+        selected_topics = topic_tree.get_selected_topics()
+        
+        if not selected_topics:
+            self.app.notify("Please select at least one topic", title="Error", severity="error")
+            return
+
+        try:
+            if bag_selector.multi_select_mode:
+                self._handle_multi_bag_task(bag_selector, selected_topics)
+            else:
+                self._handle_single_bag_task(selected_topics)
+        except Exception as e:
+            self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
+            self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
+
+    def _handle_multi_bag_task(self, bag_selector: BagSelector, selected_topics: list) -> None:
+        """Handle task creation for multiple bags"""
+        if not bag_selector.selected_bags:
+            self.app.notify("Please select at least one bag file", title="Error", severity="error")
+            return
+
+        success_count = 0
+        for bag_path in bag_selector.selected_bags:
+            try:
+                _, _, bag_time_range = Operation.load_bag(bag_path)
+                output_file = f"{Path(bag_path).stem}_filtered.bag"
+                
+                process_start = time.time()
+                Operation.filter_bag(
+                    bag_path,
+                    output_file,
+                    selected_topics,
+                    bag_time_range
+                )
+                process_end = time.time()
+                time_cost = int(process_end - process_start)
+                
+                task_table = self.app.query_one(TaskTable)
+                task_table.add_task(
+                    bag_path, 
+                    output_file, 
+                    time_cost,
+                    bag_time_range
+                )
+                success_count += 1
+                
+            except Exception as e:
+                self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
+                self.app.notify(f"Error processing {Path(bag_path).name}: {str(e)}", 
+                              title="Error", 
+                              severity="error")
+                continue
+        
+        if success_count > 0:
+            self.app.notify(f"Successfully processed {success_count} of {len(bag_selector.selected_bags)} bag files", 
+                          title="Success", 
+                          severity="information")
+
+    def _handle_single_bag_task(self, selected_topics: list) -> None:
+        """Handle task creation for single bag"""
+        if not self.app.selected_bag:
+            self.app.notify("Please select a bag file first", title="Error", severity="error")
+            return
+
+        self.logger.debug(f"Starting bag filtering task: {self.app.selected_bag} -> {self.get_output_file()}")
+        start_time = time.time()
+        Operation.filter_bag(
+            self.app.selected_bag,
+            self.get_output_file(),
+            selected_topics,
+            Operation.convert_time_range_to_tuple(*self.get_time_range())
+        )
+        end_time = time.time()
+        time_cost = int(end_time - start_time)
+        
+        task_table = self.app.query_one(TaskTable)
+        task_table.add_task(
+            self.app.selected_bag, 
+            self.get_output_file(), 
+            time_cost, 
+            Operation.convert_time_range_to_tuple(*self.get_time_range())
+        )
+        
+        self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
+                      title="Success", 
+                      severity="information")
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
@@ -725,99 +825,6 @@ class MainScreen(Screen):
             yield StatusBar("", id="status")
         yield Footer()
     
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events"""
-        status = self.query_one(StatusBar)
-        
-        if event.button.id == "add-task-btn":
-            bag_selector = self.query_one(BagSelector)
-            control_panel = self.query_one(ControlPanel)
-            topic_tree = self.query_one(TopicTreeWrap)
-            selected_topics = topic_tree.get_selected_topics()
-            
-            if not selected_topics:
-                self.app.notify("Please select at least one topic", title="Error", severity="error")
-                return
-
-            try:
-                if bag_selector.multi_select_mode:
-                    # 多选模式下处理多个bag文件
-                    if not bag_selector.selected_bags:
-                        self.app.notify("Please select at least one bag file", title="Error", severity="error")
-                        return
-
-                    success_count = 0
-                    
-                    for bag_path in bag_selector.selected_bags:
-                        try:
-                            # 获取bag文件的完整时间范围
-                            _, _, bag_time_range = Operation.load_bag(bag_path)
-                            output_file = f"{Path(bag_path).stem}_filtered.bag"
-                            
-                            process_start = time.time()
-                            Operation.filter_bag(
-                                bag_path,
-                                output_file,
-                                selected_topics,
-                                bag_time_range  # 使用bag自己的时间范围
-                            )
-                            process_end = time.time()
-                            time_cost = int(process_end - process_start)
-                            
-                            task_table = self.query_one(TaskTable)
-                            task_table.add_task(
-                                bag_path, 
-                                output_file, 
-                                time_cost,
-                                bag_time_range  # 使用bag自己的时间范围
-                            )
-                            success_count += 1
-                            
-                        except Exception as e:
-                            self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
-                            self.app.notify(f"Error processing {Path(bag_path).name}: {str(e)}", 
-                                          title="Error", 
-                                          severity="error")
-                            continue
-                    
-                    if success_count > 0:
-                        self.app.notify(f"Successfully processed {success_count} of {len(bag_selector.selected_bags)} bag files", 
-                                      title="Success", 
-                                      severity="information")
-                
-                else:
-                    # 单选模式下的处理逻辑
-                    if not self.app.selected_bag:
-                        self.app.notify("Please select a bag file first", title="Error", severity="error")
-                        return
-
-                    self.logger.debug(f"Starting bag filtering task: {self.app.selected_bag} -> {control_panel.get_output_file()}")
-                    start_time = time.time()
-                    Operation.filter_bag(
-                        self.app.selected_bag,
-                        control_panel.get_output_file(),
-                        selected_topics,
-                        Operation.convert_time_range_to_tuple(*control_panel.get_time_range())
-                    )
-                    end_time = time.time()
-                    time_cost = int(end_time - start_time)
-                    
-                    task_table = self.query_one(TaskTable)
-                    task_table.add_task(
-                        self.app.selected_bag, 
-                        control_panel.get_output_file(), 
-                        time_cost, 
-                        Operation.convert_time_range_to_tuple(*control_panel.get_time_range())
-                    )
-                    
-                    self.app.notify(f"Bag conversion completed in {time_cost} seconds", 
-                                  title="Success", 
-                                  severity="information")
-                
-            except Exception as e:
-                self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
-                self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
-
     def apply_whitelist(self, topics: list) -> None:
         """Apply whitelist to loaded topics"""
         if not self.app.selected_whitelist_path:
