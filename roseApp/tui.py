@@ -271,7 +271,7 @@ class TopicTree(Tree):
         
         self.update_border_subtitle()
 
-    def toggle_select_all(self, event: Tree.NodeSelected) -> 'tuple[bool, int]':
+    def toggle_select_all(self) -> 'tuple[bool, int]':
         """
         Toggle selection state of all topics.
         
