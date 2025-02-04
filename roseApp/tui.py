@@ -713,7 +713,9 @@ class MainScreen(Screen):
     
     def action_toggle_select_all_topics(self) -> None:
         """Toggle select all topics in the topic tree"""
-        topic_tree = self.app.query_one(TopicTreeWrap)
+        topic_tree_wrap = self.app.query_one(TopicTreeWrap)
+        topic_tree = topic_tree_wrap.topic_tree  # Get the actual TopicTree instance
+        
         if not topic_tree.root.children:
             status = self.query_one(StatusBar)
             status.update_status("No topics available to select", "error")
@@ -733,7 +735,7 @@ class MainScreen(Screen):
                 topic_tree.selected_topics.discard(topic)
                 node.label = topic
         
-        topic_tree.update_border_title()
+        topic_tree.update_border_subtitle()
         status = self.query_one(StatusBar)
         if all_selected:
             status.update_status("Deselected all topics")
