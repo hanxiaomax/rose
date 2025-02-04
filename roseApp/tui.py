@@ -177,6 +177,33 @@ class TopicTree(Tree):
 
         self.update_border_subtitle()
 
+    def toggle_select_all(self) -> 'tuple[bool, int]':
+        """
+        Toggle selection state of all topics.
+        
+        Returns:
+            tuple[bool, int]: (is_all_deselected, count_of_selected)
+        """
+        if not self.root.children:
+            return False, 0
+            
+        # Check if all topics are already selected
+        all_selected = all(node.data["selected"] for node in self.root.children)
+        
+        # Toggle selection state
+        for node in self.root.children:
+            node.data["selected"] = not all_selected
+            topic = node.data.get("topic")
+            if node.data["selected"]:
+                self.selected_topics.add(topic)
+                node.label = self.get_node_label(topic, True)
+            else:
+                self.selected_topics.discard(topic)
+                node.label = self.get_node_label(topic, False)
+        
+        self.update_border_subtitle()
+        return all_selected, len(self.selected_topics)
+
 class TopicTreeWrap(Container):
     """A wrapper component that contains a search input and a topic tree"""
     
@@ -218,6 +245,15 @@ class TopicTreeWrap(Container):
     def update_border_title(self):
         """Update the border title"""
         self.topic_tree.update_border_title()
+
+    def toggle_select_all(self) -> 'tuple[bool, int]':
+        """
+        Toggle selection of all topics.
+        
+        Returns:
+            tuple[bool, int]: (is_all_deselected, count_of_selected)
+        """
+        return self.topic_tree.toggle_select_all()
 
 class BagSelector(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
@@ -742,33 +778,20 @@ class MainScreen(Screen):
     def action_toggle_select_all_topics(self) -> None:
         """Toggle select all topics in the topic tree"""
         topic_tree_wrap = self.app.query_one(TopicTreeWrap)
-        topic_tree = topic_tree_wrap.topic_tree  # Get the actual TopicTree instance
-        
-        if not topic_tree.root.children:
-            status = self.query_one(StatusBar)
-            status.update_status("No topics available to select", "error")
-            return
-        
-        # Check if all topics are already selected
-        all_selected = all(node.data["selected"] for node in topic_tree.root.children)
-        
-        # Toggle selection state
-        for node in topic_tree.root.children:
-            node.data["selected"] = not all_selected
-            topic = node.data.get("topic")
-            if node.data["selected"]:
-                topic_tree.selected_topics.add(topic)
-                node.label = Text("√ ") + Text(topic)
-            else:
-                topic_tree.selected_topics.discard(topic)
-                node.label = Text(topic)
-        
-        topic_tree.update_border_subtitle()
         status = self.query_one(StatusBar)
-        if all_selected:
-            status.update_status("Deselected all topics")
-        else:
-            status.update_status(f"Selected all {len(topic_tree.selected_topics)} topics")
+        
+        try:
+            all_deselected, selected_count = topic_tree_wrap.toggle_select_all()
+            if selected_count == 0:
+                status.update_status("No topics available to select", "error")
+            else:
+                if all_deselected:
+                    status.update_status("Deselected all topics")
+                else:
+                    status.update_status(f"Selected all {selected_count} topics")
+        except Exception as e:
+            self.logger.error(f"Error toggling topic selection: {str(e)}", exc_info=True)
+            status.update_status(f"Error toggling topic selection: {str(e)}", "error")
 
     def action_save_whitelist(self) -> None:
         """Save currently selected topics as a whitelist"""
