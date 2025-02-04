@@ -1,0 +1,106 @@
+@startuml TUI Components Relationship
+
+' Define components
+class RoseTUI {
+  - config: dict
+  - logger: Logger
+  - selected_bag: reactive
+  - selected_whitelist_path: reactive
+  + run()
+}
+
+class MainScreen {
+  - logger: Logger
+  - config: dict
+  - selected_bag: reactive
+  - selected_whitelist_path: reactive
+  + apply_whitelist()
+  + load_whitelist()
+}
+
+class TopicManager {
+  - topic_bags: dict
+  - bag_topics: dict
+  + add_bag()
+  + remove_bag()
+  + get_topic_count()
+}
+
+class TopicTree {
+  - selected_topics: set
+  - topic_manager: TopicManager
+  - all_topics: list
+  - multi_select_mode: bool
+  + set_topics()
+  + merge_topics()
+  + remove_bag_topics()
+}
+
+class TopicTreeWrap {
+  - topic_tree: TopicTree
+  + set_topics()
+  + merge_topics()
+  + get_selected_topics()
+}
+
+class BagSelector {
+  - current_path: Path
+  - multi_select_mode: bool
+  - selected_bags: set
+  - logger: Logger
+  + toggle_multi_select_mode()
+  + filter_paths()
+}
+
+class ControlPanel {
+  - logger: Logger
+  + get_time_range()
+  + get_output_file()
+  + set_enabled()
+}
+
+class TaskTable {
+  - task_count: int
+  + add_task()
+}
+
+class StatusBar {
+  + update_status()
+}
+
+class WhitelistScreen {
+  + action_confirm()
+  + action_quit()
+}
+
+class LogsScreen {
+  + load_logs()
+}
+
+' Define relationships
+RoseTUI *-- MainScreen
+RoseTUI *-- WhitelistScreen
+RoseTUI *-- LogsScreen
+
+MainScreen *-- BagSelector
+MainScreen *-- TopicTreeWrap
+MainScreen *-- ControlPanel
+MainScreen *-- TaskTable
+MainScreen *-- StatusBar
+
+TopicTreeWrap *-- TopicTree
+TopicTree *-- TopicManager
+
+' Dependencies
+BagSelector ..> TopicTreeWrap : updates
+BagSelector ..> ControlPanel : updates state
+BagSelector ..> StatusBar : updates status
+
+ControlPanel ..> TopicTreeWrap : reads topics
+ControlPanel ..> TaskTable : adds tasks
+ControlPanel ..> StatusBar : updates status
+
+WhitelistScreen ..> TopicTreeWrap : applies whitelist
+WhitelistScreen ..> MainScreen : switches screen
+
+@enduml
