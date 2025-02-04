@@ -79,6 +79,8 @@ Once you have ros environment installed, you can build `rosbag_io_py` lib which 
   
 **You are all set! Now you can use RoseApp to filter ROS bag files.**
 
+No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
+
 ## Usage
 
 ### Command Line Interface
