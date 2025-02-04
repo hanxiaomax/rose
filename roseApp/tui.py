@@ -573,7 +573,8 @@ class ControlPanel(Container):
         if event.button.id == "add-task-btn":
             self._handle_add_task()
 
-    def _handle_add_task(self) -> None:
+    @work(thread=True)
+    async def _handle_add_task(self) -> None:
         """Handle add task button press"""
         bag_selector = self.app.query_one(BagSelector)
         topic_tree = self.app.query_one(TopicTreeWrap)
