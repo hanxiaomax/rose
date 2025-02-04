@@ -403,13 +403,6 @@ class BagSelector(DirectoryTree):
             return [p for p in paths if p.is_dir() or p.suffix.lower() == '.bag']
         return paths
 
-    def render_label(self, node: DirEntry, base_style, style) -> Text:
-        """Render node label with bag file icon"""
-        label = super().render_label(node, base_style, style)
-        if node.data.path.suffix.lower() == ".bag":
-            label = Text("💾 ") + Text(node.data.path.name)
-            label.stylize(style)
-        return label
 
     def _handle_directory_selection(self, path: Path, status: "StatusBar") -> None:
         """Handle directory selection logic"""
