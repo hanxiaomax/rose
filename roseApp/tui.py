@@ -623,7 +623,7 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one bag file", title="Error", severity="error")
             return
 
-        success_count = 0
+        task_count = 0
         task_table = self.app.query_one(TaskTable)
         
         for bag_path in bag_selector.selected_bags:
@@ -631,7 +631,7 @@ class ControlPanel(Container):
                 _, _, bag_time_range = Operation.load_bag(bag_path)
                 output_file = f"{Path(bag_path).stem}_filtered.bag"
                 self._process(task_table,bag_path,selected_topics,bag_time_range,output_file)
-                success_count += 1
+                task_count += 1
                 
             except Exception as e:
                 self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
@@ -639,22 +639,16 @@ class ControlPanel(Container):
                 title="Error",
                 severity="error")
         
-        if success_count > 0:
+        if task_count > 0:
             self.app.notify(
-                f"Successfully processed {success_count} of {len(bag_selector.selected_bags)} bag files",
-                title="Success",severity="information")
-            
-            
+                f"Successfully add {task_count} tasks, processing...",
+                title="INFO",severity="information")
+               
 
     def _handle_single_bag_task(self, selected_topics: list) -> None:
         """Handle task creation for single bag"""
         if not self.app.selected_bag:
-            self.app.call_from_thread(
-                self.app.notify,
-                "Please select a bag file first",
-                title="Error",
-                severity="error"
-            )
+            self.app.notify("Please select a bag file first",title="Error",severity="error")
             return
 
         try:
@@ -665,9 +659,9 @@ class ControlPanel(Container):
 
             self._process(task_table,self.app.selected_bag,selected_topics,time_range,self.get_output_file())
             
-            self.app.notify(f"Bag conversion completed",
-                title="Success",
-                severity="information")
+            self.app.notify(
+                f"Task started, please wait...",
+                title="INFO",severity="information")
 
         except Exception as e:
             self.logger.error(f"Error processing bag: {str(e)}", exc_info=True)
