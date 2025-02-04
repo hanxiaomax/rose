@@ -25,7 +25,7 @@ from textual.fuzzy import FuzzySearch
 from textual.worker import Worker, WorkerState
 from components.TopicTreePanel import TopicTreeWrap
 from components.Dialog import ConfirmDialog
-
+from components.StatusBar import StatusBar
 # Initialize logging at the start of the file
 logger = setup_logging()
 
@@ -425,17 +425,6 @@ class TaskTable(DataTable):
             f"{time_cost}s"
         )
 
-class StatusBar(Static):
-    """Custom status bar with dynamic styling"""
-
-    def update_status(self, message: str, status_class: str = "") -> None:
-        """Update status message with optional style"""
-        message = Text(message)
-        self.classes = ""
-        if status_class:
-            self.classes = status_class
-        
-        self.update(message)
 
 
 class SplashScreen(Screen):
