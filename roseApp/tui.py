@@ -12,7 +12,7 @@ from art import text2art
 from rich.style import Style
 from rich.text import Text
 from textual import work, log
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Container, Horizontal, Vertical
 from textual.logging import TextualHandler
 from textual.reactive import reactive
@@ -322,7 +322,6 @@ class BagSelector(DirectoryTree):
             self.update_border_title()
             return
 
-        # 单选模式下的原有逻辑
         self.app.selected_bag = str(path)
         try:
             topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
@@ -398,16 +397,13 @@ class ControlPanel(Container):
         if input_widget.disabled:
             self.query_one("#start-time").value = ""
             self.query_one("#end-time").value = ""
-            # Update button text for multi-select mode
             self.query_one("#add-task-btn").label = "Add Tasks"
         else:
-            # Reset button text for single-select mode
             self.query_one("#add-task-btn").label = "Add Task"
 
 class SplashScreen(Screen):
     """Splash screen for the app."""
     
-    # 添加按键绑定
     BINDINGS = [
         ("space", "continue", "Enter"),
         ("q", "quit", "Quit"),
@@ -451,7 +447,6 @@ class SplashScreen(Screen):
 
     def action_help(self) -> None:
         """Handle h key press to show help screen"""
-        # 这里可以添加切换到帮助页面的逻辑
         self.app.notify("Help screen not implemented yet", title="Help")
 
 class TaskTable(DataTable):
@@ -538,11 +533,11 @@ class MainScreen(Screen):
         ("s", "save_whitelist", "Save Whitelist"),
         ("a", "toggle_select_all_topics", "Select All"),
         ("m", "toggle_multi_select", "Multi Mode"),
-        ("q", "quit", "Quit"),  # Add quit binding
+        ("q", "quit", "Quit"),
     ]
     
     selected_bag = reactive(None)
-    selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
+    selected_whitelist_path = reactive(None)  
 
     def __init__(self):
         super().__init__()
@@ -879,7 +874,6 @@ class WhitelistScreen(Screen):
             return
         
         try:
-            # Load and display the complete whitelist file content
             with open(whitelist_path, 'r') as f:
                 whitelist_content = f.read()
             preview.load_text(whitelist_content)
@@ -891,6 +885,7 @@ class RoseTUI(App):
     
     CSS_PATH = "style.tcss"
     BINDINGS = [("q", "quit", "Quit")]
+    COMMAND_PALETTE_BINDING = "p"
     MODES = {
         "splash": SplashScreen,
         "main": MainScreen,
@@ -914,10 +909,23 @@ class RoseTUI(App):
         else:
             self.logger.info("Starting with main screen")
             self.switch_mode("main")
-        # self.theme = "monokai"
         self.register_theme(CASSETTE_THEME_DARK)
         self.register_theme(CASSETTE_THEME_LIGHT)
         self.theme = self.config.get("theme", "cassette-dark")
+    
+    # command palette
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        yield SystemCommand(
+            "Quit the application",
+            "Quit the application as soon as possible",
+            super().action_quit,
+        )
+        yield SystemCommand("Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
+
+
+    def toggle_dark_mode(self):
+        self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
+    
     
 
 if __name__ == "__main__":
