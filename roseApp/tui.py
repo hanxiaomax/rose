@@ -556,10 +556,10 @@ class ControlPanel(Container):
         """
         for input_widget in self.query("Input"):
             input_widget.disabled = not enabled
-        self.border_title = "Control Panel" if enabled else "Control Panel (Disabled)"
         if input_widget.disabled:
             self.query_one("#start-time").value = ""
             self.query_one("#end-time").value = ""
+            self.query_one("#output-file").value = "Filename will be generated"
             self.query_one("#add-task-btn").label = "Add Tasks"
         else:
             self.query_one("#add-task-btn").label = "Add Task"
