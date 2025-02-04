@@ -77,7 +77,7 @@ class TopicTree(Tree):
             label = topic
             
         if selected:
-            return Text("☑️ ") + Text(label)
+            return Text("√ ") + Text(label)
         return Text(label)
 
     def filter_topics(self, search_text: str) -> None:
@@ -758,9 +758,10 @@ class MainScreen(Screen):
             topic = node.data.get("topic")
             if node.data["selected"]:
                 topic_tree.selected_topics.add(topic)
-                node.label = Text("☑️ ") + Text(topic)
+                node.label = Text("√ ") + Text(topic)
             else:
                 topic_tree.selected_topics.discard(topic)
+                node.label = Text(topic)
         
         topic_tree.update_border_subtitle()
         status = self.query_one(StatusBar)
