@@ -181,30 +181,6 @@ class MainScreen(Screen):
             yield StatusBar("", id="status")
         yield Footer()
     
-    # def apply_whitelist(self, topics: list) -> None:
-    #     """Apply whitelist to loaded topics"""
-    #     if not self.app.selected_whitelist_path:
-    #         return
-            
-    #     try:
-    #         whitelist = self.load_whitelist(self.app.selected_whitelist_path)
-    #         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-    #         topic_tree.clear_selection()
-            
-    #         for topic in topics:
-    #             if topic in whitelist:
-    #                 topic_tree.select_topic(topic)
-                    
-    #         # Update panel title
-    #         topic_panel = self.app.query_one(TopicTreePanel)
-    #         topic_panel.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
-
-    #     except Exception as e:
-    #         self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
-    #         self.app.notify(f"Error applying whitelist: {str(e)}", title="Error", severity="error")
-
-
-    
     
     def action_load_whitelist(self) -> None:
         """Load whitelist from config"""
@@ -336,15 +312,11 @@ class WhitelistScreen(Screen):
             if topic in whitelist:
                 bags.select_topic(topic)
         
-        #TODO: topic handle it by itself
-        topic_panel = self.app.query_one(TopicTreePanel)
         if remove_whitelist:
-            topic_panel.border_title = "Topics"
             self.app.notify(f"No Whitelist applied", 
                        title="Whitelist Loaded", 
                        severity="information")
         else:
-            topic_panel.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
             self.app.notify(f"Whitelist '{Path(whitelist_path).stem}' applied successfully", 
                        title="Whitelist Loaded", 
                        severity="information")
