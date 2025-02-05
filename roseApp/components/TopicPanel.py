@@ -21,19 +21,18 @@ class TopicTree(Tree):
     
     def __init__(self):
         super().__init__("Topics")
-        #self.selected_topics = set() # selected topics used for filtering
-        self.all_topics = []  # Store all topics for filtering
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
         self.multi_select_mode = False
         self.show_root = False
-
+        self._search_input = None
 
 
     def on_mount(self) -> None:
         """Initialize when mounted"""
         super().on_mount()
         self.root.expand()
+        self._search_input = self.parent.query_one(TopicSearchInput)
         self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
         self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
                                 self.handle_multi_select_mode_change)
@@ -50,7 +49,6 @@ class TopicTree(Tree):
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
         self.multi_select_mode = multi_select_mode
-        self.filter_topics("")
 
     def get_node_label(self, topic: str, selected: bool = False) -> Text:
         """
@@ -71,16 +69,18 @@ class TopicTree(Tree):
             return Text("√ ") + Text(label)
         return Text(label)
 
-    def filter_topics(self, search_text: str) -> None:
-        """Filter topics based on search text using fuzzy search."""
+    def filter_topics(self,topics,search_text: str) -> None:
+        """Filter topics based on search text using fuzzy search.
+        Do not change data in bag manager, only for display
+        """
         self.root.remove_children()
         
         if not search_text:
-            filtered_topics = self.all_topics
+            filtered_topics = topics
         else:
             scored_topics = [
                 (topic, self.fuzzy_searcher.match(search_text, topic)[0])
-                for topic in self.all_topics
+                for topic in topics
             ]
             filtered_topics = [
                 topic for topic, score in sorted(
@@ -90,25 +90,22 @@ class TopicTree(Tree):
                 ) if score > 0
             ]
         
-        for topic in filtered_topics:
-            self.root.add(
-                self.get_node_label(topic, topic in self.bags.get_selected_topics()),
-                data={"topic": topic, "selected": topic in self.bags.get_selected_topics()},
-                allow_expand=False
-            )
+        return filtered_topics
+        
 
     def render_topics(self) -> None:
         """Set topics based on BagManager's state"""
 
-        topic_summary = self.bags.get_topic_summary()
-        
-        self.all_topics = list(topic_summary.keys())
 
+        topics = list(self.bags.get_topic_summary().keys())
+        search_text = self._search_input.value
+        
+        filtered_topics = self.filter_topics(topics,search_text)
+        
+        
         
         self.root.remove_children()
-        
-        # Add topics to tree
-        for topic in sorted(self.all_topics):
+        for topic in filtered_topics:
             is_selected = topic in self.bags.get_selected_topics()
             self.root.add(
                 self.get_node_label(topic,is_selected),
@@ -237,8 +234,8 @@ class TopicSearchInput(Input):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes"""
-        if self._topic_tree:
-            self._topic_tree.filter_topics(event.value)
+        self._topic_tree.render_topics()
+            
 
 class TopicTreePanel(Container):
     """A wrapper component that contains a search input and a topic tree"""
