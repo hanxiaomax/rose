@@ -16,6 +16,19 @@ class BagInfo:
     def time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
         return Operation.to_datetime(self.start_time), Operation.to_datetime(self.end_time)
+    
+    @property
+    def size_str(self) -> str:
+        """Get file size with appropriate unit (B, KB, MB, GB)"""
+        try:
+            size_bytes = self.size
+            for unit in ['B', 'KB', 'MB', 'GB']:
+                if size_bytes < 1024:
+                    return f"{size_bytes:.2f}{unit}"
+                size_bytes /= 1024
+            return f"{size_bytes:.2f}GB"
+        except FileNotFoundError:
+            return "0.00B"
 
 @dataclass
 class FilterConfig:
@@ -90,7 +103,7 @@ class BagManager:
         bag = Bag(path, BagInfo(
             start_time=start_time,
             end_time=end_time,
-            size=0,
+            size=path.stat().st_size,
             topics=set(topics)
         ))
         self.bags[path] = bag

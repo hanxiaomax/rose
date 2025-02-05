@@ -26,7 +26,7 @@ from components.BagSelector import BagSelector
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
 from components.ControlPanel import ControlPanel
-
+from components.TaskTable import TaskTable
 # Initialize logging at the start of the file
 logger = setup_logging()
 
@@ -48,52 +48,6 @@ def load_config():
 
 
 
-class TaskTable(DataTable):
-    """Table for displaying tasks"""
-    
-    def __init__(self):
-        super().__init__()
-        self.task_count = 0
-    
-    def on_mount(self) -> None:
-        """Initialize table when mounted"""
-        self.cursor_type = "row"
-        self.border_title = "Tasks"
-    
-    def get_file_size(self, file_path: str) -> str:
-        """Get file size with appropriate unit (B, KB, MB, GB)"""
-        try:
-            size_bytes = Path(file_path).stat().st_size
-            for unit in ['B', 'KB', 'MB', 'GB']:
-                if size_bytes < 1024:
-                    return f"{size_bytes:.2f} {unit}"
-                size_bytes /= 1024
-            return f"{size_bytes:.2f} GB"
-        except FileNotFoundError:
-            return "0.00 B"
-
-    def add_task(self, input_bag: str, output_bag: str, time_cost: float, time_range: tuple) -> None:
-        """Add a new task to the table"""
-        if self.task_count == 0:
-            self.add_columns("ID", "Status", "Input", "Output", "Time Range", "Size", "Time Elapsed")
-            self.add_class("has-header") 
-
-        self.task_count += 1
-
-        input_size = self.get_file_size(input_bag)
-        output_size = self.get_file_size(output_bag)
-        #TODO: get from bag info
-        start_time, end_time = "123", "123" #Operation.convert_time_range_to_str(*time_range)
-
-        self.add_row(
-            str(self.task_count),
-            "done",
-            Path(input_bag).name,
-            Path(output_bag).name,
-            f"{start_time[9:]} - {end_time[9:]}", #only display time in HH:MM:SS
-            f"{input_size} -> {output_size}",
-            f"{time_cost}s"
-        )
 
 
 
