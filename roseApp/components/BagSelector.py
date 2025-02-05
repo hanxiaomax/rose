@@ -7,7 +7,7 @@ from textual.widgets import (
     Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea, RichLog
 )
 from textual.reactive import reactive
-from core.BagManager import BagManager
+from core.Types import BagManager
 from core.util import Operation, setup_logging
 from components.StatusBar import StatusBar
 

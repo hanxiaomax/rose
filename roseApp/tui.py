@@ -26,7 +26,6 @@ from components.BagSelector import BagSelector
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
 from components.ControlPanel import ControlPanel
-from core.BagManager import BagManager
 
 # Initialize logging at the start of the file
 logger = setup_logging()

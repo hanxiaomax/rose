@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from core.util import Operation, setup_logging
 from components.BagSelector import BagSelector
-from core.BagManager import BagManager
+from core.Types import BagManager
 
 
 logger = setup_logging()

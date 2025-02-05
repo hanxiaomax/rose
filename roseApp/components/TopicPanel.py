@@ -8,7 +8,7 @@ from textual.app import ComposeResult
 from textual.containers import Container
 from textual.widgets import (Input, Tree)
 from textual.fuzzy import FuzzySearch
-from core.BagManager import BagManager
+from core.Types import BagManager
 from core.util import Operation, setup_logging
 from components.BagSelector import BagSelector
 

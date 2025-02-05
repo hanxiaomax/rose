@@ -114,3 +114,12 @@ class BagManager:
     def deselected_topic(self, topic: str) -> None:
         for bag in self.bags.values():
             bag.selected_topics.discard(topic)
+
+
+class Whitelist:
+    """Represents a whitelist of topics"""
+    def __init__(self, path: Path):
+        self.path = path
+        self.topics = set()
+        
+        
