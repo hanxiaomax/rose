@@ -103,6 +103,7 @@ class Operation():
         
     @staticmethod
     def convert_time_range_to_str(start_time: tuple, end_time: tuple):
+        #TODO move to bag manager
         """Convert time range to string"""
         start_str = Operation.to_datetime(start_time)
         end_str = Operation.to_datetime(end_time)

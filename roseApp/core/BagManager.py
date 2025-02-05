@@ -12,6 +12,11 @@ class BagInfo:
     size: int
     topics: Set[str]
 
+    @property
+    def time_range_str(self) -> Tuple[str, str]:
+        """Return the start and end time as formatted strings"""
+        return Operation.to_datetime(self.start_time), Operation.to_datetime(self.end_time)
+
 @dataclass
 class FilterConfig:
     """Store basic information about a ROS bag"""
@@ -45,8 +50,7 @@ class Bag:
             time_range=self.filter_time_range,
             topics=self.selected_topics
         )
-    def get_bag_info(self) -> BagInfo:
-        return self.info
+        
     
     
         
@@ -61,6 +65,12 @@ class BagManager:
     
     def get_bag_numbers(self):
       return len(self.bags)
+    
+    def get_single_bag(self) -> Optional[Bag]:
+        if self.get_bag_numbers() == 1:
+            return next(iter(self.bags.values()))
+        else:
+            return None
     
     def is_bag_loaded(self, path: Path) -> bool:
         return path in self.bags

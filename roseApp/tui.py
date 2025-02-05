@@ -25,7 +25,7 @@ from textual.reactive import reactive
 from components.Panel import TopicTreePanel,BagSelector
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
-
+from core.BagManager import BagManager
 
 # Initialize logging at the start of the file
 logger = setup_logging()
@@ -52,6 +52,27 @@ class ControlPanel(Container):
     def __init__(self):
         super().__init__()
         self.logger = logger.getChild("ControlPanel")
+        
+    def on_mount(self) -> None:
+        """Initialize control panel"""
+        self.border_title = "Control Panel"
+        self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
+        self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
+                                self.handle_multi_select_mode_change)
+    
+    def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
+        """Handle multi select mode change"""
+        self.set_enabled(not multi_select_mode)
+        self.query_one("#add-task-btn").label = "Add Tasks" if multi_select_mode else "Add Task"
+
+    def handle_bags_change(self, bags: BagManager) -> None:
+        """Handle bag change event"""
+        # control panel should be disabled when multi select mode is on
+        bag = bags.get_single_bag()
+        if bag and not self.disabled:
+            self.set_time_range(bag.info.time_range_str)
+            self.set_output_file(f"{bag.path.stem}_filtered.bag")
+        
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
@@ -70,10 +91,6 @@ class ControlPanel(Container):
             with Container(id="add-task-btn-container"):
                 yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
     
-    def on_mount(self) -> None:
-        """Initialize control panel"""
-        self.border_title = "Control Panel"
-    
     def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
         return self.query_one("#start-time").value, self.query_one("#end-time").value
@@ -82,10 +99,10 @@ class ControlPanel(Container):
         """Get the output file name"""
         return self.query_one("#output-file").value or "output.bag"
     
-    def set_time_range(self, start_time_st: str, end_time_str: str) -> None:
+    def set_time_range(self, time_range_str) -> None:
         """Set the time range in inputs, converting from milliseconds to seconds"""
-        self.query_one("#start-time").value = start_time_st
-        self.query_one("#end-time").value = end_time_str
+        self.query_one("#start-time").value = time_range_str[0]
+        self.query_one("#end-time").value = time_range_str[1]
 
     def set_output_file(self, output_file: str) -> None:
         """Set the output file name"""
