@@ -21,12 +21,14 @@ class TopicTree(Tree):
     
     def __init__(self):
         super().__init__("Topics")
-        self.selected_topics = set() # selected topics used for filtering
+        #self.selected_topics = set() # selected topics used for filtering
         self.all_topics = []  # Store all topics for filtering
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
         self.multi_select_mode = False
         self.show_root = False
+
+
 
     def on_mount(self) -> None:
         """Initialize when mounted"""
@@ -36,9 +38,14 @@ class TopicTree(Tree):
         self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
                                 self.handle_multi_select_mode_change)
 
+    @property
+    def bags(self) -> BagManager:
+        return self.app.query_one(BagSelector).bags
+    
+
     def handle_bags_change(self, bags: BagManager) -> None:
-        """Handle changes in BagManager and update topics accordingly"""
-        self.set_topics(bags)
+        """Handle changes in BagManager and update topics accordingly"""        
+        self.render_topics()
 
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
@@ -55,8 +62,7 @@ class TopicTree(Tree):
         """
         if self.multi_select_mode:
             # Get count from bag manager
-            bag_manager = self.app.query_one(BagSelector).bags
-            count = bag_manager.get_topic_summary().get(topic, 0)
+            count = self.bags.get_topic_summary().get(topic, 0)
             label = f"{topic} [{count}]"
         else:
             label = topic
@@ -86,26 +92,27 @@ class TopicTree(Tree):
         
         for topic in filtered_topics:
             self.root.add(
-                self.get_node_label(topic, topic in self.selected_topics),
-                data={"topic": topic, "selected": topic in self.selected_topics},
+                self.get_node_label(topic, topic in self.bags.get_selected_topics()),
+                data={"topic": topic, "selected": topic in self.bags.get_selected_topics()},
                 allow_expand=False
             )
 
-    def set_topics(self, bag_manager: BagManager) -> None:
+    def render_topics(self) -> None:
         """Set topics based on BagManager's state"""
-        # Get topic summary from bag manager
-        topic_summary = bag_manager.get_topic_summary()
+
+        topic_summary = self.bags.get_topic_summary()
         
-        # Get unique topics from summary
         self.all_topics = list(topic_summary.keys())
-        self.selected_topics.clear()
+
+        
         self.root.remove_children()
         
         # Add topics to tree
         for topic in sorted(self.all_topics):
+            is_selected = topic in self.bags.get_selected_topics()
             self.root.add(
-                self.get_node_label(topic),
-                data={"topic": topic, "selected": False},
+                self.get_node_label(topic,is_selected),
+                data={"topic": topic, "selected": is_selected},
                 allow_expand=False
             )
         
@@ -114,7 +121,7 @@ class TopicTree(Tree):
 
     def update_border_subtitle(self):
         """Update subtitle with selected topics count"""
-        self.border_subtitle = f"Topic selected: {len(self.selected_topics)}"
+        self.border_subtitle = f"Topic selected: {len(self.bags.get_selected_topics())}"
     
     def update_border_title(self):
         """Update title with whitelist info if available"""
@@ -134,16 +141,14 @@ class TopicTree(Tree):
             topic = data["topic"]
             
             if data["selected"]:
-                self.selected_topics.add(topic)
+                self.bags.selected_topic(topic)
             else:
-                self.selected_topics.discard(topic)
-                
+                self.bags.deselected_topic(topic)
+            
+            print(self.bags.get_selected_topics())
             event.node.label = self.get_node_label(topic, data["selected"])
             self.update_border_subtitle()
 
-    def get_selected_topics(self) -> list:
-        """Return list of selected topics"""
-        return list(self.selected_topics)
 
     def merge_topics(self, bag_path: str, new_topics: list) -> None:
         """Add topics from a bag"""
@@ -209,14 +214,15 @@ class TopicTree(Tree):
             node.data["selected"] = not all_selected
             topic = node.data.get("topic")
             if node.data["selected"]:
-                self.selected_topics.add(topic)
+                self.bags.selected_topic(topic)
                 node.label = self.get_node_label(topic, True)
             else:
-                self.selected_topics.discard(topic)
+                self.bags.deselected_topic(topic)
                 node.label = self.get_node_label(topic, False)
         
+        print(self.bags)
         self.update_border_subtitle()
-        return all_selected, len(self.selected_topics)
+        return all_selected, len(self.bags.get_selected_topics())
 
 class TopicSearchInput(Input):
     """Input widget for searching topics"""

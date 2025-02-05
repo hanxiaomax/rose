@@ -240,7 +240,9 @@ class MainScreen(Screen):
     def action_save_whitelist(self) -> None:
         """Save currently selected topics as a whitelist"""
         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        selected_topics = topic_tree.get_selected_topics()
+        
+        bags = self.app.query_one(BagSelector).bags
+        selected_topics = bags.get_selected_topics()
         
         if not selected_topics:
             status = self.query_one(StatusBar)
