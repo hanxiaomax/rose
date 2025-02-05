@@ -341,12 +341,10 @@ class SplashScreen(Screen):
 class MainScreen(Screen):
     """Main screen of the app."""
     BINDINGS = [
-        ("f", "toggle_bags_only", "Filter Bags"),
+        ("q", "quit", "Quit"),
         ("w", "load_whitelist", "Load Whitelist"),
         ("s", "save_whitelist", "Save Whitelist"),
         ("a", "toggle_select_all_topics", "Select All"),
-        ("m", "toggle_multi_select", "Multi Mode"),
-        ("q", "quit", "Quit"),
     ]
     
     selected_bag = reactive(None)
@@ -405,11 +403,7 @@ class MainScreen(Screen):
                        if line.strip() and not line.strip().startswith('#')]
         except Exception as e:
             raise Exception(f"Error loading whitelist: {str(e)}")
-    def action_toggle_bags_only(self) -> None:
-        """Toggle show only bags mode"""
-        bag_selector = self.query_one(BagSelector)
-        bag_selector.show_only_bags = not bag_selector.show_only_bags
-        bag_selector.reload()
+    
     
     def action_load_whitelist(self) -> None:
         """Load whitelist from config"""
@@ -471,10 +465,7 @@ class MainScreen(Screen):
         except Exception as e:
             self.app.notify(f"Error saving whitelist: {str(e)}", title="Error", severity="error")
 
-    def action_toggle_multi_select(self) -> None:
-        """Toggle multi-select mode"""
-        bag_selector = self.query_one(BagSelector)
-        bag_selector.toggle_multi_select_mode()
+    
 
     def action_quit(self) -> None:
         """Show confirmation dialog before quitting"""

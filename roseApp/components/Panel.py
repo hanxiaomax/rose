@@ -294,6 +294,11 @@ class BagSelector(DirectoryTree):
     bags = reactive(BagManager())
     multi_select_mode = reactive(False)
     
+    BINDINGS = [
+        ("f", "toggle_bags_only", "Filter Bags"),
+        ("m", "toggle_multi_select", "Multi Mode"),
+    ]
+    
     def __init__(self, init_path: str = "."):
         super().__init__(path=init_path)
         self.current_path = Path(init_path)
@@ -315,9 +320,9 @@ class BagSelector(DirectoryTree):
     
     def update_border_subtitle(self):
         """Update subtitle to show multi-select mode status"""
-        mode = "Multi-Select Mode" if self.multi_select_mode else ""
-        count = f" ({len(self.selected_bags)} selected)" if self.multi_select_mode else ""
-        self.border_subtitle = f"{mode}{count}"
+        #mode = "Multi-Select Mode" if self.multi_select_mode else ""
+        
+        self.border_subtitle = f" ({self.bags.get_bag_numbers()} selected)" if self.multi_select_mode else ""
 
     def toggle_multi_select_mode(self):
         """Toggle multi-select mode on/off."""
@@ -326,14 +331,20 @@ class BagSelector(DirectoryTree):
         self.show_only_bags = self.multi_select_mode
         self.reload()   
         self.update_border_subtitle()
-        self._update_topic_tree_mode()
+        #self._update_topic_tree_mode()
     
+    def action_toggle_bags_only(self) -> None:
+        self.show_only_bags = not self.show_only_bags
+        self.reload()
     
-    def _update_topic_tree_mode(self):
-        """Update topic tree mode based on multi-select mode"""
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        topic_tree.multi_select_mode = self.multi_select_mode
-        topic_tree.filter_topics("")
+    def action_toggle_multi_select(self) -> None:
+        self.toggle_multi_select_mode()
+    
+    # def _update_topic_tree_mode(self):
+    #     """Update topic tree mode based on multi-select mode"""
+    #     topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+    #     topic_tree.multi_select_mode = self.multi_select_mode
+    #     topic_tree.filter_topics("")
 
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter paths based on show_only_bags setting"""
