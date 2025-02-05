@@ -34,25 +34,19 @@ class Bag:
     def __repr__(self) -> str:
         return f"Bag(path={self.path}, info={self.info}, filter_config={self.get_filter_config()})"
     
-    def select_topic(self, topic: str) -> None:
-        if not self.info or topic not in self.info.topics:
-            raise ValueError(f"Topic {topic} not found in bag")
-        self.selected_topics.add(topic)
     
-    def deselect_topic(self, topic: str) -> None:
-        self.selected_topics.discard(topic)
-
     def set_filter_time_range(self, start_time, end_time) -> None:
         self.filter_time_range = (start_time, end_time)
-        
+    
+    def set_selected_topics(self, topics: Set[str]) -> None:
+        self.selected_topics = topics
+    
     def get_filter_config(self) -> FilterConfig:
+        #fitler config is bag by bag becase time range can be different
         return FilterConfig(
             time_range=self.filter_time_range,
             topics=self.selected_topics
         )
-        
-    
-    
         
   
 class BagManager:
@@ -60,12 +54,19 @@ class BagManager:
     def __init__(self):
         self.bags: Dict[str, Bag] = {}
         self.bag_mutate_callback = None
+        # for now, maintain selected topics in bag manager
+        # because bags have same selected topics
+        self.selected_topics = set()
+
+    def __repr__(self) -> str:
+        return f"BagManager(bags={self.bags}) Size = {self.get_bag_numbers()}"
 
     def set_bag_mutate_callback(self, bag_mutate_callback: Callable) -> None:
         self.bag_mutate_callback = bag_mutate_callback
 
-    def __repr__(self) -> str:
-        return f"BagManager(bags={self.bags}) Size = {self.get_bag_numbers()}"
+    def populate_selected_topics(self) -> None:
+        for bag in self.bags.values():
+            bag.set_selected_topics(self.selected_topics)
     
     def get_bag_numbers(self):
       return len(self.bags)
@@ -114,11 +115,15 @@ class BagManager:
         return topic_summary
     
     def selected_topic(self, topic: str) -> None:
-        for bag in self.bags.values():
-            bag.selected_topics.add(topic)
+        self.selected_topics.add(topic)
+        self.populate_selected_topics()
+        
     def deselected_topic(self, topic: str) -> None:
-        for bag in self.bags.values():
-            bag.selected_topics.discard(topic)
+        self.selected_topics.discard(topic)
+        self.populate_selected_topics()
+        
+    def get_selected_topics(self) -> Set[str]:
+        return self.selected_topics
 
 
 class Whitelist:
