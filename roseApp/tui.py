@@ -23,7 +23,7 @@ from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from core.util import Operation, setup_logging
 from textual.fuzzy import FuzzySearch
 from textual.worker import Worker, WorkerState
-from components.Panel import TopicTreePanel
+from components.Panel import TopicTreePanel, TopicTree
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
 # Initialize logging at the start of the file
@@ -86,8 +86,9 @@ class BagSelector(DirectoryTree):
     
     def _update_topic_tree_mode(self):
         """Update topic tree mode based on multi-select mode"""
-        topic_panel = self.app.query_one(TopicTreePanel)
-        topic_panel.set_multi_select_mode(self.multi_select_mode)
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+        topic_tree.multi_select_mode = self.multi_select_mode
+        topic_tree.filter_topics("")
 
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter paths based on show_only_bags setting"""
@@ -109,8 +110,8 @@ class BagSelector(DirectoryTree):
 
     def _handle_non_bag_file(self, path: Path, status: "StatusBar") -> None:
         """Handle selection of non-bag files"""
-        topic_panel = self.app.query_one(TopicTreePanel)
-        topic_panel.set_topics([])
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+        topic_tree.set_topics([])
         self.app.selected_bag = None
         status.update_status(f"File: {path} is not a bag file", "warning")
 
@@ -125,16 +126,12 @@ class BagSelector(DirectoryTree):
     def _deselect_bag(self, path: Path, event, status: "StatusBar") -> None:
         """Handle bag file deselection"""
         try:
-            # Get topics from the bag before removing it
             topics, _, _ = Operation.load_bag(str(path))
-            
-            # Remove the bag from selected bags
             self.selected_bags.remove(str(path))
             event.node.label = Text(path.name)
             
-            # Remove topics from TopicTree
-            topic_panel = self.app.query_one(TopicTreePanel)
-            topic_panel.remove_bag_topics(str(path))
+            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+            topic_tree.remove_bag_topics(str(path))
             
             status.update_status(f"Deselected: {path}")
         except Exception as e:
@@ -143,14 +140,10 @@ class BagSelector(DirectoryTree):
 
     def _select_bag(self, path: Path, event, status: "StatusBar") -> None:
         """Handle bag file selection"""
-        self.selected_bags.add(str(path))
-        event.node.label = Text("☑️ ") + Text(path.name)
-        status.update_status(f"Selected: {path}")
-        
         try:
             topics, _, _ = Operation.load_bag(str(path))
-            topic_panel = self.app.query_one(TopicTreePanel)
-            topic_panel.merge_topics(str(path), topics)
+            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+            topic_tree.merge_topics(str(path), topics)
         except Exception as e:
             self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
             status.update_status(f"Error loading bag file: {str(e)}", "error")
@@ -168,8 +161,8 @@ class BagSelector(DirectoryTree):
 
     def _update_ui_for_selected_bag(self, path: Path, topics: list, time_range: tuple) -> None:
         """Update UI components after selecting a bag file"""
-        topic_panel = self.app.query_one(TopicTreePanel)
-        topic_panel.set_topics(topics)
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+        topic_tree.set_topics(topics)
         
         control_panel = self.app.query_one(ControlPanel)
         start_str, end_str = Operation.convert_time_range_to_str(*time_range)
@@ -271,7 +264,7 @@ class ControlPanel(Container):
     def _handle_add_task(self) -> None:
         """Handle add task button press"""
         bag_selector = self.app.query_one(BagSelector)
-        topic_tree = self.app.query_one(TopicTreePanel)
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
         selected_topics = topic_tree.get_selected_topics()
         
         if not selected_topics:
@@ -519,14 +512,16 @@ class MainScreen(Screen):
             
         try:
             whitelist = self.load_whitelist(self.app.selected_whitelist_path)
-            topic_panel = self.app.query_one(TopicTreePanel)
-            topic_panel.clear_selection()
+            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+            topic_tree.clear_selection()
             
             for topic in topics:
                 if topic in whitelist:
-                    topic_panel.select_topic(topic)
+                    topic_tree.select_topic(topic)
                     
-            topic_panel.update_whitelist_path(self.app.selected_whitelist_path)
+            # Update panel title
+            topic_panel = self.app.query_one(TopicTreePanel)
+            topic_panel.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
 
         except Exception as e:
             self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
@@ -556,11 +551,11 @@ class MainScreen(Screen):
     
     def action_toggle_select_all_topics(self) -> None:
         """Toggle select all topics in the topic tree"""
-        topic_panel = self.app.query_one(TopicTreePanel)
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
         status = self.query_one(StatusBar)
         
         try:
-            all_deselected, selected_count = topic_panel.toggle_select_all()
+            all_deselected, selected_count = topic_tree.toggle_select_all()
             if selected_count == 0:
                 status.update_status("No topics available to select", "error")
             else:
@@ -574,8 +569,8 @@ class MainScreen(Screen):
 
     def action_save_whitelist(self) -> None:
         """Save currently selected topics as a whitelist"""
-        topic_panel = self.app.query_one(TopicTreePanel)
-        selected_topics = topic_panel.get_selected_topics()
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+        selected_topics = topic_tree.get_selected_topics()
         
         if not selected_topics:
             status = self.query_one(StatusBar)
@@ -667,12 +662,14 @@ class WhitelistScreen(Screen):
         self.app.selected_whitelist_path = whitelist_path
         self.app.switch_mode("main")
         
-        topic_panel = self.app.query_one(TopicTreePanel)
-        if topic_panel and topic_panel.has_topics:
+        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+        if topic_tree and topic_tree.all_topics:
             main_screen = self.app.query_one(MainScreen)
-            main_screen.apply_whitelist(topic_panel.get_all_topics())
-        elif topic_panel:
-            topic_panel.update_whitelist_path(whitelist_path)
+            main_screen.apply_whitelist(topic_tree.all_topics)
+        else:
+            # Update panel title
+            topic_panel = self.app.query_one(TopicTreePanel)
+            topic_panel.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
 
         self.app.notify(f"Whitelist '{Path(whitelist_path).stem}' applied successfully", 
                        title="Whitelist Loaded", 

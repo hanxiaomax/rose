@@ -287,51 +287,6 @@ class TopicTreePanel(Container):
         """Initialize when mounted"""
         self.border_title = "Topics"
 
-    # Public API methods - delegate to TopicTree
-    def set_topics(self, topics: list) -> None:
-        self.query_one(TopicTree).set_topics(topics)
-
-    def get_selected_topics(self) -> list:
-        return self.query_one(TopicTree).get_selected_topics()
-
-    def merge_topics(self, bag_path: str, new_topics: list) -> None:
-        self.query_one(TopicTree).merge_topics(bag_path, new_topics)
-
-    def remove_bag_topics(self, bag_path: str) -> None:
-        self.query_one(TopicTree).remove_bag_topics(bag_path)
-
-    def toggle_select_all(self) -> 'tuple[bool, int]':
-        return self.query_one(TopicTree).toggle_select_all()
-
-    def set_multi_select_mode(self, enabled: bool) -> None:
-        self.query_one(TopicTree).multi_select_mode = enabled
-        self.query_one(TopicTree).filter_topics("")
-
-    def update_whitelist_path(self, whitelist_path: Optional[str]) -> None:
-        if whitelist_path:
-            self.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
-        else:
-            self.border_title = "Topics"
-
-    def get_topic_count(self) -> int:
-        return len(self.query_one(TopicTree).all_topics)
-
-    def clear_selection(self) -> None:
-        topic_tree = self.query_one(TopicTree)
-        topic_tree.selected_topics.clear()
-        topic_tree.filter_topics("")
-        topic_tree.update_border_subtitle()
-
-    @property
-    def has_topics(self) -> bool:
-        return bool(self.query_one(TopicTree).all_topics)
-
-    @property
-    def selected_count(self) -> int:
-        return len(self.query_one(TopicTree).selected_topics)
-
-    def select_topic(self, topic: str) -> None:
-        self.query_one(TopicTree).select_topic(topic)
-
-    def get_all_topics(self) -> list:
-        return self.query_one(TopicTree).all_topics
+    def get_topic_tree(self) -> TopicTree:
+        """Get the topic tree"""
+        return self.query_one(TopicTree)
