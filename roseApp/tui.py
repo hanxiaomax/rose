@@ -181,36 +181,29 @@ class MainScreen(Screen):
             yield StatusBar("", id="status")
         yield Footer()
     
-    def apply_whitelist(self, topics: list) -> None:
-        """Apply whitelist to loaded topics"""
-        if not self.app.selected_whitelist_path:
-            return
+    # def apply_whitelist(self, topics: list) -> None:
+    #     """Apply whitelist to loaded topics"""
+    #     if not self.app.selected_whitelist_path:
+    #         return
             
-        try:
-            whitelist = self.load_whitelist(self.app.selected_whitelist_path)
-            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-            topic_tree.clear_selection()
+    #     try:
+    #         whitelist = self.load_whitelist(self.app.selected_whitelist_path)
+    #         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+    #         topic_tree.clear_selection()
             
-            for topic in topics:
-                if topic in whitelist:
-                    topic_tree.select_topic(topic)
+    #         for topic in topics:
+    #             if topic in whitelist:
+    #                 topic_tree.select_topic(topic)
                     
-            # Update panel title
-            topic_panel = self.app.query_one(TopicTreePanel)
-            topic_panel.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
+    #         # Update panel title
+    #         topic_panel = self.app.query_one(TopicTreePanel)
+    #         topic_panel.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
 
-        except Exception as e:
-            self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
-            self.app.notify(f"Error applying whitelist: {str(e)}", title="Error", severity="error")
+    #     except Exception as e:
+    #         self.logger.error(f"Error applying whitelist: {str(e)}", exc_info=True)
+    #         self.app.notify(f"Error applying whitelist: {str(e)}", title="Error", severity="error")
 
-    def load_whitelist(self, path: str) -> 'list[str]':
-        """Load whitelist from file"""
-        try:
-            with open(path, 'r') as f:
-                return [line.strip() for line in f.readlines() 
-                       if line.strip() and not line.strip().startswith('#')]
-        except Exception as e:
-            raise Exception(f"Error loading whitelist: {str(e)}")
+
     
     
     def action_load_whitelist(self) -> None:
@@ -317,33 +310,55 @@ class WhitelistScreen(Screen):
         selection_list = self.query_one("#whitelist-select")
         selected_values = selection_list.selected
         
+        remove_whitelist = False
         if not selected_values:
-            self.app.notify("No whitelist selected", title="Warning", severity="warning")
-            return
-        
-        whitelist_name = selected_values[0]
-        whitelist_path = self.app.config["whitelists"].get(whitelist_name)
-        
-        if not whitelist_path:
-            self.app.notify("Whitelist path not found", title="Error", severity="error")
-            return
-        
-        self.app.selected_whitelist_path = whitelist_path
-        self.app.switch_mode("main")
-        
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        if topic_tree and topic_tree.all_topics:
-            main_screen = self.app.query_one(MainScreen)
-            main_screen.apply_whitelist(topic_tree.all_topics)
+            whitelist_path = ""
+            whitelist = []
+            remove_whitelist = True
+            
         else:
-            # Update panel title
-            topic_panel = self.app.query_one(TopicTreePanel)
-            topic_panel.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
-
-        self.app.notify(f"Whitelist '{Path(whitelist_path).stem}' applied successfully", 
+            whitelist_name = selected_values[0]
+            whitelist_path = self.app.config["whitelists"].get(whitelist_name)
+            whitelist = self.load_whitelist(whitelist_path)
+        
+            if not whitelist_path:
+                self.app.notify("Whitelist path not found", title="Error", severity="error")
+                return
+        
+        self.app.switch_mode("main")
+        bags = self.app.query_one(BagSelector).bags
+        
+        # apply whitelist
+        all_topics = list(bags.get_topic_summary().keys())
+        # clear current selected topics
+        bags.clear_selected_topics()
+        for topic in all_topics:
+            if topic in whitelist:
+                bags.select_topic(topic)
+        
+        #TODO: topic handle it by itself
+        topic_panel = self.app.query_one(TopicTreePanel)
+        if remove_whitelist:
+            topic_panel.border_title = "Topics"
+            self.app.notify(f"No Whitelist applied", 
                        title="Whitelist Loaded", 
                        severity="information")
+        else:
+            topic_panel.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
+            self.app.notify(f"Whitelist '{Path(whitelist_path).stem}' applied successfully", 
+                       title="Whitelist Loaded", 
+                       severity="information")
+ 
 
+    def load_whitelist(self, path: str) -> 'list[str]':
+        """Load whitelist from file"""
+        try:
+            with open(path, 'r') as f:
+                return [line.strip() for line in f.readlines() 
+                       if line.strip() and not line.strip().startswith('#')]
+        except Exception as e:
+            raise Exception(f"Error loading whitelist: {str(e)}")
+        
     def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Handle whitelist selection and show preview"""
         selection_list = event.selection_list
@@ -358,7 +373,7 @@ class WhitelistScreen(Screen):
             selected_values = [last_selected]
         
         if not selected_values:
-            preview.load_text("No whitelist selected")
+            preview.load_text("No whitelist selected, press y to remove applied whitelist")
             return
         
         whitelist_name = selected_values[0]
@@ -466,7 +481,7 @@ class RoseTUI(App):
         "main": MainScreen,
         "whitelist": WhitelistScreen,  
     }
-    selected_bag = reactive(None)
+    #selected_bag = reactive(None)
     selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
     
     def __init__(self):

@@ -55,9 +55,9 @@ class TopicTree(Tree):
             topic = data["topic"]
             
             if data["selected"]:
-                bag_manager.selected_topic(topic)
+                bag_manager.select_topic(topic)
             else:
-                bag_manager.deselected_topic(topic)
+                bag_manager.deselect_topic(topic)
             # 触发reactive
             self.app.query_one(BagSelector).mutate_reactive(BagSelector.bag_manager)
 ```

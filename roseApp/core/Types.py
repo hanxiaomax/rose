@@ -119,17 +119,14 @@ class BagManager:
                     topic_summary[topic] = 1
         return topic_summary
     
-    def selected_topic(self, topic: str) -> None:
-        print(f"selected_topic: {topic}")
+    def select_topic(self, topic: str) -> None:
         self.selected_topics.add(topic)
-        print(f"selected_topics: {self.selected_topics}")
         self.populate_selected_topics()
-        print(f"selected_topics: {self.selected_topics}")
         self.bag_mutate_callback()
-        print(f"selected_topics: {self.selected_topics}")
+
         
         
-    def deselected_topic(self, topic: str) -> None:
+    def deselect_topic(self, topic: str) -> None:
         self.selected_topics.discard(topic)
         self.populate_selected_topics()
         self.bag_mutate_callback()

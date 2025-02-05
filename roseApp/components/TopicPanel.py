@@ -138,9 +138,9 @@ class TopicTree(Tree):
             topic = data["topic"]
             
             if data["selected"]:
-                self.bags.selected_topic(topic)
+                self.bags.select_topic(topic)
             else:
-                self.bags.deselected_topic(topic)
+                self.bags.deselect_topic(topic)
             
             print(self.bags.get_selected_topics())
             event.node.label = self.get_node_label(topic, data["selected"])
@@ -211,10 +211,10 @@ class TopicTree(Tree):
             node.data["selected"] = not all_selected
             topic = node.data.get("topic")
             if node.data["selected"]:
-                self.bags.selected_topic(topic)
+                self.bags.select_topic(topic)
                 node.label = self.get_node_label(topic, True)
             else:
-                self.bags.deselected_topic(topic)
+                self.bags.deselect_topic(topic)
                 node.label = self.get_node_label(topic, False)
         
         print(self.bags)
