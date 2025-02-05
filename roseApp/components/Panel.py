@@ -368,12 +368,20 @@ class BagSelector(DirectoryTree):
 
     def _handle_multi_select_bag(self, path: Path, event, status) -> None:
         """Handle bag file selection in multi-select mode"""
-        if str(path) in self.selected_bags:
-            self._deselect_bag(path, event, status)
-        else:
-            self._select_bag(path, event, status)
-        self.update_border_subtitle()
-
+        try:
+            if self.bags.is_bag_loaded(path):
+                self.bags.unload_bag(path,self.mutate_callback)
+                event.node.label = Text(path.name)  
+                status.update_status(f"Deselected: {path}")
+            else:
+                self.bags.load_bag(path,self.mutate_callback)
+                event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
+                status.update_status(f"Selected: {path}")   
+            self.update_border_subtitle()
+        except Exception as e:
+            self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
+            status.update_status(f"Error loading bag file: {str(e)}", "error")
+            
     # def _select_bag(self, path: Path, event, status) -> None:
     #     """Handle bag file selection"""
     #     self.selected_bags.add(str(path))
@@ -403,10 +411,10 @@ class BagSelector(DirectoryTree):
 
     def _handle_single_select_bag(self, path: Path, status) -> None:
         """Handle bag file selection in single-select mode"""
-        self.app.selected_bag = str(path)
+        # for single select mode, clear bags before load current bag
         try:
-            topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
-            self._update_ui_for_selected_bag(path, topics, (start_time, end_time))
+            self.bags.clear_bags()
+            self.bags.load_bag(path,self.mutate_callback)
             status.update_status(f"File: {path} loaded successfully")
         except Exception as e:
             self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
@@ -436,27 +444,13 @@ class BagSelector(DirectoryTree):
 
         if path.is_dir():
             self._handle_directory_selection(path, status)
+            return
 
-        elif not str(path).endswith('.bag'):
+        if not str(path).endswith('.bag'):
             self._handle_non_bag_file(path, status)
+            return
 
+        if self.multi_select_mode:
+            self._handle_multi_select_bag(path, event, status)
         else:
-            if self.multi_select_mode:
-                if self.bags.is_bag_loaded(path):
-                    self.bags.unload_bag(path,self.mutate_callback)
-                    event.node.label = Text(path.name)  
-                    status.update_status(f"Deselected: {path}")
-                else:
-                    self.bags.load_bag(path,self.mutate_callback)
-                    event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
-                    status.update_status(f"Selected: {path}")   
-            else:
-                # for single select mode, clear bags before load current bag
-                self.bags.clear_bags()
-                self.bags.load_bag(path,self.mutate_callback)
-            
-            
-        # if self.multi_select_mode:
-        #     self._handle_multi_select_bag(path, event, status)
-        # else:
-        #     self._handle_single_select_bag(path, status)
+            self._handle_single_select_bag(path, status)
