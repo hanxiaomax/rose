@@ -10,10 +10,9 @@ from typing import Iterable
 # Third-party imports
 from art import text2art
 from rich.text import Text
-from textual import work, log
+from textual import work
 from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Container, Horizontal, Vertical
-from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
@@ -21,11 +20,13 @@ from textual.widgets import (
 )
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from core.util import Operation, setup_logging
-from textual.fuzzy import FuzzySearch
 from textual.worker import Worker, WorkerState
-from components.Panel import TopicTreePanel, TopicTree
+from textual.reactive import reactive
+from components.Panel import TopicTreePanel,BagSelector
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
+
+
 # Initialize logging at the start of the file
 logger = setup_logging()
 
@@ -44,158 +45,6 @@ def load_config():
         return {"show_splash_screen": True}
 
 
-class BagSelector(DirectoryTree):
-    """A directory tree widget specialized for selecting ROS bag files"""
-
-    def __init__(self, init_path: str = "."):
-        super().__init__(path=init_path)
-        self.current_path = Path(init_path)
-        self.guide_depth = 2
-        self.show_root = True  
-        self.show_guides = True
-        self.show_only_bags = False
-        self.multi_select_mode = False
-        self.selected_bags = set()
-        self.border_title = "File Explorer"
-        self.logger = logger.getChild("BagSelector")
-    
-    def on_mount(self) -> None:
-        """Initialize when mounted"""
-        self.update_border_subtitle()
-
-    def update_border_subtitle(self):
-        """Update subtitle to show multi-select mode status"""
-        mode = "Multi-Select Mode" if self.multi_select_mode else ""
-        count = f" ({len(self.selected_bags)} selected)" if self.multi_select_mode else ""
-        self.border_subtitle = f"{mode}{count}"
-
-    def toggle_multi_select_mode(self):
-        """Toggle multi-select mode on/off."""
-        self.multi_select_mode = not self.multi_select_mode
-        self.selected_bags.clear()
-        self.show_only_bags = self.multi_select_mode
-        self.reload()   
-        self.update_border_subtitle()
-        self._update_control_panel_state()
-        self._update_topic_tree_mode()
-    
-    def _update_control_panel_state(self):
-        """Update control panel enabled state based on multi-select mode"""
-        control_panel = self.app.query_one(ControlPanel)
-        control_panel.set_enabled(not self.multi_select_mode)
-    
-    def _update_topic_tree_mode(self):
-        """Update topic tree mode based on multi-select mode"""
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        topic_tree.multi_select_mode = self.multi_select_mode
-        topic_tree.filter_topics("")
-
-    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
-        """Filter paths based on show_only_bags setting"""
-        paths = super().filter_paths(paths)
-        paths = [p for p in paths if not p.name.startswith('.')]
-        if self.show_only_bags:
-            return [p for p in paths if p.is_dir() or p.suffix.lower() == '.bag']
-        return paths
-
-
-    def _handle_directory_selection(self, path: Path, status: "StatusBar") -> None:
-        """Handle directory selection logic"""
-        if path == self.current_path:
-            self.path = self.current_path.parent
-        else:
-            self.path = path
-        self.current_path = self.path
-        status.update_status(f"Entering directory: {path}")
-
-    def _handle_non_bag_file(self, path: Path, status: "StatusBar") -> None:
-        """Handle selection of non-bag files"""
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        topic_tree.set_topics([])
-        self.app.selected_bag = None
-        status.update_status(f"File: {path} is not a bag file", "warning")
-
-    def _handle_multi_select_bag(self, path: Path, event, status: "StatusBar") -> None:
-        """Handle bag file selection in multi-select mode"""
-        if str(path) in self.selected_bags:
-            self._deselect_bag(path, event, status)
-        else:
-            self._select_bag(path, event, status)
-        self.update_border_subtitle()
-
-    def _select_bag(self, path: Path, event, status: "StatusBar") -> None:
-        """Handle bag file selection"""
-        self.selected_bags.add(str(path))
-        event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
-        status.update_status(f"Selected: {path}")
-        
-        try:
-            topics, _, _ = Operation.load_bag(str(path))
-            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-            topic_tree.merge_topics(str(path), topics)
-        except Exception as e:
-            self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
-            status.update_status(f"Error loading bag file: {str(e)}", "error")
-
-    def _deselect_bag(self, path: Path, event, status: "StatusBar") -> None:
-        """Handle bag file deselection"""
-        try:
-            topics, _, _ = Operation.load_bag(str(path))
-            self.selected_bags.remove(str(path))
-            event.node.label = Text(path.name)  # Remove checkbox symbol
-            
-            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-            topic_tree.remove_bag_topics(str(path))
-            
-            status.update_status(f"Deselected: {path}")
-        except Exception as e:
-            self.logger.error(f"Error deselecting bag file: {str(e)}", exc_info=True)
-            status.update_status(f"Error deselecting bag file: {str(e)}", "error")
-
-    def _handle_single_select_bag(self, path: Path, status: "StatusBar") -> None:
-        """Handle bag file selection in single-select mode"""
-        self.app.selected_bag = str(path)
-        try:
-            topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
-            self._update_ui_for_selected_bag(path, topics, (start_time, end_time))
-            status.update_status(f"File: {path} loaded successfully")
-        except Exception as e:
-            self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
-            status.update_status(f"Error loading bag file: {str(e)}", "error")
-
-    def _update_ui_for_selected_bag(self, path: Path, topics: list, time_range: tuple) -> None:
-        """Update UI components after selecting a bag file"""
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        topic_tree.set_topics(topics)
-        
-        control_panel = self.app.query_one(ControlPanel)
-        start_str, end_str = Operation.convert_time_range_to_str(*time_range)
-        control_panel.set_time_range(start_str, end_str)
-        control_panel.set_output_file(f"{path.stem}_filtered.bag")
-        
-        main_screen = self.app.query_one(MainScreen)
-        main_screen.apply_whitelist(topics)
-
-    @work(thread=True)
-    async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
-        """Handle file selection with support for multi-select mode"""
-        path = event.node.data.path
-        self.current_node = event.node
-        self.show_guides = True
-        status = self.app.query_one(StatusBar)
-
-        if path.is_dir():
-            self._handle_directory_selection(path, status)
-            return
-
-        if not str(path).endswith('.bag'):
-            self._handle_non_bag_file(path, status)
-            return
-
-        if self.multi_select_mode:
-            self._handle_multi_select_bag(path, event, status)
-        else:
-            self._handle_single_select_bag(path, status)
 
 class ControlPanel(Container):
     """A container widget providing controls for ROS bag file operations"""
