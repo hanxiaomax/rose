@@ -1,4 +1,4 @@
-from typing import Dict, Set, Optional, Tuple
+from typing import Dict, Set, Optional, Tuple,Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -62,7 +62,7 @@ class BagManager:
     def get_bag_numbers(self):
       return len(self.bags)
     
-    def load_bag(self,path:Path) -> None:
+    def load_bag(self,path:Path,mutate_callback:Callable) -> None:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
@@ -73,13 +73,13 @@ class BagManager:
             size=0,
             topics=set(topics)
         ))
-        self.bags[bag.path] = bag
-    
-    def unload_bag(self, path: Path) -> None:
+        self.bags[path] = bag
+        
+    def unload_bag(self, path: Path,mutate_callback:Callable) -> None:
         if path not in self.bags:
             raise KeyError(f"Bag with path {path} not found")
         del self.bags[path]
-    
+        
     def clear_bags(self) -> None:
         self.bags.clear()
 

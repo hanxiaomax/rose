@@ -310,6 +310,9 @@ class BagSelector(DirectoryTree):
         """Initialize when mounted"""
         self.update_border_subtitle()
 
+    def mutate_callback(self):
+        self.mutate_reactive(BagSelector.bags)
+    
     def update_border_subtitle(self):
         """Update subtitle to show multi-select mode status"""
         mode = "Multi-Select Mode" if self.multi_select_mode else ""
@@ -435,13 +438,20 @@ class BagSelector(DirectoryTree):
 
         if path.is_dir():
             self._handle_directory_selection(path, status)
-            return
 
-        if not str(path).endswith('.bag'):
+        elif not str(path).endswith('.bag'):
             self._handle_non_bag_file(path, status)
-            return
 
-        if self.multi_select_mode:
-            self._handle_multi_select_bag(path, event, status)
         else:
-            self._handle_single_select_bag(path, status)
+            if self.multi_select_mode:
+                pass
+            else:
+                # for single select mode, clear bags before load current bag
+                self.bags.clear_bags()
+                self.bags.load_bag(path,self.mutate_callback)
+            
+            
+        # if self.multi_select_mode:
+        #     self._handle_multi_select_bag(path, event, status)
+        # else:
+        #     self._handle_single_select_bag(path, status)
