@@ -326,14 +326,8 @@ class BagSelector(DirectoryTree):
         self.show_only_bags = self.multi_select_mode
         self.reload()   
         self.update_border_subtitle()
-        #TODO: handle control panel and mainscreen
-        # self._update_control_panel_state()
         self._update_topic_tree_mode()
     
-    # def _update_control_panel_state(self):
-    #     """Update control panel enabled state based on multi-select mode"""
-    #     control_panel = self.app.query_one(ControlPanel)
-    #     control_panel.set_enabled(not self.multi_select_mode)
     
     def _update_topic_tree_mode(self):
         """Update topic tree mode based on multi-select mode"""
@@ -422,14 +416,10 @@ class BagSelector(DirectoryTree):
 
     def _update_ui_for_selected_bag(self, path: Path, topics: list, time_range: tuple) -> None:
         """Update UI components after selecting a bag file"""
+        #TODO remove
         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
         topic_tree.set_topics(topics)
         
-        ##TODO: handle control panel and mainscreen
-        # control_panel = self.app.query_one(ControlPanel)
-        # start_str, end_str = Operation.convert_time_range_to_str(*time_range)
-        # control_panel.set_time_range(start_str, end_str)
-        # control_panel.set_output_file(f"{path.stem}_filtered.bag")
         
         # main_screen = self.app.query_one(MainScreen)
         # main_screen.apply_whitelist(topics)
