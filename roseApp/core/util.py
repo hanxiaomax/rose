@@ -101,14 +101,6 @@ class Operation():
         except ValueError as e:
             raise ValueError(f"Invalid time range format: {e}")
         
-    @staticmethod
-    def convert_time_range_to_str(start_time: tuple, end_time: tuple):
-        #TODO move to bag manager
-        """Convert time range to string"""
-        start_str = Operation.to_datetime(start_time)
-        end_str = Operation.to_datetime(end_time)
-        return start_str, end_str
-
 def setup_logging():
     """Configure logging settings for the application"""
     log_file = Path("rose_tui.log")

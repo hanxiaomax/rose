@@ -274,7 +274,8 @@ class TaskTable(DataTable):
 
         input_size = self.get_file_size(input_bag)
         output_size = self.get_file_size(output_bag)
-        start_time, end_time = Operation.convert_time_range_to_str(*time_range)
+        #TODO: get from bag info
+        start_time, end_time = "123", "123" #Operation.convert_time_range_to_str(*time_range)
 
         self.add_row(
             str(self.task_count),
