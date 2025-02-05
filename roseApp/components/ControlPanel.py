@@ -33,7 +33,7 @@ class ControlPanel(Container):
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
         self.multi_select_mode = multi_select_mode
-        self.set_disable()
+        self.set_disable(self.multi_select_mode)
 
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle bag change event"""
@@ -101,14 +101,12 @@ class ControlPanel(Container):
         """Set the output file name"""
         self.query_one("#output-file").value = output_file
 
-    def set_disable(self) -> None:
+    def set_disable(self,disable:bool) -> None:
         """Render the enable state of the control panel"""
-        for input_widget in self.query("Input"):
-            input_widget.disabled = self.multi_select_mode
-        
-
-        if self.multi_select_mode:
+        if disable:
             self.set_disable_info()
+            for input_widget in self.query("Input"):
+                input_widget.disabled = True
         else:
             self.reset_info()
 
