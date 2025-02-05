@@ -21,6 +21,7 @@ class ControlPanel(Container):
     def __init__(self):
         super().__init__()
         self.logger = logger.getChild("ControlPanel")
+        self.multi_select_mode = False
         
     def on_mount(self) -> None:
         """Initialize control panel"""
@@ -31,16 +32,26 @@ class ControlPanel(Container):
     
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
-        self.set_enabled(not multi_select_mode)
+        self.multi_select_mode = multi_select_mode
+        self.set_disable()
 
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle bag change event"""
-        # control panel should be disabled when multi select mode is on
-        bag = bags.get_single_bag()
-        if bag and not self.disabled:
+        
+        # bag number is 1 can be single mode or multi mode
+        # set info when enabled
+        if self.multi_select_mode:
+            self.set_disable_info()
+            return
+        
+        if bags.get_bag_numbers() == 1:
+            bag = bags.get_single_bag()
             self.set_time_range(bag.info.time_range_str)
             self.set_output_file(f"{bag.path.stem}_filtered.bag")
+        elif bags.get_bag_numbers() == 0:
+            self.reset_info()
         
+            
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
@@ -71,26 +82,34 @@ class ControlPanel(Container):
         """Set the time range in inputs, converting from milliseconds to seconds"""
         self.query_one("#start-time").value = time_range_str[0]
         self.query_one("#end-time").value = time_range_str[1]
-
+    
+    def reset_info(self) -> None:
+        """Set the time range in inputs, converting from milliseconds to seconds"""
+        self.query_one("#start-time").value = ""
+        self.query_one("#end-time").value = ""
+        self.query_one("#output-file").value = ""
+    
+    def set_disable_info(self) -> None:
+        """Set the disable state of the control panel"""
+        self.query_one("#start-time").value = "slice not supported"
+        self.query_one("#end-time").value = "slice not supported"
+        self.query_one("#output-file").value = "Filename will be generated"
+    
     def set_output_file(self, output_file: str) -> None:
         """Set the output file name"""
         self.query_one("#output-file").value = output_file
 
-    def set_enabled(self, enabled: bool) -> None:
-        """
-        Enable or disable all input controls in the panel.
-        
-        Args:
-            enabled (bool): Whether to enable the controls
-        """
+    def set_disable(self) -> None:
+        """Render the enable state of the control panel"""
         for input_widget in self.query("Input"):
-            input_widget.disabled = not enabled
-        if input_widget.disabled:
-            self.query_one("#start-time").value = ""
-            self.query_one("#end-time").value = ""
-            self.query_one("#output-file").value = "Filename will be generated"
+            input_widget.disabled = self.multi_select_mode
+        
+
+        if self.multi_select_mode:
+            self.set_disable_info()
         else:
-            self.query_one("#output-file").value = ""
+            self.reset_info()
+
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events"""
