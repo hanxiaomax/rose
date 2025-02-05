@@ -374,34 +374,32 @@ class BagSelector(DirectoryTree):
             self._select_bag(path, event, status)
         self.update_border_subtitle()
 
-    def _select_bag(self, path: Path, event, status) -> None:
-        """Handle bag file selection"""
-        self.selected_bags.add(str(path))
-        event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
-        status.update_status(f"Selected: {path}")
+    # def _select_bag(self, path: Path, event, status) -> None:
+    #     """Handle bag file selection"""
+    #     self.selected_bags.add(str(path))
+    #     event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
+    #     status.update_status(f"Selected: {path}")
         
-        try:
-            topics, _, _ = Operation.load_bag(str(path))
-            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-            topic_tree.merge_topics(str(path), topics)
-        except Exception as e:
-            self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
-            status.update_status(f"Error loading bag file: {str(e)}", "error")
+    #     try:
+    #         topics, _, _ = Operation.load_bag(str(path))
+    #         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+    #         topic_tree.merge_topics(str(path), topics)
+    #     except Exception as e:
+    #         self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
+    #         status.update_status(f"Error loading bag file: {str(e)}", "error")
 
-    def _deselect_bag(self, path: Path, event, status) -> None:
-        """Handle bag file deselection"""
-        try:
-            topics, _, _ = Operation.load_bag(str(path))
-            self.selected_bags.remove(str(path))
-            event.node.label = Text(path.name)  # Remove checkbox symbol
+    # def _deselect_bag(self, path: Path, event, status) -> None:
+    #     """Handle bag file deselection"""
+    #     try:
+    #         self.selected_bags.remove(str(path))
             
-            topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-            topic_tree.remove_bag_topics(str(path))
+    #         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
+    #         topic_tree.remove_bag_topics(str(path))
             
-            status.update_status(f"Deselected: {path}")
-        except Exception as e:
-            self.logger.error(f"Error deselecting bag file: {str(e)}", exc_info=True)
-            status.update_status(f"Error deselecting bag file: {str(e)}", "error")
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Error deselecting bag file: {str(e)}", exc_info=True)
+    #         status.update_status(f"Error deselecting bag file: {str(e)}", "error")
 
     def _handle_single_select_bag(self, path: Path, status) -> None:
         """Handle bag file selection in single-select mode"""
@@ -444,7 +442,14 @@ class BagSelector(DirectoryTree):
 
         else:
             if self.multi_select_mode:
-                pass
+                if self.bags.is_bag_loaded(path):
+                    self.bags.unload_bag(path,self.mutate_callback)
+                    event.node.label = Text(path.name)  
+                    status.update_status(f"Deselected: {path}")
+                else:
+                    self.bags.load_bag(path,self.mutate_callback)
+                    event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
+                    status.update_status(f"Selected: {path}")   
             else:
                 # for single select mode, clear bags before load current bag
                 self.bags.clear_bags()

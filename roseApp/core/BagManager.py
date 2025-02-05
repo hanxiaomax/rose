@@ -62,6 +62,9 @@ class BagManager:
     def get_bag_numbers(self):
       return len(self.bags)
     
+    def is_bag_loaded(self, path: Path) -> bool:
+        return path in self.bags
+    
     def load_bag(self,path:Path,mutate_callback:Callable) -> None:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
@@ -74,22 +77,18 @@ class BagManager:
             topics=set(topics)
         ))
         self.bags[path] = bag
+        mutate_callback()
         
     def unload_bag(self, path: Path,mutate_callback:Callable) -> None:
         if path not in self.bags:
             raise KeyError(f"Bag with path {path} not found")
         del self.bags[path]
+        mutate_callback()
         
     def clear_bags(self) -> None:
         self.bags.clear()
 
     def get_topic_summary(self) -> 'dict[str, int]':
-        """
-        Get the number of bags each topic appears in
-        
-        Returns:
-            dict[str, int]: A dictionary where keys are topics and values are the number of bags they appear in
-        """
         topic_summary = {}
         for bag in self.bags.values():
             for topic in bag.info.topics:
