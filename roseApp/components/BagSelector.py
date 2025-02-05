@@ -30,14 +30,13 @@ class BagSelector(DirectoryTree):
         self.show_root = True  
         self.show_guides = True
         self.show_only_bags = False
-
-        # self.selected_bags = set()
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagSelector")
     
     def on_mount(self) -> None:
         """Initialize when mounted"""
         self.update_border_subtitle()
+        self.bags.set_bag_mutate_callback(self.mutate_callback)
 
     def mutate_callback(self):
         self.mutate_reactive(BagSelector.bags)
@@ -54,6 +53,8 @@ class BagSelector(DirectoryTree):
     def action_toggle_multi_select(self) -> None:
         self.multi_select_mode = not self.multi_select_mode
         self.show_only_bags = self.multi_select_mode
+        # reset bag manager when switch mode
+        self.bags.clear_bags()
         self.reload()   
         self.update_border_subtitle()
 
@@ -80,11 +81,11 @@ class BagSelector(DirectoryTree):
         """Handle bag file selection in multi-select mode"""
         try:
             if self.bags.is_bag_loaded(path):
-                self.bags.unload_bag(path,self.mutate_callback)
+                self.bags.unload_bag(path)
                 event.node.label = Text(path.name)  
                 status.update_status(f"Deselected: {path}")
             else:
-                self.bags.load_bag(path,self.mutate_callback)
+                self.bags.load_bag(path)
                 event.node.label = Text("☑️ ") + Text(path.name)  # Add checkbox symbol
                 status.update_status(f"Selected: {path}")   
             self.update_border_subtitle()
@@ -124,7 +125,7 @@ class BagSelector(DirectoryTree):
         # for single select mode, clear bags before load current bag
         try:
             self.bags.clear_bags()
-            self.bags.load_bag(path,self.mutate_callback)
+            self.bags.load_bag(path)
             status.update_status(f"File: {path} loaded successfully")
         except Exception as e:
             self.logger.error(f"Error loading bag file: {str(e)}", exc_info=True)
@@ -150,6 +151,7 @@ class BagSelector(DirectoryTree):
             return
 
         if not str(path).endswith('.bag'):
+            self.bags.clear_bags()
             status.update_status(f"File: {path} is not a bag file", "warning")
             return
 

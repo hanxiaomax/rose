@@ -59,7 +59,11 @@ class BagManager:
     """Manages multiple ROS bag files"""
     def __init__(self):
         self.bags: Dict[str, Bag] = {}
-    
+        self.bag_mutate_callback = None
+
+    def set_bag_mutate_callback(self, bag_mutate_callback: Callable) -> None:
+        self.bag_mutate_callback = bag_mutate_callback
+
     def __repr__(self) -> str:
         return f"BagManager(bags={self.bags}) Size = {self.get_bag_numbers()}"
     
@@ -75,7 +79,7 @@ class BagManager:
     def is_bag_loaded(self, path: Path) -> bool:
         return path in self.bags
     
-    def load_bag(self,path:Path,mutate_callback:Callable) -> None:
+    def load_bag(self,path:Path) -> None:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
@@ -87,16 +91,17 @@ class BagManager:
             topics=set(topics)
         ))
         self.bags[path] = bag
-        mutate_callback()
+        self.bag_mutate_callback()
         
-    def unload_bag(self, path: Path,mutate_callback:Callable) -> None:
+    def unload_bag(self, path: Path) -> None:
         if path not in self.bags:
             raise KeyError(f"Bag with path {path} not found")
         del self.bags[path]
-        mutate_callback()
+        self.bag_mutate_callback()
         
     def clear_bags(self) -> None:
         self.bags.clear()
+        self.bag_mutate_callback()
 
     def get_topic_summary(self) -> 'dict[str, int]':
         topic_summary = {}
