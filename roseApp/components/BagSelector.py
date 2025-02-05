@@ -131,12 +131,9 @@ class BagSelector(DirectoryTree):
             status.update_status(f"Error loading bag file: {str(e)}", "error")
 
     # def _update_ui_for_selected_bag(self, path: Path, topics: list, time_range: tuple) -> None:
-    #     """Update UI components after selecting a bag file"""
-    #     #TODO remove
-    #     # topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-    #     # topic_tree.set_topics(topics)
-        
-        
+    #     """Update UI components after selecting a bag file"""        
+        #TODO: apply whitelist when bag changes. handle it in TopicTreePanel
+        #TODO: make whitelist part of bag manager?
     #     # main_screen = self.app.query_one(MainScreen)
     #     # main_screen.apply_whitelist(topics)
 

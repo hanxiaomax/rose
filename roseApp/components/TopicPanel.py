@@ -14,59 +14,58 @@ from components.BagSelector import BagSelector
 
 logger = setup_logging()
 
-class TopicManager:
-    """Manager for handling topic-bag relationships and counts"""
+# class TopicManager:
+#     """Manager for handling topic-bag relationships and counts"""
     
-    def __init__(self):
-        # 存储每个topic对应的bag set
-        self.topic_bags: dict[str, 'set[str]'] = defaultdict(set)
-        # 存储每个bag对应的topics list，用于快速查找bag包含的所有topics
-        self.bag_topics: dict[str, 'list[str]'] = {}
+#     def __init__(self):
+#         # 存储每个topic对应的bag set
+#         self.topic_bags: dict[str, 'set[str]'] = defaultdict(set)
+#         # 存储每个bag对应的topics list，用于快速查找bag包含的所有topics
+#         self.bag_topics: dict[str, 'list[str]'] = {}
         
-    def add_bag(self, bag_path: str, topics: 'list[str]') -> None:
-        # 记录bag包含的topics
-        self.bag_topics[bag_path] = topics
-        # 为每个topic添加这个bag
-        for topic in topics:
-            self.topic_bags[topic].add(bag_path)
+#     def add_bag(self, bag_path: str, topics: 'list[str]') -> None:
+#         # 记录bag包含的topics
+#         self.bag_topics[bag_path] = topics
+#         # 为每个topic添加这个bag
+#         for topic in topics:
+#             self.topic_bags[topic].add(bag_path)
     
-    def remove_bag(self, bag_path: str) -> 'tuple[list[str], list[str]]':
-        if bag_path not in self.bag_topics:
-            return [], []
+#     def remove_bag(self, bag_path: str) -> 'tuple[list[str], list[str]]':
+#         if bag_path not in self.bag_topics:
+#             return [], []
             
-        removed_topics = []
-        updated_topics = []
+#         removed_topics = []
+#         updated_topics = []
         
 
-        topics = self.bag_topics[bag_path]
+#         topics = self.bag_topics[bag_path]
 
-        for topic in topics:
-            self.topic_bags[topic].remove(bag_path)
-            if not self.topic_bags[topic]:
-                removed_topics.append(topic)
-                del self.topic_bags[topic]
-            else:
-                updated_topics.append(topic)
+#         for topic in topics:
+#             self.topic_bags[topic].remove(bag_path)
+#             if not self.topic_bags[topic]:
+#                 removed_topics.append(topic)
+#                 del self.topic_bags[topic]
+#             else:
+#                 updated_topics.append(topic)
 
-        del self.bag_topics[bag_path]
+#         del self.bag_topics[bag_path]
         
-        return removed_topics, updated_topics
+#         return removed_topics, updated_topics
     
-    def get_topic_count(self, topic: str) -> int:
-        """Get the number of bags containing a topic"""
-        return len(self.topic_bags.get(topic, set()))
+#     def get_topic_count(self, topic: str) -> int:
+#         """Get the number of bags containing a topic"""
+#         return len(self.topic_bags.get(topic, set()))
     
-    def get_topics(self) -> 'list[str]':
-        """Get all current topics"""
-        return list(self.topic_bags.keys())
+#     def get_topics(self) -> 'list[str]':
+#         """Get all current topics"""
+#         return list(self.topic_bags.keys())
 
 class TopicTree(Tree):
     """A tree widget for displaying ROS bag topics with multi-selection capability"""
     
-    def __init__(self, topic_manager: TopicManager):
+    def __init__(self):
         super().__init__("Topics")
         self.selected_topics = set() # selected topics used for filtering
-        self.topic_manager = topic_manager  # manager for topic-bag relationships
         self.all_topics = []  # Store all topics for filtering
         self.border_subtitle = "Selected: 0"
         self.fuzzy_searcher = FuzzySearch(case_sensitive=False)
@@ -82,8 +81,9 @@ class TopicTree(Tree):
                                 self.handle_multi_select_mode_change)
 
     def handle_bags_change(self, bags: BagManager) -> None:
-        print(f"++ bags: {bags}")
-    
+        """Handle changes in BagManager and update topics accordingly"""
+        self.set_topics(bags)
+
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
         self.multi_select_mode = multi_select_mode
@@ -98,7 +98,9 @@ class TopicTree(Tree):
             selected: Whether the topic is selected
         """
         if self.multi_select_mode:
-            count = self.topic_manager.get_topic_count(topic)
+            # Get count from bag manager
+            bag_manager = self.app.query_one(BagSelector).bags
+            count = bag_manager.get_topic_summary().get(topic, 0)
             label = f"{topic} [{count}]"
         else:
             label = topic
@@ -133,13 +135,18 @@ class TopicTree(Tree):
                 allow_expand=False
             )
 
-    def set_topics(self, topics: list) -> None:
-        """Set topics and clear previous selections"""
-        self.all_topics = topics
+    def set_topics(self, bag_manager: BagManager) -> None:
+        """Set topics based on BagManager's state"""
+        # Get topic summary from bag manager
+        topic_summary = bag_manager.get_topic_summary()
+        
+        # Get unique topics from summary
+        self.all_topics = list(topic_summary.keys())
         self.selected_topics.clear()
         self.root.remove_children()
         
-        for topic in sorted(topics):
+        # Add topics to tree
+        for topic in sorted(self.all_topics):
             self.root.add(
                 self.get_node_label(topic),
                 data={"topic": topic, "selected": False},
@@ -206,26 +213,27 @@ class TopicTree(Tree):
 
     def remove_bag_topics(self, bag_path: str) -> None:
         """Remove topics from a bag"""
-        removed_topics, updated_topics = self.topic_manager.remove_bag(bag_path)
+        #TODO: remove bag from bag manager
+        # removed_topics, updated_topics = self.topic_manager.remove_bag(bag_path)
         
-        for topic in removed_topics:
-            self.selected_topics.discard(topic)
-            for node in list(self.root.children): 
-                if node.data.get("topic") == topic:
-                    node.remove()  
-                    break
+        # for topic in removed_topics:
+        #     self.selected_topics.discard(topic)
+        #     for node in list(self.root.children): 
+        #         if node.data.get("topic") == topic:
+        #             node.remove()  
+        #             break
         
 
-        for topic in updated_topics:
-            for node in self.root.children:
-                if node.data.get("topic") == topic:
-                    node.label = self.get_node_label(
-                        topic,
-                        node.data.get("selected", False)
-                    )
-                    break
+        # for topic in updated_topics:
+        #     for node in self.root.children:
+        #         if node.data.get("topic") == topic:
+        #             node.label = self.get_node_label(
+        #                 topic,
+        #                 node.data.get("selected", False)
+        #             )
+        #             break
         
-        self.update_border_subtitle()
+        # self.update_border_subtitle()
 
     def toggle_select_all(self) -> 'tuple[bool, int]':
         """
@@ -275,12 +283,11 @@ class TopicTreePanel(Container):
     
     def __init__(self):
         super().__init__()
-        self._topic_manager = TopicManager()
 
     def compose(self) -> ComposeResult:
         """Create child widgets"""
         yield TopicSearchInput()
-        yield TopicTree(self._topic_manager)
+        yield TopicTree()
 
     def on_mount(self) -> None:
         """Initialize when mounted"""
