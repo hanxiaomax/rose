@@ -356,13 +356,7 @@ class BagSelector(DirectoryTree):
             self.path = path
         self.current_path = self.path
         status.update_status(f"Entering directory: {path}")
-
-    def _handle_non_bag_file(self, path: Path, status) -> None:
-        """Handle selection of non-bag files"""
-        topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        topic_tree.set_topics([])
-        self.app.selected_bag = None
-        status.update_status(f"File: {path} is not a bag file", "warning")
+        
 
     def _handle_multi_select_bag(self, path: Path, event, status) -> None:
         """Handle bag file selection in multi-select mode"""
@@ -441,7 +435,7 @@ class BagSelector(DirectoryTree):
             return
 
         if not str(path).endswith('.bag'):
-            self._handle_non_bag_file(path, status)
+            status.update_status(f"File: {path} is not a bag file", "warning")
             return
 
         if self.multi_select_mode:
