@@ -82,7 +82,11 @@ class TopicTree(Tree):
         """Initialize when mounted"""
         super().on_mount()
         self.root.expand()
+        self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
 
+    def handle_bags_change(self, bags: BagManager) -> None:
+        print(f"++ bags: {bags}")
+    
     def get_node_label(self, topic: str, selected: bool = False) -> Text:
         """
         Get the label for a topic node based on mode and selection state.
