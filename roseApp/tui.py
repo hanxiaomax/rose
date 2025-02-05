@@ -228,13 +228,11 @@ class MainScreen(Screen):
         
         try:
             all_deselected, selected_count = topic_tree.toggle_select_all()
-            if selected_count == 0:
-                status.update_status("No topics available to select", "error")
+            
+            if all_deselected:
+                status.update_status("Deselected all topics")
             else:
-                if all_deselected:
-                    status.update_status("Deselected all topics")
-                else:
-                    status.update_status(f"Selected all {selected_count} topics")
+                status.update_status(f"Selected all {selected_count} topics")
         except Exception as e:
             self.logger.error(f"Error toggling topic selection: {str(e)}", exc_info=True)
             status.update_status(f"Error toggling topic selection: {str(e)}", "error")
