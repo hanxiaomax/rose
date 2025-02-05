@@ -19,13 +19,6 @@ class TopicManager:
         self.bag_topics: dict[str, 'list[str]'] = {}
         
     def add_bag(self, bag_path: str, topics: 'list[str]') -> None:
-        """
-        Add a bag and its topics to the manager.
-        
-        Args:
-            bag_path: Path to the bag file
-            topics: List of topics in the bag
-        """
         # 记录bag包含的topics
         self.bag_topics[bag_path] = topics
         # 为每个topic添加这个bag
@@ -33,16 +26,6 @@ class TopicManager:
             self.topic_bags[topic].add(bag_path)
     
     def remove_bag(self, bag_path: str) -> 'tuple[list[str], list[str]]':
-        """
-        Remove a bag and update topic counts.
-        Args:
-            bag_path: Path to the bag file
-            
-        Returns:
-            tuple[list[str], list[str]]: (removed_topics, updated_topics)
-            - removed_topics: Topics that should be removed (count became 0)
-            - updated_topics: Topics that still exist but count decreased
-        """
         if bag_path not in self.bag_topics:
             return [], []
             
