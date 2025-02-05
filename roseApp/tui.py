@@ -63,7 +63,6 @@ class ControlPanel(Container):
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
         self.set_enabled(not multi_select_mode)
-        self.query_one("#add-task-btn").label = "Add Tasks" if multi_select_mode else "Add Task"
 
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle bag change event"""
@@ -118,8 +117,8 @@ class ControlPanel(Container):
         for input_widget in self.query("Input"):
             input_widget.disabled = not enabled
         if input_widget.disabled:
-            self.query_one("#start-time").value = ""
-            self.query_one("#end-time").value = ""
+            self.query_one("#start-time").value = "slice not supported"
+            self.query_one("#end-time").value = "slice not supported"
             self.query_one("#output-file").value = "Filename will be generated"
             self.query_one("#add-task-btn").label = "Add Tasks"
         else:
