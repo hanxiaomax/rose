@@ -88,7 +88,7 @@ class ControlPanel(Container):
                     yield Input(placeholder="", id="output-file", classes="file-input")
             
             with Container(id="add-task-btn-container"):
-                yield Button(label="Add Task", variant="primary", id="add-task-btn", classes="task-btn")
+                yield Button(label="Run", variant="primary", id="add-task-btn", classes="task-btn")
     
     def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
@@ -117,12 +117,11 @@ class ControlPanel(Container):
         for input_widget in self.query("Input"):
             input_widget.disabled = not enabled
         if input_widget.disabled:
-            self.query_one("#start-time").value = "slice not supported"
-            self.query_one("#end-time").value = "slice not supported"
+            self.query_one("#start-time").value = ""
+            self.query_one("#end-time").value = ""
             self.query_one("#output-file").value = "Filename will be generated"
-            self.query_one("#add-task-btn").label = "Add Tasks"
         else:
-            self.query_one("#add-task-btn").label = "Add Task"
+            self.query_one("#output-file").value = ""
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events"""
@@ -131,7 +130,7 @@ class ControlPanel(Container):
 
     
     def _handle_add_task(self) -> None:
-        """Handle add task button press"""
+        """Handle Run button press"""
         bag_selector = self.app.query_one(BagSelector)
         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
         selected_topics = topic_tree.get_selected_topics()
