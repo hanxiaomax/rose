@@ -255,126 +255,83 @@ class TopicTree(Tree):
         self.update_border_subtitle()
         return all_selected, len(self.selected_topics)
 
+class TopicSearchInput(Input):
+    """Input widget for searching topics"""
+    
+    def __init__(self):
+        super().__init__(placeholder="Search topics...", id="topic-search")
+        self._topic_tree = None
+
+    def on_mount(self) -> None:
+        """Get reference to topic tree when mounted"""
+        self._topic_tree = self.parent.query_one(TopicTree)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle search input changes"""
+        if self._topic_tree:
+            self._topic_tree.filter_topics(event.value)
+
 class TopicTreePanel(Container):
     """A wrapper component that contains a search input and a topic tree"""
     
     def __init__(self):
         super().__init__()
         self._topic_manager = TopicManager()
-        self._topic_tree = None
-        self.border_title = "Topics"
 
     def compose(self) -> ComposeResult:
         """Create child widgets"""
-        yield Input(
-            placeholder="Search topics...",
-            id="topic-search",
-        )
-        self._topic_tree = TopicTree(self._topic_manager)  
-        yield self._topic_tree
+        yield TopicSearchInput()
+        yield TopicTree(self._topic_manager)
 
     def on_mount(self) -> None:
         """Initialize when mounted"""
         self.border_title = "Topics"
 
-    def filter_topics(self, search_text: str) -> None:
-        """Filter topics based on search text"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.filter_topics(search_text)
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """Handle search input changes"""
-        if event.input.id == "topic-search":
-            self.filter_topics(event.value)
-
-    # Public API methods
+    # Public API methods - delegate to TopicTree
     def set_topics(self, topics: list) -> None:
-        """Set topics in the tree"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.set_topics(topics)
+        self.query_one(TopicTree).set_topics(topics)
 
     def get_selected_topics(self) -> list:
-        """Get selected topics from the tree"""
-        if not self._topic_tree:
-            return []
-        return self._topic_tree.get_selected_topics()
+        return self.query_one(TopicTree).get_selected_topics()
 
     def merge_topics(self, bag_path: str, new_topics: list) -> None:
-        """Merge new topics into the tree"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.merge_topics(bag_path, new_topics)
+        self.query_one(TopicTree).merge_topics(bag_path, new_topics)
 
     def remove_bag_topics(self, bag_path: str) -> None:
-        """Remove topics from a bag"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.remove_bag_topics(bag_path)
+        self.query_one(TopicTree).remove_bag_topics(bag_path)
 
     def toggle_select_all(self) -> 'tuple[bool, int]':
-        """Toggle selection of all topics"""
-        if not self._topic_tree:
-            return False, 0
-        return self._topic_tree.toggle_select_all()
+        return self.query_one(TopicTree).toggle_select_all()
 
     def set_multi_select_mode(self, enabled: bool) -> None:
-        """Set multi-select mode"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.multi_select_mode = enabled
-        self.filter_topics("")  # Refresh display
+        self.query_one(TopicTree).multi_select_mode = enabled
+        self.query_one(TopicTree).filter_topics("")
 
     def update_whitelist_path(self, whitelist_path: Optional[str]) -> None:
-        """Update whitelist path and refresh title"""
         if whitelist_path:
             self.border_title = f"Topics (Whitelist: {Path(whitelist_path).stem})"
         else:
             self.border_title = "Topics"
 
     def get_topic_count(self) -> int:
-        """Get total number of topics"""
-        if not self._topic_tree:
-            return 0
-        return len(self._topic_tree.all_topics)
+        return len(self.query_one(TopicTree).all_topics)
 
     def clear_selection(self) -> None:
-        """Clear all topic selections"""
-        if not self._topic_tree:
-            return
-        self._topic_tree.selected_topics.clear()
-        self.filter_topics("")  # Refresh display
-        self._topic_tree.update_border_subtitle()
+        topic_tree = self.query_one(TopicTree)
+        topic_tree.selected_topics.clear()
+        topic_tree.filter_topics("")
+        topic_tree.update_border_subtitle()
 
     @property
     def has_topics(self) -> bool:
-        """Check if there are any topics in the tree"""
-        if not self._topic_tree:
-            return False
-        return bool(self._topic_tree.all_topics)
+        return bool(self.query_one(TopicTree).all_topics)
 
     @property
     def selected_count(self) -> int:
-        """Get number of selected topics"""
-        if not self._topic_tree:
-            return 0
-        return len(self._topic_tree.selected_topics)
+        return len(self.query_one(TopicTree).selected_topics)
 
     def select_topic(self, topic: str) -> None:
-        """Select a specific topic"""
-        if not self._topic_tree:
-            return
-        for node in self._topic_tree.root.children:
-            if node.data.get("topic") == topic:
-                node.data["selected"] = True
-                self._topic_tree.selected_topics.add(topic)
-                node.label = self._topic_tree.get_node_label(topic, True)
-                break
-        self._topic_tree.update_border_subtitle()
+        self.query_one(TopicTree).select_topic(topic)
 
     def get_all_topics(self) -> list:
-        """Get all topics in the tree"""
-        if not self._topic_tree:
-            return []
-        return self._topic_tree.all_topics
+        return self.query_one(TopicTree).all_topics
