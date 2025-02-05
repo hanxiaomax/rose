@@ -66,9 +66,7 @@ class BagManager:
     """Manages multiple ROS bag files"""
     def __init__(self):
         self.bags: Dict[str, Bag] = {}
-        self.bag_mutate_callback = None #call it when bag mutate
-        # for now, maintain selected topics in bag manager
-        # because bags have same selected topics
+        self.bag_mutate_callback = None
         self.selected_topics = set()
 
     def __repr__(self) -> str:
@@ -95,7 +93,17 @@ class BagManager:
     def is_bag_loaded(self, path: Path) -> bool:
         return path in self.bags
     
-    def load_bag(self,path:Path) -> None:
+    def publish(func):
+        """Decorator to call bag_mutate_callback after function execution"""
+        def wrapper(self, *args, **kwargs):
+            result = func(self, *args, **kwargs)
+            if self.bag_mutate_callback:
+                self.bag_mutate_callback()
+            return result
+        return wrapper
+
+    @publish
+    def load_bag(self, path: Path) -> None:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
@@ -108,20 +116,34 @@ class BagManager:
         ))
         self.bags[path] = bag
         self.selected_topics.clear()
-        self.bag_mutate_callback()
-        
+
+    @publish
     def unload_bag(self, path: Path) -> None:
         if path not in self.bags:
             raise KeyError(f"Bag with path {path} not found")
         del self.bags[path]
         self.selected_topics.clear()
-        self.bag_mutate_callback()
-        
+
+    @publish
     def clear_bags(self) -> None:
         self.bags.clear()
         self.selected_topics.clear()
-        self.bag_mutate_callback()
+    
+    @publish
+    def select_topic(self, topic: str) -> None:
+        self.selected_topics.add(topic)
+        self.populate_selected_topics()
 
+    @publish
+    def deselect_topic(self, topic: str) -> None:
+        self.selected_topics.discard(topic)
+        self.populate_selected_topics()
+    
+    @publish
+    def clear_selected_topics(self) -> None:
+        self.selected_topics.clear()
+        self.populate_selected_topics()
+    
     def get_topic_summary(self) -> 'dict[str, int]':
         topic_summary = {}
         for bag in self.bags.values():
@@ -131,23 +153,6 @@ class BagManager:
                 else:
                     topic_summary[topic] = 1
         return topic_summary
-    
-    def select_topic(self, topic: str) -> None:
-        self.selected_topics.add(topic)
-        self.populate_selected_topics()
-        self.bag_mutate_callback()
-
-        
-        
-    def deselect_topic(self, topic: str) -> None:
-        self.selected_topics.discard(topic)
-        self.populate_selected_topics()
-        self.bag_mutate_callback()
-    
-    def clear_selected_topics(self) -> None:
-        self.selected_topics.clear()
-        self.populate_selected_topics()
-        self.bag_mutate_callback()
     
     def get_selected_topics(self) -> Set[str]:
         return self.selected_topics
