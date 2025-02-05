@@ -38,18 +38,20 @@ class ControlPanel(Container):
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle bag change event"""
         
-        # bag number is 1 can be single mode or multi mode
-        # set info when enabled
+        #set disable info when in multi mode
         if self.multi_select_mode:
             self.set_disable_info()
             return
-        
+        #clean content when no bag select in single mode
+        if bags.get_bag_numbers() == 0:
+            self.reset_info()
+        #set information when bag selected in single mode
         if bags.get_bag_numbers() == 1:
             bag = bags.get_single_bag()
             self.set_time_range(bag.info.time_range_str)
             self.set_output_file(f"{bag.path.stem}_filtered.bag")
-        elif bags.get_bag_numbers() == 0:
-            self.reset_info()
+            return
+        
         
             
     
