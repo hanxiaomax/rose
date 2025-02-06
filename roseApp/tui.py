@@ -432,18 +432,11 @@ class RoseTUI(App):
             super().action_quit,
         )
         yield SystemCommand(
-            "Show Logs",
-            "Show Logs",
-            self.show_logs,
-        )
-        yield SystemCommand(
             "Show Debug Info",
             "Show current state of BagManager and other debug information",
             self.show_bagmanager_info,
         )
 
-    def show_logs(self):
-        self.push_screen(InfoScreen(title="Logs", content=self.load_logs()))
 
     def show_bagmanager_info(self):
         """Display complete BagManager information using Pretty"""
