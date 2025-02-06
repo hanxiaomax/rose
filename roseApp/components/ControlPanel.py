@@ -40,23 +40,22 @@ class ControlPanel(Container):
 
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle bag change event"""
-        
-        #set disable info when in multi mode
         if self.multi_select_mode:
             self.set_disable_info()
             return
-        #clean content when no bag select in single mode
-        if bags.get_bag_numbers() == 0:
-            self.reset_info()
-        #set information when bag selected in single mode
+
+        # Only update input values when a new bag is loaded
         if bags.get_bag_numbers() == 1:
             bag = bags.get_single_bag()
-            self.set_time_range(bag.info.time_range_str)
-            self.set_output_file(f"{bag.path.stem}_filtered.bag")
-            return
-    
-
+            # Check if the current input values are different from the bag's values
+            current_start, current_end = self.get_time_range()
+            bag_start, bag_end = bag.info.time_range_str
             
+            if current_start != bag_start or current_end != bag_end:
+                self.set_time_range(bag.info.time_range_str)
+                self.set_output_file(f"{bag.path.stem}_filtered.bag")
+        elif bags.get_bag_numbers() == 0:
+            self.reset_info()
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
@@ -79,14 +78,6 @@ class ControlPanel(Container):
         """Get the current time range from inputs, converting to milliseconds"""
         return self.query_one("#start-time").value, self.query_one("#end-time").value
     
-    # def get_output_file(self, bag_path: Path = None) -> str:
-    #     """Get the output file name"""
-    #     if bag_path:
-    #         # For Python < 3.9 compatibility
-    #         return str(bag_path.parent / f"{bag_path.stem}_filtered{bag_path.suffix}")
-    #     else:
-    #         return self.query_one("#output-file").value or "output.bag"
-
     
     def set_time_range(self, time_range_str) -> None:
         self.query_one("#start-time").value = time_range_str[0]
@@ -158,15 +149,7 @@ class ControlPanel(Container):
         process_end = time.time()
         time_cost = int(process_end - process_start)
         
-        # # update UI
-        # self.app.call_from_thread(
-        #     task_table.add_task,
-        #     bag_path,
-        #     output_file,
-        #     time_cost,
-        #     time_range
-        # )
-            
+
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Called when the worker state changes."""
@@ -187,3 +170,33 @@ class ControlPanel(Container):
         #    self.app.notify(
         #        f"Task started, please wait...",
         #        title="INFO",severity="information")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle input changes and update bag configurations"""
+        if self.bags.get_bag_numbers() == 0 or self.multi_select_mode:
+            return
+
+        input_id = event.input.id
+        if input_id == "start-time" or input_id == "end-time":
+            self._update_time_range()
+        elif input_id == "output-file":
+            self._update_output_file()
+
+    def _update_time_range(self) -> None:
+        """Update time range for current bag"""
+        try:
+            time_range = Operation.convert_time_range_to_tuple(*self.get_time_range())
+            if self.bags.get_bag_numbers() == 1:
+                bag = self.bags.get_single_bag()
+                self.bags.set_time_range(bag.path, time_range)
+        except ValueError as e:
+            self.logger.warning(f"Invalid time range: {str(e)}")
+
+    def _update_output_file(self) -> None:
+        """Update output file name for current bag"""
+        output_file = self.query_one("#output-file").value
+        if not output_file:
+            return
+        if self.bags.get_bag_numbers() == 1:
+            bag = self.bags.get_single_bag()
+            self.bags.set_output_file(bag.path, output_file)

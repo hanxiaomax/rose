@@ -167,11 +167,24 @@ class BagManager:
     def get_selected_topics(self) -> Set[str]:
         return self.selected_topics
 
+    @publish
+    def set_output_file(self, bag_path: Path , output_file: str = None) -> None:
+        """Set output file name for specific bag or all bags"""
+        if bag_path:
+            if bag_path in self.bags:
+                self.bags[bag_path].output_file = Path(str(bag_path.parent / f"{output_file}{bag_path.suffix}"))
+        else:
+            for path, bag in self.bags.items():
+                bag.output_file = Path(str(path.parent / f"{output_file}{path.suffix}"))
 
-class Whitelist:
-    """Represents a whitelist of topics"""
-    def __init__(self, path: Path):
-        self.path = path
-        self.topics = set()
-        
-        
+    @publish
+    def set_time_range(self, bag_path: Path , time_range: Tuple[tuple, tuple]) -> None:
+        """Set time range for specific bag or all bags"""
+        if bag_path:
+            if bag_path in self.bags:
+                self.bags[bag_path].set_filter_time_range(time_range)
+        else:
+            for bag in self.bags.values():
+                bag.set_filter_time_range(time_range)
+
+
