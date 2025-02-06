@@ -30,13 +30,17 @@ class TaskTable(DataTable):
         self.add_columns("ID", "Status", "Input", "Output", "Time Range", "Size", "Time Elapsed")
         self.add_class("has-header")
         for bag in self.app.query_one(BagSelector).bags.bags.values():
+            if bag.info.size_after_filter == bag.info.size:
+                size_content = f"{bag.info.size_str}"
+            else:
+                size_content = f"{bag.info.size_str}->{bag.info.size_after_filter_str}"
             self.add_row(
                 str(self.task_count),
                 f"{bag.status.name}",
                 Path(bag.path).name,
                 Path(bag.output_file).name,
                 f"{bag.info.time_range_str[0][8:]}->{bag.info.time_range_str[1][8:]}",
-                bag.info.size_str,
-                "0.00s",
+                size_content,
+                f"{bag.time_elapsed}ms",
             )
 

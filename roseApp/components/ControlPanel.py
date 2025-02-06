@@ -137,7 +137,7 @@ class ControlPanel(Container):
             self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
 
     @work(thread=True)
-    def _process(self,bag_path: str, config: FilterConfig,output_file:str) -> None:
+    def _process(self, bag_path: str, config: FilterConfig, output_file: str) -> None:
         """Handle task creation for single bag"""
         process_start = time.time()
 
@@ -148,7 +148,11 @@ class ControlPanel(Container):
             config.time_range
         )
         process_end = time.time()
-        time_cost = int(process_end - process_start)
+        # Convert to milliseconds
+        time_elapsed = int((process_end - process_start) * 1000)
+        
+        self.bags.set_time_elapsed(bag_path, time_elapsed)
+        self.bags.set_size_after_filter(bag_path, output_file.stat().st_size)
         
 
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:

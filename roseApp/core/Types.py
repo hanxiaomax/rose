@@ -17,17 +17,15 @@ class BagInfo:
     time_range: Tuple[tuple, tuple]
     size: int
     topics: Set[str]
+    size_after_filter: int
 
     @property
     def time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
         return Operation.to_datetime(self.time_range[0]), Operation.to_datetime(self.time_range[1])
     
-    @property
-    def size_str(self) -> str:
-        """Get file size with appropriate unit (B, KB, MB, GB)"""
+    def _covert_size_to_str(self, size_bytes: int) -> str:
         try:
-            size_bytes = self.size
             for unit in ['B', 'KB', 'MB', 'GB']:
                 if size_bytes < 1024:
                     return f"{size_bytes:.2f}{unit}"
@@ -35,6 +33,17 @@ class BagInfo:
             return f"{size_bytes:.2f}GB"
         except FileNotFoundError:
             return "0.00B"
+    
+    @property
+    def size_str(self) -> str:
+        """Get file size with appropriate unit (B, KB, MB, GB)"""
+        return self._covert_size_to_str(self.size)
+    
+    @property
+    def size_after_filter_str(self) -> str:
+        """Get file size with appropriate unit (B, KB, MB, GB)"""
+        return self._covert_size_to_str(self.size_after_filter)
+
 
 @dataclass
 class FilterConfig:
@@ -51,6 +60,8 @@ class Bag:
         self.filter_time_range = self.info.time_range
         self.status = BagStatus.IDLE
         self.output_file = Path(str(self.path.parent / f"{self.path.stem}_filtered{self.path.suffix}"))
+        self.time_elapsed = 0
+        
         
     def __repr__(self) -> str:
         return f"Bag(path={self.path}, info={self.info}, filter_config={self.get_filter_config()})"
@@ -70,7 +81,12 @@ class Bag:
         )
     def set_status(self, status: BagStatus) -> None:
         self.status = status
+
+    def set_time_elapsed(self, time_elapsed: float) -> None:
+        self.time_elapsed = time_elapsed
         
+    def set_size_after_filter(self, size_after_filter: int) -> None:
+        self.info.size_after_filter = size_after_filter
   
 class BagManager:
     """Manages multiple ROS bag files"""
@@ -122,7 +138,8 @@ class BagManager:
         bag = Bag(path, BagInfo(
             time_range=time_range,
             size=path.stat().st_size,
-            topics=set(topics)
+            topics=set(topics),
+            size_after_filter=path.stat().st_size
         ))
         self.bags[path] = bag
         self.selected_topics.clear()
@@ -181,3 +198,13 @@ class BagManager:
     def set_status(self, bag_path: Path, status: BagStatus) -> None:
         """Set status for specific bag or all bags"""
         self.bags[bag_path].set_status(status)
+
+    @publish
+    def set_time_elapsed(self, bag_path: Path, time_elapsed: float) -> None:
+        """Set time elapsed for specific bag or all bags"""
+        self.bags[bag_path].set_time_elapsed(time_elapsed)
+
+    @publish
+    def set_size_after_filter(self, bag_path: Path, size_after_filter: int) -> None:
+        """Set size after filter for specific bag or all bags"""
+        self.bags[bag_path].set_size_after_filter(size_after_filter)
