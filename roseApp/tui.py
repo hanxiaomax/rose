@@ -48,11 +48,6 @@ def load_config():
 
 
 
-
-
-
-
-
 class SplashScreen(Screen):
     """Splash screen for the app."""
     
@@ -375,6 +370,8 @@ class InfoScreen(Screen):
         else:
             _format = "log"
             _content = self.log_content
+        
+        debug_content.clear()
         debug_content.write(Syntax(
                 _content,
                 _format,
