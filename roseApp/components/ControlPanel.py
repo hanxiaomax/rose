@@ -117,6 +117,7 @@ class ControlPanel(Container):
 
     
     def handle_run_process(self) -> None:
+        """Handle Run button press with time range validation"""
         if self.bags.get_bag_numbers() == 0:
             self.app.notify("Please select at least one bag file", title="Error", severity="error")
             return
@@ -125,13 +126,34 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one topic", title="Error", severity="error")
             return
 
+        # Validate time range
+        if self.bags.get_bag_numbers() == 1:
+            bag = self.bags.get_single_bag()
+            start_time, end_time = self.get_time_range()
+            
+            try:
+                input_start = Operation.from_datetime(start_time)
+                input_end = Operation.from_datetime(end_time)
+                bag_start, bag_end = bag.info.init_time_range
+                
+                if input_start < bag_start or input_end > bag_end:
+                    # Reset to initial time range
+                    self.set_time_range(bag.info.init_time_range_str)
+                    self.app.notify(
+                        f"Time range reset to {bag.info.init_time_range_str[0]} - {bag.info.init_time_range_str[1]}",
+                        title="Invalid Time Range",
+                        severity="warning"
+                    )
+                    return
+            except ValueError as e:
+                self.logger.warning(f"Invalid time format: {str(e)}")
+                return
+
         try:
             for bag_path, bag in self.bags.bags.items():
-                
                 self._process(bag_path,
-                                bag.get_filter_config(),
-                                bag.output_file)
-            
+                            bag.get_filter_config(),
+                            bag.output_file)
         except Exception as e:
             self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
             self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
@@ -173,7 +195,6 @@ class ControlPanel(Container):
         
         input_path, output_path = self.extract_paths_from_description(worker.description)
         
-        print(f"input_path: {input_path}, output_path: {output_path}")
         bag_name = input_path.stem
         if state == WorkerState.SUCCESS:
             self.bags.set_status(input_path, BagStatus.SUCCESS)

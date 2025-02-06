@@ -15,6 +15,7 @@ class BagStatus(Enum):
 class BagInfo:
     """Store basic information about a ROS bag"""
     time_range: Tuple[tuple, tuple]
+    init_time_range: Tuple[tuple, tuple]
     size: int
     topics: Set[str]
     size_after_filter: int
@@ -23,6 +24,11 @@ class BagInfo:
     def time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
         return Operation.to_datetime(self.time_range[0]), Operation.to_datetime(self.time_range[1])
+    
+    @property
+    def init_time_range_str(self) -> Tuple[str, str]:
+        """Return the start and end time as formatted strings"""
+        return Operation.to_datetime(self.init_time_range[0]), Operation.to_datetime(self.init_time_range[1])
     
     def _covert_size_to_str(self, size_bytes: int) -> str:
         try:
@@ -135,6 +141,7 @@ class BagManager:
         topics, connections, time_range = Operation.load_bag(str(path))
         bag = Bag(path, BagInfo(
             time_range=time_range,
+            init_time_range=time_range,
             size=path.stat().st_size,
             topics=set(topics),
             size_after_filter=path.stat().st_size
