@@ -116,8 +116,50 @@ class ControlPanel(Container):
             self.handle_run_process()
 
     
+    def _validate_output_file(self) -> bool:
+        """Validate and fix output file extension"""
+        output_file = self.query_one("#output-file").value
+        if output_file and not output_file.endswith('.bag'):
+            output_file += '.bag'
+            self.set_output_file(output_file)
+            self.app.notify(
+                "output file must end with .bag, added for you. :)",
+                title="Info",
+                severity="information"
+            )
+            return False
+        return True
+
+    def _validate_time_range(self) -> bool:
+        """Validate that the time range is within the bag's initial range"""
+        if self.bags.get_bag_numbers() != 1:
+            return True
+
+        bag = self.bags.get_single_bag()
+        start_time, end_time = self.get_time_range()
+        
+        try:
+            input_start = Operation.from_datetime(start_time)
+            input_end = Operation.from_datetime(end_time)
+            bag_start, bag_end = bag.info.init_time_range
+            
+            print(f"input_start: {input_start}, input_end: {input_end}, bag_start: {bag_start}, bag_end: {bag_end}")
+            if input_start[0] < bag_start[0] or input_end[0] > bag_end[0]:
+                # Reset to initial time range
+                self.set_time_range(bag.info.init_time_range_str)
+                self.app.notify(
+                    f"Time range reset to {bag.info.init_time_range_str[0]} - {bag.info.init_time_range_str[1]}",
+                    title="Invalid Time Range",
+                    severity="warning"
+                )
+                return False
+            return True
+        except ValueError as e:
+            self.logger.warning(f"Invalid time format: {str(e)}")
+            return False
+
     def handle_run_process(self) -> None:
-        """Handle Run button press with time range validation"""
+        """Handle Run button press with validation"""
         if self.bags.get_bag_numbers() == 0:
             self.app.notify("Please select at least one bag file", title="Error", severity="error")
             return
@@ -126,40 +168,13 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one topic", title="Error", severity="error")
             return
 
-        # Validate and fix output file extension
-        output_file = self.query_one("#output-file").value
-        if output_file and not output_file.endswith('.bag'):
-            output_file += '.bag'
-            self.set_output_file(output_file)
-            self.app.notify(
-                "Added .bag extension to output file name",
-                title="Info",
-                severity="information"
-            )
+        # Validate output file
+        if not self._validate_output_file():
+            return
 
         # Validate time range
-        if self.bags.get_bag_numbers() == 1:
-            bag = self.bags.get_single_bag()
-            start_time, end_time = self.get_time_range()
-            
-            try:
-                input_start = Operation.from_datetime(start_time)
-                input_end = Operation.from_datetime(end_time)
-                bag_start, bag_end = bag.info.init_time_range
-                
-                print(f"input_start: {input_start}, input_end: {input_end}, bag_start: {bag_start}, bag_end: {bag_end}")
-                if input_start[0] < bag_start[0] or input_end[0] > bag_end[0]:
-                    # Reset to initial time range
-                    self.set_time_range(bag.info.init_time_range_str)
-                    self.app.notify(
-                        f"Time range reset to {bag.info.init_time_range_str[0]} - {bag.info.init_time_range_str[1]}",
-                        title="Invalid Time Range",
-                        severity="warning"
-                    )
-                    return
-            except ValueError as e:
-                self.logger.warning(f"Invalid time format: {str(e)}")
-                return
+        if not self._validate_time_range():
+            return
 
         try:
             for bag_path, bag in self.bags.bags.items():
