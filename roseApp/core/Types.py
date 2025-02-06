@@ -177,3 +177,7 @@ class BagManager:
         """Set time range for specific bag or all bags"""
         self.bags[bag_path].set_filter_time_range(time_range)
         
+    @publish
+    def set_status(self, bag_path: Path, status: BagStatus) -> None:
+        """Set status for specific bag or all bags"""
+        self.bags[bag_path].set_status(status)

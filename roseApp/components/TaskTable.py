@@ -32,7 +32,7 @@ class TaskTable(DataTable):
         for bag in self.app.query_one(BagSelector).bags.bags.values():
             self.add_row(
                 str(self.task_count),
-                "idle",
+                f"{bag.status.name}",
                 Path(bag.path).name,
                 Path(bag.output_file).name,
                 f"{bag.info.time_range_str[0][8:]}->{bag.info.time_range_str[1][8:]}",

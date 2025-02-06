@@ -7,11 +7,12 @@ from textual import work
 from textual.worker import Worker, WorkerState
 import time
 from pathlib import Path
+from typing import Tuple
 from core.util import get_logger
 from components.BagSelector import BagSelector
-from core.Types import BagManager, FilterConfig
+from core.Types import BagManager, FilterConfig, BagStatus
 from core.util import Operation
-
+import re
 logger = get_logger("ControlPanel")
 
 class ControlPanel(Container):
@@ -150,15 +151,28 @@ class ControlPanel(Container):
         time_cost = int(process_end - process_start)
         
 
-
+    def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:
+            """Extract two PosixPaths from worker description string using regex"""
+            path_pattern = r"PosixPath\('([^']+)'\)"
+            matches = re.findall(path_pattern, description)
+            
+            if len(matches) < 2:
+                raise ValueError("Could not find two paths in description")
+            
+            return Path(matches[0]), Path(matches[1])
+        
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        
         """Called when the worker state changes."""
         worker = event.worker
         state = event.state
         
-        print(f"Worker state changed: {worker}")
-        bag_name = Path(worker.description.split(",")[0]).stem
+        input_path, output_path = self.extract_paths_from_description(worker.description)
+        
+        print(f"input_path: {input_path}, output_path: {output_path}")
+        bag_name = input_path.stem
         if state == WorkerState.SUCCESS:
+            self.bags.set_status(input_path, BagStatus.SUCCESS)
             self.app.notify(f"Successfully processed {bag_name}",
                 title="Success",
                 severity="information")
@@ -166,10 +180,7 @@ class ControlPanel(Container):
             self.app.notify(f"Failed when processing {bag_name} ",
                 title="Error",
                 severity="error")
-        #elif state == WorkerState.RUNNING:
-        #    self.app.notify(
-        #        f"Task started, please wait...",
-        #        title="INFO",severity="information")
+
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle input changes and update bag configurations"""
