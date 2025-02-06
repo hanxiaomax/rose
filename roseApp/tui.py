@@ -9,25 +9,27 @@ from typing import Iterable
 
 # Third-party imports
 from art import text2art
+from rich.syntax import Syntax
 from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import (Footer, Header, 
-    Pretty, Static, Rule, Link, SelectionList, TextArea, RichLog, Tabs, Tab
+from textual.widgets import (
+    Footer, Header, Link, Pretty, RichLog, Rule, SelectionList, 
+    Static, Tab, Tabs, TextArea
 )
-from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
-from core.util import get_logger
 
-from textual.reactive import reactive
-from components.TopicPanel import TopicTreePanel
+# Local application imports
 from components.BagSelector import BagSelector
+from components.ControlPanel import ControlPanel
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
-from components.ControlPanel import ControlPanel
 from components.TaskTable import TaskTable
+from components.TopicPanel import TopicTreePanel
+from core.util import get_logger
+from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 
-from rich.syntax import Syntax
+from textual.reactive import reactive
 
 # Initialize logging at the start of the file
 logger = get_logger("RoseTUI")

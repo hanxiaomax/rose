@@ -1,9 +1,12 @@
-from typing import Dict, Set, Optional, Tuple,Callable,List
+# Standard library imports
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-from core.util import Operation
 from enum import Enum
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Set, Tuple
+
+# Local application imports
+from core.util import Operation
 
 class BagStatus(Enum):
     IDLE = "IDLE"

@@ -1,18 +1,21 @@
-from textual.app import App, ComposeResult, SystemCommand
-from textual.widgets import (
-    Button, Input, Label
-)
-from textual.containers import Container, Vertical
-from textual import work
-from textual.worker import Worker, WorkerState
+# Standard library imports
+import re
 import time
 from pathlib import Path
 from typing import Tuple
-from core.util import get_logger
+
+# Third-party imports
+from textual import work
+from textual.app import App, ComposeResult, SystemCommand
+from textual.containers import Container, Vertical
+from textual.widgets import Button, Input, Label
+from textual.worker import Worker, WorkerState
+
+# Local application imports
 from components.BagSelector import BagSelector
-from core.Types import BagManager, FilterConfig, BagStatus
-from core.util import Operation
-import re
+from core.Types import BagManager, BagStatus, FilterConfig
+from core.util import Operation, get_logger
+
 logger = get_logger("ControlPanel")
 
 class ControlPanel(Container):

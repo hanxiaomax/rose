@@ -1,16 +1,19 @@
-from pathlib import Path
+# Standard library imports
 from collections import defaultdict
-from typing import Optional, Iterable
+from pathlib import Path
+from typing import Iterable, Optional
 
+# Third-party imports
 from rich.text import Text
-from textual.widgets import Tree
 from textual.app import ComposeResult
 from textual.containers import Container
-from textual.widgets import (Input, Tree)
 from textual.fuzzy import FuzzySearch
+from textual.widgets import Input, Tree
+
+# Local application imports
+from components.BagSelector import BagSelector
 from core.Types import BagManager
 from core.util import get_logger
-from components.BagSelector import BagSelector
 
 logger = get_logger("TopicPanel")
 

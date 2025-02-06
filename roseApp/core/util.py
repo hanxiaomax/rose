@@ -1,8 +1,13 @@
-import rosbag_io_py
-import time
+# Standard library imports
 import logging
+import time
 from pathlib import Path
+
+# Third-party imports
 from textual.logging import TextualHandler
+
+# Local application imports
+import rosbag_io_py
 
 # Add this at the top of the file, after imports
 _logger = None

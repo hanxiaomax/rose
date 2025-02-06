@@ -1,15 +1,21 @@
+# Standard library imports
 from pathlib import Path
 from typing import Iterable
+
+# Third-party imports
 from rich.text import Text
 from textual import work
+from textual.reactive import reactive
 from textual.widgets import (
     Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea, RichLog
+    Link, Placeholder, RichLog, Rule, SelectionList, Static, Switch,
+    TextArea, Tree
 )
-from textual.reactive import reactive
+
+# Local application imports
+from components.StatusBar import StatusBar
 from core.Types import BagManager
 from core.util import get_logger
-from components.StatusBar import StatusBar
 
 logger = get_logger("BagSelector")
 
