@@ -31,14 +31,15 @@ class Operation():
             return topics
         
     @staticmethod
-    def filter_bag(input_bag, output_bag, whitelist, time_range):
+    def filter_bag(input_bag: str, output_bag: str, topics: list, time_range: tuple):
         """Filter rosbag using C++ interface"""
         try:
             start_time = time.time()
             io = rosbag_io_py.rosbag_io()
-            ## TODO: support load with whitelist and time range
-            io.load(input_bag)
-            io.dump(output_bag, whitelist,time_range)
+            
+            _logger.info(f"filtering bag: {input_bag} to {output_bag} with topics: {topics} and time range: {time_range}")
+            io.load(str(input_bag))
+            io.dump(str(output_bag), topics,time_range)
             
             end_time = time.time()
             elapsed = end_time - start_time
@@ -51,9 +52,6 @@ class Operation():
     @staticmethod
     def load_bag(bag_path):
         io = rosbag_io_py.rosbag_io()
-        # TODO: support load with whitelist and time range
-        # in case whitelist or time range is set before loading bag
-        # it betters to load bag partially. dose it make sense?
         io.load(bag_path)
         topics = io.get_topics()
         connections = io.get_connections()

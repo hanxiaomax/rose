@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 from core.util import get_logger
 from components.BagSelector import BagSelector
-from core.Types import BagManager
-
+from core.Types import BagManager, FilterConfig
+from core.util import Operation
 
 logger = get_logger("ControlPanel")
 
@@ -50,8 +50,10 @@ class ControlPanel(Container):
             self.set_time_range(bag.info.time_range_str)
             self.set_output_file(f"{bag.path.stem}_filtered.bag")
             return
-        
-        
+    
+    @property
+    def bags(self) -> BagManager:
+        return self.app.query_one(BagSelector).bags
             
     
     def compose(self) -> ComposeResult:
@@ -68,8 +70,8 @@ class ControlPanel(Container):
                     yield Label("Output File:")
                     yield Input(placeholder="", id="output-file", classes="file-input")
             
-            with Container(id="add-task-btn-container"):
-                yield Button(label="Run", variant="primary", id="add-task-btn", classes="task-btn")
+            with Container(id="run-btn-container"):
+                yield Button(label="Run", variant="primary", id="run-btn", classes="task-btn")
     
     def get_time_range(self) -> 'tuple[str, str]':
         """Get the current time range from inputs, converting to milliseconds"""
@@ -80,7 +82,6 @@ class ControlPanel(Container):
         return self.query_one("#output-file").value or "output.bag"
     
     def set_time_range(self, time_range_str) -> None:
-        """Set the time range in inputs, converting from milliseconds to seconds"""
         self.query_one("#start-time").value = time_range_str[0]
         self.query_one("#end-time").value = time_range_str[1]
     
@@ -112,52 +113,56 @@ class ControlPanel(Container):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events"""
-        if event.button.id == "add-task-btn":
-            self._handle_add_task()
+        if event.button.id == "run-btn":
+            self.handle_run_process()
 
     
-    def _handle_add_task(self) -> None:
+    def handle_run_process(self) -> None:
         """Handle Run button press"""
         #TODO:ge topics from bag manager
-        # bag_selector = self.app.query_one(BagSelector)
-        # topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
-        # selected_topics = topic_tree.get_selected_topics()
         
-        # if not selected_topics:
-        #     self.app.notify("Please select at least one topic", title="Error", severity="error")
-        #     return
+        if self.bags.get_bag_numbers() == 0:
+            self.app.notify("Please select at least one bag file", title="Error", severity="error")
+            return
 
-        # try:
-        #     if bag_selector.multi_select_mode:
-        #         self._handle_multi_bag_task(bag_selector, selected_topics)
-        #     else:
-        #         self._handle_single_bag_task(selected_topics)
-        # except Exception as e:
-        #     self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
-        #     self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
+        if not self.bags.get_selected_topics():
+            self.app.notify("Please select at least one topic", title="Error", severity="error")
+            return
+
+        try:
+            for bag_path, bag in self.bags.bags.items():
+                config = bag.get_filter_config()
+
+                self._process(bag_path,config,self.get_output_file())
+
+            
+        except Exception as e:
+            self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
+            self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
 
     @work(thread=True)
-    def _process(self,task_table, bag_path: str, selected_topics: list,time_range:tuple,output_file:str) -> None:
+    def _process(self,bag_path: str, config: FilterConfig,output_file:str) -> None:
         """Handle task creation for single bag"""
         process_start = time.time()
         
+        print(f"filter config: {config}")
         Operation.filter_bag(
-            bag_path,
-            output_file,
-            selected_topics,
-            time_range
+            str(bag_path),
+            str(output_file),
+            config.topic_list,
+            config.time_range
         )
         process_end = time.time()
         time_cost = int(process_end - process_start)
         
-        # update UI
-        self.app.call_from_thread(
-            task_table.add_task,
-            bag_path,
-            output_file,
-            time_cost,
-            time_range
-        )
+        # # update UI
+        # self.app.call_from_thread(
+        #     task_table.add_task,
+        #     bag_path,
+        #     output_file,
+        #     time_cost,
+        #     time_range
+        # )
             
 
     def _handle_multi_bag_task(self, bag_selector: BagSelector, selected_topics: list) -> None:

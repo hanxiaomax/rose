@@ -1,4 +1,4 @@
-from typing import Dict, Set, Optional, Tuple,Callable
+from typing import Dict, Set, Optional, Tuple,Callable,List
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -7,15 +7,14 @@ from core.util import Operation
 @dataclass
 class BagInfo:
     """Store basic information about a ROS bag"""
-    start_time: datetime
-    end_time: datetime
+    time_range: Tuple[tuple, tuple]
     size: int
     topics: Set[str]
 
     @property
     def time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
-        return Operation.to_datetime(self.start_time), Operation.to_datetime(self.end_time)
+        return Operation.to_datetime(self.time_range[0]), Operation.to_datetime(self.time_range[1])
     
     @property
     def size_str(self) -> str:
@@ -34,7 +33,7 @@ class BagInfo:
 class FilterConfig:
     """Store basic information about a ROS bag"""
     time_range: '[Tuple[tuple, tuple]]'
-    topics: Set[str]
+    topic_list: List[str] #dump API accept list
 
 class Bag:
     """Represents a ROS bag file with its metadata"""
@@ -42,14 +41,14 @@ class Bag:
         self.path = path
         self.info = bag_info
         self.selected_topics: Set[str] = set()
-        self.filter_time_range = None
+        self.filter_time_range = self.info.time_range
         
     def __repr__(self) -> str:
         return f"Bag(path={self.path}, info={self.info}, filter_config={self.get_filter_config()})"
     
     
-    def set_filter_time_range(self, start_time, end_time) -> None:
-        self.filter_time_range = (start_time, end_time)
+    def set_filter_time_range(self, time_range: Tuple[tuple, tuple]) -> None:
+        self.filter_time_range = time_range
     
     def set_selected_topics(self, topics: Set[str]) -> None:
         self.selected_topics = topics
@@ -58,7 +57,7 @@ class Bag:
         #fitler config is bag by bag becase time range can be different
         return FilterConfig(
             time_range=self.filter_time_range,
-            topics=self.selected_topics
+            topic_list=list(self.selected_topics)
         )
         
   
@@ -84,6 +83,7 @@ class BagManager:
     def get_bag_numbers(self):
       return len(self.bags)
     
+    
     def get_single_bag(self) -> Optional[Bag]:
         if self.get_bag_numbers() == 1:
             return next(iter(self.bags.values()))
@@ -107,10 +107,9 @@ class BagManager:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
-        topics, connections, (start_time, end_time) = Operation.load_bag(str(path))
+        topics, connections, time_range = Operation.load_bag(str(path))
         bag = Bag(path, BagInfo(
-            start_time=start_time,
-            end_time=end_time,
+            time_range=time_range,
             size=path.stat().st_size,
             topics=set(topics)
         ))
