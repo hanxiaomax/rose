@@ -37,9 +37,9 @@ class TaskTable(DataTable):
     def render_tasks(self) -> None:
         """Render tasks based on BagManager's state"""
         self.clear(columns=True)
-        if self.bags.get_bag_numbers():
-            self.add_columns("", "Input", "Output", "Time Range", "Size", "Time Elapsed")
-            self.add_class("has-header")
+
+        self.add_columns("", "Input", "Output", "Time Range", "Size", "Time Elapsed")
+        self.add_class("has-header")
         for bag in self.app.query_one(BagSelector).bags.bags.values():
             if bag.info.size_after_filter == bag.info.size:
                 size_content = f"{bag.info.size_str}"
