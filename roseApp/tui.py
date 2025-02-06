@@ -13,9 +13,8 @@ from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import (
-    Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Placeholder, Static, Switch, Tree, Rule, Link, SelectionList, TextArea, RichLog
+from textual.widgets import (Footer, Header, 
+    Pretty, Static, Rule, Link, SelectionList, TextArea, RichLog, Tabs, Tab
 )
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
 from core.util import Operation, setup_logging
@@ -27,6 +26,9 @@ from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
 from components.ControlPanel import ControlPanel
 from components.TaskTable import TaskTable
+
+from rich.syntax import Syntax
+
 # Initialize logging at the start of the file
 logger = setup_logging()
 
@@ -316,85 +318,68 @@ class WhitelistScreen(Screen):
         except Exception as e:
             preview.load_text(f"Error loading whitelist: {str(e)}")
 
-class LogsScreen(Screen):
-    """Screen for displaying application logs"""
+class InfoScreen(Screen):
+    """Screen for displaying information with tabs"""
     
-    BINDINGS = [
-        ("q", "quit", "Back"),
-        ("r", "reload", "Reload"),
-        ("j", "scroll_end", "Scroll to End"),
-        ("k", "scroll_home", "Scroll to Top"),
-    ]
+    BINDINGS = [("q", "quit", "Back to Main")]
+    
+    def __init__(self, title: str, content):
+        super().__init__()
+        self.title = title
+        self.content = content
+        self.log_content = self.load_logs()
 
     def compose(self) -> ComposeResult:
-        """Create child widgets for the logs screen"""
-        yield Header(show_clock=True)
-        
-        with Container(id="logs-container"):
-            yield RichLog(
-                highlight=True,
-                markup=True,
-                wrap=True,
-                id="log-viewer",
-                classes="logs"
+        """Create child widgets with tabs"""
+        yield Header()
+        with Container():
+            yield Tabs(
+                Tab("Debug Info", id="debug-tab"),
+                Tab("Logs", id="logs-tab")
             )
-            
+            with Vertical(id="content-container"):
+                yield Pretty(self.content, id="debug-content")
+                yield RichLog(
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                    id="log-content",
+                    classes="logs"
+                )
         yield Footer()
 
     def on_mount(self) -> None:
-        """Load logs when screen is mounted"""
-        self.load_logs()
+        """Initialize screen state"""
+        self.query_one("#log-content").write(self.log_content)
+        self.query_one("#log-content").visible = False
 
-    def load_logs(self) -> None:
-        """Load and display logs from file"""
-        log_viewer = self.query_one(RichLog)
-        log_viewer.clear()
+    def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
+        """Handle tab switching"""
+        debug_content = self.query_one("#debug-content")
+        log_content = self.query_one("#log-content")
         
+        if event.tab.id == "debug-tab":
+            debug_content.visible = True
+            log_content.visible = False
+        else:
+            debug_content.visible = False
+            log_content.visible = True
+
+    def load_logs(self) -> str:
+        """Load logs from file"""
         try:
             log_path = Path("rose_tui.log")
             if not log_path.exists():
-                log_viewer.write("[red]No log file found at rose_tui.log[/red]")
-                return
+                return "[red]No log file found at rose_tui.log[/red]"
                 
             with open(log_path, "r") as f:
-                log_content = f.read()
-                
-            # Split content into lines and add syntax highlighting
-            from rich.syntax import Syntax
-            log_viewer.write(
-                Syntax(
-                    log_content, 
-                    "log",
-                    theme="monokai",
-                    line_numbers=True,
-                    word_wrap=True
-                )
-            )
-            
-            # Scroll to end by default
-            log_viewer.scroll_end(animate=False)
-            
+                return f.read()
         except Exception as e:
-            log_viewer.write(f"[red]Error loading logs: {str(e)}[/red]")
+            return f"[red]Error loading logs: {str(e)}[/red]"
 
     def action_quit(self) -> None:
-        """Handle q key press to return to previous screen"""
+        """Handle q key press to return to main screen"""
         self.app.pop_screen()
-
-    def action_reload(self) -> None:
-        """Handle r key press to reload logs"""
-        self.load_logs()
-        self.notify("Logs reloaded", severity="information")
-
-    def action_scroll_end(self) -> None:
-        """Handle end key press to scroll to bottom"""
-        log_viewer = self.query_one(RichLog)
-        log_viewer.scroll_end(animate=True)
-
-    def action_scroll_home(self) -> None:
-        """Handle home key press to scroll to top"""
-        log_viewer = self.query_one(RichLog)
-        log_viewer.scroll_home(animate=True)
 
 class RoseTUI(App):
     """Textual TUI for filtering ROS bags"""
@@ -451,9 +436,32 @@ class RoseTUI(App):
             "Show Logs",
             self.show_logs,
         )
+        yield SystemCommand(
+            "Show Debug Info",
+            "Show current state of BagManager and other debug information",
+            self.show_bagmanager_info,
+        )
 
     def show_logs(self):
-        self.push_screen(LogsScreen())
+        self.push_screen(InfoScreen(title="Logs", content=self.load_logs()))
+
+    def show_bagmanager_info(self):
+        """Display complete BagManager information using Pretty"""
+        bag_manager = self.query_one(BagSelector).bags
+        
+        # Create a dictionary with all BagManager data
+        bag_manager_data = {
+            "bags": {str(path): bag.__dict__ for path, bag in bag_manager.bags.items()},
+            "selected_topics": list(bag_manager.selected_topics),
+            "total_bags": len(bag_manager.bags)
+        }
+        
+        self.push_screen(
+            InfoScreen(
+                title="Debug Info - BagManager",
+                content=bag_manager_data
+            )
+        )
 
     def toggle_dark_mode(self):
         self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
