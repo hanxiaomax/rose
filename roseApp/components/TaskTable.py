@@ -1,6 +1,6 @@
 from pathlib import Path
 from textual.widgets import (DataTable)
-from components.BagSelector import BagSelector
+from components.BagExplorer import BagExplorer
 from core.Types import BagManager, BagStatus
 class TaskTable(DataTable):
     """Table for displaying tasks"""
@@ -14,11 +14,11 @@ class TaskTable(DataTable):
         self.cursor_type = "row"
         self.border_title = "Tasks"
 
-        self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
+        self.watch(self.app.query_one(BagExplorer), "bags", self.handle_bags_change)
     
     @property
     def bags(self) -> BagManager:
-        return self.app.query_one(BagSelector).bags
+        return self.app.query_one(BagExplorer).bags
       
     def handle_bags_change(self, bags: BagManager) -> None:
         """Handle changes in BagManager and update tasks accordingly"""
@@ -40,7 +40,7 @@ class TaskTable(DataTable):
 
         self.add_columns("", "Input", "Output", "Time Range", "Size", "Time Elapsed")
         self.add_class("has-header")
-        for bag in self.app.query_one(BagSelector).bags.bags.values():
+        for bag in self.app.query_one(BagExplorer).bags.bags.values():
             if bag.info.size_after_filter == bag.info.size:
                 size_content = f"{bag.info.size_str}"
             else:

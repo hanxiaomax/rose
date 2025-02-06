@@ -51,7 +51,7 @@ TopicTree > .tree--guides {
     margin-bottom: 1;
 }
 
-BagSelector {
+BagExplorer {
     background: $surface;
     border: $border;
     padding: 1; 

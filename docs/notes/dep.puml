@@ -43,7 +43,7 @@ class TopicTreeWrap {
   + get_selected_topics()
 }
 
-class BagSelector {
+class BagExplorer {
   - current_path: Path
   - multi_select_mode: bool
   - selected_bags: set
@@ -82,7 +82,7 @@ RoseTUI *-- MainScreen
 RoseTUI *-- WhitelistScreen
 RoseTUI *-- LogsScreen
 
-MainScreen *-- BagSelector
+MainScreen *-- BagExplorer
 MainScreen *-- TopicTreeWrap
 MainScreen *-- ControlPanel
 MainScreen *-- TaskTable
@@ -92,9 +92,9 @@ TopicTreeWrap *-- TopicTree
 TopicTree *-- TopicManager
 
 ' Dependencies
-BagSelector ..> TopicTreeWrap : updates
-BagSelector ..> ControlPanel : updates state
-BagSelector ..> StatusBar : updates status
+BagExplorer ..> TopicTreeWrap : updates
+BagExplorer ..> ControlPanel : updates state
+BagExplorer ..> StatusBar : updates status
 
 ControlPanel ..> TopicTreeWrap : reads topics
 ControlPanel ..> TaskTable : adds tasks

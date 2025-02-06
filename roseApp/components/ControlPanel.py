@@ -12,7 +12,7 @@ from textual.widgets import Button, Input, Label
 from textual.worker import Worker, WorkerState
 
 # Local application imports
-from components.BagSelector import BagSelector
+from components.BagExplorer import BagExplorer
 from core.Types import BagManager, BagStatus, FilterConfig
 from core.util import Operation, get_logger
 
@@ -30,13 +30,13 @@ class ControlPanel(Container):
     def on_mount(self) -> None:
         """Initialize control panel"""
         self.border_title = "Control Panel"
-        self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
-        self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
+        self.watch(self.app.query_one(BagExplorer), "bags", self.handle_bags_change)
+        self.watch(self.app.query_one(BagExplorer), "multi_select_mode", 
                                 self.handle_multi_select_mode_change)
     
     @property
     def bags(self) -> BagManager:
-        return self.app.query_one(BagSelector).bags
+        return self.app.query_one(BagExplorer).bags
     
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""

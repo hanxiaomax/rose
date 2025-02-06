@@ -17,9 +17,9 @@ from components.StatusBar import StatusBar
 from core.Types import BagManager
 from core.util import get_logger
 
-logger = get_logger("BagSelector")
+logger = get_logger("BagExplorer")
 
-class BagSelector(DirectoryTree):
+class BagExplorer(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
     bags = reactive(BagManager())
     multi_select_mode = reactive(False)
@@ -37,7 +37,7 @@ class BagSelector(DirectoryTree):
         self.show_guides = True
         self.show_only_bags = False
         self.border_title = "File Explorer"
-        self.logger = logger.getChild("BagSelector")
+        self.logger = logger.getChild("BagExplorer")
     
     def on_mount(self) -> None:
         """Initialize when mounted"""
@@ -45,7 +45,7 @@ class BagSelector(DirectoryTree):
         self.bags.set_bag_mutate_callback(self.mutate_callback)
 
     def mutate_callback(self):
-        self.mutate_reactive(BagSelector.bags)
+        self.mutate_reactive(BagExplorer.bags)
     
     def update_border_subtitle(self):
         """Update subtitle to show multi-select mode status"""

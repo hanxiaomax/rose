@@ -20,7 +20,7 @@ from textual.widgets import (
 )
 
 # Local application imports
-from components.BagSelector import BagSelector
+from components.BagExplorer import BagExplorer
 from components.ControlPanel import ControlPanel
 from components.Dialog import ConfirmDialog
 from components.StatusBar import StatusBar
@@ -121,7 +121,7 @@ class MainScreen(Screen):
         
         with Container():
             with Vertical(id="file-explorer-area"):
-                yield BagSelector(str(Path(__file__).parent))
+                yield BagExplorer(str(Path(__file__).parent))
 
             with Vertical(id="main-area"):
                 with Horizontal(id="topics-area"):
@@ -163,7 +163,7 @@ class MainScreen(Screen):
         """Save currently selected topics as a whitelist"""
         topic_tree = self.app.query_one(TopicTreePanel).get_topic_tree()
         
-        bags = self.app.query_one(BagSelector).bags
+        bags = self.app.query_one(BagExplorer).bags
         selected_topics = bags.get_selected_topics()
         
         if not selected_topics:
@@ -255,7 +255,7 @@ class WhitelistScreen(Screen):
                 return
         
         self.app.switch_mode("main")
-        bags = self.app.query_one(BagSelector).bags
+        bags = self.app.query_one(BagExplorer).bags
         
         # apply whitelist
         all_topics = list(bags.get_topic_summary().keys())
@@ -327,7 +327,7 @@ class InfoScreen(Screen):
 
     def get_bag_manager_data(self) -> dict:
         """Get BagManager data for display"""
-        bag_manager = self.app.query_one(BagSelector).bags
+        bag_manager = self.app.query_one(BagExplorer).bags
         return {
             "bags": {str(path): bag.__dict__ for path, bag in bag_manager.bags.items()},
             "selected_topics": list(bag_manager.selected_topics),

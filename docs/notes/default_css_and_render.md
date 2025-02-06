@@ -52,7 +52,7 @@ DirectoryTree > .tree--highlight {
     background: $boost;
 }
 
-/* 如果你想特别指定 BagSelector 的样式 */
+/* 如果你想特别指定 BagExplorer 的样式 */
 #file-explorer .tree--cursor {
     background: $accent;
     color: $text;

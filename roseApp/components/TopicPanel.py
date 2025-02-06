@@ -11,7 +11,7 @@ from textual.fuzzy import FuzzySearch
 from textual.widgets import Input, Tree
 
 # Local application imports
-from components.BagSelector import BagSelector
+from components.BagExplorer import BagExplorer
 from core.Types import BagManager
 from core.util import get_logger
 
@@ -36,13 +36,13 @@ class TopicTree(Tree):
         super().on_mount()
         self.root.expand()
         self._search_input = self.parent.query_one(TopicSearchInput)
-        self.watch(self.app.query_one(BagSelector), "bags", self.handle_bags_change)
-        self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
+        self.watch(self.app.query_one(BagExplorer), "bags", self.handle_bags_change)
+        self.watch(self.app.query_one(BagExplorer), "multi_select_mode", 
                                 self.handle_multi_select_mode_change)
 
     @property
     def bags(self) -> BagManager:
-        return self.app.query_one(BagSelector).bags
+        return self.app.query_one(BagExplorer).bags
     
 
     def handle_bags_change(self, bags: BagManager) -> None:

@@ -31,7 +31,7 @@ enum ProcessingStatus {
     FAILED
 }
 
-class BagSelector {
+class BagExplorer {
     - multi_select_mode: bool
     + on_bag_selected(bag_path: str) → None
     + on_bag_deselected(bag_path: str) → None
@@ -44,7 +44,7 @@ class TopicTreePanel {
 }
 
 App --> BagManager
-BagSelector --> BagManager
+BagExplorer --> BagManager
 TopicTreePanel --> BagManager
 
 @enduml
