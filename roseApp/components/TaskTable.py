@@ -1,7 +1,7 @@
 from pathlib import Path
 from textual.widgets import (DataTable)
 from components.BagSelector import BagSelector
-from core.Types import BagManager
+from core.Types import BagManager, BagStatus
 class TaskTable(DataTable):
     """Table for displaying tasks"""
     
@@ -24,11 +24,22 @@ class TaskTable(DataTable):
         """Handle changes in BagManager and update tasks accordingly"""
         self.render_tasks()
     
+    def get_status_icon(self, status: BagStatus) -> str:
+        if status == BagStatus.SUCCESS:
+            return "√"
+        elif status == BagStatus.ERROR:
+            return "×"
+        elif status == BagStatus.IDLE:
+            return "*"
+        else:
+            return "?"
+        
     def render_tasks(self) -> None:
         """Render tasks based on BagManager's state"""
         self.clear(columns=True)
-        self.add_columns("ID", "Status", "Input", "Output", "Time Range", "Size", "Time Elapsed")
-        self.add_class("has-header")
+        if self.bags.get_bag_numbers():
+            self.add_columns("", "Input", "Output", "Time Range", "Size", "Time Elapsed")
+            self.add_class("has-header")
         for bag in self.app.query_one(BagSelector).bags.bags.values():
             if bag.info.size_after_filter == bag.info.size:
                 size_content = f"{bag.info.size_str}"
@@ -37,8 +48,7 @@ class TaskTable(DataTable):
             
             
             self.add_row(
-                str(self.task_count),
-                f"{bag.status.name}",
+                self.get_status_icon(bag.status),
                 Path(bag.path).name,
                 Path(bag.output_file).name,
                 f"{bag.info.time_range_str[0][8:]},{bag.info.time_range_str[1][8:]}",

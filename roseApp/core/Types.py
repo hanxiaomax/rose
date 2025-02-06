@@ -71,7 +71,7 @@ class Bag:
     def get_filter_config(self) -> FilterConfig:
         #fitler config is bag by bag becase time range can be different
         return FilterConfig(
-            time_range=self.filter_time_range,
+            time_range=self.info.time_range,
             topic_list=list(self.selected_topics)
         )
     def set_status(self, status: BagStatus) -> None:
