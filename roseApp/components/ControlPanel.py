@@ -126,6 +126,17 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one topic", title="Error", severity="error")
             return
 
+        # Validate and fix output file extension
+        output_file = self.query_one("#output-file").value
+        if output_file and not output_file.endswith('.bag'):
+            output_file += '.bag'
+            self.set_output_file(output_file)
+            self.app.notify(
+                "Added .bag extension to output file name",
+                title="Info",
+                severity="information"
+            )
+
         # Validate time range
         if self.bags.get_bag_numbers() == 1:
             bag = self.bags.get_single_bag()
@@ -136,7 +147,8 @@ class ControlPanel(Container):
                 input_end = Operation.from_datetime(end_time)
                 bag_start, bag_end = bag.info.init_time_range
                 
-                if input_start < bag_start or input_end > bag_end:
+                print(f"input_start: {input_start}, input_end: {input_end}, bag_start: {bag_start}, bag_end: {bag_end}")
+                if input_start[0] < bag_start[0] or input_end[0] > bag_end[0]:
                     # Reset to initial time range
                     self.set_time_range(bag.info.init_time_range_str)
                     self.app.notify(
