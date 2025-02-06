@@ -345,48 +345,18 @@ class InfoScreen(Screen):
                 Tab("Debug Info", id="debug-tab"),
                 Tab("Logs", id="logs-tab")
             )
-            with Vertical(id="content-container"):
-                yield RichLog(
-                    highlight=True,
-                    markup=True,
-                    wrap=True,
-                    id="debug-content",
-                    classes="logs"
-                )
-                yield RichLog(
-                    highlight=True,
-                    markup=True,
-                    wrap=True,
-                    id="log-content",
-                    classes="logs"
-                )
+            # use Tabs to switch content not widget.
+            # we can only use one widget to take the whole screen.
+            yield RichLog(
+                highlight=True,
+                markup=True,
+                wrap=True,
+                id="debug-content",
+                classes="logs"
+            )
+            
         yield Footer()
 
-    def on_mount(self) -> None:
-        """Initialize screen state"""
-        # Format debug info as JSON with syntax highlighting
-        debug_content = self.query_one("#debug-content")
-        debug_content.write(
-            Syntax(
-                json.dumps(self.bag_manager_data, indent=4, default=str),
-                "json",
-                line_numbers=True,
-                theme=self.get_text_theme(),
-                word_wrap=True
-            )
-        )
-        
-        # Load logs
-        log_content = self.query_one("#log-content")
-        log_content.write(Syntax(
-                "1",
-                "log",
-                line_numbers=True,
-                theme=self.get_text_theme(),
-                word_wrap=True
-            ))
-
-        log_content.visible = True
 
     def get_text_theme(self) -> str:
         """Get the theme for the text"""
@@ -398,14 +368,20 @@ class InfoScreen(Screen):
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
         """Handle tab switching"""
         debug_content = self.query_one("#debug-content")
-        log_content = self.query_one("#log-content")
         
         if event.tab.id == "debug-tab":
-            debug_content.visible = True
-            log_content.visible = False
+            _format = "json"
+            _content = json.dumps(self.bag_manager_data, indent=4, default=str)
         else:
-            debug_content.visible = False
-            log_content.visible = True
+            _format = "log"
+            _content = self.log_content
+        debug_content.write(Syntax(
+                _content,
+                _format,
+                line_numbers=True,
+                theme=self.get_text_theme(),
+                word_wrap=True
+            ))
 
     def load_logs(self) -> str:
         """Load logs from file"""
@@ -482,12 +458,12 @@ class RoseTUI(App):
         yield SystemCommand(
             "Show Debug Info",
             "Show current state of BagManager and other debug information",
-            self.debug_info,
+            self.show_debug_info,
         )
     def toggle_dark_mode(self):
         self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
     
-    def debug_info(self) -> None:
+    def show_debug_info(self) -> None:
         """Switch to debug info screen"""
         self.switch_mode("debug")
 
