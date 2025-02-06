@@ -150,51 +150,6 @@ class TopicTree(Tree):
             self.update_border_subtitle()
 
 
-    def merge_topics(self, bag_path: str, new_topics: list) -> None:
-        """Add topics from a bag"""
-        self.topic_manager.add_bag(bag_path, new_topics)
-        
-        for topic in new_topics:
-            if topic not in [node.data.get("topic") for node in self.root.children]:
-                self.root.add(
-                    self.get_node_label(topic),
-                    data={"topic": topic, "selected": False},
-                    allow_expand=False
-                )
-            else:
-                for node in self.root.children:
-                    if node.data.get("topic") == topic:
-                        node.label = self.get_node_label(
-                            topic, 
-                            node.data.get("selected", False)
-                        )
-                        break
-
-        self.update_border_subtitle()
-
-    def remove_bag_topics(self, bag_path: str) -> None:
-        """Remove topics from a bag"""
-        #TODO: remove bag from bag manager
-        # removed_topics, updated_topics = self.topic_manager.remove_bag(bag_path)
-        
-        # for topic in removed_topics:
-        #     self.selected_topics.discard(topic)
-        #     for node in list(self.root.children): 
-        #         if node.data.get("topic") == topic:
-        #             node.remove()  
-        #             break
-        
-
-        # for topic in updated_topics:
-        #     for node in self.root.children:
-        #         if node.data.get("topic") == topic:
-        #             node.label = self.get_node_label(
-        #                 topic,
-        #                 node.data.get("selected", False)
-        #             )
-        #             break
-        
-        # self.update_border_subtitle()
 
     def toggle_select_all(self) -> 'tuple[bool, int]':
         """
