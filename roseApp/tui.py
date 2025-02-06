@@ -323,11 +323,19 @@ class InfoScreen(Screen):
     
     BINDINGS = [("q", "quit", "Back to Main")]
     
-    def __init__(self, title: str, content):
+    def __init__(self):
         super().__init__()
-        self.title = title
-        self.content = content
+        self.bag_manager_data = self.get_bag_manager_data()
         self.log_content = self.load_logs()
+
+    def get_bag_manager_data(self) -> dict:
+        """Get BagManager data for display"""
+        bag_manager = self.app.query_one(BagSelector).bags
+        return {
+            "bags": {str(path): bag.__dict__ for path, bag in bag_manager.bags.items()},
+            "selected_topics": list(bag_manager.selected_topics),
+            "total_bags": len(bag_manager.bags)
+        }
 
     def compose(self) -> ComposeResult:
         """Create child widgets with tabs"""
@@ -338,7 +346,7 @@ class InfoScreen(Screen):
                 Tab("Logs", id="logs-tab")
             )
             with Vertical(id="content-container"):
-                yield Pretty(self.content, id="debug-content")
+                yield Pretty(self.bag_manager_data, id="debug-content")
                 yield RichLog(
                     highlight=True,
                     markup=True,
@@ -379,19 +387,24 @@ class InfoScreen(Screen):
 
     def action_quit(self) -> None:
         """Handle q key press to return to main screen"""
-        self.app.pop_screen()
+        self.app.switch_mode("main")
+
 
 class RoseTUI(App):
     """Textual TUI for filtering ROS bags"""
     
     CSS_PATH = "style.tcss"
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+    ]
     COMMAND_PALETTE_BINDING = "p"
     MODES = {
         "splash": SplashScreen,
         "main": MainScreen,
-        "whitelist": WhitelistScreen,  
+        "whitelist": WhitelistScreen,
+        "debug": InfoScreen,  # 添加调试信息模式
     }
+    
     #selected_bag = reactive(None)
     selected_whitelist_path = reactive(None)  # Move selected_whitelist_path to App level
     
@@ -434,32 +447,14 @@ class RoseTUI(App):
         yield SystemCommand(
             "Show Debug Info",
             "Show current state of BagManager and other debug information",
-            self.show_bagmanager_info,
+            self.debug_info,
         )
-
-
-    def show_bagmanager_info(self):
-        """Display complete BagManager information using Pretty"""
-        bag_manager = self.query_one(BagSelector).bags
-        
-        # Create a dictionary with all BagManager data
-        bag_manager_data = {
-            "bags": {str(path): bag.__dict__ for path, bag in bag_manager.bags.items()},
-            "selected_topics": list(bag_manager.selected_topics),
-            "total_bags": len(bag_manager.bags)
-        }
-        
-        self.push_screen(
-            InfoScreen(
-                title="Debug Info - BagManager",
-                content=bag_manager_data
-            )
-        )
-
     def toggle_dark_mode(self):
         self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
     
-    
+    def debug_info(self) -> None:
+        """Switch to debug info screen"""
+        self.switch_mode("debug")
 
 if __name__ == "__main__":
     RoseTUI().run()
