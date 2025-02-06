@@ -9,10 +9,10 @@ from textual.containers import Container
 from textual.widgets import (Input, Tree)
 from textual.fuzzy import FuzzySearch
 from core.Types import BagManager
-from core.util import Operation, setup_logging
+from core.util import get_logger
 from components.BagSelector import BagSelector
 
-logger = setup_logging()
+logger = get_logger("TopicPanel")
 
 
 

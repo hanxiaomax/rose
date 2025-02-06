@@ -17,7 +17,7 @@ from textual.widgets import (Footer, Header,
     Pretty, Static, Rule, Link, SelectionList, TextArea, RichLog, Tabs, Tab
 )
 from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
-from core.util import Operation, setup_logging
+from core.util import get_logger
 
 from textual.reactive import reactive
 from components.TopicPanel import TopicTreePanel
@@ -30,7 +30,7 @@ from components.TaskTable import TaskTable
 from rich.syntax import Syntax
 
 # Initialize logging at the start of the file
-logger = setup_logging()
+logger = get_logger("RoseTUI")
 
 def load_config():
     """Load configuration from config.json"""
@@ -386,10 +386,9 @@ class InfoScreen(Screen):
     def load_logs(self) -> str:
         """Load logs from file"""
         try:
-            log_path = Path("./rose_tui.log")
+            log_path = Path("logs/rose_tui.log")
             if not log_path.exists():
-                print("[red]No log file found at rose_tui.log[/red]")
-                return "[red]No log file found at rose_tui.log[/red]"
+                return "[red]No log file found at logs/rose_tui.log[/red]"
                 
             with open(log_path, "r") as f:
                 return f.read()

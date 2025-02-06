@@ -8,10 +8,10 @@ from textual.widgets import (
 )
 from textual.reactive import reactive
 from core.Types import BagManager
-from core.util import Operation, setup_logging
+from core.util import get_logger
 from components.StatusBar import StatusBar
 
-logger = setup_logging()
+logger = get_logger("BagSelector")
 
 class BagSelector(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""

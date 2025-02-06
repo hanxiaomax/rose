@@ -1,4 +1,3 @@
-
 from textual.app import App, ComposeResult, SystemCommand
 from textual.widgets import (
     Button, Input, Label
@@ -8,12 +7,12 @@ from textual import work
 from textual.worker import Worker, WorkerState
 import time
 from pathlib import Path
-from core.util import Operation, setup_logging
+from core.util import get_logger
 from components.BagSelector import BagSelector
 from core.Types import BagManager
 
 
-logger = setup_logging()
+logger = get_logger("ControlPanel")
 
 class ControlPanel(Container):
     """A container widget providing controls for ROS bag file operations"""

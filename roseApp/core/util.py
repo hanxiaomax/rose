@@ -4,6 +4,19 @@ import logging
 from pathlib import Path
 from textual.logging import TextualHandler
 
+# Add this at the top of the file, after imports
+_logger = None
+
+def get_logger(name: str = None) -> logging.Logger:
+    """Get a logger instance with the given name"""
+    global _logger
+    if _logger is None:
+        _logger = setup_logging()
+    return _logger.getChild(name) if name else _logger
+
+def setup_logging():
+    """Backward compatibility function"""
+    return get_logger()
 
 class Operation():
 
@@ -101,9 +114,14 @@ class Operation():
         except ValueError as e:
             raise ValueError(f"Invalid time range format: {e}")
         
-def setup_logging():
+def _setup_logging():
     """Configure logging settings for the application"""
-    log_file = Path("rose_tui.log")
+    # Create logs directory if it doesn't exist
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    
+    # Define log file path
+    log_file = log_dir / "rose_tui.log"
     
     # Create formatter
     formatter = logging.Formatter(
@@ -114,14 +132,26 @@ def setup_logging():
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     
-    # Textual handler
-    textual_handler = TextualHandler()
-    textual_handler.setFormatter(formatter)
+    # Stream handler for console output
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
     
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.WARNING)
+    root_logger.setLevel(logging.INFO)  # Set default level to INFO
     root_logger.addHandler(file_handler)
-    root_logger.addHandler(textual_handler)
+    root_logger.addHandler(stream_handler)
+    
+    # Add custom handler for Textual if needed
+    try:
+        from textual.logging import TextualHandler
+        textual_handler = TextualHandler()
+        textual_handler.setFormatter(formatter)
+        root_logger.addHandler(textual_handler)
+    except ImportError:
+        pass
     
     return root_logger
+
+# Call setup_logging once when module is imported
+_logger = _setup_logging()
