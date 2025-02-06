@@ -142,8 +142,8 @@ class ControlPanel(Container):
         process_start = time.time()
 
         Operation.filter_bag(
-            bag_path.name,
-            output_file.name,
+            str(bag_path),
+            str(output_file),
             config.topic_list,
             config.time_range
         )
