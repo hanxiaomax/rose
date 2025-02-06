@@ -29,6 +29,10 @@ class ControlPanel(Container):
         self.watch(self.app.query_one(BagSelector), "multi_select_mode", 
                                 self.handle_multi_select_mode_change)
     
+    @property
+    def bags(self) -> BagManager:
+        return self.app.query_one(BagSelector).bags
+    
     def handle_multi_select_mode_change(self, multi_select_mode: bool) -> None:
         """Handle multi select mode change"""
         self.multi_select_mode = multi_select_mode
@@ -51,9 +55,7 @@ class ControlPanel(Container):
             self.set_output_file(f"{bag.path.stem}_filtered.bag")
             return
     
-    @property
-    def bags(self) -> BagManager:
-        return self.app.query_one(BagSelector).bags
+
             
     
     def compose(self) -> ComposeResult:
@@ -153,8 +155,7 @@ class ControlPanel(Container):
     def _process(self,bag_path: str, config: FilterConfig,output_file:str) -> None:
         """Handle task creation for single bag"""
         process_start = time.time()
-        
-        print(f"filter config: {config}")
+
         Operation.filter_bag(
             str(bag_path),
             str(output_file),
@@ -173,55 +174,6 @@ class ControlPanel(Container):
         #     time_range
         # )
             
-
-    def _handle_multi_bag_task(self, bag_selector: BagSelector, selected_topics: list) -> None:
-        """Handle task creation for multiple bags"""
-        if not bag_selector.selected_bags:
-            self.app.notify("Please select at least one bag file", title="Error", severity="error")
-            return
-        #TODO: tasktable should handle by itself
-        task_count = 0
-        task_table = self.app.query_one(TaskTable)
-        
-        for bag_path in bag_selector.selected_bags:
-            try:
-                _, _, bag_time_range = Operation.load_bag(bag_path)
-                output_file = f"{Path(bag_path).stem}_filtered.bag"
-                self._process(task_table,bag_path,selected_topics,bag_time_range,output_file)
-                task_count += 1
-                
-            except Exception as e:
-                self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
-                self.app.notify(f"Error processing {Path(bag_path).name}: {str(e)}",
-                title="Error",
-                severity="error")
-        
-        if task_count > 0:
-            self.app.notify(
-                f"Successfully add {task_count} tasks",
-                title="INFO",severity="information")
-               
-
-    def _handle_single_bag_task(self, selected_topics: list) -> None:
-        """Handle task creation for single bag"""
-        if not self.app.selected_bag:
-            self.app.notify("Please select a bag file first",title="Error",severity="error")
-            return
-
-        try:
-            self.logger.debug(f"Starting bag filtering task: {self.app.selected_bag} -> {self.get_output_file()}")
-            start_time = time.time()
-            time_range = Operation.convert_time_range_to_tuple(*self.get_time_range())
-            #TODO: tasktable should handle by itself
-            task_table = self.app.query_one(TaskTable)
-
-            self._process(task_table,self.app.selected_bag,selected_topics,time_range,self.get_output_file())
-
-        except Exception as e:
-            self.logger.error(f"Error processing bag: {str(e)}", exc_info=True)
-            self.app.notify(f"Error processing bag: {str(e)}",
-                title="Error",
-                severity="error")
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Called when the worker state changes."""
