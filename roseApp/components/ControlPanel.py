@@ -77,9 +77,14 @@ class ControlPanel(Container):
         """Get the current time range from inputs, converting to milliseconds"""
         return self.query_one("#start-time").value, self.query_one("#end-time").value
     
-    def get_output_file(self) -> str:
+    def get_output_file(self, bag_path: Path = None) -> str:
         """Get the output file name"""
-        return self.query_one("#output-file").value or "output.bag"
+        if bag_path:
+            # For Python < 3.9 compatibility
+            return str(bag_path.parent / f"{bag_path.stem}_filtered{bag_path.suffix}")
+        else:
+            return self.query_one("#output-file").value or "output.bag"
+
     
     def set_time_range(self, time_range_str) -> None:
         self.query_one("#start-time").value = time_range_str[0]
@@ -131,10 +136,14 @@ class ControlPanel(Container):
 
         try:
             for bag_path, bag in self.bags.bags.items():
-                config = bag.get_filter_config()
-
-                self._process(bag_path,config,self.get_output_file())
-
+                if self.multi_select_mode:
+                    self._process(bag_path,
+                                  bag.get_filter_config(),
+                                  self.get_output_file(bag_path))
+                else:
+                    self._process(bag_path,
+                                  bag.get_filter_config(),
+                                  self.get_output_file())
             
         except Exception as e:
             self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
@@ -218,7 +227,9 @@ class ControlPanel(Container):
         """Called when the worker state changes."""
         worker = event.worker
         state = event.state
-        bag_name = Path(worker.description.split(",")[1]).stem
+        
+        print(f"Worker state changed: {worker}")
+        bag_name = Path(worker.description.split(",")[0]).stem
         if state == WorkerState.SUCCESS:
             self.app.notify(f"Successfully processed {bag_name}",
                 title="Success",
