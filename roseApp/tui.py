@@ -346,7 +346,13 @@ class InfoScreen(Screen):
                 Tab("Logs", id="logs-tab")
             )
             with Vertical(id="content-container"):
-                yield Pretty(self.bag_manager_data, id="debug-content")
+                yield RichLog(
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                    id="debug-content",
+                    classes="logs"
+                )
                 yield RichLog(
                     highlight=True,
                     markup=True,
@@ -358,9 +364,37 @@ class InfoScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize screen state"""
-        self.query_one("#log-content").write(self.log_content)
-        self.query_one("#log-content").visible = False
+        # Format debug info as JSON with syntax highlighting
+        debug_content = self.query_one("#debug-content")
+        debug_content.write(
+            Syntax(
+                json.dumps(self.bag_manager_data, indent=4, default=str),
+                "json",
+                line_numbers=True,
+                theme=self.get_text_theme(),
+                word_wrap=True
+            )
+        )
+        
+        # Load logs
+        log_content = self.query_one("#log-content")
+        log_content.write(Syntax(
+                "1",
+                "log",
+                line_numbers=True,
+                theme=self.get_text_theme(),
+                word_wrap=True
+            ))
 
+        log_content.visible = True
+
+    def get_text_theme(self) -> str:
+        """Get the theme for the text"""
+        if self.app.theme == "cassette-light":
+            return "default"
+        else:
+            return "lightbulb"
+    
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
         """Handle tab switching"""
         debug_content = self.query_one("#debug-content")
@@ -376,8 +410,9 @@ class InfoScreen(Screen):
     def load_logs(self) -> str:
         """Load logs from file"""
         try:
-            log_path = Path("rose_tui.log")
+            log_path = Path("./rose_tui.log")
             if not log_path.exists():
+                print("[red]No log file found at rose_tui.log[/red]")
                 return "[red]No log file found at rose_tui.log[/red]"
                 
             with open(log_path, "r") as f:
