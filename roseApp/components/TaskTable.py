@@ -34,12 +34,14 @@ class TaskTable(DataTable):
                 size_content = f"{bag.info.size_str}"
             else:
                 size_content = f"{bag.info.size_str}->{bag.info.size_after_filter_str}"
+            
+            
             self.add_row(
                 str(self.task_count),
                 f"{bag.status.name}",
                 Path(bag.path).name,
                 Path(bag.output_file).name,
-                f"{bag.info.time_range_str[0][8:]}->{bag.info.time_range_str[1][8:]}",
+                f"{bag.info.time_range_str[0][8:]},{bag.info.time_range_str[1][8:]}",
                 size_content,
                 f"{bag.time_elapsed}ms",
             )

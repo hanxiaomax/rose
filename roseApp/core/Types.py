@@ -57,7 +57,6 @@ class Bag:
         self.path = path
         self.info = bag_info
         self.selected_topics: Set[str] = set()
-        self.filter_time_range = self.info.time_range
         self.status = BagStatus.IDLE
         self.output_file = Path(str(self.path.parent / f"{self.path.stem}_filtered{self.path.suffix}"))
         self.time_elapsed = 0
@@ -65,10 +64,6 @@ class Bag:
         
     def __repr__(self) -> str:
         return f"Bag(path={self.path}, info={self.info}, filter_config={self.get_filter_config()})"
-    
-    #TODO: handle time slice
-    def set_filter_time_range(self, time_range: Tuple[tuple, tuple]) -> None:
-        self.filter_time_range = time_range
     
     def set_selected_topics(self, topics: Set[str]) -> None:
         self.selected_topics = topics
@@ -87,6 +82,9 @@ class Bag:
         
     def set_size_after_filter(self, size_after_filter: int) -> None:
         self.info.size_after_filter = size_after_filter
+        
+    def set_time_range(self, time_range: Tuple[tuple, tuple]) -> None:
+        self.info.time_range = time_range
   
 class BagManager:
     """Manages multiple ROS bag files"""
@@ -192,8 +190,8 @@ class BagManager:
     @publish
     def set_time_range(self, bag_path: Path , time_range: Tuple[tuple, tuple]) -> None:
         """Set time range for specific bag or all bags"""
-        self.bags[bag_path].set_filter_time_range(time_range)
-        
+        self.bags[bag_path].set_time_range(time_range)
+    
     @publish
     def set_status(self, bag_path: Path, status: BagStatus) -> None:
         """Set status for specific bag or all bags"""

@@ -22,6 +22,7 @@ class ControlPanel(Container):
         super().__init__()
         self.logger = logger.getChild("ControlPanel")
         self.multi_select_mode = False
+        self.current_bag_path = None
         
     def on_mount(self) -> None:
         """Initialize control panel"""
@@ -44,19 +45,18 @@ class ControlPanel(Container):
         if self.multi_select_mode:
             self.set_disable_info()
             return
-
-        # Only update input values when a new bag is loaded
+        
         if bags.get_bag_numbers() == 1:
             bag = bags.get_single_bag()
-            # Check if the current input values are different from the bag's values
-            current_start, current_end = self.get_time_range()
-            bag_start, bag_end = bag.info.time_range_str
-            
-            if current_start != bag_start or current_end != bag_end:
+            # Check if the bag path has actually changed
+            # Only update input values when a new bag is loaded
+            if self.current_bag_path != bag.path:
+                self.current_bag_path = bag.path
                 self.set_time_range(bag.info.time_range_str)
                 self.set_output_file(f"{bag.path.stem}_filtered.bag")
         elif bags.get_bag_numbers() == 0:
             self.reset_info()
+            self.current_bag_path = None
     
     def compose(self) -> ComposeResult:
         """Create child widgets for the control panel"""
