@@ -35,7 +35,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
   - by time range (only TUI tested)
 - 🌟 Fuzzy search topic in TUI
 - 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
-   - 🚧 parallel processing for Multi-selection mode
+   - parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
 - 🌟 cassette futurism theme for dark and light mode
 - 🚧 Message view in TUI
