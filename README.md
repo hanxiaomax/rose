@@ -199,10 +199,13 @@ project_root/
 |   └── build_rosecode.sh # build script
 ├── roseApp/        # Python application
 │   ├── rose.py     # main script
-│   ├── themes/     # theme folder
+│   ├── themes/     
+│   ├── components/ # components 
+│   ├── core/       # data types and utils
+|   |── tui.py      # main tui script
 │   ├── whitelists/ # topic whitelist folder
 │   ├── config.json # config file
-│   └── style.css   # style sheet
+│   └── style.tcss   # style sheet
 ├── docker/              # Docker support
 │   └── Dockerfile
 │   └── go_docker.sh
