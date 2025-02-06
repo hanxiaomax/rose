@@ -183,6 +183,9 @@ Use Dev container(build with ./docker/Dockerfile-dev) or local environment to de
 - **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation of both CLI and TUI.
 - **[Pybind11](https://pybind11.readthedocs.io/)**: A lightweight header-only library that exposes C++ types in Python and vice versa. Used for wrapping ROS C++ interfaces to Python.
 
+### Rough ideas - data driven rendering
+
+![1](docs/notes/sketch.png)
 
 ### Project Structure
 ```

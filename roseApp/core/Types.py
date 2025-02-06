@@ -3,6 +3,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from core.util import Operation
+from enum import Enum
+
+class BagStatus(Enum):
+    IDLE = "IDLE"
+    SUCCESS = "SUCCESS"
+    ERROR = "ERROR"
+
 
 @dataclass
 class BagInfo:
@@ -42,11 +49,13 @@ class Bag:
         self.info = bag_info
         self.selected_topics: Set[str] = set()
         self.filter_time_range = self.info.time_range
+        self.status = BagStatus.IDLE
+        self.output_file = Path(str(self.path.parent / f"{self.path.stem}_filtered{self.path.suffix}"))
         
     def __repr__(self) -> str:
         return f"Bag(path={self.path}, info={self.info}, filter_config={self.get_filter_config()})"
     
-    
+    #TODO: handle time slice
     def set_filter_time_range(self, time_range: Tuple[tuple, tuple]) -> None:
         self.filter_time_range = time_range
     
@@ -59,6 +68,8 @@ class Bag:
             time_range=self.filter_time_range,
             topic_list=list(self.selected_topics)
         )
+    def set_status(self, status: BagStatus) -> None:
+        self.status = status
         
   
 class BagManager:

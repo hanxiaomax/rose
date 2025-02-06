@@ -79,13 +79,13 @@ class ControlPanel(Container):
         """Get the current time range from inputs, converting to milliseconds"""
         return self.query_one("#start-time").value, self.query_one("#end-time").value
     
-    def get_output_file(self, bag_path: Path = None) -> str:
-        """Get the output file name"""
-        if bag_path:
-            # For Python < 3.9 compatibility
-            return str(bag_path.parent / f"{bag_path.stem}_filtered{bag_path.suffix}")
-        else:
-            return self.query_one("#output-file").value or "output.bag"
+    # def get_output_file(self, bag_path: Path = None) -> str:
+    #     """Get the output file name"""
+    #     if bag_path:
+    #         # For Python < 3.9 compatibility
+    #         return str(bag_path.parent / f"{bag_path.stem}_filtered{bag_path.suffix}")
+    #     else:
+    #         return self.query_one("#output-file").value or "output.bag"
 
     
     def set_time_range(self, time_range_str) -> None:
@@ -125,9 +125,6 @@ class ControlPanel(Container):
 
     
     def handle_run_process(self) -> None:
-        """Handle Run button press"""
-        #TODO:ge topics from bag manager
-        
         if self.bags.get_bag_numbers() == 0:
             self.app.notify("Please select at least one bag file", title="Error", severity="error")
             return
@@ -138,14 +135,10 @@ class ControlPanel(Container):
 
         try:
             for bag_path, bag in self.bags.bags.items():
-                if self.multi_select_mode:
-                    self._process(bag_path,
-                                  bag.get_filter_config(),
-                                  self.get_output_file(bag_path))
-                else:
-                    self._process(bag_path,
-                                  bag.get_filter_config(),
-                                  self.get_output_file())
+                
+                self._process(bag_path,
+                                bag.get_filter_config(),
+                                bag.output_file)
             
         except Exception as e:
             self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
@@ -157,8 +150,8 @@ class ControlPanel(Container):
         process_start = time.time()
 
         Operation.filter_bag(
-            str(bag_path),
-            str(output_file),
+            bag_path.name,
+            output_file.name,
             config.topic_list,
             config.time_range
         )
