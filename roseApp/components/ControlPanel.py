@@ -168,13 +168,14 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one topic", title="Error", severity="error")
             return
 
-        # Validate output file
-        if not self._validate_output_file():
-            return
+        if not self.multi_select_mode:
+            # Validate output file
+            if not self._validate_output_file():
+                return
 
-        # Validate time range
-        if not self._validate_time_range():
-            return
+            # Validate time range
+            if not self._validate_time_range():
+                return
 
         try:
             for bag_path, bag in self.bags.bags.items():
