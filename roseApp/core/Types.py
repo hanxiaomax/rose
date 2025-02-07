@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 # Local application imports
-from core.parser import BagParser, TimeUtil
-from core.util import BagParserCPP
+from core.parser import IBagParser, ParserType
+from core.util import TimeUtil
 
 class BagStatus(Enum):
     IDLE = "IDLE"
@@ -98,10 +98,11 @@ class Bag:
   
 class BagManager:
     """Manages multiple ROS bag files"""
-    def __init__(self):
+    def __init__(self, parser_type: ParserType = ParserType.CPP):
         self.bags: Dict[str, Bag] = {}
         self.bag_mutate_callback = None
         self.selected_topics = set()
+        IBagParser.set_implementation(parser_type)
 
     def __repr__(self) -> str:
         return f"BagManager(bags={self.bags}) \n" \
@@ -142,8 +143,7 @@ class BagManager:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
-        # topics, connections, time_range = BagParser.load_bag(str(path))
-        topics, connections, time_range = BagParserCPP.load_bag(str(path))
+        topics, connections, time_range = IBagParser.load_bag(str(path))
         bag = Bag(path, BagInfo(
             time_range=time_range,
             init_time_range=time_range,

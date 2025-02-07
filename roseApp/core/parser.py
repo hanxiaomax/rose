@@ -4,10 +4,118 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 
 import time
 import logging
+from enum import Enum
 from typing import Tuple, List, Dict
 import rosbag
-
+import rosbag_io_py
 _logger = logging.getLogger(__name__)
+
+class ParserType(Enum):
+    """Enum for different parser implementations"""
+    PYTHON = "python"
+    CPP = "cpp"
+
+class IBagParser:
+    """Interface for bag parser implementations"""
+    
+    _instance = None
+    _parser_impl = None
+    
+    def __new__(cls):
+        """Singleton pattern implementation"""
+        if cls._instance is None:
+            cls._instance = super(IBagParser, cls).__new__(cls)
+        return cls._instance
+    
+    @classmethod
+    def get_instance(cls) -> 'IBagParser':
+        """Get singleton instance"""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    @classmethod
+    def set_implementation(cls, parser_type: ParserType):
+        """
+        Set the parser implementation to use
+        
+        Args:
+            parser_type: Type of parser to use (PYTHON or CPP)
+        """
+        if parser_type == ParserType.PYTHON:
+            cls._parser_impl = BagParser
+        elif parser_type == ParserType.CPP:
+            cls._parser_impl = BagParserCPP
+        else:
+            raise ValueError(f"Unknown parser type: {parser_type}")
+        
+        _logger.info(f"Using {parser_type.value} implementation for bag parsing")
+    
+    @classmethod
+    def load_whitelist(cls, whitelist_path: str) -> List[str]:
+        """
+        Load topics from whitelist file
+        
+        Args:
+            whitelist_path: Path to the whitelist file
+            
+        Returns:
+            List of topic names
+        """
+        if cls._parser_impl is None:
+            cls.set_implementation(ParserType.CPP)  # Default to C++ implementation
+        return cls._parser_impl.load_whitelist(whitelist_path)
+    
+    @classmethod
+    def filter_bag(cls, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+        """
+        Filter rosbag using selected implementation
+        
+        Args:
+            input_bag: Path to input bag file
+            output_bag: Path to output bag file  
+            topics: List of topics to include
+            time_range: Tuple of (start_time, end_time)
+        
+        Returns:
+            Status message with completion time
+        """
+        if cls._parser_impl is None:
+            cls.set_implementation(ParserType.CPP)
+        return cls._parser_impl.filter_bag(input_bag, output_bag, topics, time_range)
+    
+    @classmethod
+    def load_bag(cls, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
+        """
+        Load bag file and return topics, connections and time range
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Tuple containing:
+            - List of topics
+            - Dict mapping topics to message types
+            - Tuple of (start_time, end_time)
+        """
+        if cls._parser_impl is None:
+            cls.set_implementation(ParserType.CPP)
+        return cls._parser_impl.load_bag(bag_path)
+    
+    @classmethod
+    def inspect_bag(cls, bag_path: str) -> str:
+        """
+        List all topics and message types using selected implementation
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Formatted string containing bag information
+        """
+        if cls._parser_impl is None:
+            cls.set_implementation(ParserType.CPP)
+        return cls._parser_impl.inspect_bag(bag_path)
 
 class BagParser:
     """
@@ -130,66 +238,109 @@ class BagParser:
             _logger.error(f"Error inspecting bag file: {e}")
             raise Exception(f"Error inspecting bag file: {e}")
 
-class TimeUtil:
-    """Utility class for handling time conversions"""
+class BagParserCPP:
+    """
+    A class that handles ROS bag file operations using C++ implementation.
+    Provides the same interface as BagParser but with better performance.
+    """
     
     @staticmethod
-    def to_datetime(time_tuple: Tuple[int, int]) -> str:
+    def load_whitelist(whitelist_path: str) -> List[str]:
         """
-        Convert (seconds, nanoseconds) tuple to [YY/MM/DD HH:MM:SS] formatted string
+        Load topics from whitelist file
         
         Args:
-            time_tuple: Tuple of (seconds, nanoseconds)
+            whitelist_path: Path to the whitelist file
             
         Returns:
-            Formatted time string
+            List of topic names
         """
-        if not time_tuple or len(time_tuple) != 2:
-            return "N.A"
-        
-        seconds, nanoseconds = time_tuple
-        total_seconds = seconds + nanoseconds / 1e9
-        return time.strftime("%y/%m/%d %H:%M:%S", time.localtime(total_seconds))
-
+        with open(whitelist_path) as f:
+            topics = []
+            for line in f.readlines():
+                if line.strip() and not line.strip().startswith('#'):
+                    topics.append(line.strip())
+            return topics
+    
     @staticmethod
-    def from_datetime(time_str: str) -> Tuple[int, int]:
+    def filter_bag(input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
         """
-        Convert [YY/MM/DD HH:MM:SS] formatted string to (seconds, nanoseconds) tuple
+        Filter rosbag using C++ interface
         
         Args:
-            time_str: Time string in YY/MM/DD HH:MM:SS format
-            
+            input_bag: Path to input bag file
+            output_bag: Path to output bag file  
+            topics: List of topics to include
+            time_range: Tuple of (start_time, end_time)
+        
         Returns:
-            Tuple of (seconds, nanoseconds)
+            Status message with completion time
         """
         try:
-            # Parse time string to time struct
-            time_struct = time.strptime(time_str, "%y/%m/%d %H:%M:%S")
-            # Convert to Unix timestamp
-            total_seconds = time.mktime(time_struct)
-            # Return (seconds, nanoseconds) tuple
-            return (int(total_seconds), 0)
-        except ValueError:
-            raise ValueError(f"Invalid time format: {time_str}. Expected format: YY/MM/DD HH:MM:SS")
+            start_time = time.time()
+            io = rosbag_io_py.rosbag_io()
+            
+            _logger.info(f"Filtering bag: {input_bag} to {output_bag}")
+            _logger.info(f"Topics: {topics}")
+            _logger.info(f"Time range: {time_range}")
+            
+            io.load(str(input_bag))
+            io.dump(str(output_bag), topics, time_range)
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            mins, secs = divmod(elapsed, 60)
+            return f"Filtering completed in {int(mins)}m {secs:.2f}s"
+            
+        except Exception as e:
+            _logger.error(f"Error filtering bag: {e}")
+            raise Exception(f"Error filtering bag: {e}")
 
     @staticmethod
-    def convert_time_range_to_tuple(start_time_str: str, end_time_str: str) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    def load_bag(bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
         """
-        Create time range from start and end time strings
+        Load bag file and return topics, connections and time range
         
         Args:
-            start_time_str: Start time in YY/MM/DD HH:MM:SS format
-            end_time_str: End time in YY/MM/DD HH:MM:SS format
+            bag_path: Path to bag file
             
         Returns:
-            Tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
+            Tuple containing:
+            - List of topics
+            - Dict mapping topics to message types
+            - Tuple of (start_time, end_time)
+        """
+        io = rosbag_io_py.rosbag_io()
+        io.load(bag_path)
+        topics = io.get_topics()
+        connections = io.get_connections()
+        timerange = io.get_time_range()
+        
+        return topics, connections, timerange
+    
+    @staticmethod
+    def inspect_bag(bag_path: str) -> str:
+        """
+        List all topics and message types using C++ interface
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Formatted string containing bag information
         """
         try:
-            start_time = TimeUtil.from_datetime(start_time_str)
-            end_time = TimeUtil.from_datetime(end_time_str)
-            # make sure start and end are within range of output bag file
-            start_time = (start_time[0] - 1, start_time[1])
-            end_time = (end_time[0] + 1, end_time[1]) 
-            return (start_time, end_time)
-        except ValueError as e:
-            raise ValueError(f"Invalid time range format: {e}") 
+            topics, connections, (start_time, end_time) = BagParserCPP.load_bag(bag_path)
+            
+            result = [f"\nTopics in {bag_path}:"]
+            result.append("{:<40} {:<30}".format("Topic", "Message Type"))
+            result.append("-" * 80)
+            for topic in topics:
+                result.append("{:<40} {:<30}".format(topic, connections[topic]))
+            
+            result.append(f"\nTime range: {TimeUtil.to_datetime(start_time)} - {TimeUtil.to_datetime(end_time)}")
+            return "\n".join(result)
+            
+        except Exception as e:
+            _logger.error(f"Error inspecting bag file: {e}")
+            raise Exception(f"Error inspecting bag file: {e}")

@@ -14,8 +14,8 @@ from textual.worker import Worker, WorkerState
 # Local application imports
 from components.BagExplorer import BagExplorer
 from core.Types import BagManager, BagStatus, FilterConfig
-from core.util import TimeUtil, get_logger,BagParserCPP
-from core.parser import BagParser
+from core.util import TimeUtil, get_logger
+from core.parser import IBagParser,ParserType
 
 logger = get_logger("ControlPanel")
 
@@ -193,8 +193,8 @@ class ControlPanel(Container):
     def _process(self, bag_path: str, config: FilterConfig, output_file: str) -> None:
         """Handle task creation for single bag"""
         process_start = time.time()
-
-        BagParser.filter_bag(
+        IBagParser.set_implementation(ParserType.CPP)
+        IBagParser.filter_bag(
             str(bag_path),
             str(output_file),
             config.topic_list,

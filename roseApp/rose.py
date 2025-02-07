@@ -2,7 +2,6 @@
 
 import os
 import click
-from core.parser import BagParser
 from tui import RoseTUI     
 
 
