@@ -43,41 +43,53 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Getting Started
 
-First, Clone the repository
 ```bash
 git clone https://github.com/your-repo/rose.git
 cd rose
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run TUI
+python3 rose.py tui
 ```
 
-Second, since Rose depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
 
-#### Option 1: Install ROS Noetic (Ubuntu 20.04), refer to [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
+> [!NOTE]
+> Want to try C++ Parser? instead of [Python API(lib rosbag)](https://wiki.ros.org/rosbag/Code%20API#Python_API)
 
-#### Option 2: Use docker image
-1. Build the Docker image:
-   ```bash
-   cd docker
-   docker build -t rose .
-   ```
-2. Run the container:
-   ```bash
-   ./go_docker.sh
-   ```
+> since Rose's C++ parser depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
 
-Once you have ros environment installed, you can build `rosbag_io_py` lib which is required by roseApp to operate.
+> Option 1: Install ROS Noetic (Ubuntu 20.04), refer to [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
 
-1. Build the ROS project:
-   ```bash
-   cd ros
-   ./build.sh
-   ```
+> Option 2: Use docker image
+> 1. Build the Docker image:
+>    ```bash
+>    cd docker
+>    docker build -t rose .
+>    ```
+> 2. Run the container:
+>    ```bash
+>    ./go_docker.sh
+>    ```
 
-2. Set up environment which will make sure `rosbag_io_py` add to `PYTHONPATH`
-   ```bash
-   source setup.sh
-   ```
+> Once you have ros environment installed, you can build `rosbag_io_py` lib which is required by roseApp to operate.
+
+> 1. Build the ROS project:
+>    ```bash
+>    cd ros
+>    ./build.sh
+>    ```
+
+> 2. Set up environment which will make sure `rosbag_io_py` add to `PYTHONPATH`
+>    ```bash
+>    source setup.sh
+>    ```
   
-**You are all set! Now you can use RoseApp to filter ROS bag files.**
+> **You are all set! Now you can use RoseApp to filter ROS bag files.**
+
+> Note: Rose's C++ parser is very simple and not support ROS2. It is slightly faster than Python API(lib rosbag) (Refer to [benchmark](./benchmark/README.md)). But I am not sure if it is worth the effort to maintain it.
+
 
 No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
 
@@ -223,9 +235,7 @@ Before you start with Textual, there are some docs worth reading:
 - [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
 - Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
 
-## Benchmark
 
-Refer to [benchmark](./benchmark/README.md) for more details.
 
 ## Resources
 
