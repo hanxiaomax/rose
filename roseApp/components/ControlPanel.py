@@ -13,7 +13,7 @@ from textual.worker import Worker, WorkerState
 
 # Local application imports
 from components.BagExplorer import BagExplorer
-from core.Types import BagManager, BagStatus, FilterConfig
+from core.BagManager import BagManager, BagStatus, FilterConfig
 from core.util import TimeUtil, get_logger
 from core.parser import IBagParser,ParserType
 

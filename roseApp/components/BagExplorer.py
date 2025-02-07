@@ -10,7 +10,7 @@ from textual.widgets import DirectoryTree
 
 # Local application imports
 from components.StatusBar import StatusBar
-from core.Types import BagManager
+from core.BagManager import BagManager
 from core.util import get_logger
 
 logger = get_logger("BagExplorer")

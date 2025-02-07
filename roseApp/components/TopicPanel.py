@@ -12,7 +12,7 @@ from textual.widgets import Input, Tree
 
 # Local application imports
 from components.BagExplorer import BagExplorer
-from core.Types import BagManager
+from core.BagManager import BagManager
 from core.util import get_logger
 
 logger = get_logger("TopicPanel")

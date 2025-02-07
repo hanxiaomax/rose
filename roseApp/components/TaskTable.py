@@ -1,7 +1,7 @@
 from pathlib import Path
 from textual.widgets import (DataTable)
 from components.BagExplorer import BagExplorer
-from core.Types import BagManager, BagStatus
+from core.BagManager import BagManager, BagStatus
 class TaskTable(DataTable):
     """Table for displaying tasks"""
     
