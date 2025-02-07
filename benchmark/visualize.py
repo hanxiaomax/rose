@@ -33,25 +33,28 @@ def create_time_comparison_plot(results: dict, output_dir: Path):
         results: Benchmark results dictionary
         output_dir: Directory to save the plot
     """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 6))
     
-    implementations = ['Python Lib:Rosbag']
-    times = [results['python_impl']['time']]
+    implementations = ['Python Lib:Rosbag', 'ROS CLI:Filter']
+    times = [results['python_impl']['time'], results['ros_cli']['time']]
     
     if results['cpp_impl']:
         implementations.append('Our C++ Interface')
         times.append(results['cpp_impl']['time'])
     
-    plt.bar(implementations, times)
+    bars = plt.bar(implementations, times)
     plt.title('Rosbag Processing Time Comparison')
     plt.ylabel('Time (seconds)')
     plt.grid(True, alpha=0.3)
     
     # Add value labels on top of each bar
-    for i, v in enumerate(times):
-        plt.text(i, v, f'{v:.2f}s', ha='center', va='bottom')
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.2f}s',
+                ha='center', va='bottom')
     
-    plt.savefig(output_dir / 'time_comparison.png')
+    plt.savefig(output_dir / 'time_comparison.png', bbox_inches='tight')
     plt.close()
 
 def create_throughput_plot(results: dict, output_dir: Path):
@@ -62,27 +65,32 @@ def create_throughput_plot(results: dict, output_dir: Path):
         results: Benchmark results dictionary
         output_dir: Directory to save the plot
     """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 6))
     
-    implementations = ['Python Lib:Rosbag']
-    py_throughput = results['python_impl']['messages'] / results['python_impl']['time']
-    throughputs = [py_throughput]
+    implementations = ['Python Lib:Rosbag', 'ROS CLI:Filter']
+    throughputs = [
+        results['python_impl']['messages'] / results['python_impl']['time'],
+        results['ros_cli']['messages'] / results['ros_cli']['time']
+    ]
     
     if results['cpp_impl']:
         implementations.append('Our C++ Interface')
         cpp_throughput = results['cpp_impl']['messages'] / results['cpp_impl']['time']
         throughputs.append(cpp_throughput)
     
-    plt.bar(implementations, throughputs)
+    bars = plt.bar(implementations, throughputs)
     plt.title('Message Processing Throughput')
     plt.ylabel('Messages per Second')
     plt.grid(True, alpha=0.3)
     
     # Add value labels on top of each bar
-    for i, v in enumerate(throughputs):
-        plt.text(i, v, f'{v:.0f} msg/s', ha='center', va='bottom')
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height,
+                f'{int(height)} msg/s',
+                ha='center', va='bottom')
     
-    plt.savefig(output_dir / 'throughput_comparison.png')
+    plt.savefig(output_dir / 'throughput_comparison.png', bbox_inches='tight')
     plt.close()
 
 def generate_report(results: dict, output_dir: Path):
@@ -108,7 +116,12 @@ def generate_report(results: dict, output_dir: Path):
         f"- Processing Time: {results['python_impl']['time']:.2f} seconds",
         f"- Messages Processed: {results['python_impl']['messages']}",
         f"- Throughput: {results['python_impl']['messages'] / results['python_impl']['time']:.2f} messages/second",
-        f"- Output File: `{results['python_impl']['output_path']}`"
+        f"- Output File: `{results['python_impl']['output_path']}`",
+        "\n### ROS CLI:Filter",
+        f"- Processing Time: {results['ros_cli']['time']:.2f} seconds",
+        f"- Messages Processed: {results['ros_cli']['messages']}",
+        f"- Throughput: {results['ros_cli']['messages'] / results['ros_cli']['time']:.2f} messages/second",
+        f"- Output File: `{results['ros_cli']['output_path']}`"
     ]
     
     if results['cpp_impl']:
@@ -119,7 +132,9 @@ def generate_report(results: dict, output_dir: Path):
             f"- Throughput: {results['cpp_impl']['messages'] / results['cpp_impl']['time']:.2f} messages/second",
             f"- Output File: `{results['cpp_impl']['output_path']}`",
             "\n### Performance Comparison",
-            f"- Speedup (C++ vs Python): {results['python_impl']['time'] / results['cpp_impl']['time']:.2f}x"
+            f"- Speedup (C++ vs Python): {results['python_impl']['time'] / results['cpp_impl']['time']:.2f}x",
+            f"- Speedup (C++ vs ROS CLI): {results['ros_cli']['time'] / results['cpp_impl']['time']:.2f}x",
+            f"- Speedup (ROS CLI vs Python): {results['python_impl']['time'] / results['ros_cli']['time']:.2f}x"
         ])
     
     with open(output_dir / 'report.md', 'w') as f:

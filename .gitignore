@@ -31,3 +31,4 @@ __pycache__/
 .DS_Store
 .cursorrules
 localnotes/** 
+benchmark/**

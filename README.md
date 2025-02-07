@@ -223,6 +223,9 @@ Before you start with Textual, there are some docs worth reading:
 - [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
 - Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
 
+## Benchmark
+
+Refer to [benchmark](./benchmark/README.md) for more details.
 
 ## Resources
 

@@ -9,6 +9,7 @@ import os
 import time
 import json
 import argparse
+import subprocess
 from typing import Dict, List, Tuple
 from pathlib import Path
 import rosbag
@@ -80,19 +81,17 @@ def benchmark_cpp_impl(bag_path: str, output_path: str) -> Tuple[float, int]:
         
     start_time = time.time()
     
-    # 创建rosbag_io对象
+
     bag_io = rosbag_io_py.rosbag_io()
     
-    # 加载输入bag文件
+
     bag_io.load(bag_path)
     
-    # 获取所有话题
+
     topics = bag_io.get_topics()
-    
-    # 获取时间范围
+
     time_range = bag_io.get_time_range()
-    
-    # 导出到新的bag文件
+
     msg_count = 0
     with tqdm() as pbar:
         bag_io.dump(output_path, topics, time_range)
@@ -102,6 +101,35 @@ def benchmark_cpp_impl(bag_path: str, output_path: str) -> Tuple[float, int]:
             pbar.update(msg_count)
     
     end_time = time.time()
+    return end_time - start_time, msg_count
+
+def benchmark_ros_cli(bag_path: str, output_path: str) -> Tuple[float, int]:
+    """
+    Benchmark the ROS command line tool (rosbag filter).
+    
+    Args:
+        bag_path: Input bag file path
+        output_path: Output bag file path
+        
+    Returns:
+        Tuple of (processing_time, message_count)
+    """
+    start_time = time.time()
+    
+
+    cmd = f"rosbag filter {bag_path} {output_path} 'True'"
+
+    try:
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running rosbag filter: {e}")
+        raise
+    
+    end_time = time.time()
+
+    with rosbag.Bag(output_path) as outbag:
+        msg_count = outbag.get_message_count()
+    
     return end_time - start_time, msg_count
 
 def run_benchmark(input_bag: str) -> Dict:
@@ -117,7 +145,8 @@ def run_benchmark(input_bag: str) -> Dict:
     results = {
         'bag_info': get_bag_info(input_bag),
         'python_impl': {},
-        'cpp_impl': {} if HAS_CPP_IMPL else None
+        'cpp_impl': {} if HAS_CPP_IMPL else None,
+        'ros_cli': {}
     }
     
     # Python implementation benchmark
@@ -138,6 +167,15 @@ def run_benchmark(input_bag: str) -> Dict:
             'messages': cpp_msgs,
             'output_path': cpp_output
         }
+    
+    # ROS CLI benchmark
+    ros_output = str(Path(input_bag).parent / f"{Path(input_bag).stem}_ros_output.bag")
+    ros_time, ros_msgs = benchmark_ros_cli(input_bag, ros_output)
+    results['ros_cli'] = {
+        'time': ros_time,
+        'messages': ros_msgs,
+        'output_path': ros_output
+    }
     
     return results
 
@@ -163,10 +201,11 @@ def main():
     print(f"\nResults saved to {args.output}")
     print("\nSummary:")
     print(f"Python implementation: {results['python_impl']['time']:.2f} seconds")
+    print(f"ROS CLI (rosbag filter): {results['ros_cli']['time']:.2f} seconds")
     if results['cpp_impl']:
         print(f"C++ implementation: {results['cpp_impl']['time']:.2f} seconds")
-        speedup = results['python_impl']['time'] / results['cpp_impl']['time']
-        print(f"Speedup: {speedup:.2f}x")
+        print(f"Speedup (C++ vs Python): {results['python_impl']['time'] / results['cpp_impl']['time']:.2f}x")
+        print(f"Speedup (C++ vs ROS CLI): {results['ros_cli']['time'] / results['cpp_impl']['time']:.2f}x")
 
 if __name__ == '__main__':
     main() 
