@@ -32,3 +32,4 @@ __pycache__/
 .cursorrules
 localnotes/** 
 benchmark/**
+roseApp/venv/**

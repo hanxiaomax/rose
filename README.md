@@ -26,7 +26,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 ## Key Features and Todos
 
 - High-performance C++ processing core (Optional)
-- 🎉 ROS Environment independent. Thanks to [rosbag](https://pypi.org/project/rosbags/)
+- 🎉 ROS Environment independent. current rosbag and later to [rosbags](https://pypi.org/project/rosbags/)
 - 🌟 Interactive TUI for easy operation
 - Command-line interface for automation
 - Filter ROS bag files 
@@ -48,10 +48,10 @@ git clone https://github.com/your-repo/rose.git
 cd rose
 
 # Install Python dependencies
-pip install -r requirements.txt
+pip install --extra-index-url https://rospypi.github.io/simple/ rosbag
+pip install -r click art rich texutal texutal-dev
 
-# Run TUI
-python3 rose.py tui
+
 ```
 No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
 
