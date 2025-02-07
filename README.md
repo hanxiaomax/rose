@@ -25,8 +25,8 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Key Features and Todos
 
-- High-performance C++ processing core
-  - 🚧 make C++ interface asynchronous
+- High-performance C++ processing core (Optional)
+- 🎉 ROS Environment independent. Thanks to [rosbag](https://pypi.org/project/rosbags/)
 - 🌟 Interactive TUI for easy operation
 - Command-line interface for automation
 - Filter ROS bag files 
@@ -39,7 +39,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 - Docker support for cross-platform usage
 - 🌟 cassette futurism theme for dark and light mode
 - 🚧 Message view in TUI
-- 🚧 Support dynamic file/whitelist refresh in TUI 
+- 🚧 Support dynamic file/whitelist refresh in TUI
 
 ## Getting Started
 
@@ -53,15 +53,15 @@ pip install -r requirements.txt
 # Run TUI
 python3 rose.py tui
 ```
-
+No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
 
 > [!NOTE]
-> Want to try C++ Parser? instead of [Python API(lib rosbag)](https://wiki.ros.org/rosbag/Code%20API#Python_API)
-
-> since Rose's C++ parser depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
-
+> Want to try C++ Parser instead of [Python API(lib rosbag)](https://wiki.ros.org/rosbag/Code%20API#Python_API)?
+> 
+> Since Rose's C++ parser depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
+>
 > Option 1: Install ROS Noetic (Ubuntu 20.04), refer to [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
-
+>
 > Option 2: Use docker image
 > 1. Build the Docker image:
 >    ```bash
@@ -72,26 +72,22 @@ python3 rose.py tui
 >    ```bash
 >    ./go_docker.sh
 >    ```
-
 > Once you have ros environment installed, you can build `rosbag_io_py` lib which is required by roseApp to operate.
-
 > 1. Build the ROS project:
 >    ```bash
 >    cd ros
 >    ./build.sh
 >    ```
-
 > 2. Set up environment which will make sure `rosbag_io_py` add to `PYTHONPATH`
 >    ```bash
 >    source setup.sh
 >    ```
-  
 > **You are all set! Now you can use RoseApp to filter ROS bag files.**
-
+>
 > Note: Rose's C++ parser is very simple and not support ROS2. It is slightly faster than Python API(lib rosbag) (Refer to [benchmark](./benchmark/README.md)). But I am not sure if it is worth the effort to maintain it.
 
 
-No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
+
 
 ## Usage
 
