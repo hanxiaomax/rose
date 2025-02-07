@@ -8,8 +8,17 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict
 import rosbag
-import rosbag_io_py
-_logger = logging.getLogger(__name__)
+
+# Try to import C++ implementation
+try:
+    import rosbag_io_py
+    _HAS_CPP_IMPL = True
+    _logger = logging.getLogger(__name__)
+    _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
+except ImportError:
+    _HAS_CPP_IMPL = False
+    _logger = logging.getLogger(__name__)
+    _logger.warning("C++ implementation (rosbag_io_py) not available. Only Python implementation will be used.")
 
 class ParserType(Enum):
     """Enum for different parser implementations"""
@@ -292,10 +301,15 @@ def create_parser(parser_type: ParserType) -> IBagParser:
         
     Returns:
         Instance of IBagParser implementation
+        
+    Raises:
+        ValueError: If parser_type is CPP but C++ implementation is not available
     """
     if parser_type == ParserType.PYTHON:
         return BagParser()
     elif parser_type == ParserType.CPP:
+        if not _HAS_CPP_IMPL:
+            raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
         return BagParserCPP()
     else:
         raise ValueError(f"Unknown parser type: {parser_type}")
