@@ -1,34 +1,62 @@
-# 使用ROS Noetic基础镜像
+# Use ROS Noetic base image
 FROM ros:noetic-ros-core
 
-# 设置环境变量
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
+# Setup ROS repository
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg2 \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list' \
+    && curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     python3-pip \
     pybind11-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装ROS依赖
-RUN apt-get update && apt-get install -y \
+# Install ROS dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-noetic-rosbag \
     ros-noetic-rosbag-storage \
     ros-noetic-roscpp \
     ros-noetic-tf2-msgs \
     ros-noetic-tf \
+    python3-rosdep \
+    python3-rospy \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装Python依赖
-RUN pip install pybind11 textual click textual-dev art rich-pixels
+# Initialize rosdep
+RUN rosdep init && rosdep update
 
-# 创建工作目录
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    pybind11 \
+    textual \
+    textual-dev \
+    rich \
+    pytest \
+    pytest-asyncio \
+    typing-extensions \
+    click \
+    art
+
+RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
+
+# Create workspace directory
 WORKDIR /workspace
 
-# 设置挂载点
+# Set mount point
 VOLUME /workspace
 
-# 设置默认命令
+# Set default command
 CMD ["bash"]

@@ -437,6 +437,11 @@ class RoseTUI(App):
     # command palette
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         # copy some of the useful commands from the default implementation
+        yield SystemCommand(
+                "Change theme",
+                "Change the current theme",
+                self.action_change_theme,
+            )
         yield SystemCommand("Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
         if screen.maximized is not None:
             yield SystemCommand(
