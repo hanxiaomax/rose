@@ -1,6 +1,6 @@
 {
     "show_splash_screen": true,
-    "theme": "cassette-light",
+    "theme": "cassette-dark",
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",

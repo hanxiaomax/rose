@@ -4,7 +4,7 @@ from textual.theme import Theme
 # Dark Theme (Terminal-safe)
 CASSETTE_THEME_DARK = Theme(
     name="cassette-dark",
-    primary="#00FF00",       
+    primary="#12303A",       
     secondary="#00FFFF",     
     accent="#FF8C00",        
     background="#1A1A1A",    
@@ -28,15 +28,15 @@ CASSETTE_THEME_DARK = Theme(
 CASSETTE_THEME_LIGHT = Theme(
     name="cassette-light",
     primary="#F4A460",       
-    secondary="#00FFFF",      
+    secondary="#008B8B",      
     accent="#008000",        
-    background="#F5F5F5",    
+    background="#FFF5EE",    
     foreground="#333333",     
     success="#00FFFF",       
     warning="#DAA520",       
     error="#FF4500",        
-    surface="#DCDCDC",       
-    panel="#C0C0C0",         
+    surface="#FFFFF0",       
+    panel="#FFFFF0",         
     dark=False,
     variables={
         "border": "#1E90FF 60%",  # dodgerblue

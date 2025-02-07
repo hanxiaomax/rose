@@ -190,6 +190,7 @@ Button {
 
 #splash-content {
     align: center middle;
+    background: $background;
 }
 
 #logo {
