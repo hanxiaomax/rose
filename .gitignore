@@ -30,3 +30,4 @@ __pycache__/
 .cursor/rules/*
 .DS_Store
 .cursorrules
+localnotes/** 
