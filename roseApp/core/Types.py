@@ -7,6 +7,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 
 # Local application imports
 from core.parser import BagParser, TimeUtil
+from core.util import BagParserCPP
 
 class BagStatus(Enum):
     IDLE = "IDLE"
@@ -141,7 +142,8 @@ class BagManager:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
-        topics, connections, time_range = BagParser.load_bag(str(path))
+        # topics, connections, time_range = BagParser.load_bag(str(path))
+        topics, connections, time_range = BagParserCPP.load_bag(str(path))
         bag = Bag(path, BagInfo(
             time_range=time_range,
             init_time_range=time_range,

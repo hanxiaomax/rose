@@ -2,7 +2,7 @@
 
 import os
 import click
-from core.util import Operation
+from core.parser import BagParser
 from tui import RoseTUI     
 
 

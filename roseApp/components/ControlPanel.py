@@ -14,12 +14,12 @@ from textual.worker import Worker, WorkerState
 # Local application imports
 from components.BagExplorer import BagExplorer
 from core.Types import BagManager, BagStatus, FilterConfig
-from core.util import Operation, get_logger
+from core.util import TimeUtil, get_logger,BagParserCPP
+from core.parser import BagParser
 
 logger = get_logger("ControlPanel")
 
 class ControlPanel(Container):
-    """A container widget providing controls for ROS bag file operations"""
     
     def __init__(self):
         super().__init__()
@@ -142,8 +142,8 @@ class ControlPanel(Container):
         start_time, end_time = self.get_time_range()
         
         try:
-            input_start = Operation.from_datetime(start_time)
-            input_end = Operation.from_datetime(end_time)
+            input_start = TimeUtil.from_datetime(start_time)
+            input_end = TimeUtil.from_datetime(end_time)
             bag_start, bag_end = bag.info.init_time_range
             
             print(f"input_start: {input_start}, input_end: {input_end}, bag_start: {bag_start}, bag_end: {bag_end}")
@@ -194,7 +194,7 @@ class ControlPanel(Container):
         """Handle task creation for single bag"""
         process_start = time.time()
 
-        Operation.filter_bag(
+        BagParser.filter_bag(
             str(bag_path),
             str(output_file),
             config.topic_list,
@@ -252,7 +252,7 @@ class ControlPanel(Container):
     def _update_time_range(self) -> None:
         """Update time range for current bag"""
         try:
-            time_range = Operation.convert_time_range_to_tuple(*self.get_time_range())
+            time_range = TimeUtil.convert_time_range_to_tuple(*self.get_time_range())
             if self.bags.get_bag_numbers() == 1:
                 bag = self.bags.get_single_bag()
                 self.bags.set_time_range(bag.path, time_range)
