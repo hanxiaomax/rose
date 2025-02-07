@@ -192,22 +192,9 @@ class ControlPanel(Container):
     @work(thread=True)
     def _process(self, bag_path: str, config: FilterConfig, output_file: str) -> None:
         """Handle task creation for single bag"""
-        process_start = time.time()
-        IBagParser.set_implementation(ParserType.CPP)
-        IBagParser.filter_bag(
-            str(bag_path),
-            str(output_file),
-            config.topic_list,
-            config.time_range
-        )
-        process_end = time.time()
-        # Convert to milliseconds
-        time_elapsed = int((process_end - process_start) * 1000)
-        
-        self.bags.set_time_elapsed(bag_path, time_elapsed)
-        self.bags.set_size_after_filter(bag_path, output_file.stat().st_size)
-        
+        self.bags.filter_bag(bag_path, config, output_file)
 
+        
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:
             """Extract two PosixPaths from worker description string using regex"""
             path_pattern = r"PosixPath\('([^']+)'\)"
@@ -228,7 +215,6 @@ class ControlPanel(Container):
         
         bag_name = input_path.stem
         if state == WorkerState.SUCCESS:
-            self.bags.set_status(input_path, BagStatus.SUCCESS)
             self.app.notify(f"Successfully processed {bag_name}",
                 title="Success",
                 severity="information")

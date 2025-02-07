@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple
+import time
 
 # Local application imports
 from core.parser import IBagParser, ParserType
@@ -218,3 +219,27 @@ class BagManager:
     def set_size_after_filter(self, bag_path: Path, size_after_filter: int) -> None:
         """Set size after filter for specific bag or all bags"""
         self.bags[bag_path].set_size_after_filter(size_after_filter)
+
+    @publish
+    def filter_bag(self, bag_path: Path, config: FilterConfig, output_file: Path) -> None:
+        try:
+            process_start = time.time()
+            
+            IBagParser.filter_bag(
+                str(bag_path),
+                str(output_file),
+                config.topic_list,
+                config.time_range
+            )
+            
+            process_end = time.time()
+            # Convert to milliseconds
+            time_elapsed = int((process_end - process_start) * 1000)
+            
+            self.set_time_elapsed(bag_path, time_elapsed)
+            self.set_size_after_filter(bag_path, output_file.stat().st_size)
+            self.set_status(bag_path, BagStatus.SUCCESS)
+            
+        except Exception as e:
+            self.set_status(bag_path, BagStatus.ERROR)
+            raise Exception(f"Error processing bag {bag_path}: {str(e)}")
