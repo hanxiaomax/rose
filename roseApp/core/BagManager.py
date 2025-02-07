@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from core.parser import IBagParser, ParserType
+from core.parser import IBagParser
 from core.util import TimeUtil
 
 class BagStatus(Enum):
@@ -99,11 +99,11 @@ class Bag:
   
 class BagManager:
     """Manages multiple ROS bag files"""
-    def __init__(self, parser_type: ParserType = ParserType.CPP):
+    def __init__(self, parser: IBagParser):
         self.bags: Dict[str, Bag] = {}
         self.bag_mutate_callback = None
         self.selected_topics = set()
-        IBagParser.set_implementation(parser_type)
+        self._parser = parser
 
     def __repr__(self) -> str:
         return f"BagManager(bags={self.bags}) \n" \
@@ -144,7 +144,7 @@ class BagManager:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
-        topics, connections, time_range = IBagParser.load_bag(str(path))
+        topics, connections, time_range = self._parser.load_bag(str(path))
         bag = Bag(path, BagInfo(
             time_range=time_range,
             init_time_range=time_range,
@@ -225,7 +225,7 @@ class BagManager:
         try:
             process_start = time.time()
             
-            IBagParser.filter_bag(
+            self._parser.filter_bag(
                 str(bag_path),
                 str(output_file),
                 config.topic_list,

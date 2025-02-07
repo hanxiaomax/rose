@@ -4,6 +4,7 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 
 import time
 import logging
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict
 import rosbag
@@ -15,44 +16,11 @@ class ParserType(Enum):
     PYTHON = "python"
     CPP = "cpp"
 
-class IBagParser:
-    """Interface for bag parser implementations"""
+class IBagParser(ABC):
+    """Abstract base class for bag parser implementations"""
     
-    _instance = None
-    _parser_impl = None
-    
-    def __new__(cls):
-        """Singleton pattern implementation"""
-        if cls._instance is None:
-            cls._instance = super(IBagParser, cls).__new__(cls)
-        return cls._instance
-    
-    @classmethod
-    def get_instance(cls) -> 'IBagParser':
-        """Get singleton instance"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-    
-    @classmethod
-    def set_implementation(cls, parser_type: ParserType):
-        """
-        Set the parser implementation to use
-        
-        Args:
-            parser_type: Type of parser to use (PYTHON or CPP)
-        """
-        if parser_type == ParserType.PYTHON:
-            cls._parser_impl = BagParser
-        elif parser_type == ParserType.CPP:
-            cls._parser_impl = BagParserCPP
-        else:
-            raise ValueError(f"Unknown parser type: {parser_type}")
-        
-        _logger.info(f"Using {parser_type.value} implementation for bag parsing")
-    
-    @classmethod
-    def load_whitelist(cls, whitelist_path: str) -> List[str]:
+    @abstractmethod
+    def load_whitelist(self, whitelist_path: str) -> List[str]:
         """
         Load topics from whitelist file
         
@@ -62,12 +30,10 @@ class IBagParser:
         Returns:
             List of topic names
         """
-        if cls._parser_impl is None:
-            cls.set_implementation(ParserType.CPP)  # Default to C++ implementation
-        return cls._parser_impl.load_whitelist(whitelist_path)
+        pass
     
-    @classmethod
-    def filter_bag(cls, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    @abstractmethod
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
         """
         Filter rosbag using selected implementation
         
@@ -80,12 +46,10 @@ class IBagParser:
         Returns:
             Status message with completion time
         """
-        if cls._parser_impl is None:
-            cls.set_implementation(ParserType.CPP)
-        return cls._parser_impl.filter_bag(input_bag, output_bag, topics, time_range)
+        pass
     
-    @classmethod
-    def load_bag(cls, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
+    @abstractmethod
+    def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
         """
         Load bag file and return topics, connections and time range
         
@@ -98,14 +62,12 @@ class IBagParser:
             - Dict mapping topics to message types
             - Tuple of (start_time, end_time)
         """
-        if cls._parser_impl is None:
-            cls.set_implementation(ParserType.CPP)
-        return cls._parser_impl.load_bag(bag_path)
+        pass
     
-    @classmethod
-    def inspect_bag(cls, bag_path: str) -> str:
+    @abstractmethod
+    def inspect_bag(self, bag_path: str) -> str:
         """
-        List all topics and message types using selected implementation
+        List all topics and message types
         
         Args:
             bag_path: Path to bag file
@@ -113,26 +75,12 @@ class IBagParser:
         Returns:
             Formatted string containing bag information
         """
-        if cls._parser_impl is None:
-            cls.set_implementation(ParserType.CPP)
-        return cls._parser_impl.inspect_bag(bag_path)
+        pass
 
-class BagParser:
-    """
-    A class that handles ROS bag file operations including reading, filtering and inspection.
-    """
+class BagParser(IBagParser):
+    """Python implementation of bag parser using rosbag"""
     
-    @staticmethod
-    def load_whitelist(whitelist_path: str) -> List[str]:
-        """
-        Load topics from whitelist file
-        
-        Args:
-            whitelist_path: Path to the whitelist file
-            
-        Returns:
-            List of topic names
-        """
+    def load_whitelist(self, whitelist_path: str) -> List[str]:
         with open(whitelist_path) as f:
             topics = []
             for line in f.readlines():
@@ -140,8 +88,7 @@ class BagParser:
                     topics.append(line.strip())
             return topics
     
-    @staticmethod
-    def filter_bag(input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
         """
         Filter rosbag using rosbag Python API
         
@@ -181,8 +128,7 @@ class BagParser:
             _logger.error(f"Error filtering bag: {e}")
             raise Exception(f"Error filtering bag: {e}")
 
-    @staticmethod
-    def load_bag(bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
+    def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
         """
         Load bag file and return topics, connections and time range
         
@@ -211,8 +157,7 @@ class BagParser:
             
             return topics, connections, (start, end)
     
-    @staticmethod
-    def inspect_bag(bag_path: str) -> str:
+    def inspect_bag(self, bag_path: str) -> str:
         """
         List all topics and message types in the bag file
         
@@ -223,7 +168,7 @@ class BagParser:
             Formatted string containing bag information
         """
         try:
-            topics, connections, (start_time, end_time) = BagParser.load_bag(bag_path)
+            topics, connections, (start_time, end_time) = self.load_bag(bag_path)
             
             result = [f"\nTopics in {bag_path}:"]
             result.append("{:<40} {:<30}".format("Topic", "Message Type"))
@@ -238,14 +183,10 @@ class BagParser:
             _logger.error(f"Error inspecting bag file: {e}")
             raise Exception(f"Error inspecting bag file: {e}")
 
-class BagParserCPP:
-    """
-    A class that handles ROS bag file operations using C++ implementation.
-    Provides the same interface as BagParser but with better performance.
-    """
+class BagParserCPP(IBagParser):
+    """C++ implementation of bag parser using rosbag_io_py"""
     
-    @staticmethod
-    def load_whitelist(whitelist_path: str) -> List[str]:
+    def load_whitelist(self, whitelist_path: str) -> List[str]:
         """
         Load topics from whitelist file
         
@@ -262,8 +203,7 @@ class BagParserCPP:
                     topics.append(line.strip())
             return topics
     
-    @staticmethod
-    def filter_bag(input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
         """
         Filter rosbag using C++ interface
         
@@ -296,8 +236,7 @@ class BagParserCPP:
             _logger.error(f"Error filtering bag: {e}")
             raise Exception(f"Error filtering bag: {e}")
 
-    @staticmethod
-    def load_bag(bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
+    def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
         """
         Load bag file and return topics, connections and time range
         
@@ -318,8 +257,7 @@ class BagParserCPP:
         
         return topics, connections, timerange
     
-    @staticmethod
-    def inspect_bag(bag_path: str) -> str:
+    def inspect_bag(self, bag_path: str) -> str:
         """
         List all topics and message types using C++ interface
         
@@ -330,7 +268,7 @@ class BagParserCPP:
             Formatted string containing bag information
         """
         try:
-            topics, connections, (start_time, end_time) = BagParserCPP.load_bag(bag_path)
+            topics, connections, (start_time, end_time) = self.load_bag(bag_path)
             
             result = [f"\nTopics in {bag_path}:"]
             result.append("{:<40} {:<30}".format("Topic", "Message Type"))
@@ -344,3 +282,20 @@ class BagParserCPP:
         except Exception as e:
             _logger.error(f"Error inspecting bag file: {e}")
             raise Exception(f"Error inspecting bag file: {e}")
+
+def create_parser(parser_type: ParserType) -> IBagParser:
+    """
+    Factory function to create parser instances
+    
+    Args:
+        parser_type: Type of parser to create
+        
+    Returns:
+        Instance of IBagParser implementation
+    """
+    if parser_type == ParserType.PYTHON:
+        return BagParser()
+    elif parser_type == ParserType.CPP:
+        return BagParserCPP()
+    else:
+        raise ValueError(f"Unknown parser type: {parser_type}")

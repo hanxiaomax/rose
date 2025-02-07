@@ -12,12 +12,13 @@ from textual.widgets import DirectoryTree
 from components.StatusBar import StatusBar
 from core.BagManager import BagManager
 from core.util import get_logger
+from core.parser import create_parser, ParserType
 
 logger = get_logger("BagExplorer")
 
 class BagExplorer(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
-    bags = reactive(BagManager())
+    bags = reactive(BagManager(create_parser(ParserType.PYTHON)))
     multi_select_mode = reactive(False)
     
     BINDINGS = [
