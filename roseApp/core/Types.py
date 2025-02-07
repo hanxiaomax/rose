@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 # Local application imports
-from core.util import Operation
+from core.parser import BagParser, TimeUtil
 
 class BagStatus(Enum):
     IDLE = "IDLE"
@@ -26,12 +26,12 @@ class BagInfo:
     @property
     def time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
-        return Operation.to_datetime(self.time_range[0]), Operation.to_datetime(self.time_range[1])
+        return TimeUtil.to_datetime(self.time_range[0]), TimeUtil.to_datetime(self.time_range[1])
     
     @property
     def init_time_range_str(self) -> Tuple[str, str]:
         """Return the start and end time as formatted strings"""
-        return Operation.to_datetime(self.init_time_range[0]), Operation.to_datetime(self.init_time_range[1])
+        return TimeUtil.to_datetime(self.init_time_range[0]), TimeUtil.to_datetime(self.init_time_range[1])
     
     def _covert_size_to_str(self, size_bytes: int) -> str:
         try:
@@ -141,7 +141,7 @@ class BagManager:
         if path in self.bags:
             raise ValueError(f"Bag with path {path} already exists")
         
-        topics, connections, time_range = Operation.load_bag(str(path))
+        topics, connections, time_range = BagParser.load_bag(str(path))
         bag = Bag(path, BagInfo(
             time_range=time_range,
             init_time_range=time_range,

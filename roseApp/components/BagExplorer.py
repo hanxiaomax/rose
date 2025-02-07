@@ -6,11 +6,7 @@ from typing import Iterable
 from rich.text import Text
 from textual import work
 from textual.reactive import reactive
-from textual.widgets import (
-    Button, DataTable, DirectoryTree, Footer, Header, Input, Label,
-    Link, Placeholder, RichLog, Rule, SelectionList, Static, Switch,
-    TextArea, Tree
-)
+from textual.widgets import DirectoryTree
 
 # Local application imports
 from components.StatusBar import StatusBar
