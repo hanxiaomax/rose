@@ -1,0 +1,37 @@
+{
+  "bag_info": {
+    "path": "../demo3.bag",
+    "size": 729967395,
+    "duration": 19.99506402015686,
+    "message_count": 5390,
+    "topics": [
+      "/diagnostics",
+      "/diagnostics_agg",
+      "/diagnostics_toplevel_state",
+      "/gps/fix",
+      "/gps/rtkfix",
+      "/gps/time",
+      "/image_raw",
+      "/obs1/gps/fix",
+      "/obs1/gps/rtkfix",
+      "/obs1/gps/time",
+      "/radar/points",
+      "/radar/range",
+      "/radar/tracks",
+      "/tf",
+      "/velodyne_nodelet_manager/bond",
+      "/velodyne_packets",
+      "/velodyne_points"
+    ]
+  },
+  "python_impl": {
+    "time": 3.5219473838806152,
+    "messages": 5390,
+    "output_path": "../demo3_py_output.bag"
+  },
+  "cpp_impl": {
+    "time": 1.52117919921875,
+    "messages": 5390,
+    "output_path": "../demo3_cpp_output.bag"
+  }
+}
