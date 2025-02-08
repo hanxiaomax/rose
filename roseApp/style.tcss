@@ -46,13 +46,13 @@ TopicTree > .tree--guides {
 #topic-search {
     width: 100%;
     height: 1;
-    background: $surface;
+    background: $background;
     border: none;
     margin-bottom: 1;
 }
 
 BagExplorer {
-    background: $surface;
+    background: $background;
     border: $border;
     padding: 1; 
     height: 100%;
@@ -68,16 +68,23 @@ BagExplorer {
 
 TopicTreePanel {
     width: 50%;
-    background: $surface;
+    background: $background;
     border: $border;
     padding: 0 1;
     layout: vertical;
 }
 
+TopicTree {
+    background: $background;
+    color:$foreground-lighten-2
+}
+
 #topic-search {
-    border: none;
+    width: 100%;
     padding: 0;
-    background: $panel;
+    background: $background-lighten-1;
+    border: none;
+    text-align: center;
 }
 
 
@@ -111,7 +118,7 @@ ControlPanel {
 #output-file-container > .file-input {
     width: 100%;
     padding: 0;
-    background: $panel;
+    background: $background-lighten-1;
     border: none;
     text-align: center;
 }
@@ -121,7 +128,7 @@ ControlPanel {
 #output-file-container > .file-input:hover {
     border: none;
     padding: 0;
-    color: $secondary;
+    color: $warning;
 }
 
 
@@ -129,17 +136,17 @@ TaskTable {
     width: 100%;
     height: 100%;
     border: $border;
-    background: $surface;
+    background: $background;
     color: $foreground;
-    
 }
 
 
 
 TaskTable.has-header  > .datatable--header {
-    background: $primary;
-    color: $foreground;
+    background:$accent;
+    color: $background;
 }
+
 
 
 
@@ -165,14 +172,14 @@ Button {
     height: 100%;
     border: $border;
     margin: 1;
-    background: $surface;
+    background: $background;
 }
 
 #right-middle {
     height: 20%;
     border: $border;
     margin: 1;
-    background: $surface;
+    background: $background;
 }
 
 #right-bottom {
@@ -185,7 +192,7 @@ Button {
     height: 100%;
     border: $border;
     margin: 1;
-    background: $surface;
+    background: $background;
 }
 
 #splash-content {
@@ -194,32 +201,33 @@ Button {
 }
 
 #logo {
-    color: $primary;
+    color: $accent;
     content-align-horizontal: center;
 }
 
 #subtitle {
-    background: $primary;
-    color: $foreground;
+    background:$accent;
+    color: $surface;
     content-align-horizontal: center;
 }
 
 #prompt {
     background:$secondary;
     content-align-horizontal: center;
-    color: $foreground;
+    color: $surface;
 }
 
 #about {
     align: center bottom;
     padding: 1;
+    color: $accent;
 }
 
 #about-divider {
     height: 1;
 }
 .about-link {
-    color: $primary;
+    color: $accent;
     background: $link-background;
 }
 
@@ -232,11 +240,11 @@ Button {
 }
 
 #dialog-container {
-    background: $surface;
+    background: $background;
     padding: 1;
     width: 40%;
     height: 8;
-    border: thick $primary;
+    border: thick $accent;
     
 }
 
@@ -244,6 +252,7 @@ Button {
     layout: horizontal;
     align-horizontal: center;
     margin-top: 1;
+    
 }
 
 
