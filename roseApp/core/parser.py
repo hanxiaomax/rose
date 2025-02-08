@@ -112,10 +112,6 @@ class BagParser(IBagParser):
         """
         try:
             start_time = time.time()
-            
-            _logger.info(f"Filtering bag: {input_bag} to {output_bag}")
-            _logger.info(f"Topics: {topics}")
-            _logger.info(f"Time range: {time_range}")
 
             with rosbag.Bag(output_bag, 'w') as outbag:
                 # Convert time range to seconds
@@ -228,11 +224,7 @@ class BagParserCPP(IBagParser):
         try:
             start_time = time.time()
             io = rosbag_io_py.rosbag_io()
-            
-            _logger.info(f"Filtering bag: {input_bag} to {output_bag}")
-            _logger.info(f"Topics: {topics}")
-            _logger.info(f"Time range: {time_range}")
-            
+
             io.load(str(input_bag))
             io.dump(str(output_bag), topics, time_range)
             
