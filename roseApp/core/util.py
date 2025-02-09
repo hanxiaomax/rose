@@ -42,15 +42,10 @@ def _setup_logging():
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     
-    # Stream handler for console output
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)  # Set default level to INFO
     root_logger.addHandler(file_handler)
-    root_logger.addHandler(stream_handler)
     
     # Add custom handler for Textual if needed
     try:

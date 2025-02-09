@@ -125,7 +125,6 @@ class TopicTree(Tree):
     
     def update_border_title(self):
         if self.multi_select_mode:
-            logger.info("Multi select mode")
             self.app.query_one(TopicTreePanel).border_title = "Topics(Show Common Topics)"
         else:
             self.app.query_one(TopicTreePanel).border_title = "Topics"
