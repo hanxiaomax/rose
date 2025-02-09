@@ -27,7 +27,7 @@ from components.StatusBar import StatusBar
 from components.TaskTable import TaskTable
 from components.TopicPanel import TopicTreePanel
 from core.util import get_logger
-from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_LIGHT
+from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
 
 from textual.reactive import reactive
 
@@ -431,7 +431,8 @@ class RoseTUI(App):
         else:
             self.switch_mode("main")
         self.register_theme(CASSETTE_THEME_DARK)
-        self.register_theme(CASSETTE_THEME_LIGHT)
+        # self.register_theme(CASSETTE_THEME_LIGHT)
+        self.register_theme(CASSETTE_THEME_WALKMAN)
         self.theme = self.config.get("theme", "cassette-dark")
     
     # command palette
@@ -464,7 +465,7 @@ class RoseTUI(App):
             self.show_debug_info,
         )
     def toggle_dark_mode(self):
-        self.theme = "cassette-dark" if self.theme == "cassette-light" else "cassette-light"
+        self.theme = "cassette-dark" if self.theme == "cassette-walkman" else "cassette-walkman"
     
     def show_debug_info(self) -> None:
         """Switch to debug info screen"""

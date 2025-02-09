@@ -5,7 +5,7 @@ from textual.theme import Theme
 CASSETTE_THEME_DARK = Theme(
     name="cassette-dark",
     primary="#b1b329",       
-    secondary="#F5F5F5",     
+    secondary="#008001",     
     accent="#b1b329",        
     background="#002f33",    
     foreground="#FAF0E6",    
@@ -20,7 +20,7 @@ CASSETTE_THEME_DARK = Theme(
         "scrollbar": "#002f33",   
         "button-background": "#00FF00",
         "button-color-foreground": "#1A1A1A",
-        "footer-key-foreground": "#FF8C00",
+        "footer-key-foreground": "#FF4500",
         "input-cursor-background":"#FFFF00",
         "datatable--header-cursor":"#FFFF00"
     }
@@ -32,7 +32,7 @@ CASSETTE_THEME_LIGHT = Theme(
     primary="#F4A460",       
     secondary="#C0C0C0",      
     accent="#f24d11",        
-    background="#fff1ca",    
+    background="#fcf2d4",    
     foreground="#333333",     
     success="#00FFFF",       
     warning="#DAA520",       
@@ -42,9 +42,32 @@ CASSETTE_THEME_LIGHT = Theme(
     dark=False,
     variables={
         "border": "#ec6809 60%",  # dodgerblue
-        "scrollbar": "#C0C0C0",   # silver
-        "button-background": "#F4A460",
-        "button-color-foreground": "#FFFFFF",
-        "footer-key-foreground": "#F4A460",
+        "scrollbar": "#fcf2d4",   # silver
+        "button-background": "#ec6809",
+        "button-color-foreground": "#333333",
+        "footer-key-foreground": "#ec6809",
+    }
+)
+
+
+CASSETTE_THEME_WALKMAN = Theme(
+    name="cassette-walkman",
+    primary="#43748f",       
+    secondary="#43748f",      
+    accent="#6e92a6",        
+    background="#e7e5e6",    
+    foreground="#353530",     
+    success="#253662",       
+    warning="#DAA520",       
+    error="#ef8e04",        
+    surface="#43748f",       
+    panel="#d6d6d6",         
+    dark=False,
+    variables={
+        "border": "#6e92a6 60%",  # dodgerblue
+        "scrollbar": "#d6d6d6",   # silver
+        "button-background": "#ef8e04",
+        "button-color-foreground": "#313a44",
+        "footer-key-foreground": "#ef8e04",
     }
 )
