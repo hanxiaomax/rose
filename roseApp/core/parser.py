@@ -6,7 +6,7 @@ import time
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 import rosbag
 from core.util import TimeUtil
 
@@ -43,7 +43,7 @@ class IBagParser(ABC):
         pass
     
     @abstractmethod
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
         """
         Filter rosbag using selected implementation
         
@@ -51,7 +51,7 @@ class IBagParser(ABC):
             input_bag: Path to input bag file
             output_bag: Path to output bag file  
             topics: List of topics to include
-            time_range: Tuple of (start_time, end_time)
+            time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
         
         Returns:
             Status message with completion time
@@ -98,7 +98,7 @@ class BagParser(IBagParser):
                     topics.append(line.strip())
             return topics
     
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
         """
         Filter rosbag using rosbag Python API
         
@@ -106,7 +106,7 @@ class BagParser(IBagParser):
             input_bag: Path to input bag file
             output_bag: Path to output bag file  
             topics: List of topics to include
-            time_range: Tuple of (start_time, end_time)
+            time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
         
         Returns:
             Status message with completion time
@@ -115,14 +115,21 @@ class BagParser(IBagParser):
             start_time = time.time()
 
             with rosbag.Bag(output_bag, 'w') as outbag:
-                # Convert time range to seconds
-                start_sec = time_range[0][0] + time_range[0][1]/1e9
-                end_sec = time_range[1][0] + time_range[1][1]/1e9
+                # If time range is provided, convert it to seconds
+                start_sec = None
+                end_sec = None
+                if time_range:
+                    start_sec = time_range[0][0] + time_range[0][1]/1e9
+                    end_sec = time_range[1][0] + time_range[1][1]/1e9
                 
                 for topic, msg, t in rosbag.Bag(input_bag).read_messages(topics=topics):
-                    # Check if message is within time range
+                    # Check if message is within time range (if specified)
                     msg_time = t.to_sec()
-                    if msg_time >= start_sec and msg_time <= end_sec:
+                    if time_range:
+                        if msg_time >= start_sec and msg_time <= end_sec:
+                            outbag.write(topic, msg, t)
+                    else:
+                        # If no time range specified, include all messages
                         outbag.write(topic, msg, t)
 
             end_time = time.time()
@@ -209,7 +216,7 @@ class BagParserCPP(IBagParser):
                     topics.append(line.strip())
             return topics
     
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Tuple) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
         """
         Filter rosbag using C++ interface
         
@@ -217,7 +224,7 @@ class BagParserCPP(IBagParser):
             input_bag: Path to input bag file
             output_bag: Path to output bag file  
             topics: List of topics to include
-            time_range: Tuple of (start_time, end_time)
+            time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
         
         Returns:
             Status message with completion time
