@@ -35,7 +35,13 @@ class BagExplorer(DirectoryTree):
         self.show_only_bags = False
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagExplorer")
-    
+        
+        # Get config from app
+        config = self.app.config if hasattr(self.app, 'config') else {}
+        parser_type = ParserType.CPP if config.get('load_cpp_parser', False) else ParserType.PYTHON
+        self.bags = BagManager(create_parser(parser_type))
+        self.logger.info(f"Using parser type: {parser_type}")
+
     def on_mount(self) -> None:
         """Initialize when mounted"""
         self.update_border_subtitle()

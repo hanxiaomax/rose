@@ -4,8 +4,6 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 
 import time
 import logging
-import json
-import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict, Optional
@@ -14,34 +12,29 @@ from roseApp.core.util import TimeUtil, get_logger
 
 _logger = get_logger(__name__)
 
-# Only try to import C++ implementation if enabled in config
+# Initialize C++ implementation flag
 _HAS_CPP_IMPL = False
-try:
-    # Load config
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
-    _logger.info(f"Loading config from: {config_path}")
-    
-    if not os.path.exists(config_path):
-        _logger.warning(f"Config file not found at: {config_path}")
-        config = {"load_cpp_parser": False}
-    else:
-        with open(config_path) as f:
-            config = json.load(f)
-            _logger.info(f"Config loaded: {config}")
-    
-    if config.get('load_cpp_parser', False):
-        import rosbag_io_py
-        _HAS_CPP_IMPL = True
-        _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
-    else:
-        _logger.info("C++ implementation disabled in config")
-except Exception as e:
-    _logger.warning(f"Error loading config or C++ implementation: {e}. Only Python implementation will be used.")
 
 class ParserType(Enum):
     """Enum for different parser implementations"""
     PYTHON = "python"
     CPP = "cpp"
+
+def check_cpp_impl() -> bool:
+    """Check if C++ implementation is available
+    
+    Returns:
+        bool: True if C++ implementation is available, False otherwise
+    """
+    global _HAS_CPP_IMPL
+    if not _HAS_CPP_IMPL:
+        try:
+            import rosbag_io_py
+            _HAS_CPP_IMPL = True
+            _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
+        except ImportError:
+            _logger.warning("C++ implementation (rosbag_io_py) not available. Only Python implementation will be used.")
+    return _HAS_CPP_IMPL
 
 class IBagParser(ABC):
     """Abstract base class for bag parser implementations"""
@@ -215,6 +208,14 @@ class BagParser(IBagParser):
 class BagParserCPP(IBagParser):
     """C++ implementation of bag parser using rosbag_io_py"""
     
+    def __init__(self):
+        """Initialize BagParserCPP"""
+        if not check_cpp_impl():
+            raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
+        # Import here to avoid early import
+        import rosbag_io_py
+        self._rosbag_io_py = rosbag_io_py
+    
     def load_whitelist(self, whitelist_path: str) -> List[str]:
         """
         Load topics from whitelist file
@@ -247,7 +248,7 @@ class BagParserCPP(IBagParser):
         """
         try:
             start_time = time.time()
-            io = rosbag_io_py.rosbag_io()
+            io = self._rosbag_io_py.rosbag_io()
 
             io.load(str(input_bag))
             io.dump(str(output_bag), topics, time_range)
@@ -274,7 +275,7 @@ class BagParserCPP(IBagParser):
             - Dict mapping topics to message types
             - Tuple of (start_time, end_time)
         """
-        io = rosbag_io_py.rosbag_io()
+        io = self._rosbag_io_py.rosbag_io()
         io.load(bag_path)
         topics = io.get_topics()
         connections = io.get_connections()
@@ -324,7 +325,7 @@ def create_parser(parser_type: ParserType) -> IBagParser:
     if parser_type == ParserType.PYTHON:
         return BagParser()
     elif parser_type == ParserType.CPP:
-        if not _HAS_CPP_IMPL:
+        if not check_cpp_impl():
             raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
         return BagParserCPP()
     else:

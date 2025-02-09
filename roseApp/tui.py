@@ -6,6 +6,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Iterable
+import os
 
 # Third-party imports
 from art import text2art
@@ -37,16 +38,38 @@ logger = get_logger("RoseTUI")
 def load_config():
     """Load configuration from config.json"""
     try:
-        with open("config.json", "r") as f:
+        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        logger.info(f"Loading config from: {config_path}")
+        
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at: {config_path}")
+            return {
+                "show_splash_screen": True,
+                "theme": "cassette-walkman",
+                "load_cpp_parser": False,
+                "whitelists": {}
+            }
+            
+        with open(config_path, "r") as f:
             config = json.load(f)
+            logger.info(f"Config loaded: {config}")
             return config
-    except FileNotFoundError:
-        logger.warning("config.json not found, using default configuration")
-        return {"show_splash_screen": True}  # Default value
     except json.JSONDecodeError as e:
-        logger.error("Error parsing config.json, using default configuration")
-        logger.error(f"Error: {e}")
-        return {"show_splash_screen": True}
+        logger.error(f"Error parsing config.json: {e}")
+        return {
+            "show_splash_screen": True,
+            "theme": "cassette-walkman",
+            "load_cpp_parser": False,
+            "whitelists": {}
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error loading config: {e}")
+        return {
+            "show_splash_screen": True,
+            "theme": "cassette-walkman",
+            "load_cpp_parser": False,
+            "whitelists": {}
+        }
 
 
 
