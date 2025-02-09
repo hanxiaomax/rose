@@ -48,7 +48,7 @@ RUN pip install --no-cache-dir \
     pytest-asyncio \
     typing-extensions \
     click \
-    art
+    art 
 
 RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
 
