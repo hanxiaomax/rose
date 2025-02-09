@@ -97,6 +97,19 @@ class IBagParser(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_message_counts(self, bag_path: str) -> Dict[str, int]:
+        """
+        Get message counts for each topic in the bag file
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Dict mapping topic names to message counts
+        """
+        pass
+
 class BagParser(IBagParser):
     """Python implementation of bag parser using rosbag"""
     
@@ -205,6 +218,24 @@ class BagParser(IBagParser):
             _logger.error(f"Error inspecting bag file: {e}")
             raise Exception(f"Error inspecting bag file: {e}")
 
+    def get_message_counts(self, bag_path: str) -> Dict[str, int]:
+        """
+        Get message counts for each topic in the bag file
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Dict mapping topic names to message counts
+        """
+        try:
+            with rosbag.Bag(bag_path) as bag:
+                info = bag.get_type_and_topic_info()
+                return {topic: data.message_count for topic, data in info.topics.items()}
+        except Exception as e:
+            _logger.error(f"Error getting message counts: {e}")
+            raise Exception(f"Error getting message counts: {e}")
+
 class BagParserCPP(IBagParser):
     """C++ implementation of bag parser using rosbag_io_py"""
     
@@ -308,6 +339,25 @@ class BagParserCPP(IBagParser):
         except Exception as e:
             _logger.error(f"Error inspecting bag file: {e}")
             raise Exception(f"Error inspecting bag file: {e}")
+
+    def get_message_counts(self, bag_path: str) -> Dict[str, int]:
+        """
+        Get message counts for each topic in the bag file
+        
+        Args:
+            bag_path: Path to bag file
+            
+        Returns:
+            Dict mapping topic names to message counts
+        """
+        try:
+            io = self._rosbag_io_py.rosbag_io()
+            io.load(bag_path)
+            topics = io.get_topics()
+            return {topic: io.get_message_count(topic) for topic in topics}
+        except Exception as e:
+            _logger.error(f"Error getting message counts: {e}")
+            raise Exception(f"Error getting message counts: {e}")
 
 def create_parser(parser_type: ParserType) -> IBagParser:
     """

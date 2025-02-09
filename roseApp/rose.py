@@ -258,26 +258,26 @@ def inspect(input_bag, json_output, pattern, save):
             click.echo(json.dumps(result, indent=2))
         else:
             click.secho(f"\nTopic Analysis: {click.style(input_bag, fg='green')}", bold=True)
-            click.echo("─" * 80)
+            click.echo("─" * 105)
             
             # Header
-            click.echo(f"{'Topic':<50} {'Type':<30} {'Messages':<12}")
-            click.echo("─" * 80)
+            click.echo(f"{'Topic':<50} {'Type':<35} {'Messages':<15}")
+            click.echo("─" * 105)
             
             # Topic details
             for topic in sorted(filtered_topics):
                 msg_count = msg_counts[topic]
                 
                 topic_str = f"{topic:<50}"
-                type_str = f"{connections[topic]:<30}"
-                count_str = f"{msg_count:,}"
+                type_str = f"{connections[topic]:<35}"
+                count_str = f"{msg_count:>15,}"
                 
                 click.echo(f"{click.style(topic_str, fg='white')} "
                           f"{click.style(type_str, fg='cyan')} "
-                          f"{click.style(f'{count_str:>12}', fg='yellow')}")
+                          f"{click.style(count_str, fg='yellow')}")
             
             # Summary
-            click.echo("─" * 80)
+            click.echo("─" * 105)
             click.echo(f"Showing {click.style(str(len(filtered_topics)), fg='green')} of "
                       f"{click.style(str(len(topics)), fg='white')} topics")
             
