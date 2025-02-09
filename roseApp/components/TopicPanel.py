@@ -121,14 +121,14 @@ class TopicTree(Tree):
 
     def update_border_subtitle(self):
         """Update subtitle with selected topics count"""
-        self.border_subtitle = f"Topic selected: {len(self.bags.get_selected_topics())}"
+        self.app.query_one(TopicTreePanel).border_subtitle = f"Topic selected: {len(self.bags.get_selected_topics())}"
     
     def update_border_title(self):
-        """Update title with whitelist info if available"""
-        if self.app.selected_whitelist_path:
-            self.border_title = f"Topics (Whitelist: {Path(self.app.selected_whitelist_path).stem})"
+        if self.multi_select_mode:
+            logger.info("Multi select mode")
+            self.app.query_one(TopicTreePanel).border_title = "Topics(Show Common Topics)"
         else:
-            self.border_title = "Topics"
+            self.app.query_one(TopicTreePanel).border_title = "Topics"
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle topic selection toggle"""
