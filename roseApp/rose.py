@@ -124,18 +124,25 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
                 click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
                           f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
             return
-            
-        with click.progressbar(length=100, label='Filtering bag file') as bar:
-            click.echo(f"Filtering {click.style(input_bag, fg='green')} to {click.style(output_bag, fg='blue')}")
-            click.echo("\nSelected topics:")
-            for topic in sorted(whitelist_topics):
-                click.echo(f"  {click.style('✓', fg='green')} {topic}")
-            
-            if time_range_tuple:
-                start_time, end_time = time_range_tuple
-                click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
-                          f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
-            
+        
+        # Print filter information
+        click.secho("\nStarting bag filter:", bold=True)
+        click.echo(f"Input:  {click.style(input_bag, fg='green')}")
+        click.echo(f"Output: {click.style(output_bag, fg='blue')}")
+        
+        click.echo("\nSelected topics:")
+        for topic in sorted(whitelist_topics):
+            click.echo(f"  {click.style('✓', fg='green')} {topic}")
+        
+        if time_range_tuple:
+            start_time, end_time = time_range_tuple
+            click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
+                      f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
+        
+        # Run the filter with progress bar
+        click.echo("\nProcessing:")
+        with click.progressbar(length=100, label='Filtering bag file', 
+                             show_eta=True, show_percent=True) as bar:
             result = parser.filter_bag(
                 input_bag, 
                 output_bag, 
