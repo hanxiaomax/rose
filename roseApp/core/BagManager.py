@@ -104,6 +104,7 @@ class BagManager:
         self.bag_mutate_callback = None
         self.selected_topics = set()
         self._parser = parser
+        self._processed_count = 0  # 添加处理计数器
 
     def __repr__(self) -> str:
         return f"BagManager(bags={self.bags}) \n" \
@@ -166,6 +167,7 @@ class BagManager:
     def clear_bags(self) -> None:
         self.bags.clear()
         self.selected_topics.clear()
+        self.reset_processed_count()  # 清空时重置计数器
     
     @publish
     def select_topic(self, topic: str) -> None:
@@ -220,6 +222,14 @@ class BagManager:
         """Set size after filter for specific bag or all bags"""
         self.bags[bag_path].set_size_after_filter(size_after_filter)
 
+    def get_processed_count(self) -> int:
+        """Get number of processed files"""
+        return self._processed_count
+
+    def reset_processed_count(self) -> None:
+        """Reset the processed files counter"""
+        self._processed_count = 0
+
     @publish
     def filter_bag(self, bag_path: Path, config: FilterConfig, output_file: Path) -> None:
         try:
@@ -239,6 +249,7 @@ class BagManager:
             self.set_time_elapsed(bag_path, time_elapsed)
             self.set_size_after_filter(bag_path, output_file.stat().st_size)
             self.set_status(bag_path, BagStatus.SUCCESS)
+            self._processed_count += 1  # 增加处理计数
             
         except Exception as e:
             self.set_status(bag_path, BagStatus.ERROR)

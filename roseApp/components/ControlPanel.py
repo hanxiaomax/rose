@@ -180,14 +180,25 @@ class ControlPanel(Container):
             if not self._validate_time_range():
                 return
 
-        try:
-            for bag_path, bag in self.bags.bags.items():
+        # 重置处理计数器
+        self.bags.reset_processed_count()
+
+        # 处理所有选中的bag文件
+        for bag_path, bag in self.bags.bags.items():
+            try:
                 self._process(bag_path,
                             bag.get_filter_config(),
                             bag.output_file)
-        except Exception as e:
-            self.logger.error(f"Error during bag filtering: {str(e)}", exc_info=True)
-            self.app.notify(f"Error during bag filtering: {str(e)}", title="Error", severity="error")
+            except Exception as e:
+                # 在多选模式下，单个文件的错误不应该中断整个处理过程
+                self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
+                self.app.notify(
+                    f"Error processing {Path(bag_path).name}: {str(e)}", 
+                    title="Error",
+                    severity="error"
+                )
+                # 继续处理下一个文件
+                continue
 
     @work(thread=True)
     def _process(self, bag_path: str, config: FilterConfig, output_file: str) -> None:
@@ -195,19 +206,24 @@ class ControlPanel(Container):
         status = self.app.query_one(StatusBar)
         
         try:
-            # 使用加载动画显示处理状态
-            status.start_loading(f"Processing {Path(bag_path).name}")
+            # 使用简单的加载动画
+            status.start_loading("Processing")
             
             # 开始处理
             self.bags.filter_bag(bag_path, config, output_file)
             
             # 处理完成
             status.stop_loading()
-            status.update_status(f"Completed processing {Path(bag_path).name}", "success")
+            
+            # 更新完成状态
+            if self.multi_select_mode:
+                status.update_status("Processing completed", "success")
+            else:
+                status.update_status("Processing completed", "success")
                 
         except Exception as e:
             status.stop_loading()
-            status.update_status(f"Error processing {Path(bag_path).name}: {str(e)}", "error")
+            status.update_status("Processing failed", "error")
             raise e
 
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:

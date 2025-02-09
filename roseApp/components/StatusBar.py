@@ -58,17 +58,22 @@ class StatusBar(Static):
             message: Status message to display
             status_class: CSS class for styling
         """
-        text = Text(message)
+        # 创建新的文本对象，确保清除之前的内容
+        text = Text()
         
-        # Add spinner animation if loading
+        # 添加主要消息
+        text.append(message)
+        
+        # 添加加载动画（如果正在加载）
         if self._is_loading:
             spinner_text = self._render_spinner()
             if spinner_text:
-                padding = " " * 4
-                text.append(padding)
+                text.append(" " * 4)  # 固定间距
                 text.append(spinner_text, style="bold yellow")
 
+        # 更新样式类
         if status_class:
             self.classes = status_class
         
+        # 更新显示内容
         self.update(text)
