@@ -164,18 +164,22 @@ Rose is configured with `roseApp/config.json`.
 {
     "show_splash_screen": true,
     "theme": "cassette-walkman",
+    "load_cpp_parser": false,
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt",
+        "invalid": "./whitelists/invalid.txt"
     }
 }
 ```
 
 - `show_splash_screen`: whether to show the splash screen, default is true
-- `theme`: the theme of the TUI, default is `cassette-walkman`,check [Theme](#theme) for more details
-- `whitelists`: the whitelists of the TUI, default is empty,check [Whitelist](#whitelist) for more details
+- `theme`: the theme of the TUI, default is `cassette-walkman`, check [Theme](#theme) for more details
+- `load_cpp_parser`: whether to use C++ implementation for better performance, default is false
+- `whitelists`: the whitelists of the TUI, default is empty, check [Whitelist](#whitelist) for more details
 
+> [!NOTE]
+> The `load_cpp_parser` option is set to false by default to improve startup time. Enable it only if you need better performance and have the C++ implementation properly installed.
 
 #### Theme
 RoseApp TUI provides two built-in themes: `cassette-walkman` (default light theme) and `cassette-dark`. You can configure the theme in two ways:
@@ -215,7 +219,7 @@ After whitelist created, add it to `config.json` so RoseApp can find it:
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt",
+        "invalid": "./whitelists/invalid.txt"
     }
 }
 ```

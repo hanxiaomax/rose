@@ -4,22 +4,34 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 
 import time
 import logging
+import json
+import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict, Optional
 import rosbag
 from core.util import TimeUtil
 
-# Try to import C++ implementation
+_logger = logging.getLogger(__name__)
+
+# Only try to import C++ implementation if enabled in config
+_HAS_CPP_IMPL = False
 try:
-    import rosbag_io_py
-    _HAS_CPP_IMPL = True
-    _logger = logging.getLogger(__name__)
-    _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
+    # Load config
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+    with open(config_path) as f:
+        config = json.load(f)
+    
+    if config.get('load_cpp_parser', False):
+        import rosbag_io_py
+        _HAS_CPP_IMPL = True
+        _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
+    else:
+        _logger.info("C++ implementation disabled in config")
 except ImportError:
-    _HAS_CPP_IMPL = False
-    _logger = logging.getLogger(__name__)
     _logger.warning("C++ implementation (rosbag_io_py) not available. Only Python implementation will be used.")
+except Exception as e:
+    _logger.warning(f"Error loading config or C++ implementation: {e}. Only Python implementation will be used.")
 
 class ParserType(Enum):
     """Enum for different parser implementations"""
