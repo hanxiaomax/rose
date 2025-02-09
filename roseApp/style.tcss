@@ -148,8 +148,8 @@ TaskTable {
 
 
 TaskTable.has-header  > .datatable--header {
-    background:$accent;
-    color: $foreground;
+    background:$primary;
+    color: $background;
 }
 
 
@@ -206,12 +206,12 @@ Button {
 }
 
 #logo {
-    color: $accent;
+    color: $primary;
     content-align-horizontal: center;
 }
 
 #subtitle {
-    background:$accent;
+    background:$primary;
     color: $foreground;
     content-align-horizontal: center;
 }
@@ -249,7 +249,7 @@ Button {
     padding: 1;
     width: 40%;
     height: 8;
-    border: thick $accent;
+    border: thick $primary;
     
 }
 
@@ -257,9 +257,14 @@ Button {
     layout: horizontal;
     align-horizontal: center;
     margin-top: 1;
-    
+    color: $accent;
+    border: none;
 }
 
+.confirm-btn{
+    color: $background;
+    background: $primary;
+}
 
 
 ConfirmDialog {

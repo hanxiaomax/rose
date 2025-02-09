@@ -16,8 +16,8 @@ class ConfirmDialog(Screen):
         with Vertical(id="dialog-container"):
             yield Label(f"{self.message}")
             with Horizontal(id="dialog-buttons"):
-                yield Button("No", id="confirm-no")
-                yield Button("Yes",id="confirm-yes")
+                yield Button("No", classes="confirm-btn")
+                yield Button("Yes",classes="confirm-btn")
                 
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
