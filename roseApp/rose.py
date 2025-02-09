@@ -9,9 +9,32 @@ import click
 from core.parser import create_parser, ParserType
 from core.util import get_logger, TimeUtil
 from tui import RoseTUI     
+import logging
 
 # Initialize logger
 logger = get_logger("RoseCLI")
+
+def configure_logging(verbosity: int):
+    """Configure logging level based on verbosity count
+    
+    Args:
+        verbosity: Number of 'v' flags (e.g. -vvv = 3)
+    """
+    levels = {
+        0: logging.WARNING,  # Default
+        1: logging.INFO,     # -v
+        2: logging.DEBUG,    # -vv
+        3: logging.DEBUG,    # -vvv (with extra detail in formatter)
+    }
+    level = levels.get(min(verbosity, 3), logging.DEBUG)
+    logger.setLevel(level)
+    
+    if verbosity >= 3:
+        # Add more detailed formatting for high verbosity
+        for handler in logger.handlers:
+            handler.setFormatter(logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+            ))
 
 def parse_time_range(time_range: str) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
     """Parse time range string in format 'start_time,end_time'
@@ -35,15 +58,20 @@ def parse_time_range(time_range: str) -> Optional[Tuple[Tuple[int, int], Tuple[i
         )
 
 @click.group(invoke_without_command=True)
+@click.option('-v', '--verbose', count=True, help='Increase verbosity (e.g. -v, -vv, -vvv)')
 @click.pass_context
-def cli(ctx):
-    """ROS bag filter utility"""
+def cli(ctx, verbose):
+    """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
+    configure_logging(verbose)
+    ctx.ensure_object(dict)
+    ctx.obj['VERBOSE'] = verbose
+    
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 @cli.command()
 def tui():
-    """Launch the TUI interface"""
+    """Launch the TUI (Terminal User Interface) for interactive operation"""
     app = RoseTUI()
     app.run()
 
@@ -58,21 +86,17 @@ def tui():
               help='Topics to include (can be specified multiple times). Alternative to whitelist file.')
 @click.option('--dry-run', is_flag=True,
               help='Show what would be done without actually doing it')
-@click.option('--use-cpp', is_flag=True,
-              help='Use C++ implementation for better performance')
-def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run, use_cpp):
+def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
     """Filter ROS bag by topic whitelist and/or time range.
     
     Examples:
+    \b
         rose filter input.bag output.bag -w whitelist.txt
         rose filter input.bag output.bag -t "23/01/01 00:00:00,23/01/01 00:10:00"
         rose filter input.bag output.bag --topics /topic1 --topics /topic2
-        rose filter input.bag output.bag -w whitelist.txt --use-cpp
     """
     try:
-        # Create parser instance
-        parser_type = ParserType.CPP if use_cpp else ParserType.PYTHON
-        parser = create_parser(parser_type)
+        parser = create_parser(ParserType.PYTHON)
         
         # Parse time range if provided
         time_range_tuple = parse_time_range(time_range) if time_range else None
@@ -89,26 +113,38 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run, use_cp
             
         # Show what will be done in dry run mode
         if dry_run:
-            click.echo(f"Would filter {input_bag} to {output_bag}")
-            click.echo(f"Topics to include: {sorted(whitelist_topics)}")
+            click.secho("DRY RUN - No changes will be made", fg='yellow', bold=True)
+            click.echo(f"Would filter {click.style(input_bag, fg='green')} to {click.style(output_bag, fg='blue')}")
+            click.echo("\nTopics to include:")
+            for topic in sorted(whitelist_topics):
+                click.echo(f"  {click.style('✓', fg='green')} {topic}")
+            
             if time_range_tuple:
                 start_time, end_time = time_range_tuple
-                click.echo(f"Time range: {TimeUtil.to_datetime(start_time)} to {TimeUtil.to_datetime(end_time)}")
+                click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
+                          f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
             return
             
-        click.echo(f"Filtering {input_bag} to {output_bag}")
-        click.echo(f"Including topics: {sorted(whitelist_topics)}")
-        if time_range_tuple:
-            start_time, end_time = time_range_tuple
-            click.echo(f"Time range: {TimeUtil.to_datetime(start_time)} to {TimeUtil.to_datetime(end_time)}")
+        with click.progressbar(length=100, label='Filtering bag file') as bar:
+            click.echo(f"Filtering {click.style(input_bag, fg='green')} to {click.style(output_bag, fg='blue')}")
+            click.echo("\nSelected topics:")
+            for topic in sorted(whitelist_topics):
+                click.echo(f"  {click.style('✓', fg='green')} {topic}")
             
-        result = parser.filter_bag(
-            input_bag, 
-            output_bag, 
-            list(whitelist_topics),
-            time_range_tuple
-        )
-        click.echo(result)
+            if time_range_tuple:
+                start_time, end_time = time_range_tuple
+                click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
+                          f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
+            
+            result = parser.filter_bag(
+                input_bag, 
+                output_bag, 
+                list(whitelist_topics),
+                time_range_tuple
+            )
+            bar.update(100)
+            
+        click.secho("\n" + result, fg='green', bold=True)
         
     except Exception as e:
         logger.error(f"Error during filtering: {str(e)}", exc_info=True)
@@ -118,50 +154,66 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run, use_cp
 @click.argument('input_bag', type=click.Path(exists=True))
 @click.option('--json', 'json_output', is_flag=True,
               help='Output in JSON format')
-@click.option('--use-cpp', is_flag=True,
-              help='Use C++ implementation for better performance')
-def inspect(input_bag, json_output, use_cpp):
-    """List all topics and message types in the bag file.
+def inspect(input_bag, json_output):
+    """Analyze bag structure and show detailed topic statistics.
+    
+    This command provides a comprehensive analysis of the bag file, including:
+    - Message counts per topic
+    - Data rates and sizes
+    - Frequency statistics
+    - Connection information
     
     Examples:
+    \b
         rose inspect input.bag
         rose inspect input.bag --json
-        rose inspect input.bag --use-cpp
     """
     try:
-        parser_type = ParserType.CPP if use_cpp else ParserType.PYTHON
-        parser = create_parser(parser_type)
+        parser = create_parser(ParserType.PYTHON)
         result = parser.inspect_bag(input_bag)
-        click.echo(result)
+        
+        if json_output:
+            click.echo(result)
+        else:
+            click.secho(f"\nAnalyzing {click.style(input_bag, fg='green')}:", bold=True)
+            click.echo(result)
+            
     except Exception as e:
         logger.error(f"Error during inspection: {str(e)}", exc_info=True)
         raise click.ClickException(str(e))
 
 @cli.command()
 @click.argument('input_bag', type=click.Path(exists=True))
-@click.option('--use-cpp', is_flag=True,
-              help='Use C++ implementation for better performance')
-def info(input_bag, use_cpp):
-    """Show detailed information about the bag file.
+def info(input_bag):
+    """Show basic information about the bag file.
+    
+    This command provides a quick overview of the bag file, including:
+    - Number of topics
+    - Time range
+    - Basic topic list
     
     Examples:
+    \b
         rose info input.bag
-        rose info input.bag --use-cpp
     """
     try:
-        parser_type = ParserType.CPP if use_cpp else ParserType.PYTHON
-        parser = create_parser(parser_type)
+        parser = create_parser(ParserType.PYTHON)
         topics, connections, time_range = parser.load_bag(input_bag)
         
         # Format output
-        result = [f"\nBag information for {input_bag}:"]
-        result.append(f"Number of topics: {len(topics)}")
-        result.append(f"Time range: {TimeUtil.to_datetime(time_range[0])} - {TimeUtil.to_datetime(time_range[1])}")
-        result.append("\nTopics:")
+        click.secho(f"\nBag Summary: {click.style(input_bag, fg='green')}", bold=True)
+        click.echo("─" * 80)
+        
+        click.echo(f"Topics: {click.style(str(len(topics)), fg='yellow')} total")
+        click.echo(f"Duration: {click.style(TimeUtil.to_datetime(time_range[0]), fg='yellow')} to "
+                  f"{click.style(TimeUtil.to_datetime(time_range[1]), fg='yellow')}")
+        
+        click.secho("\nTopic List:", bold=True)
+        click.echo("─" * 80)
         for topic in sorted(topics):
-            result.append(f"  - {topic} ({connections[topic]})")
+            click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
+                      f"{click.style(connections[topic], fg='cyan')}")
             
-        click.echo("\n".join(result))
     except Exception as e:
         logger.error(f"Error getting bag info: {str(e)}", exc_info=True)
         raise click.ClickException(str(e))
