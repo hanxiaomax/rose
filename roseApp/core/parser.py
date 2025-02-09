@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict
 import rosbag
+from core.util import TimeUtil
 
 # Try to import C++ implementation
 try:
