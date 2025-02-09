@@ -234,14 +234,16 @@ class ControlPanel(Container):
             if not self.multi_select_mode:
                 status.stop_loading()
                 status.update_status("Processing failed", "error")
+                raise e
             else:
-                # 在多选模式下，如果所有文件都处理完了（包括失败的），才更新状态
+                # 在多选模式下，如果发生错误，不要立即抛出异常
+                self.logger.error(f"Error processing {bag_path}: {str(e)}", exc_info=True)
+                # 检查是否是最后一个文件
                 current = self.bags.get_processed_count()
                 total = self.bags.get_bag_numbers()
                 if current == total:
                     status.stop_loading()
                     status.update_status("Processing failed", "error")
-            raise e
 
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:
             """Extract two PosixPaths from worker description string using regex"""
