@@ -288,7 +288,8 @@ project_root/
 
 
 
->[!TIP]Before you start with Textual, there are some docs worth reading:
+>[!TIP]
+> Before you start with Textual, there are some docs worth reading:
 >
 > - [Textual devtools](https://textual.textualize.io/guide/devtools/) on how to use `textual run <your app> --dev` to go into dev mode and how to handle logs
 > - [Design a layout](https://textual.textualize.io/how-to/design-a-layout/) 、[TextualCSS](https://textual.textualize.io/guide/CSS/) and [CSS Types](https://textual.textualize.io/css_types/) to understand how to design a layout and style your app with CSS. and more tips on [Styles](https://textual.textualize.io/guide/styles/) and its [reference](https://textual.textualize.io/styles/)
