@@ -182,6 +182,11 @@ class ControlPanel(Container):
 
         # 重置处理计数器
         self.bags.reset_processed_count()
+        
+        # 在多选模式下，先显示处理状态
+        if self.multi_select_mode:
+            status = self.app.query_one(StatusBar)
+            status.start_loading("Processing")
 
         # 处理所有选中的bag文件
         for bag_path, bag in self.bags.bags.items():
@@ -206,24 +211,36 @@ class ControlPanel(Container):
         status = self.app.query_one(StatusBar)
         
         try:
-            # 使用简单的加载动画
-            status.start_loading("Processing")
+            # 只在单文件模式下显示加载动画
+            if not self.multi_select_mode:
+                status.start_loading("Processing")
             
             # 开始处理
             self.bags.filter_bag(bag_path, config, output_file)
             
             # 处理完成
-            status.stop_loading()
-            
-            # 更新完成状态
-            if self.multi_select_mode:
+            if not self.multi_select_mode:
+                status.stop_loading()
                 status.update_status("Processing completed", "success")
             else:
-                status.update_status("Processing completed", "success")
+                # 在多选模式下，只在所有文件处理完成后更新状态
+                current = self.bags.get_processed_count()
+                total = self.bags.get_bag_numbers()
+                if current == total:
+                    status.stop_loading()
+                    status.update_status("Processing completed", "success")
                 
         except Exception as e:
-            status.stop_loading()
-            status.update_status("Processing failed", "error")
+            if not self.multi_select_mode:
+                status.stop_loading()
+                status.update_status("Processing failed", "error")
+            else:
+                # 在多选模式下，如果所有文件都处理完了（包括失败的），才更新状态
+                current = self.bags.get_processed_count()
+                total = self.bags.get_bag_numbers()
+                if current == total:
+                    status.stop_loading()
+                    status.update_status("Processing failed", "error")
             raise e
 
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:
