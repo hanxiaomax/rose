@@ -243,7 +243,9 @@ Button {
 #whitelist-container {
     padding: 1;
 }
-
+#whitelist-preview{
+    background: $background;
+}
 #dialog-container {
     background: $background;
     padding: 1;
