@@ -11,9 +11,9 @@ from textual.fuzzy import FuzzySearch
 from textual.widgets import Input, Tree
 
 # Local application imports
-from components.BagExplorer import BagExplorer
-from core.BagManager import BagManager
-from core.util import get_logger
+from roseApp.components.BagExplorer import BagExplorer
+from roseApp.core.BagManager import BagManager
+from roseApp.core.util import get_logger
 
 logger = get_logger("TopicPanel")
 

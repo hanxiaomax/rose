@@ -12,10 +12,10 @@ from textual.widgets import Button, Input, Label
 from textual.worker import Worker, WorkerState
 
 # Local application imports
-from components.BagExplorer import BagExplorer
-from components.StatusBar import StatusBar
-from core.BagManager import BagManager, BagStatus, FilterConfig
-from core.util import TimeUtil, get_logger
+from roseApp.components.BagExplorer import BagExplorer
+from roseApp.components.StatusBar import StatusBar
+from roseApp.core.BagManager import BagManager, BagStatus, FilterConfig
+from roseApp.core.util import TimeUtil, get_logger
 
 logger = get_logger("ControlPanel")
 

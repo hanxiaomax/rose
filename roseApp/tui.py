@@ -20,14 +20,14 @@ from textual.widgets import (
 )
 
 # Local application imports
-from components.BagExplorer import BagExplorer
-from components.ControlPanel import ControlPanel
-from components.Dialog import ConfirmDialog
-from components.StatusBar import StatusBar
-from components.TaskTable import TaskTable
-from components.TopicPanel import TopicTreePanel
-from core.util import get_logger
-from themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
+from roseApp.components.BagExplorer import BagExplorer
+from roseApp.components.ControlPanel import ControlPanel
+from roseApp.components.Dialog import ConfirmDialog
+from roseApp.components.StatusBar import StatusBar
+from roseApp.components.TaskTable import TaskTable
+from roseApp.components.TopicPanel import TopicTreePanel
+from roseApp.core.util import get_logger
+from roseApp.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
 
 from textual.reactive import reactive
 

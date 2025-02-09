@@ -1,7 +1,8 @@
 from pathlib import Path
 from textual.widgets import (DataTable)
-from components.BagExplorer import BagExplorer
-from core.BagManager import BagManager, BagStatus
+from roseApp.components.BagExplorer import BagExplorer
+from roseApp.core.BagManager import BagManager, BagStatus
+
 class TaskTable(DataTable):
     """Table for displaying tasks"""
     

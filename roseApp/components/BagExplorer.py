@@ -9,10 +9,10 @@ from textual.reactive import reactive
 from textual.widgets import DirectoryTree
 
 # Local application imports
-from components.StatusBar import StatusBar
-from core.BagManager import BagManager
-from core.util import get_logger
-from core.parser import create_parser, ParserType
+from roseApp.components.StatusBar import StatusBar
+from roseApp.core.BagManager import BagManager
+from roseApp.core.util import get_logger
+from roseApp.core.parser import create_parser, ParserType
 
 logger = get_logger("BagExplorer")
 

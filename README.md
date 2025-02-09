@@ -43,20 +43,27 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Getting Started
 
+### Installation
+
 ```bash
-git clone https://github.com/your-repo/rose.git
+# Clone the repository
+git clone https://github.com/hanxiaomax/rose.git
 cd rose
 
-# Install Python dependencies
-pip install --extra-index-url https://rospypi.github.io/simple/ rosbag
-pip install -r click art rich texutal texutal-dev
-
-# Set terminal to 256 color
-# Set this to your bashrc or zshrc
-export TERM=xterm-256color
-
+# Run the installation script
+chmod +x install.sh
+./install.sh
 ```
-No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
+
+### Terminal Setup
+
+To ensure proper color display in your terminal, set the following environment variable:
+```bash
+# Add this to your bashrc or zshrc
+export TERM=xterm-256color
+```
+
+No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and give it a try!
 
 > [!NOTE]
 > Want to try C++ Parser instead of [Python API(lib rosbag)](https://wiki.ros.org/rosbag/Code%20API#Python_API)?
@@ -236,19 +243,6 @@ After whitelist created, add it to `config.json` so RoseApp can find it:
 
 ## Development
 
-Use Dev container(build with ./docker/Dockerfile-dev) or local environment to develop RoseApp. refer [devtoos](https://textual.textualize.io/guide/devtools/) when debugging TUI.
-
-### Tech stack
-
-- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI (Text User Interface) applications. Used for creating the interactive terminal interface.
-- **[Click](https://click.palletsprojects.com/)**: A Python package for creating beautiful command line interfaces in a composable way. Used for building the CLI interface.
-- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation of both CLI and TUI.
-- **[Pybind11](https://pybind11.readthedocs.io/)**: A lightweight header-only library that exposes C++ types in Python and vice versa. Used for wrapping ROS C++ interfaces to Python.
-
-### Rough ideas - data driven rendering
-
-![1](docs/notes/sketch.png)
-
 ### Project Structure
 ```
 project_root/
@@ -276,14 +270,25 @@ project_root/
 ├── README.md     
 ```
 
-### Textual
+### Tech stack
 
-Before you start with Textual, there are some docs worth reading:
+- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI (Text User Interface) applications. Used for creating the interactive terminal interface.
+- **[Click](https://click.palletsprojects.com/)**: A Python package for creating beautiful command line interfaces in a composable way. Used for building the CLI interface.
+- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation of both CLI and TUI.
+- **[Pybind11](https://pybind11.readthedocs.io/)**: A lightweight header-only library that exposes C++ types in Python and vice versa. Used for wrapping ROS C++ interfaces to Python.
 
-- [Textual devtools](https://textual.textualize.io/guide/devtools/) on how to use `textual run <your app> --dev` to go into dev mode and how to handle logs
-- [Design a layout](https://textual.textualize.io/how-to/design-a-layout/) 、[TextualCSS](https://textual.textualize.io/guide/CSS/) and [CSS Types](https://textual.textualize.io/css_types/) to understand how to design a layout and style your app with CSS. and more tips on [Styles](https://textual.textualize.io/guide/styles/) and its [reference](https://textual.textualize.io/styles/)
-- [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
-- Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
+### Rough ideas - data driven rendering
+
+![1](docs/notes/sketch.png)
+
+
+
+>[!TIP]Before you start with Textual, there are some docs worth reading:
+>
+> - [Textual devtools](https://textual.textualize.io/guide/devtools/) on how to use `textual run <your app> --dev` to go into dev mode and how to handle logs
+> - [Design a layout](https://textual.textualize.io/how-to/design-a-layout/) 、[TextualCSS](https://textual.textualize.io/guide/CSS/) and [CSS Types](https://textual.textualize.io/css_types/) to understand how to design a layout and style your app with CSS. and more tips on [Styles](https://textual.textualize.io/guide/styles/) and its [reference](https://textual.textualize.io/styles/)
+> - [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
+> - Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
 
 
 

@@ -33,3 +33,5 @@ __pycache__/
 localnotes/** 
 benchmark/**
 roseApp/venv/**
+dist/** 
+rose_bag.egg-info/** 

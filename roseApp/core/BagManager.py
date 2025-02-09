@@ -7,8 +7,8 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from core.parser import IBagParser
-from core.util import TimeUtil
+from roseApp.core.parser import IBagParser
+from roseApp.core.util import TimeUtil
 
 class BagStatus(Enum):
     IDLE = "IDLE"

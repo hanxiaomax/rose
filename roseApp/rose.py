@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 import click
-from core.parser import create_parser, ParserType
-from core.util import get_logger, TimeUtil
-from tui import RoseTUI     
+from roseApp.core.parser import create_parser, ParserType
+from roseApp.core.util import get_logger, TimeUtil
+from roseApp.tui import RoseTUI     
 import logging
 import time
 

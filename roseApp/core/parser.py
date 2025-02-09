@@ -10,9 +10,9 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict, Optional
 import rosbag
-from core.util import TimeUtil
+from roseApp.core.util import TimeUtil, get_logger
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 # Only try to import C++ implementation if enabled in config
 _HAS_CPP_IMPL = False
