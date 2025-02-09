@@ -4,21 +4,28 @@ Screen {
     grid-rows: 1fr;
 }
 
+*{
+    border-subtitle-color: $primary-darken-1;
+    border-title-color: $primary-darken-1;
+}
+
+
 
 #status-bar {
     dock: bottom;
     height: 2;
     margin: 0;
     padding: 0 1;
+    background:$primary-darken-3;
+    color: $foreground;
 }
 
-*{
-    border-subtitle-color: $primary;
-    border-title-color: $primary;
+#status.normal {
+    color: $background;
 }
 
 #status.success {
-    color: $success-darken-2;
+    color: $success;
 }
 
 #status.error {

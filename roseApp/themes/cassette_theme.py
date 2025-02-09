@@ -6,7 +6,7 @@ CASSETTE_THEME_DARK = Theme(
     name="cassette-dark",
     primary="#b1b329",       
     secondary="#008001",     
-    accent="#00FF00",        
+    accent="#9b50b7",        
     background="#002f33",    
     foreground="#FAF0E6",    
     success="#008001",       
@@ -23,6 +23,28 @@ CASSETTE_THEME_DARK = Theme(
         "footer-key-foreground": "#9b50b7",
         "input-cursor-background":"#FFFF00",
         "datatable--header-cursor":"#FFFF00",
+        "button-focus-text-style": "bold",
+    }
+)
+
+CASSETTE_THEME_WALKMAN = Theme(
+    name="cassette-walkman",
+    primary="#43748f",       
+    secondary="#6e92a6",      
+    accent="#ef8e04",        
+    background="#e7e5e6",    
+    foreground="#353530",     
+    success="#253662",       
+    warning="#DAA520",       
+    error="#ef8e04",        
+    surface="#43748f",       
+    panel="#d6d6d6",         
+    dark=False,
+    variables={
+        "border": "#6e92a6 60%",  
+        "scrollbar": "#d6d6d6",  
+        "button-color-foreground": "#313a44",
+        "footer-key-foreground": "#ef8e04",
         "button-focus-text-style": "bold",
     }
 )
@@ -52,24 +74,3 @@ CASSETTE_THEME_LIGHT = Theme(
 )
 
 
-CASSETTE_THEME_WALKMAN = Theme(
-    name="cassette-walkman",
-    primary="#43748f",       
-    secondary="#6e92a6",      
-    accent="#253662",        
-    background="#e7e5e6",    
-    foreground="#353530",     
-    success="#253662",       
-    warning="#DAA520",       
-    error="#ef8e04",        
-    surface="#43748f",       
-    panel="#d6d6d6",         
-    dark=False,
-    variables={
-        "border": "#6e92a6 60%",  
-        "scrollbar": "#d6d6d6",  
-        "button-color-foreground": "#313a44",
-        "footer-key-foreground": "#ef8e04",
-        "button-focus-text-style": "bold",
-    }
-)
