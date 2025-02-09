@@ -184,14 +184,41 @@ class BagManager:
         self.selected_topics.clear()
         self.populate_selected_topics()
     
+    def get_common_topics(self) -> Set[str]:
+        """获取所有bag文件共有的topics
+        
+        Returns:
+            所有bag文件中都存在的topic集合
+        """
+        if not self.bags:
+            return set()
+            
+        # 获取第一个bag的topics作为基准
+        common_topics = set(next(iter(self.bags.values())).info.topics)
+        
+        # 与其他bag的topics取交集
+        for bag in self.bags.values():
+            common_topics &= bag.info.topics
+            
+        return common_topics
+    
     def get_topic_summary(self) -> 'dict[str, int]':
+        """获取topic的出现次数统计
+        
+        Returns:
+            topic到出现次数的映射
+        """
         topic_summary = {}
+        common_topics = self.get_common_topics()
+        
         for bag in self.bags.values():
             for topic in bag.info.topics:
-                if topic in topic_summary:
-                    topic_summary[topic] += 1
-                else:
-                    topic_summary[topic] = 1
+                # 只统计共有topics
+                if topic in common_topics:
+                    if topic in topic_summary:
+                        topic_summary[topic] += 1
+                    else:
+                        topic_summary[topic] = 1
         return topic_summary
     
     def get_selected_topics(self) -> Set[str]:

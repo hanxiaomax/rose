@@ -167,7 +167,21 @@ class ControlPanel(Container):
             self.app.notify("Please select at least one bag file", title="Error", severity="error")
             return
 
-        if not self.bags.get_selected_topics():
+        # 获取所有bag共有的topics
+        common_topics = self.bags.get_common_topics()
+        selected_topics = self.bags.get_selected_topics()
+        
+        # 检查是否选择了不在共有topics中的topic
+        invalid_topics = selected_topics - common_topics
+        if invalid_topics:
+            self.app.notify(
+                f"Selected topics {', '.join(invalid_topics)} are not present in all bag files", 
+                title="Error", 
+                severity="error"
+            )
+            return
+
+        if not selected_topics:
             self.app.notify("Please select at least one topic", title="Error", severity="error")
             return
 
