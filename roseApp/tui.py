@@ -443,7 +443,7 @@ class RoseTUI(App):
                 "Change the current theme",
                 self.action_change_theme,
             )
-        yield SystemCommand("Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
+        yield SystemCommand("🌓Toggle Dark Mode", "Toggle Dark Mode", self.toggle_dark_mode) 
         if screen.maximized is not None:
             yield SystemCommand(
                 "Minimize",

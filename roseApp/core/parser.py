@@ -125,7 +125,7 @@ class BagParser(IBagParser):
         """
         try:
             start_time = time.time()
-
+            time.sleep(10)
             with rosbag.Bag(output_bag, 'w') as outbag:
                 # If time range is provided, convert it to seconds
                 start_sec = None

@@ -13,6 +13,7 @@ from textual.worker import Worker, WorkerState
 
 # Local application imports
 from components.BagExplorer import BagExplorer
+from components.StatusBar import StatusBar
 from core.BagManager import BagManager, BagStatus, FilterConfig
 from core.util import TimeUtil, get_logger
 
@@ -191,9 +192,24 @@ class ControlPanel(Container):
     @work(thread=True)
     def _process(self, bag_path: str, config: FilterConfig, output_file: str) -> None:
         """Handle task creation for single bag"""
-        self.bags.filter_bag(bag_path, config, output_file)
-
+        status = self.app.query_one(StatusBar)
         
+        try:
+            # 使用加载动画显示处理状态
+            status.start_loading(f"Processing {Path(bag_path).name}")
+            
+            # 开始处理
+            self.bags.filter_bag(bag_path, config, output_file)
+            
+            # 处理完成
+            status.stop_loading()
+            status.update_status(f"Completed processing {Path(bag_path).name}", "success")
+                
+        except Exception as e:
+            status.stop_loading()
+            status.update_status(f"Error processing {Path(bag_path).name}: {str(e)}", "error")
+            raise e
+
     def extract_paths_from_description(self, description: str) -> Tuple[Path, Path]:
             """Extract two PosixPaths from worker description string using regex"""
             path_pattern = r"PosixPath\('([^']+)'\)"
