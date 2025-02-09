@@ -25,17 +25,17 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Key Features and Todos
 
-- High-performance C++ processing core (Optional)
+- High-performance C++ processing core (Optional,ROS required)
 - 🎉 ROS Environment independent. current rosbag and later to [rosbags](https://pypi.org/project/rosbags/)
 - 🌟 Interactive TUI for easy operation
-- Command-line interface for automation
+- 🌟 Command-line interface for automation
 - Filter ROS bag files 
   - 🌟 with whitelists 
   - with manually selected topics
   - by time range (only TUI tested)
 - 🌟 Fuzzy search topic in TUI
 - 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
-   - parallel processing for Multi-selection mode
+   - 🌟 parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
 - 🌟 cassette futurism theme for dark and light mode
 - 🚧 Message view in TUI
