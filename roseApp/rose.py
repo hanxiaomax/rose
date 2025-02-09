@@ -98,6 +98,9 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
     try:
         parser = create_parser(ParserType.PYTHON)
         
+        # Get all topics from input bag
+        all_topics, connections, _ = parser.load_bag(input_bag)
+        
         # Parse time range if provided
         time_range_tuple = parse_time_range(time_range) if time_range else None
         
@@ -115,9 +118,18 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
         if dry_run:
             click.secho("DRY RUN - No changes will be made", fg='yellow', bold=True)
             click.echo(f"Would filter {click.style(input_bag, fg='green')} to {click.style(output_bag, fg='blue')}")
-            click.echo("\nTopics to include:")
-            for topic in sorted(whitelist_topics):
-                click.echo(f"  {click.style('✓', fg='green')} {topic}")
+            
+            # Show all topics with selection status
+            click.echo("\nTopic Selection:")
+            click.echo("─" * 80)
+            for topic in sorted(all_topics):
+                is_selected = topic in whitelist_topics
+                status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
+                topic_style = 'green' if is_selected else 'bright_black'
+                msg_type_style = 'cyan' if is_selected else 'bright_black'
+                topic_str = f"{topic:<40}"
+                click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
+                          f"{click.style(connections[topic], fg=msg_type_style)}")
             
             if time_range_tuple:
                 start_time, end_time = time_range_tuple
@@ -130,9 +142,25 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
         click.echo(f"Input:  {click.style(input_bag, fg='green')}")
         click.echo(f"Output: {click.style(output_bag, fg='blue')}")
         
-        click.echo("\nSelected topics:")
-        for topic in sorted(whitelist_topics):
-            click.echo(f"  {click.style('✓', fg='green')} {topic}")
+        # Show all topics with selection status
+        click.echo("\nTopic Selection:")
+        click.echo("─" * 80)
+        selected_count = 0
+        for topic in sorted(all_topics):
+            is_selected = topic in whitelist_topics
+            if is_selected:
+                selected_count += 1
+            status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
+            topic_style = 'green' if is_selected else 'bright_black'
+            msg_type_style = 'cyan' if is_selected else 'bright_black'
+            topic_str = f"{topic:<40}"
+            click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
+                      f"{click.style(connections[topic], fg=msg_type_style)}")
+        
+        # Show selection summary
+        click.echo("─" * 80)
+        click.echo(f"Selected: {click.style(str(selected_count), fg='green')} of "
+                  f"{click.style(str(len(all_topics)), fg='white')} topics")
         
         if time_range_tuple:
             start_time, end_time = time_range_tuple
