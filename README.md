@@ -51,6 +51,9 @@ cd rose
 pip install --extra-index-url https://rospypi.github.io/simple/ rosbag
 pip install -r click art rich texutal texutal-dev
 
+# Set terminal to 256 color
+# Set this to your bashrc or zshrc
+export TERM=xterm-256color
 
 ```
 No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and have a try!
@@ -90,6 +93,13 @@ No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 
 
 ## Usage
+
+> [!IMPORTANT]
+> If you experience color display issues in your terminal, set the following environment variable:
+> ```bash
+> export TERM=xterm-256color
+> ```
+> This ensures proper color rendering in both CLI and TUI interfaces.
 
 ### Command Line Interface
 
