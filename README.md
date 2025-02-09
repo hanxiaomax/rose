@@ -93,15 +93,55 @@ No Ros bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 
 ### Command Line Interface
 
-1. Inspect bag file contents:
+Rose provides several command-line tools for bag file operations:
+
+1. Show basic bag information:
    ```bash
-   ./rose.py inspect input.bag
+   # Show basic information about the bag file
+   ./rose.py info input.bag
    ```
 
-2. Filter bag file with whitelist:
+2. Analyze topics and create whitelist:
    ```bash
-   ./rose.py filter input.bag output.bag --whitelist topics.txt
+   # Show all topics in the bag file
+   ./rose.py inspect input.bag
+
+   # Filter topics by pattern and show
+   ./rose.py inspect input.bag -p ".*gps.*"
+
+   # Filter topics and save to whitelist
+   ./rose.py inspect input.bag -p ".*sensor.*" -s sensor_whitelist.txt
+
+   # Output in JSON format
+   ./rose.py inspect input.bag --json
    ```
+
+3. Filter bag file:
+   ```bash
+   # Filter using whitelist file
+   ./rose.py filter input.bag output.bag -w whitelist.txt
+
+   # Filter by specific topics
+   ./rose.py filter input.bag output.bag --topics /topic1 --topics /topic2
+
+   # Filter by time range
+   ./rose.py filter input.bag output.bag -w whitelist.txt -t "23/01/01 00:00:00,23/01/01 00:10:00"
+
+   # Dry run to preview changes
+   ./rose.py filter input.bag output.bag -w whitelist.txt --dry-run
+   ```
+
+Common workflow example:
+```bash
+# 1. First inspect the bag file
+./rose.py info demo.bag
+
+# 2. Create a whitelist with GPS related topics
+./rose.py inspect demo.bag -p ".*gps.*" -s gps_whitelist.txt
+
+# 3. Filter the bag file using the whitelist
+./rose.py filter demo.bag gps_only.bag -w gps_whitelist.txt
+```
 
 ### TUI Interface
 
