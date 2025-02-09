@@ -20,9 +20,10 @@ CASSETTE_THEME_DARK = Theme(
         "scrollbar": "#002f33",   
         "button-background": "#00FF00",
         "button-color-foreground": "#1A1A1A",
-        "footer-key-foreground": "#FF4500",
+        "footer-key-foreground": "#9b50b7",
         "input-cursor-background":"#FFFF00",
-        "datatable--header-cursor":"#FFFF00"
+        "datatable--header-cursor":"#FFFF00",
+        "button-focus-text-style": "bold",
     }
 )
 
@@ -46,6 +47,7 @@ CASSETTE_THEME_LIGHT = Theme(
         "button-background": "#ec6809",
         "button-color-foreground": "#333333",
         "footer-key-foreground": "#ec6809",
+        "button-focus-text-style": "bold",
     }
 )
 
@@ -64,10 +66,10 @@ CASSETTE_THEME_WALKMAN = Theme(
     panel="#d6d6d6",         
     dark=False,
     variables={
-        "border": "#6e92a6 60%",  # dodgerblue
-        "scrollbar": "#d6d6d6",   # silver
-        "button-background": "#ef8e04",
+        "border": "#6e92a6 60%",  
+        "scrollbar": "#d6d6d6",  
         "button-color-foreground": "#313a44",
         "footer-key-foreground": "#ef8e04",
+        "button-focus-text-style": "bold",
     }
 )

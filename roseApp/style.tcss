@@ -246,6 +246,9 @@ Button {
 #whitelist-preview{
     background: $background;
 }
+#whitelist-select{
+    background: $background;
+}
 #dialog-container {
     background: $background;
     padding: 1;
@@ -266,6 +269,9 @@ Button {
 .confirm-btn{
     color: $background;
     background: $primary;
+}
+.confirm-btn:hover{
+    background: $accent;
 }
 
 
