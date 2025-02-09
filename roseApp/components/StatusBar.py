@@ -6,7 +6,6 @@ import time
 class StatusBar(Static):
     """Custom status bar with dynamic styling and loading indicator"""
 
-    # 旋转动画的字符
     SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     def __init__(self, *args, **kwargs):
@@ -58,21 +57,15 @@ class StatusBar(Static):
             message: Status message to display
             status_class: CSS class for styling
         """
-        # 创建新的文本对象，确保清除之前的内容
         text = Text()
         
-        # 如果正在加载，优先显示加载动画
         if self._is_loading:
             spinner_text = self._render_spinner()
             if spinner_text:
                 text.append(spinner_text, style="bold yellow")
-        # 否则显示普通消息
         else:
             text.append(message)
-
-        # 更新样式类
         if status_class:
             self.classes = status_class
-        
-        # 更新显示内容
+
         self.update(text)
