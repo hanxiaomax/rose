@@ -10,6 +10,7 @@ from core.parser import create_parser, ParserType
 from core.util import get_logger, TimeUtil
 from tui import RoseTUI     
 import logging
+import time
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -125,8 +126,8 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
             for topic in sorted(all_topics):
                 is_selected = topic in whitelist_topics
                 status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
-                topic_style = 'green' if is_selected else 'bright_black'
-                msg_type_style = 'cyan' if is_selected else 'bright_black'
+                topic_style = 'green' if is_selected else 'white'
+                msg_type_style = 'cyan' if is_selected else 'white'
                 topic_str = f"{topic:<40}"
                 click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
                           f"{click.style(connections[topic], fg=msg_type_style)}")
@@ -151,8 +152,8 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
             if is_selected:
                 selected_count += 1
             status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
-            topic_style = 'green' if is_selected else 'bright_black'
-            msg_type_style = 'cyan' if is_selected else 'bright_black'
+            topic_style = 'green' if is_selected else 'white'
+            msg_type_style = 'cyan' if is_selected else 'white'
             topic_str = f"{topic:<40}"
             click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
                       f"{click.style(connections[topic], fg=msg_type_style)}")
@@ -169,6 +170,7 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
         
         # Run the filter with progress bar
         click.echo("\nProcessing:")
+        start_time = time.time()
         with click.progressbar(length=100, label='Filtering bag file', 
                              show_eta=True, show_percent=True) as bar:
             result = parser.filter_bag(
@@ -178,8 +180,21 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
                 time_range_tuple
             )
             bar.update(100)
-            
-        click.secho("\n" + result, fg='green', bold=True)
+        
+        # Show filtering results
+        end_time = time.time()
+        elapsed = end_time - start_time
+        input_size = os.path.getsize(input_bag)
+        output_size = os.path.getsize(output_bag)
+        size_reduction = (1 - output_size/input_size) * 100
+        
+        click.secho("\nFilter Results:", fg='green', bold=True)
+        click.echo("─" * 80)
+        click.echo(f"Time taken: {int(elapsed//60)}m {elapsed%60:.2f}s")
+        click.echo(f"Input size:  {click.style(f'{input_size/1024/1024:.2f} MB', fg='yellow')}")
+        click.echo(f"Output size: {click.style(f'{output_size/1024/1024:.2f} MB', fg='yellow')}")
+        click.echo(f"Reduction:   {click.style(f'{size_reduction:.1f}%', fg='green')}")
+        click.echo(result)
         
     except Exception as e:
         logger.error(f"Error during filtering: {str(e)}", exc_info=True)
@@ -189,29 +204,98 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
 @click.argument('input_bag', type=click.Path(exists=True))
 @click.option('--json', 'json_output', is_flag=True,
               help='Output in JSON format')
-def inspect(input_bag, json_output):
-    """Analyze bag structure and show detailed topic statistics.
+@click.option('--pattern', '-p', type=str, default=None,
+              help='Filter topics by regex pattern')
+@click.option('--save', '-s', type=click.Path(),
+              help='Save filtered topics to whitelist file')
+def inspect(input_bag, json_output, pattern, save):
+    """Analyze topics and help create whitelist.
     
-    This command provides a comprehensive analysis of the bag file, including:
-    - Message counts per topic
-    - Data rates and sizes
-    - Frequency statistics
-    - Connection information
+    This command helps analyze topics and create whitelist files by:
+    - Showing message count for each topic
+    - Filtering topics by pattern (regex)
+    - Generating whitelist files from filtered topics
     
     Examples:
     \b
+        # Show all topics with statistics
         rose inspect input.bag
-        rose inspect input.bag --json
+        
+        # Filter topics matching pattern and save to whitelist
+        rose inspect input.bag -p ".*gps.*" -s whitelist.txt
+        
+        # Filter sensor topics
+        rose inspect input.bag -p "sensor.*"
     """
     try:
         parser = create_parser(ParserType.PYTHON)
-        result = parser.inspect_bag(input_bag)
+        topics, connections, time_range = parser.load_bag(input_bag)
         
+        # Get message counts
+        try:
+            msg_counts = parser.get_message_counts(input_bag)
+        except:
+            msg_counts = {topic: 0 for topic in topics}
+        
+        # Filter topics based on pattern
+        filtered_topics = set(topics)
+        if pattern:
+            import re
+            regex = re.compile(pattern)
+            filtered_topics = {topic for topic in topics if regex.search(topic)}
+        
+        # Format output
         if json_output:
-            click.echo(result)
+            import json
+            result = {
+                'topics': {
+                    topic: {
+                        'type': connections[topic],
+                        'messages': msg_counts[topic]
+                    } for topic in filtered_topics
+                }
+            }
+            click.echo(json.dumps(result, indent=2))
         else:
-            click.secho(f"\nAnalyzing {click.style(input_bag, fg='green')}:", bold=True)
-            click.echo(result)
+            click.secho(f"\nTopic Analysis: {click.style(input_bag, fg='green')}", bold=True)
+            click.echo("─" * 80)
+            
+            # Header
+            click.echo(f"{'Topic':<50} {'Type':<30} {'Messages':<12}")
+            click.echo("─" * 80)
+            
+            # Topic details
+            for topic in sorted(filtered_topics):
+                msg_count = msg_counts[topic]
+                
+                topic_str = f"{topic:<50}"
+                type_str = f"{connections[topic]:<30}"
+                count_str = f"{msg_count:,}"
+                
+                click.echo(f"{click.style(topic_str, fg='white')} "
+                          f"{click.style(type_str, fg='cyan')} "
+                          f"{click.style(f'{count_str:>12}', fg='yellow')}")
+            
+            # Summary
+            click.echo("─" * 80)
+            click.echo(f"Showing {click.style(str(len(filtered_topics)), fg='green')} of "
+                      f"{click.style(str(len(topics)), fg='white')} topics")
+            
+            if pattern:
+                click.echo(f"\nApplied filter: {click.style(pattern, fg='yellow')}")
+        
+        # Save to whitelist if requested
+        if save and filtered_topics:
+            os.makedirs(os.path.dirname(save) if os.path.dirname(save) else '.', exist_ok=True)
+            with open(save, 'w') as f:
+                f.write("# Generated by rose inspect\n")
+                f.write(f"# Source: {input_bag}\n")
+                if pattern:
+                    f.write(f"# Pattern: {pattern}\n")
+                f.write("\n")
+                for topic in sorted(filtered_topics):
+                    f.write(f"{topic}\n")
+            click.secho(f"\nSaved {len(filtered_topics)} topics to {click.style(save, fg='blue')}", fg='green')
             
     except Exception as e:
         logger.error(f"Error during inspection: {str(e)}", exc_info=True)
@@ -223,9 +307,10 @@ def info(input_bag):
     """Show basic information about the bag file.
     
     This command provides a quick overview of the bag file, including:
-    - Number of topics
-    - Time range
-    - Basic topic list
+    - File information (size, path)
+    - Time range and duration
+    - Topic count and message types
+    - Message counts per topic
     
     Examples:
     \b
@@ -235,19 +320,51 @@ def info(input_bag):
         parser = create_parser(ParserType.PYTHON)
         topics, connections, time_range = parser.load_bag(input_bag)
         
+        # Get file information
+        file_size = os.path.getsize(input_bag)
+        file_size_mb = file_size / (1024 * 1024)
+        
         # Format output
         click.secho(f"\nBag Summary: {click.style(input_bag, fg='green')}", bold=True)
         click.echo("─" * 80)
         
-        click.echo(f"Topics: {click.style(str(len(topics)), fg='yellow')} total")
-        click.echo(f"Duration: {click.style(TimeUtil.to_datetime(time_range[0]), fg='yellow')} to "
-                  f"{click.style(TimeUtil.to_datetime(time_range[1]), fg='yellow')}")
+        # File information
+        click.echo(f"File Size: {click.style(f'{file_size_mb:.2f} MB', fg='yellow')} "
+                  f"({click.style(f'{file_size:,}', fg='yellow')} bytes)")
+        click.echo(f"Location: {click.style(os.path.abspath(input_bag), fg='blue')}")
         
-        click.secho("\nTopic List:", bold=True)
+        # Time information
+        start_time = TimeUtil.to_datetime(time_range[0])
+        end_time = TimeUtil.to_datetime(time_range[1])
+        duration_secs = time_range[1][0] - time_range[0][0] + (time_range[1][1] - time_range[0][1])/1e9
+        mins, secs = divmod(duration_secs, 60)
+        hours, mins = divmod(mins, 60)
+        
+        click.echo(f"\nTime Range:")
+        click.echo(f"  Start:    {click.style(start_time, fg='yellow')}")
+        click.echo(f"  End:      {click.style(end_time, fg='yellow')}")
+        click.echo(f"  Duration: {click.style(f'{int(hours)}h {int(mins)}m {secs:.2f}s', fg='yellow')}")
+        
+        # Topic information
+        click.echo(f"\nTopics: {click.style(str(len(topics)), fg='yellow')} total")
         click.echo("─" * 80)
-        for topic in sorted(topics):
-            click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
-                      f"{click.style(connections[topic], fg='cyan')}")
+        
+        # Get message counts if available
+        try:
+            msg_counts = parser.get_message_counts(input_bag)
+            for topic in sorted(topics):
+                count = msg_counts.get(topic, 'N/A')
+                count_str = f"{count:,}" if isinstance(count, int) else count
+                msg_type = f"{connections[topic]:<30}"
+                click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
+                          f"{click.style(msg_type, fg='cyan')} "
+                          f"({click.style(count_str, fg='yellow')} msgs)")
+        except:
+            # Fallback if message counts not available
+            for topic in sorted(topics):
+                msg_type = f"{connections[topic]:<30}"
+                click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
+                          f"{click.style(msg_type, fg='cyan')}")
             
     except Exception as e:
         logger.error(f"Error getting bag info: {str(e)}", exc_info=True)
