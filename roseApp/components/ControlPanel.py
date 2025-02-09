@@ -221,14 +221,14 @@ class ControlPanel(Container):
             # 处理完成
             if not self.multi_select_mode:
                 status.stop_loading()
-                status.update_status("Processing completed", "success")
+                status.update_status("Processing completed")
             else:
                 # 在多选模式下，只在所有文件处理完成后更新状态
                 current = self.bags.get_processed_count()
                 total = self.bags.get_bag_numbers()
                 if current == total:
                     status.stop_loading()
-                    status.update_status("Processing completed", "success")
+                    status.update_status("Processing completed")
                 
         except Exception as e:
             if not self.multi_select_mode:

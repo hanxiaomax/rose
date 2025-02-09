@@ -61,15 +61,14 @@ class StatusBar(Static):
         # 创建新的文本对象，确保清除之前的内容
         text = Text()
         
-        # 添加主要消息
-        text.append(message)
-        
-        # 添加加载动画（如果正在加载）
+        # 如果正在加载，优先显示加载动画
         if self._is_loading:
             spinner_text = self._render_spinner()
             if spinner_text:
-                text.append(" " * 4)  # 固定间距
                 text.append(spinner_text, style="bold yellow")
+        # 否则显示普通消息
+        else:
+            text.append(message)
 
         # 更新样式类
         if status_class:
