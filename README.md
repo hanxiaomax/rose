@@ -123,7 +123,7 @@ Rose is configured with `roseApp/config.json`.
 ```json
 {
     "show_splash_screen": true,
-    "theme": "cassette-light",
+    "theme": "cassette-walkman",
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
@@ -133,14 +133,14 @@ Rose is configured with `roseApp/config.json`.
 ```
 
 - `show_splash_screen`: whether to show the splash screen, default is true
-- `theme`: the theme of the TUI, default is `cassette-light`,check [Theme](#theme) for more details
+- `theme`: the theme of the TUI, default is `cassette-walkman`,check [Theme](#theme) for more details
 - `whitelists`: the whitelists of the TUI, default is empty,check [Whitelist](#whitelist) for more details
 
 
 #### Theme
-RoseApp TUI provides two built-in themes: `cassette-light` (default) and `cassette-dark`. You can configure the theme in two ways:
+RoseApp TUI provides two built-in themes: `cassette-walkman` (default light theme) and `cassette-dark`. You can configure the theme in two ways:
 
-| cassette-light | cassette-dark |
+| cassette-walkman | cassette-dark |
 |------------|-------------|
 | ![Light Theme TUI](main-light.png) | ![Dark Theme TUI](main-dark.png) |
 
