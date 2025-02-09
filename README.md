@@ -55,6 +55,11 @@ chmod +x install.sh
 ./install.sh
 ```
 
+To uninstall Rose, run the following command:
+```bash
+pip uninstall rose-bag
+```
+
 ### Terminal Setup
 
 To ensure proper color display in your terminal, set the following environment variable:

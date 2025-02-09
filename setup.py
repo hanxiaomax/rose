@@ -4,6 +4,7 @@ setup(
     name="rose-bag",
     version="0.1.0",
     packages=find_packages(),
+    include_package_data=True,
     install_requires=[
         "textual>=0.40.0",
         "rosbags>=0.9.16",
@@ -17,6 +18,11 @@ setup(
         ],
     },
     package_data={
-        "roseApp": ["style.tcss", "config.json"],
+        "roseApp": [
+            "style.tcss",
+            "config.json",
+            "themes/*.py",
+            "whitelists/*",
+        ],
     },
 ) 

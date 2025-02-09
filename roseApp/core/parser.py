@@ -19,8 +19,15 @@ _HAS_CPP_IMPL = False
 try:
     # Load config
     config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
-    with open(config_path) as f:
-        config = json.load(f)
+    _logger.info(f"Loading config from: {config_path}")
+    
+    if not os.path.exists(config_path):
+        _logger.warning(f"Config file not found at: {config_path}")
+        config = {"load_cpp_parser": False}
+    else:
+        with open(config_path) as f:
+            config = json.load(f)
+            _logger.info(f"Config loaded: {config}")
     
     if config.get('load_cpp_parser', False):
         import rosbag_io_py
@@ -28,8 +35,6 @@ try:
         _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
     else:
         _logger.info("C++ implementation disabled in config")
-except ImportError:
-    _logger.warning("C++ implementation (rosbag_io_py) not available. Only Python implementation will be used.")
 except Exception as e:
     _logger.warning(f"Error loading config or C++ implementation: {e}. Only Python implementation will be used.")
 

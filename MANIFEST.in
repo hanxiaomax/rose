@@ -1,0 +1,6 @@
+include roseApp/style.tcss
+include roseApp/config.json
+recursive-include roseApp/themes *.py
+recursive-include roseApp/whitelists *
+recursive-include roseApp/components *.py
+recursive-include roseApp/core *.py

@@ -7,6 +7,32 @@ print_color() {
     echo -e "\033[${color}m${text}\033[0m"
 }
 
+# Check and set TERM environment variable
+setup_term() {
+    if [[ -z "$TERM" || "$TERM" != "xterm-256color" ]]; then
+        print_color "33" "TERM environment variable needs to be set for proper color display."
+
+        
+        print_color "36" "Would you like to add this to your ~/.bashrc? (y/n)"
+        read -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if ! grep -q "export TERM=xterm-256color" ~/.bashrc; then
+                echo 'export TERM=xterm-256color' >> ~/.bashrc
+                print_color "32" "Added to ~/.bashrc"
+                print_color "33" "Please run 'source ~/.bashrc' or restart your terminal"
+            else
+                print_color "33" "TERM setting already exists in ~/.bashrc"
+            fi
+        else
+            print_color "33" "Please remember to set TERM=xterm-256color manually before running rose"
+        fi
+        print_color "36" "Please run the following command in your shell or start a new shell:"
+        print_color "32" "    export TERM=xterm-256color"
+    fi
+    
+}
+
 # Check if a command exists
 check_command() {
     if ! command -v $1 &> /dev/null; then
@@ -16,26 +42,11 @@ check_command() {
     fi
 }
 
-# Check TERM environment variable
-check_term() {
-    if [[ "$TERM" != "xterm-256color" ]]; then
-        print_color "33" "Warning: TERM environment variable is not set to xterm-256color"
-        print_color "36" "Consider adding the following line to your ~/.bashrc or ~/.zshrc:"
-        echo 'export TERM=xterm-256color'
-        
-        read -p "Would you like to add it to ~/.bashrc now? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo 'export TERM=xterm-256color' >> ~/.bashrc
-            print_color "32" "Added to ~/.bashrc"
-            print_color "33" "Please run 'source ~/.bashrc' to apply the changes"
-        fi
-    fi
-}
-
 # Main installation process
 main() {
     print_color "36" "Starting ROSE installation..."
+    
+
     
     # Check required commands
     check_command python3
@@ -53,12 +64,11 @@ main() {
         exit 1
     fi
     
-    # Check TERM environment variable
-    check_term
-    
     print_color "36" "You can now use ROSE with the following commands:"
     print_color "32" "rose tui    # Launch TUI interface"
     print_color "32" "rose --help # Show help information"
+    # Setup TERM environment variable
+    setup_term
 }
 
 # Run main function
