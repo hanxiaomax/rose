@@ -33,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-noetic-tf \
     python3-rosdep \
     python3-rospy \
+    git \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize rosdep
@@ -48,7 +50,9 @@ RUN pip install --no-cache-dir \
     pytest-asyncio \
     typing-extensions \
     click \
-    art 
+    art \
+    matplotlib \
+    tqdm
 
 RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
 

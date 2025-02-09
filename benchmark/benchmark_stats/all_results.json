@@ -1,0 +1,842 @@
+[
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.722602128982544,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.9692013263702393,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.287062644958496,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.5431714057922363,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.1533360481262207,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.09614896774292,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.026730537414551,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.706714153289795,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.5580484867095947,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.112443685531616,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.3663153648376465,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.573582172393799,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.041522741317749,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.0380818843841553,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.3557584285736084,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.0888054370880127,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.7891507148742676,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.137012004852295,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.506483793258667,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.946180820465088,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.045283079147339,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.5078883171081543,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.187349319458008,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.8347384929656982,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.0858547687530518,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.2516913414001465,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.57029128074646,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 1.996453046798706,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.4556515216827393,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.875009536743164,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.148447275161743,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.0881459712982178,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.413973331451416,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.161634922027588,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.871943473815918,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.653623580932617,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.4250736236572266,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.360227108001709,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.3829476833343506,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.7641398906707764,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.0860910415649414,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.8797624111175537,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.2488625049591064,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.9095475673675537,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 3.0842673778533936,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.097273826599121,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 2.060042381286621,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.2987959384918213,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 1.7622122764587402,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.4800071716308594,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.463695764541626,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.01603364944458,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.764704942703247,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.202101707458496,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.1127610206604004,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.6802661418914795,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.1545565128326416,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  },
+  {
+    "bag_info": {
+      "path": "../demo4.bag",
+      "size": 729967395,
+      "duration": 19.99506402015686,
+      "message_count": 5390,
+      "topics": [
+        "/diagnostics",
+        "/diagnostics_agg",
+        "/diagnostics_toplevel_state",
+        "/gps/fix",
+        "/gps/rtkfix",
+        "/gps/time",
+        "/image_raw",
+        "/obs1/gps/fix",
+        "/obs1/gps/rtkfix",
+        "/obs1/gps/time",
+        "/radar/points",
+        "/radar/range",
+        "/radar/tracks",
+        "/tf",
+        "/velodyne_nodelet_manager/bond",
+        "/velodyne_packets",
+        "/velodyne_points"
+      ]
+    },
+    "python_impl": {
+      "time": 2.080716371536255,
+      "messages": 5390,
+      "output_path": "../demo4_py_output.bag"
+    },
+    "cpp_impl": {
+      "time": 1.7424514293670654,
+      "messages": 5390,
+      "output_path": "../demo4_cpp_output.bag"
+    },
+    "ros_cli": {
+      "time": 2.2726356983184814,
+      "messages": 5390,
+      "output_path": "../demo4_ros_output.bag"
+    }
+  }
+]
