@@ -41,7 +41,7 @@ async def on_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None
         # Update ControlPanel
         control_panel = self.app.query_one(ControlPanel)
         control_panel.set_time_range(start_time, end_time)
-        control_panel.set_output_file(f"{path.stem}_filtered.bag")
+        control_panel.set_output_file(f"{path.stem}_out.bag")
 ```
 上面代码中，由于Operation.load_bag(str(path))是阻塞的，所以load_bag函数不能使用普通的work，只能使用[Thread Workers](https://textual.textualize.io/guide/workers/#thread-workers)。然后在执行完成后，根据work的状态更新topic tree和control panel。因此暂时将on_tree_node_selected作为work来使用。后续可以使用线程或者将底层函数实现为异步。
 

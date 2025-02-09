@@ -56,7 +56,7 @@ class ControlPanel(Container):
             if self.current_bag_path != bag.path:
                 self.current_bag_path = bag.path
                 self.set_time_range(bag.info.time_range_str)
-                self.set_output_file(f"{bag.path.stem}_filtered.bag")
+                self.set_output_file(f"{bag.path.stem}_out.bag")
         elif bags.get_bag_numbers() == 0:
             self.reset_info()
             self.current_bag_path = None

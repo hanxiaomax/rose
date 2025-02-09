@@ -69,7 +69,7 @@ class Bag:
         self.info = bag_info
         self.selected_topics: Set[str] = set()
         self.status = BagStatus.IDLE
-        self.output_file = Path(str(self.path.parent / f"{self.path.stem}_filtered{self.path.suffix}"))
+        self.output_file = Path(str(self.path.parent / f"{self.path.stem}_out{self.path.suffix}"))
         self.time_elapsed = 0
         
         
