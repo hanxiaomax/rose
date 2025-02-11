@@ -33,5 +33,4 @@ __pycache__/
 localnotes/** 
 roseApp/venv/**
 dist/** 
-rose_bag.egg-info/** 
 .pypirc
