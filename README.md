@@ -45,6 +45,12 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ### Installation
 
+1. Install rose-bag from pypi
+```bash
+pip install rose-bag
+```
+
+2. Install from the source
 ```bash
 # Clone the repository
 git clone https://github.com/hanxiaomax/rose.git
