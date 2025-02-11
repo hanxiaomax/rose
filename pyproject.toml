@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rose-bag"
+version = "0.1.1"
+description = "A modern TUI tool for ROS bag file analysis and visualization"
+readme = "README.md"
+authors = [
+    { name = "Lingfeng_ai", email = "hanxiaomax@qq.com" }
+]
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+keywords = ["ros", "bag", "tui", "visualization", "robotics"]
+dependencies = [
+    "textual>=0.40.0",
+    "rosbags>=0.9.16",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "pydantic>=2.0.0",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/hanxiaomax/rose"
+Repository = "https://github.com/hanxiaomax/rose.git"
+Documentation = "https://github.com/hanxiaomax/rose#readme"
+
+[project.scripts]
+rose = "roseApp.rose:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["roseApp"]
+
+[tool.hatch.build]
+include = [
+    "roseApp/**/*.py",
+    "roseApp/**/*.tcss",
+    "roseApp/**/*.json",
+] 
