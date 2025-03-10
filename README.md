@@ -254,6 +254,12 @@ After whitelist created, add it to `config.json` so RoseApp can find it:
 
 ## Development
 
+### Run locally in docker
+
+```bash
+python roseApp/rose.py
+```
+
 ### Project Structure
 ```
 project_root/
