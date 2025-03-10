@@ -123,13 +123,8 @@ No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 
 Rose provides several command-line tools for bag file operations:
 
-1. Show basic bag information:
-   ```bash
-   # Show basic information about the bag file
-   ./rose.py info input.bag
-   ```
 
-2. Analyze topics and create whitelist:
+1. Analyze topics and create whitelist:
    ```bash
    # Show all topics in the bag file
    ./rose.py inspect input.bag
@@ -144,7 +139,7 @@ Rose provides several command-line tools for bag file operations:
    ./rose.py inspect input.bag --json
    ```
 
-3. Filter bag file:
+2. Filter bag file:
    ```bash
    # Filter using whitelist file
    ./rose.py filter input.bag output.bag -w whitelist.txt

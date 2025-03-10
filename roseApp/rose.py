@@ -208,35 +208,85 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
               help='Filter topics by regex pattern')
 @click.option('--save', '-s', type=click.Path(),
               help='Save filtered topics to whitelist file')
-def inspect(input_bag, json_output, pattern, save):
-    """Analyze topics and help create whitelist.
+@click.option('--detailed', '-d', is_flag=True,
+              help='Show detailed topic analysis instead of basic bag information')
+def inspect(input_bag, json_output, pattern, save, detailed):
+    """Analyze bag file and show information about topics.
     
-    This command helps analyze topics and create whitelist files by:
-    - Showing message count for each topic
-    - Filtering topics by pattern (regex)
-    - Generating whitelist files from filtered topics
+    This command provides information about the bag file in two modes:
+    
+    1. Basic mode (default): Shows an overview of the bag file, including:
+       - File information (size, path)
+       - Time range and duration
+       - Topic count and message types
+    
+    2. Detailed mode (--detailed): Analyzes topics and helps create whitelist files by:
+       - Showing message type for each topic
+       - Filtering topics by pattern (regex)
+       - Generating whitelist files from filtered topics
     
     Examples:
     \b
-        # Show all topics with statistics
+        # Show basic bag information (like the old 'info' command)
         rose inspect input.bag
         
+        # Show detailed topic analysis
+        rose inspect input.bag --detailed
+        
         # Filter topics matching pattern and save to whitelist
-        rose inspect input.bag -p ".*gps.*" -s whitelist.txt
+        rose inspect input.bag --detailed -p ".*gps.*" -s whitelist.txt
         
         # Filter sensor topics
-        rose inspect input.bag -p "sensor.*"
+        rose inspect input.bag --detailed -p "sensor.*"
+        
+        # Output topic information in JSON format
+        rose inspect input.bag --detailed --json
     """
     try:
         parser = create_parser(ParserType.PYTHON)
         topics, connections, time_range = parser.load_bag(input_bag)
         
-        # Get message counts
-        try:
-            msg_counts = parser.get_message_counts(input_bag)
-        except:
-            msg_counts = {topic: 0 for topic in topics}
+        # If detailed mode is not specified and no other options are provided,
+        # show basic bag information (like the old 'info' command)
+        if not detailed and not pattern and not save and not json_output:
+            # Get file information
+            file_size = os.path.getsize(input_bag)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            # Format output
+            click.secho(f"\nBag Summary: {click.style(input_bag, fg='green')}", bold=True)
+            click.echo("─" * 80)
+            
+            # File information
+            click.echo(f"File Size: {click.style(f'{file_size_mb:.2f} MB', fg='yellow')} "
+                      f"({click.style(f'{file_size:,}', fg='yellow')} bytes)")
+            click.echo(f"Location: {click.style(os.path.abspath(input_bag), fg='blue')}")
+            
+            # Time information
+            start_time = TimeUtil.to_datetime(time_range[0])
+            end_time = TimeUtil.to_datetime(time_range[1])
+            duration_secs = time_range[1][0] - time_range[0][0] + (time_range[1][1] - time_range[0][1])/1e9
+            mins, secs = divmod(duration_secs, 60)
+            hours, mins = divmod(mins, 60)
+            
+            click.echo(f"\nTime Range:")
+            click.echo(f"  Start:    {click.style(start_time, fg='yellow')}")
+            click.echo(f"  End:      {click.style(end_time, fg='yellow')}")
+            click.echo(f"  Duration: {click.style(f'{int(hours)}h {int(mins)}m {secs:.2f}s', fg='yellow')}")
+            
+            # Topic information
+            click.echo(f"\nTopics: {click.style(str(len(topics)), fg='yellow')} total")
+            click.echo("─" * 80)
+            
+            # Display topics and their types
+            for topic in sorted(topics):
+                msg_type = f"{connections[topic]:<30}"
+                click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
+                          f"{click.style(msg_type, fg='cyan')}")
+            
+            return
         
+        # Detailed mode (original inspect functionality)
         # Filter topics based on pattern
         filtered_topics = set(topics)
         if pattern:
@@ -250,34 +300,29 @@ def inspect(input_bag, json_output, pattern, save):
             result = {
                 'topics': {
                     topic: {
-                        'type': connections[topic],
-                        'messages': msg_counts[topic]
+                        'type': connections[topic]
                     } for topic in filtered_topics
                 }
             }
             click.echo(json.dumps(result, indent=2))
         else:
             click.secho(f"\nTopic Analysis: {click.style(input_bag, fg='green')}", bold=True)
-            click.echo("─" * 105)
+            click.echo("─" * 90)
             
             # Header
-            click.echo(f"{'Topic':<50} {'Type':<35} {'Messages':<15}")
-            click.echo("─" * 105)
+            click.echo(f"{'Topic':<50} {'Type':<35}")
+            click.echo("─" * 90)
             
             # Topic details
             for topic in sorted(filtered_topics):
-                msg_count = msg_counts[topic]
-                
                 topic_str = f"{topic:<50}"
                 type_str = f"{connections[topic]:<35}"
-                count_str = f"{msg_count:>15,}"
                 
                 click.echo(f"{click.style(topic_str, fg='white')} "
-                          f"{click.style(type_str, fg='cyan')} "
-                          f"{click.style(count_str, fg='yellow')}")
+                          f"{click.style(type_str, fg='cyan')}")
             
             # Summary
-            click.echo("─" * 105)
+            click.echo("─" * 90)
             click.echo(f"Showing {click.style(str(len(filtered_topics)), fg='green')} of "
                       f"{click.style(str(len(topics)), fg='white')} topics")
             
@@ -303,71 +348,84 @@ def inspect(input_bag, json_output, pattern, save):
 
 @cli.command()
 @click.argument('input_bag', type=click.Path(exists=True))
-def info(input_bag):
-    """Show basic information about the bag file.
+@click.option('--output', '-o', type=click.Path(), default=None,
+              help='Output whitelist file path')
+def whitelist(input_bag, output):
+    """Interactive topic selection for whitelist creation.
     
-    This command provides a quick overview of the bag file, including:
-    - File information (size, path)
-    - Time range and duration
-    - Topic count and message types
-    - Message counts per topic
+    This command provides an interactive interface to:
+    1. View all topics in the bag file
+    2. Select topics using checkboxes
+    3. Save selected topics to a whitelist file
     
     Examples:
     \b
-        rose info input.bag
+        # Interactive selection and save to default whitelist
+        rose whitelist input.bag
+        
+        # Interactive selection and save to specific file
+        rose whitelist input.bag -o my_whitelist.txt
     """
     try:
+        import questionary
+        from questionary import Choice
+        
         parser = create_parser(ParserType.PYTHON)
-        topics, connections, time_range = parser.load_bag(input_bag)
+        topics, connections, _ = parser.load_bag(input_bag)
         
-        # Get file information
-        file_size = os.path.getsize(input_bag)
-        file_size_mb = file_size / (1024 * 1024)
+        # Format topics with their message types for display
+        topic_choices = []
+        for topic in sorted(topics):
+            msg_type = connections[topic]
+            # Create choice with topic as value and formatted string as name
+            topic_choices.append(Choice(
+                title=f"{topic:<50} {click.style(msg_type, fg='cyan')}",
+                value=topic
+            ))
         
-        # Format output
-        click.secho(f"\nBag Summary: {click.style(input_bag, fg='green')}", bold=True)
+        # Show topic selection interface
+        click.secho(f"\nBag file: {click.style(input_bag, fg='green')}", bold=True)
+        click.echo(f"Total topics: {click.style(str(len(topics)), fg='yellow')}")
+        click.echo("\nSelect topics to include in whitelist (use space to select, enter to confirm):")
+        
+        selected_topics = questionary.checkbox(
+            "",
+            choices=topic_choices,
+            instruction="空格选择，回车确认"
+        ).ask()
+        
+        if selected_topics is None:  # User cancelled
+            click.echo("\nOperation cancelled")
+            return
+        
+        # Generate output path if not specified
+        if not output:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            output = f"whitelists/whitelist_{timestamp}.txt"
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(output) if os.path.dirname(output) else '.', exist_ok=True)
+        
+        # Save selected topics to whitelist file
+        with open(output, 'w') as f:
+            f.write("# Generated by rose whitelist\n")
+            f.write(f"# Source: {input_bag}\n")
+            f.write(f"# Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("\n")
+            for topic in sorted(selected_topics):
+                f.write(f"{topic}\n")
+        
+        # Show results
+        click.echo("\nWhitelist Summary:")
         click.echo("─" * 80)
+        click.echo(f"Selected: {click.style(str(len(selected_topics)), fg='green')} of "
+                  f"{click.style(str(len(topics)), fg='white')} topics")
+        click.echo(f"Saved to: {click.style(output, fg='blue')}")
         
-        # File information
-        click.echo(f"File Size: {click.style(f'{file_size_mb:.2f} MB', fg='yellow')} "
-                  f"({click.style(f'{file_size:,}', fg='yellow')} bytes)")
-        click.echo(f"Location: {click.style(os.path.abspath(input_bag), fg='blue')}")
-        
-        # Time information
-        start_time = TimeUtil.to_datetime(time_range[0])
-        end_time = TimeUtil.to_datetime(time_range[1])
-        duration_secs = time_range[1][0] - time_range[0][0] + (time_range[1][1] - time_range[0][1])/1e9
-        mins, secs = divmod(duration_secs, 60)
-        hours, mins = divmod(mins, 60)
-        
-        click.echo(f"\nTime Range:")
-        click.echo(f"  Start:    {click.style(start_time, fg='yellow')}")
-        click.echo(f"  End:      {click.style(end_time, fg='yellow')}")
-        click.echo(f"  Duration: {click.style(f'{int(hours)}h {int(mins)}m {secs:.2f}s', fg='yellow')}")
-        
-        # Topic information
-        click.echo(f"\nTopics: {click.style(str(len(topics)), fg='yellow')} total")
-        click.echo("─" * 80)
-        
-        # Get message counts if available
-        try:
-            msg_counts = parser.get_message_counts(input_bag)
-            for topic in sorted(topics):
-                count = msg_counts.get(topic, 'N/A')
-                count_str = f"{count:,}" if isinstance(count, int) else count
-                msg_type = f"{connections[topic]:<30}"
-                click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
-                          f"{click.style(msg_type, fg='cyan')} "
-                          f"({click.style(count_str, fg='yellow')} msgs)")
-        except:
-            # Fallback if message counts not available
-            for topic in sorted(topics):
-                msg_type = f"{connections[topic]:<30}"
-                click.echo(f"  {click.style('•', fg='blue')} {topic:<40} "
-                          f"{click.style(msg_type, fg='cyan')}")
-            
+    except ImportError:
+        raise click.ClickException("questionary package is required. Install it with: pip install questionary")
     except Exception as e:
-        logger.error(f"Error getting bag info: {str(e)}", exc_info=True)
+        logger.error(f"Error creating whitelist: {str(e)}", exc_info=True)
         raise click.ClickException(str(e))
 
 if __name__ == '__main__':
