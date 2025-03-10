@@ -347,20 +347,19 @@ def inspect(input_bag, json_output, pattern, save, detailed):
         raise click.ClickException(str(e))
 
 @cli.command()
-@click.argument('input_bag', type=click.Path(exists=True))
+@click.argument('input_bag', type=click.Path(exists=True), required=False)
 @click.option('--output', '-o', type=click.Path(), default=None,
               help='Output whitelist file path')
 def whitelist(input_bag, output):
     """Interactive topic selection for whitelist creation.
     
-    This command provides an interactive interface to:
-    1. View all topics in the bag file
-    2. Select topics using checkboxes
-    3. Save selected topics to a whitelist file
     
     Examples:
     \b
-        # Interactive selection and save to default whitelist
+        # Interactive selection with bag file prompt
+        rose whitelist
+        
+        # Interactive selection with specified bag file
         rose whitelist input.bag
         
         # Interactive selection and save to specific file
@@ -382,6 +381,30 @@ def whitelist(input_bag, output):
             ('completion-menu', 'bg:#333333 #ffffff'),
             ('completion-menu-selection', 'bg:#859900 #000000')
         ])
+        
+        # If input_bag is not provided, ask for it
+        if not input_bag:
+            while True:
+                input_bag = questionary.path(
+                    "Enter bag file path:",
+                    only_directories=False,
+                    style=custom_style
+                ).ask()
+                
+                if input_bag is None:  # User cancelled
+                    click.echo("\nOperation cancelled")
+                    return
+                
+                # Validate the input
+                if not os.path.exists(input_bag):
+                    click.echo("Error: File does not exist")
+                    continue
+                    
+                if not input_bag.endswith('.bag'):
+                    click.echo("Error: File must be a .bag file")
+                    continue
+                    
+                break
         
         parser = create_parser(ParserType.PYTHON)
         topics, connections, _ = parser.load_bag(input_bag)
