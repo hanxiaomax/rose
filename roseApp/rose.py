@@ -368,7 +368,20 @@ def whitelist(input_bag, output):
     """
     try:
         import questionary
-        from questionary import Choice
+        from questionary import Choice, Style
+        
+        # Define questionary style
+        custom_style = Style([
+            ('question', '#ffffff bold'),
+            ('answer', '#2aa198'),  # Cyan
+            ('path', '#268bd2'),    # Blue
+            ('highlighted', '#859900 bold'),  # Green
+            ('selected', '#859900'),  # Green
+            ('instruction', '#93a1a1'),  # Gray
+            ('text', '#ffffff'),
+            ('completion-menu', 'bg:#333333 #ffffff'),
+            ('completion-menu-selection', 'bg:#859900 #000000')
+        ])
         
         parser = create_parser(ParserType.PYTHON)
         topics, connections, _ = parser.load_bag(input_bag)
@@ -379,7 +392,7 @@ def whitelist(input_bag, output):
             msg_type = connections[topic]
             # Create choice with topic as value and formatted string as name
             topic_choices.append(Choice(
-                title=f"{topic:<50} {click.style(msg_type, fg='cyan')}",
+                title=f"{topic:<50} {msg_type}",
                 value=topic
             ))
         
@@ -391,17 +404,78 @@ def whitelist(input_bag, output):
         selected_topics = questionary.checkbox(
             "",
             choices=topic_choices,
-            instruction="空格选择，回车确认"
+            instruction="[space] select/unselect [enter] confirm",
+            style=custom_style
         ).ask()
         
         if selected_topics is None:  # User cancelled
             click.echo("\nOperation cancelled")
             return
+            
+        # Show selection summary
+        click.echo("\nSelected Topics:")
+        click.echo("─" * 80)
+        click.echo(f"Selected: {click.style(str(len(selected_topics)), fg='green')} of "
+                  f"{click.style(str(len(topics)), fg='white')} topics")
         
-        # Generate output path if not specified
+        # Ask for save location if not specified in command line
         if not output:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output = f"whitelists/whitelist_{timestamp}.txt"
+            default_path = f"whitelists/whitelist_{timestamp}.txt"
+            
+            # Ask if user wants to use default path
+            use_default = questionary.confirm(
+                f"Use default path? ({default_path})",
+                default=True,
+                style=custom_style
+            ).ask()
+            
+            if use_default:
+                output = default_path
+            else:
+                # Ask for custom path with path completion
+                while True:
+                    output = questionary.path(
+                        "Enter save path:",
+                        default="whitelists/my_whitelist.txt",
+                        only_directories=False,
+                        style=custom_style
+                    ).ask()
+                    
+                    if output is None:  # User cancelled
+                        click.echo("\nOperation cancelled")
+                        return
+                        
+                    # Validate directory exists or can be created
+                    try:
+                        dir_path = os.path.dirname(output)
+                        if dir_path and not os.path.exists(dir_path):
+                            create_dir = questionary.confirm(
+                                f"Directory {dir_path} does not exist. Create it?",
+                                default=True,
+                                style=custom_style
+                            ).ask()
+                            
+                            if not create_dir:
+                                continue
+                                
+                        # Try to create directory and test file writability
+                        os.makedirs(dir_path, exist_ok=True)
+                        # Check if file exists
+                        if os.path.exists(output):
+                            overwrite = questionary.confirm(
+                                f"File {output} already exists. Overwrite?",
+                                default=False,
+                                style=custom_style
+                            ).ask()
+                            
+                            if not overwrite:
+                                continue
+                        
+                        break
+                    except Exception as e:
+                        click.echo(f"Error: {str(e)}")
+                        continue
         
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(output) if os.path.dirname(output) else '.', exist_ok=True)
