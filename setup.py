@@ -7,10 +7,10 @@ with open("README.md", encoding="utf-8") as f:
 
 setup(
     name="rose-bag",
-    version="0.1.1",
+    version="0.2.0",
     author="Lingfeng_ai",
     author_email="hanxiaomax@qq.com",  # Please update with your email
-    description="A modern TUI tool for ROS bag file analysis and visualization",
+    description="A modern CLI/TUI tool for ROS bag file analysis and filtering",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/hanxiaomax/rose",  # Please update with your repository URL
@@ -22,6 +22,8 @@ setup(
         "rich>=13.0.0",
         "typer>=0.9.0",
         "pydantic>=2.0.0",
+        "questionary>=2.0.0",
+        "click>=8.0.0",
     ],
     entry_points={
         "console_scripts": [
@@ -52,5 +54,5 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     python_requires=">=3.8",
-    keywords="ros, bag, tui, visualization, robotics",
+    keywords="ros, bag, cli, tui, visualization, robotics, filter",
 ) 

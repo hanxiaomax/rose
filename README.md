@@ -255,6 +255,36 @@ After whitelist created, add it to `config.json` so RoseApp can find it:
 python roseApp/rose.py
 ```
 
+### Publishing to PyPI
+
+To publish a new version to PyPI:
+
+1. Update version in `pyproject.toml`
+2. Install required tools:
+```bash
+pip install keyring keyrings.alt
+```
+
+3. Configure PyPI credentials:
+```bash
+# Using environment variables
+export HATCH_INDEX_USER=__token__
+export HATCH_INDEX_AUTH=your_pypi_token
+
+# Or using hatch config
+hatch config set pypi.auth.username __token__
+hatch config set pypi.auth.password your_pypi_token
+```
+
+4. Build and publish:
+```bash
+# Build the package
+hatch build
+
+# Publish to PyPI
+hatch publish
+```
+
 ### Project Structure
 ```
 project_root/
