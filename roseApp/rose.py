@@ -525,5 +525,11 @@ def whitelist(input_bag, output):
         logger.error(f"Error creating whitelist: {str(e)}", exc_info=True)
         raise click.ClickException(str(e))
 
+@cli.command('cli-tool')
+def cli_tool():
+    """Launch interactive command-line interface"""
+    from .cli_tool import main
+    main()
+
 if __name__ == '__main__':
     cli()
