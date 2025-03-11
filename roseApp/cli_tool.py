@@ -82,42 +82,95 @@ class CliTool:
     
     def run_inspector(self):
         """Run the inspector tool"""
-        # Ask for bag file
-        input_bag = self.ask_for_bag()
-        if not input_bag:
-            return
-            
-        # Show options
-        action = questionary.select(
-            "Select action:",
-            choices=[
-                Choice("Show bag information", "info"),
-                Choice("Browse topics", "topics"),
-                Choice("Create whitelist", "create"),
-                Choice("Browse whitelists", "browse"),
-                Choice("Back to main menu", "back")
-            ],
-            style=CUSTOM_STYLE
-        ).ask()
+        input_bag = None
+        topics = None
+        connections = None
+        time_range = None
         
-        if action == "back":
-            return
+        while True:
+            # If we don't have a bag file yet, ask for it
+            if not input_bag:
+                input_bag = self.ask_for_bag()
+                if not input_bag:
+                    return
+                
+                # Load bag file
+                with self.show_loading("Loading bag file...") as progress:
+                    progress.add_task(description="Loading...")
+                    topics, connections, time_range = self.parser.load_bag(input_bag)
             
-        if action in ["info", "topics", "create"]:
-            # Load bag file
-            with self.show_loading("Loading bag file...") as progress:
-                progress.add_task(description="Loading...")
-                topics, connections, time_range = self.parser.load_bag(input_bag)
+            # Show options
+            action = questionary.select(
+                "Select action:",
+                choices=[
+                    Choice("Show bag information", "info"),
+                    Choice("Browse topics", "topics"),
+                    Choice("Create whitelist", "create"),
+                    Choice("Browse whitelists", "browse"),
+                    Choice("Change bag file", "change"),
+                    Choice("Back to main menu", "back")
+                ],
+                style=CUSTOM_STYLE
+            ).ask()
             
+            if action == "back":
+                return
+                
+            if action == "change":
+                input_bag = None
+                topics = None
+                connections = None
+                time_range = None
+                continue
+                
+            if action == "browse":
+                self._browse_whitelists()
+                # After browsing whitelists, ask what to do next
+                next_action = questionary.select(
+                    "What would you like to do next?",
+                    choices=[
+                        Choice("Continue with current bag", "continue"),
+                        Choice("Change bag file", "change"),
+                        Choice("Back to main menu", "back")
+                    ],
+                    style=CUSTOM_STYLE
+                ).ask()
+                
+                if next_action == "back":
+                    return
+                elif next_action == "change":
+                    input_bag = None
+                    topics = None
+                    connections = None
+                    time_range = None
+                continue
+            
+            # Handle actions that need bag file
             if action == "info":
                 self._show_bag_info(input_bag, topics, connections, time_range)
             elif action == "topics":
                 self._show_topics(topics, connections)
             elif action == "create":
                 self._create_whitelist(input_bag, topics, connections)
-        
-        elif action == "browse":
-            self._browse_whitelists()
+            
+            # After each action, ask what to do next
+            next_action = questionary.select(
+                "What would you like to do next?",
+                choices=[
+                    Choice("Continue with current bag", "continue"),
+                    Choice("Change bag file", "change"),
+                    Choice("Back to main menu", "back")
+                ],
+                style=CUSTOM_STYLE
+            ).ask()
+            
+            if next_action == "back":
+                return
+            elif next_action == "change":
+                input_bag = None
+                topics = None
+                connections = None
+                time_range = None
     
     def run_filter(self):
         """Run the filter tool"""
