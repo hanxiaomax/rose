@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rose-bag"
-version = "0.1.1"
-description = "A modern TUI tool for ROS bag file analysis and visualization"
+version = "0.2.0"
+description = "A modern CLI/TUI tool for ROS bag file analysis and filtering"
 readme = "README.md"
 authors = [
     { name = "Lingfeng_ai", email = "hanxiaomax@qq.com" }
@@ -23,21 +23,24 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["ros", "bag", "tui", "visualization", "robotics"]
+keywords = ["ros", "bag", "cli", "tui", "visualization", "robotics", "filter"]
 dependencies = [
     "textual>=0.40.0",
     "rosbags>=0.9.16",
     "rich>=13.0.0",
     "typer>=0.9.0",
     "pydantic>=2.0.0",
+    "questionary>=2.0.0",
+    "click>=8.0.0",
 ]
 requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://github.com/hanxiaomax/rose"
-Repository = "https://github.com/hanxiaomax/rose.git"
-Documentation = "https://github.com/hanxiaomax/rose#readme"
+"Bug Tracker" = "https://github.com/hanxiaomax/rose/issues"
 
 [project.scripts]
 rose = "roseApp.rose:cli"
@@ -50,4 +53,5 @@ include = [
     "roseApp/**/*.py",
     "roseApp/**/*.tcss",
     "roseApp/**/*.json",
+    "roseApp/whitelists/*",
 ] 
