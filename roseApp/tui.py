@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Iterable
 import os
 
-# Third-party imports
-from art import text2art
 from rich.syntax import Syntax
 from rich.text import Text
 from textual.app import App, ComposeResult, SystemCommand
@@ -83,7 +81,14 @@ class SplashScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        txt2art = text2art("ROSE",font="big")
+        txt2art = """
+██████╗  ██████╗ ███████╗███████╗
+██╔══██╗██╔═══██╗██╔════╝██╔════╝
+██████╔╝██║   ██║███████╗█████╗  
+██╔══██╗██║   ██║╚════██║██╔══╝  
+██║  ██║╚██████╔╝███████║███████╗
+╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
+"""
         with Vertical(id="splash-content"):
             yield Vertical(
                 Static(txt2art, id="logo"),
