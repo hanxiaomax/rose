@@ -26,6 +26,7 @@ setup(
         "click>=8.0.0",
     ],
     entry_points={
+        
         "console_scripts": [
             "rose=roseApp.rose:cli",
         ],

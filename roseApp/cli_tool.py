@@ -1,13 +1,15 @@
 import os
 import time
-from typing import Optional, List
+from typing import Optional, List, Set
 import questionary
-from questionary import Choice, Style
+from questionary import Choice, Style, select, text, confirm, path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
 from rich.panel import Panel
 from rich.text import Text
+from rich.table import Table
+from rich import box
 
 from .core.parser import create_parser, ParserType
 from .core.util import get_logger
@@ -293,7 +295,7 @@ class CliTool:
         selected_topics = questionary.checkbox(
             "Select topics to include:",
             choices=topic_choices,
-            instruction="[space] select/unselect [enter] confirm",
+            instruction="[space] select/unselect [enter] confirm [a] all [i] invert",
             style=CUSTOM_STYLE
         ).ask()
         
@@ -400,7 +402,7 @@ class CliTool:
         selected_topics = questionary.checkbox(
             "Select topics to include:",
             choices=topic_choices,
-            instruction="[space] select/unselect [enter] confirm",
+            instruction="[space] select/unselect [enter] confirm [a] all [i] invert",
             style=CUSTOM_STYLE
         ).ask()
         

@@ -52,9 +52,9 @@ RUN pip install --no-cache-dir \
     click \
     art \
     matplotlib \
-    tqdm
-
-RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
+    tqdm \
+    questionary \
+    RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
 
 # Create workspace directory
 WORKDIR /workspace
