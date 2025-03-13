@@ -1,15 +1,13 @@
 import os
 import time
-from typing import Optional, List, Set
+from typing import Optional, List
 import questionary
-from questionary import Choice, Style, select, text, confirm, path
+from questionary import Choice, Style
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
 from rich.panel import Panel
 from rich.text import Text
-from rich.table import Table
-from rich import box
 
 from .core.parser import create_parser, ParserType
 from .core.util import get_logger
@@ -96,213 +94,164 @@ class CliTool:
         )
         rprint(Panel(bag_info, style="bold blue", title="[bold]Bag Info[/bold]"))
     
-    def run_inspector(self):
-        """Run the inspector tool"""
-        input_bag = None
-        topics = None
-        connections = None
-        time_range = None
+    def run(self):
+        """Run the CLI tool with improved menu logic"""
+        try:
+            self.show_banner()
+            
+            while True:
+                # Show main menu
+                action = questionary.select(
+                    "Select action:",
+                    choices=[
+                        Choice("1. Bag Editor - View and filter bag files", "filter"),
+                        Choice("2. Whitelist - Manage topic whitelists", "whitelist"),
+                        Choice("3. Exit", "exit")
+                    ],
+                    style=CUSTOM_STYLE
+                ).ask()
+                
+                if action == "exit":
+                    break
+                elif action == "filter":
+                    self._run_quick_filter()
+                elif action == "whitelist":
+                    self._run_whitelist_manager()
+                
+        except KeyboardInterrupt:
+            self.console.print("\nOperation cancelled by user", style="yellow")
+        except Exception as e:
+            logger.error(f"Error: {str(e)}", exc_info=True)
+            self.console.print(f"\nError: {str(e)}", style="red")
+    
+    def _run_quick_filter(self):
+        """Run quick filter workflow"""
+        # Get input bag
+        input_bag = self.ask_for_bag("Enter input bag file path:")
+        if not input_bag:
+            return
+            
+        # Load bag file
+        with self.show_loading("Loading bag file...") as progress:
+            progress.add_task(description="Loading...")
+            topics, connections, time_range = self.parser.load_bag(input_bag)
+        
+        # Show bag info
+        self._show_current_bag_info(input_bag, topics)
         
         while True:
-            # Show current bag info if available
-            if input_bag:
-                self._show_current_bag_info(input_bag, topics)
-            
-            # Show options first
+            # Select action
             action = questionary.select(
                 "Select action:",
                 choices=[
-                    Choice("Show bag information", "info"),
-                    Choice("Browse topics", "topics"),
-                    Choice("Create whitelist", "create"),
-                    Choice("Browse whitelists", "browse"),
-                    Choice("Back to main menu", "back")
+                    Choice("1. Show bag information", "info"),
+                    Choice("2. Filter bag file", "filter"),
+                    Choice("3. Back", "back")
                 ],
                 style=CUSTOM_STYLE
             ).ask()
             
             if action == "back":
                 return
-                
-            # Browse whitelists doesn't need bag file
-            if action == "browse":
-                self._browse_whitelists()
+            elif action == "info":
+                self._show_bag_info(input_bag, topics, connections, time_range)
                 continue
-            
-            # For actions that need bag file, load it if not already loaded
-            if action in ["info", "topics", "create"]:
-                if not input_bag:
-                    input_bag = self.ask_for_bag()
-                    if not input_bag:
-                        continue  # If user cancels bag selection, go back to menu
-                    
-                    # Load bag file
-                    with self.show_loading("Loading bag file...") as progress:
-                        progress.add_task(description="Loading...")
-                        topics, connections, time_range = self.parser.load_bag(input_bag)
-                    
-                    # Show bag info after loading
-                    self._show_current_bag_info(input_bag, topics)
-                
-                # Execute the action
-                if action == "info":
-                    self._show_bag_info(input_bag, topics, connections, time_range)
-                elif action == "topics":
-                    self._show_topics(topics, connections)
-                elif action == "create":
-                    self._create_whitelist(input_bag, topics, connections)
-            
-            # After actions that used a bag file, ask what to do next
-            if action in ["info", "topics", "create"]:
-                next_action = questionary.select(
-                    "What would you like to do next?",
+            elif action == "filter":
+                # Select filter method
+                method = questionary.select(
+                    "Select filter method:",
                     choices=[
-                        Choice("Continue with current bag", "continue"),
-                        Choice("Use different bag", "change"),
-                        Choice("Back to action menu", "menu")
+                        Choice("1. Use whitelist file", "whitelist"),
+                        Choice("2. Select topics manually", "manual"),
+                        Choice("3. Back", "back")
                     ],
                     style=CUSTOM_STYLE
                 ).ask()
                 
-                if next_action == "change":
-                    input_bag = None
-                    topics = None
-                    connections = None
-                    time_range = None
-    
-    def run_filter(self):
-        """Run the filter tool"""
-        input_bag = None
-        topics = None
-        connections = None
-        
-        while True:
-            # Show current bag info if available
-            if input_bag:
-                self._show_current_bag_info(input_bag, topics)
-            
-            if not input_bag:
-                # Ask for input bag
-                input_bag = self.ask_for_bag("Enter input bag file path:")
-                if not input_bag:
+                if method == "back":
+                    continue
+                    
+                # Get selected topics
+                selected_topics = []
+                if method == "whitelist":
+                    whitelist_path = self._select_whitelist()
+                    if not whitelist_path:
+                        continue
+                    selected_topics = self.parser.load_whitelist(whitelist_path)
+                else:
+                    selected_topics = self._select_topics(topics, connections)
+                    if not selected_topics:
+                        continue
+                
+                # Get output path
+                output_bag = self._ask_for_output_bag()
+                if not output_bag:
+                    continue
+                    
+                # Run filter
+                with self.show_loading("Filtering bag file...") as progress:
+                    progress.add_task(description="Processing...")
+                    self.parser.filter_bag(input_bag, output_bag, selected_topics)
+                
+                self.console.print(f"\nFilter completed: {output_bag}", style="green")
+                
+                # Ask what to do next
+                next_action = questionary.select(
+                    "What would you like to do next?",
+                    choices=[
+                        Choice("1. Filter another bag", "continue"),
+                        Choice("2. Back", "back")
+                    ],
+                    style=CUSTOM_STYLE
+                ).ask()
+                
+                if next_action == "continue":
+                    self._run_quick_filter()
                     return
-                
-                # Load bag file
-                with self.show_loading("Loading bag file...") as progress:
-                    progress.add_task(description="Loading...")
-                    topics, connections, _ = self.parser.load_bag(input_bag)
-                
-                # Show bag info after loading
-                self._show_current_bag_info(input_bag, topics)
-            
-            # Ask for filter method
-            method = questionary.select(
-                "Select filter method:",
+                elif next_action == "back":
+                    continue
+    
+    def _run_whitelist_manager(self):
+        """Run whitelist management workflow"""
+        while True:
+            action = questionary.select(
+                "Whitelist Management:",
                 choices=[
-                    Choice("Use whitelist file", "whitelist"),
-                    Choice("Select topics manually", "manual"),
-                    Choice("Change bag file", "change"),
-                    Choice("Back to main menu", "back")
+                    Choice("1. Create new whitelist", "create"),
+                    Choice("2. View whitelist", "view"),
+                    Choice("3. Back", "back")
                 ],
                 style=CUSTOM_STYLE
             ).ask()
             
-            if method == "back":
+            if action == "back":
                 return
-            
-            if method == "change":
-                input_bag = None
-                topics = None
-                connections = None
-                continue
-            
-            selected_topics = []
-            if method == "whitelist":
-                whitelist_path = self._select_whitelist()
-                if not whitelist_path:
-                    continue
-                selected_topics = self.parser.load_whitelist(whitelist_path)
-            else:
-                selected_topics = self._select_topics(topics, connections)
-                if not selected_topics:
-                    continue
-            
-            # Ask for output path
-            output_bag = self._ask_for_output_bag()
-            if not output_bag:
-                continue
-                
-            # Run filter
-            with self.show_loading("Filtering bag file...") as progress:
-                progress.add_task(description="Processing...")
-                self.parser.filter_bag(input_bag, output_bag, selected_topics)
-            
-            self.console.print(f"\nFilter completed: {output_bag}", style="green")
-            
-            # Ask what to do next
-            next_action = questionary.select(
-                "What would you like to do next?",
-                choices=[
-                    Choice("Continue with current bag", "continue"),
-                    Choice("Use different bag", "change"),
-                    Choice("Back to main menu", "back")
-                ],
-                style=CUSTOM_STYLE
-            ).ask()
-            
-            if next_action == "back":
-                return
-            elif next_action == "change":
-                input_bag = None
-                topics = None
-                connections = None
+            elif action == "create":
+                self._create_whitelist_workflow()
+            elif action == "view":
+                self._browse_whitelists()
     
-    def _show_bag_info(self, bag_path: str, topics: List[str], connections: dict, time_range: tuple):
-        """Show bag file information"""
-        file_size = os.path.getsize(bag_path)
-        file_size_mb = file_size / (1024 * 1024)
+    def _create_whitelist_workflow(self):
+        """Create whitelist workflow"""
+        # Get bag file
+        input_bag = self.ask_for_bag("Enter bag file path to create whitelist from:")
+        if not input_bag:
+            return
+            
+        # Load bag file
+        with self.show_loading("Loading bag file...") as progress:
+            progress.add_task(description="Loading...")
+            topics, connections, _ = self.parser.load_bag(input_bag)
         
-        self.console.print("\nBag Summary:", style="bold green")
-        self.console.print("─" * 80)
-        self.console.print(f"File Size: {file_size_mb:.2f} MB ({file_size:,} bytes)")
-        self.console.print(f"Location: {os.path.abspath(bag_path)}")
-        self.console.print(f"\nTopics: {len(topics)} total")
-        self.console.print("─" * 80)
-        
-        for topic in sorted(topics):
-            msg_type = connections[topic]
-            self.console.print(f"• {topic:<40} {msg_type}")
-    
-    def _show_topics(self, topics: List[str], connections: dict):
-        """Show topics with message types"""
-        self.console.print("\nTopics List:", style="bold green")
-        self.console.print("─" * 80)
-        self.console.print(f"{'Topic':<50} {'Type':<35}")
-        self.console.print("─" * 80)
-        
-        for topic in sorted(topics):
-            self.console.print(f"{topic:<50} {connections[topic]}")
-    
-    def _create_whitelist(self, input_bag: str, topics: List[str], connections: dict):
-        """Create whitelist from topics"""
-        # Format topics for selection
-        topic_choices = [
-            Choice(title=f"{topic:<50} {connections[topic]}", value=topic)
-            for topic in sorted(topics)
-        ]
+        # Show bag info
+        self._show_current_bag_info(input_bag, topics)
         
         # Select topics
-        selected_topics = questionary.checkbox(
-            "Select topics to include:",
-            choices=topic_choices,
-            instruction="[space] select/unselect [enter] confirm [a] all [i] invert",
-            style=CUSTOM_STYLE
-        ).ask()
-        
+        selected_topics = self._select_topics(topics, connections)
         if not selected_topics:
             return
             
-        # Ask for save location
+        # Save whitelist
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         default_path = f"whitelists/whitelist_{timestamp}.txt"
         
@@ -336,6 +285,45 @@ class CliTool:
                 f.write(f"{topic}\n")
         
         self.console.print(f"\nSaved whitelist to: {output}", style="green")
+        
+        # Ask what to do next
+        next_action = questionary.select(
+            "What would you like to do next?",
+            choices=[
+                Choice("1. Create another whitelist", "continue"),
+                Choice("2. Back", "back")
+            ],
+            style=CUSTOM_STYLE
+        ).ask()
+        
+        if next_action == "continue":
+            self._create_whitelist_workflow()
+    
+    def _show_bag_info(self, bag_path: str, topics: List[str], connections: dict, time_range: tuple):
+        """Show bag file information"""
+        file_size = os.path.getsize(bag_path)
+        file_size_mb = file_size / (1024 * 1024)
+        
+        self.console.print("\nBag Summary:", style="bold green")
+        self.console.print("─" * 80)
+        self.console.print(f"File Size: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+        self.console.print(f"Location: {os.path.abspath(bag_path)}")
+        self.console.print(f"\nTopics: {len(topics)} total")
+        self.console.print("─" * 80)
+        
+        for topic in sorted(topics):
+            msg_type = connections[topic]
+            self.console.print(f"• {topic:<40} {msg_type}")
+    
+    def _show_topics(self, topics: List[str], connections: dict):
+        """Show topics with message types"""
+        self.console.print("\nTopics List:", style="bold green")
+        self.console.print("─" * 80)
+        self.console.print(f"{'Topic':<50} {'Type':<35}")
+        self.console.print("─" * 80)
+        
+        for topic in sorted(topics):
+            self.console.print(f"{topic:<50} {connections[topic]}")
     
     def _browse_whitelists(self):
         """Browse and view whitelist files"""
@@ -402,7 +390,7 @@ class CliTool:
         selected_topics = questionary.checkbox(
             "Select topics to include:",
             choices=topic_choices,
-            instruction="[space] select/unselect [enter] confirm [a] all [i] invert",
+            instruction="Use space to select/unselect topics",
             style=CUSTOM_STYLE
         ).ask()
         
@@ -437,35 +425,6 @@ class CliTool:
                     continue
             
             return output
-    
-    def run(self):
-        """Run the CLI tool"""
-        try:
-            self.show_banner()
-            
-            while True:
-                action = questionary.select(
-                    "Select tool:",
-                    choices=[
-                        Choice("Inspector - View bag info and manage whitelists", "inspector"),
-                        Choice("Filter - Filter bag files", "filter"),
-                        Choice("Exit", "exit")
-                    ],
-                    style=CUSTOM_STYLE
-                ).ask()
-                
-                if action == "exit":
-                    break
-                elif action == "inspector":
-                    self.run_inspector()
-                elif action == "filter":
-                    self.run_filter()
-                
-        except KeyboardInterrupt:
-            self.console.print("\nOperation cancelled by user", style="yellow")
-        except Exception as e:
-            logger.error(f"Error: {str(e)}", exc_info=True)
-            self.console.print(f"\nError: {str(e)}", style="red")
 
 def main():
     """Entry point for the CLI tool"""
