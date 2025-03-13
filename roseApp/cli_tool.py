@@ -8,6 +8,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
 from rich.panel import Panel
 from rich.text import Text
+import typer
 
 from .core.parser import create_parser, ParserType
 from .core.util import get_logger
@@ -36,10 +37,16 @@ ROSE_BANNER = """
 ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
 """
 
+app = typer.Typer(help="ROS Bag Filter Tool")
+
 class CliTool:
     def __init__(self):
         self.console = Console()
         self.parser = create_parser(ParserType.PYTHON)
+        self.input_bag = None
+        self.topics = None
+        self.connections = None
+        self.time_range = None
         
     def show_banner(self):
         """Display the ROSE banner"""
@@ -94,7 +101,7 @@ class CliTool:
         )
         rprint(Panel(bag_info, style="bold blue", title="[bold]Bag Info[/bold]"))
     
-    def run(self):
+    def run_cli(self):
         """Run the CLI tool with improved menu logic"""
         try:
             self.show_banner()
@@ -123,21 +130,68 @@ class CliTool:
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
+
+    def filter_bag(self, input_bag: str, output_bag: str, whitelist: Optional[str] = None):
+        """Filter a bag file using whitelist or manual selection"""
+        try:
+            # Load bag file
+            with self.show_loading("Loading bag file...") as progress:
+                progress.add_task(description="Loading...")
+                self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
+            
+            # Get selected topics
+            selected_topics = []
+            if whitelist:
+                selected_topics = self.parser.load_whitelist(whitelist)
+            else:
+                selected_topics = self._select_topics(self.topics, self.connections)
+                if not selected_topics:
+                    return
+            
+            # Run filter
+            start_time = time.time()
+            with self.show_loading("Filtering bag file...") as progress:
+                progress.add_task(description="Processing...")
+                self.parser.filter_bag(input_bag, output_bag, selected_topics)
+            end_time = time.time()
+            
+            # Show statistics
+            input_size = os.path.getsize(input_bag)
+            output_size = os.path.getsize(output_bag)
+            input_size_mb = input_size / (1024 * 1024)
+            output_size_mb = output_size / (1024 * 1024)
+            reduction_ratio = (1 - output_size / input_size) * 100
+            
+            stats = (
+                f"Filter Statistics:\n"
+                f"• Time: {end_time - start_time:.2f} seconds\n"
+                f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
+                f"• Reduction: {reduction_ratio:.1f}%\n"
+                f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
+            )
+            rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
+            
+            self.console.print(f"\nFilter completed: {output_bag}", style="green")
+            
+        except Exception as e:
+            logger.error(f"Error: {str(e)}", exc_info=True)
+            self.console.print(f"\nError: {str(e)}", style="red")
+            raise typer.Exit(1)
     
     def _run_quick_filter(self):
         """Run quick filter workflow"""
         # Get input bag
-        input_bag = self.ask_for_bag("Enter input bag file path:")
-        if not input_bag:
+        self.input_bag = self.ask_for_bag("Enter input bag file path:")
+        if not self.input_bag:
             return
             
         # Load bag file
         with self.show_loading("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
-            topics, connections, time_range = self.parser.load_bag(input_bag)
+            self.topics, self.connections, self.time_range = self.parser.load_bag(self.input_bag)
         
         # Show bag info
-        self._show_current_bag_info(input_bag, topics)
+        self._show_current_bag_info(self.input_bag, self.topics)
         
         while True:
             # Select action
@@ -154,7 +208,7 @@ class CliTool:
             if action == "back":
                 return
             elif action == "info":
-                self._show_bag_info(input_bag, topics, connections, time_range)
+                self._show_bag_info(self.input_bag, self.topics, self.connections, self.time_range)
                 continue
             elif action == "filter":
                 # Select filter method
@@ -179,7 +233,7 @@ class CliTool:
                         continue
                     selected_topics = self.parser.load_whitelist(whitelist_path)
                 else:
-                    selected_topics = self._select_topics(topics, connections)
+                    selected_topics = self._select_topics(self.topics, self.connections)
                     if not selected_topics:
                         continue
                 
@@ -192,11 +246,11 @@ class CliTool:
                 start_time = time.time()
                 with self.show_loading("Filtering bag file...") as progress:
                     progress.add_task(description="Processing...")
-                    self.parser.filter_bag(input_bag, output_bag, selected_topics)
+                    self.parser.filter_bag(self.input_bag, output_bag, selected_topics)
                 end_time = time.time()
                 
                 # Show statistics
-                input_size = os.path.getsize(input_bag)
+                input_size = os.path.getsize(self.input_bag)
                 output_size = os.path.getsize(output_bag)
                 input_size_mb = input_size / (1024 * 1024)
                 output_size_mb = output_size / (1024 * 1024)
@@ -207,7 +261,7 @@ class CliTool:
                     f"• Time: {end_time - start_time:.2f} seconds\n"
                     f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
                     f"• Reduction: {reduction_ratio:.1f}%\n"
-                    f"• Topics: {len(topics)} -> {len(selected_topics)}"
+                    f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
                 )
                 rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
                 
@@ -419,10 +473,15 @@ class CliTool:
     
     def _ask_for_output_bag(self) -> Optional[str]:
         """Ask for output bag path"""
+        # Get default output name based on input bag
+        input_name = os.path.basename(self.input_bag)
+        default_name = os.path.splitext(input_name)[0] + "_filtered.bag"
+        default_path = os.path.join(os.path.dirname(self.input_bag), default_name)
+        
         while True:
             output = questionary.path(
                 "Enter output bag path:",
-                default="filtered.bag",
+                default=default_path,
                 only_directories=False,
                 style=CUSTOM_STYLE
             ).ask()
@@ -485,7 +544,26 @@ class CliTool:
         except Exception as e:
             self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
 
+# Typer commands
+@app.command()
+def cli():
+    """Interactive CLI mode with menu interface"""
+    tool = CliTool()
+    tool.run_cli()
+
+@app.command()
+def filter(
+    input_bag: str = typer.Argument(..., help="Input bag file path"),
+    output_bag: str = typer.Argument(..., help="Output bag file path"),
+    whitelist: Optional[str] = typer.Option(None, help="Whitelist file path")
+):
+    """Filter a bag file using whitelist or manual selection"""
+    tool = CliTool()
+    tool.filter_bag(input_bag, output_bag, whitelist)
+
 def main():
     """Entry point for the CLI tool"""
-    tool = CliTool()
-    tool.run() 
+    app()
+
+if __name__ == "__main__":
+    main() 
