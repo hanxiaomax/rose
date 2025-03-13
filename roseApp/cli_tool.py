@@ -189,9 +189,27 @@ class CliTool:
                     continue
                     
                 # Run filter
+                start_time = time.time()
                 with self.show_loading("Filtering bag file...") as progress:
                     progress.add_task(description="Processing...")
                     self.parser.filter_bag(input_bag, output_bag, selected_topics)
+                end_time = time.time()
+                
+                # Show statistics
+                input_size = os.path.getsize(input_bag)
+                output_size = os.path.getsize(output_bag)
+                input_size_mb = input_size / (1024 * 1024)
+                output_size_mb = output_size / (1024 * 1024)
+                reduction_ratio = (1 - output_size / input_size) * 100
+                
+                stats = (
+                    f"Filter Statistics:\n"
+                    f"• Time: {end_time - start_time:.2f} seconds\n"
+                    f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
+                    f"• Reduction: {reduction_ratio:.1f}%\n"
+                    f"• Topics: {len(topics)} -> {len(selected_topics)}"
+                )
+                rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
                 
                 self.console.print(f"\nFilter completed: {output_bag}", style="green")
                 
@@ -219,7 +237,8 @@ class CliTool:
                 choices=[
                     Choice("1. Create new whitelist", "create"),
                     Choice("2. View whitelist", "view"),
-                    Choice("3. Back", "back")
+                    Choice("3. Delete whitelist", "delete"),
+                    Choice("4. Back", "back")
                 ],
                 style=CUSTOM_STYLE
             ).ask()
@@ -230,6 +249,8 @@ class CliTool:
                 self._create_whitelist_workflow()
             elif action == "view":
                 self._browse_whitelists()
+            elif action == "delete":
+                self._delete_whitelist()
     
     def _create_whitelist_workflow(self):
         """Create whitelist workflow"""
@@ -425,6 +446,44 @@ class CliTool:
                     continue
             
             return output
+    
+    def _delete_whitelist(self):
+        """Delete a whitelist file"""
+        whitelist_dir = "whitelists"
+        if not os.path.exists(whitelist_dir):
+            self.console.print("No whitelists found", style="yellow")
+            return
+            
+        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+        if not whitelists:
+            self.console.print("No whitelists found", style="yellow")
+            return
+            
+        # Select whitelist to delete
+        selected = questionary.select(
+            "Select whitelist to delete:",
+            choices=whitelists,
+            style=CUSTOM_STYLE
+        ).ask()
+        
+        if not selected:
+            return
+            
+        # Confirm deletion
+        if not questionary.confirm(
+            f"Are you sure you want to delete '{selected}'?",
+            default=False,
+            style=CUSTOM_STYLE
+        ).ask():
+            return
+            
+        # Delete the file
+        path = os.path.join(whitelist_dir, selected)
+        try:
+            os.remove(path)
+            self.console.print(f"\nDeleted whitelist: {selected}", style="green")
+        except Exception as e:
+            self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
 
 def main():
     """Entry point for the CLI tool"""
