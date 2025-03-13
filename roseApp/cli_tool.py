@@ -22,7 +22,7 @@ CUSTOM_STYLE = Style([
     ('path', '#268bd2'),        # Blue
     ('highlighted', '#859900 bold'),  # Green
     ('selected', '#859900'),    # Green
-    ('instruction', '#93a1a1'), # Gray
+    ('instruction', '#268bd2'), # Blue
     ('text', '#ffffff'),
     ('completion-menu', 'bg:#333333 #ffffff'),
     ('completion-menu-selection', 'bg:#859900 #000000')
@@ -465,7 +465,7 @@ class CliTool:
         selected_topics = questionary.checkbox(
             "Select topics to include:",
             choices=topic_choices,
-            instruction="Use space to select/unselect topics",
+            instruction="\n[space] to select/unselect topics \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
             style=CUSTOM_STYLE
         ).ask()
         
