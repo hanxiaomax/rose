@@ -236,9 +236,7 @@ class CliTool:
                 Choice(title=f"{rel_path} ({file_size_mb:.1f} MB)", value=f)
             )
         
-        # Add "Select All" option
-        choices.insert(0, Choice(title="[Select All]", value="all"))
-        
+
         # Select files
         selected = questionary.checkbox(
             "Select bag files to process:",
