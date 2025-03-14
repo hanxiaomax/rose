@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import questionary
 from questionary import Choice, Style
 from rich.console import Console
@@ -9,6 +9,7 @@ from rich import print as rprint
 from rich.panel import Panel
 from rich.text import Text
 import typer
+from prompt_toolkit import prompt
 
 from .core.parser import create_parser, ParserType
 from .core.util import get_logger
@@ -256,227 +257,250 @@ class CliTool:
 
     def _run_quick_filter(self):
         """Run quick filter workflow"""
-        # Select input method
-        input_method = questionary.select(
-            "Select input method:",
-            choices=[
-                Choice("1. Single bag file", "single"),
-                Choice("2. Multiple bag files from directory", "multiple"),
-                Choice("3. Back", "back")
-            ],
-            style=CUSTOM_STYLE
-        ).ask()
-        
-        if input_method == "back":
-            return
-        elif input_method == "single":
-            # Get input bag
-            self.input_bag = self.ask_for_bag("Enter input bag file path:")
-            if not self.input_bag:
-                return
-                
-            # Load bag file
-            with self.show_loading("Loading bag file...") as progress:
-                progress.add_task(description="Loading...")
-                self.topics, self.connections, self.time_range = self.parser.load_bag(self.input_bag)
-            
-            # Show bag info
-            self._show_current_bag_info(self.input_bag, self.topics)
-            
-            # Process single file
-            self._process_single_bag(self.input_bag)
-        else:
-            # Select multiple files
-            bag_files = self._select_bag_files()
-            if not bag_files:
-                return
-                
-            # Select filter method for all files
-            method = questionary.select(
-                "Select filter method for all files:",
-                choices=[
-                    Choice("1. Use whitelist file", "whitelist"),
-                    Choice("2. Select topics manually", "manual"),
+        # Define questions using dictionary configuration
+        questions = [
+            {
+                "type": "select",
+                "name": "input_method",
+                "message": "Select input method:",
+                "choices": [
+                    Choice("1. Single bag file", "single"),
+                    Choice("2. Multiple bag files from directory", "multiple"),
                     Choice("3. Back", "back")
-                ],
-                style=CUSTOM_STYLE
-            ).ask()
+                ]
+            }
+        ]
+        
+        # Get input method
+        answers = questionary.prompt(questions)
+        if not answers or answers["input_method"] == "back":
+            return
             
-            if method == "back":
+        input_method = answers["input_method"]
+        
+        if input_method == "single":
+            # Single file questions
+            questions = [
+                {
+                    "type": "path",
+                    "name": "input_bag",
+                    "message": "Enter input bag file path:",
+                    "only_directories": False
+                },
+                {
+                    "type": "path",
+                    "name": "output_bag",
+                    "message": "Enter output bag file path:",
+                    "only_directories": False
+                },
+                {
+                    "type": "select",
+                    "name": "filter_method",
+                    "message": "Select filter method:",
+                    "choices": [
+                        Choice("1. Topic whitelist", "whitelist"),
+                        Choice("2. Time range", "time"),
+                        Choice("3. Both", "both"),
+                        Choice("4. Back", "back")
+                    ]
+                }
+            ]
+            
+            # Get answers
+            answers = questionary.prompt(questions)
+            if not answers or answers["filter_method"] == "back":
                 return
                 
-            # Get selected topics
-            selected_topics = None
-            whitelist_path = None
-            if method == "whitelist":
-                whitelist_path = self._select_whitelist()
-                if not whitelist_path:
-                    return
-            else:
-                # Load first bag to get topics
-                with self.show_loading("Loading bag file...") as progress:
-                    progress.add_task(description="Loading...")
-                    self.topics, self.connections, _ = self.parser.load_bag(bag_files[0])
-                selected_topics = self._select_topics(self.topics, self.connections)
-                if not selected_topics:
-                    return
+            # Process single file
+            self._process_single_bag(
+                answers["input_bag"],
+                answers["output_bag"],
+                answers["filter_method"]
+            )
             
-            # Process all files with a progress display
-            self.console.print("\nStarting batch processing...", style="bold blue")
+        else:  # multiple
+            # Directory selection questions
+            questions = [
+                {
+                    "type": "path",
+                    "name": "directory",
+                    "message": "Enter directory path:",
+                    "only_directories": True
+                },
+                {
+                    "type": "select",
+                    "name": "filter_method",
+                    "message": "Select filter method:",
+                    "choices": [
+                        Choice("1. Topic whitelist", "whitelist"),
+                        Choice("2. Time range", "time"),
+                        Choice("3. Both", "both"),
+                        Choice("4. Back", "back")
+                    ]
+                }
+            ]
             
-            # Display all files that will be processed
-            self.console.print("\nFiles to be processed:", style="bold yellow")
-            for i, bag_file in enumerate(bag_files, 1):
-                # Try to get a shorter representation of the path
-                try:
-                    display_path = os.path.relpath(bag_file)
-                except ValueError:
-                    display_path = bag_file
-                self.console.print(f"{i}. {display_path}")
-            self.console.print(f"\n{len(bag_files)} files in total\n", style="bold yellow")
+            # Get directory and filter method
+            answers = questionary.prompt(questions)
+            if not answers or answers["filter_method"] == "back":
+                return
+                
+            # Find and select bag files
+            bag_files = self._find_bag_files(answers["directory"])
+            if not bag_files:
+                rprint(Panel("No bag files found in directory", style="red"))
+                return
+                
+            # Create file selection questions
+            file_choices = [
+                Choice(
+                    f"{os.path.relpath(f, answers['directory'])} ({os.path.getsize(f)/1024/1024:.1f} MB)",
+                    f
+                ) for f in bag_files
+            ]
+            file_choices.insert(0, Choice("Select All", "all"))
             
-            # Create a progress display with one task per file
+            questions = [
+                {
+                    "type": "checkbox",
+                    "name": "selected_files",
+                    "message": "Select bag files to process:",
+                    "choices": file_choices
+                }
+            ]
+            
+            # Get selected files
+            answers = questionary.prompt(questions)
+            if not answers or not answers["selected_files"]:
+                return
+                
+            selected_files = answers["selected_files"]
+            if "all" in selected_files:
+                selected_files = bag_files
+                
+            # Process selected files
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 transient=False,
             ) as progress:
-                # Create a task for each file (all visible but only current one active)
-                file_tasks = {}
-                for i, bag_file in enumerate(bag_files):
-                    # Try to get a shorter representation of the path
-                    try:
-                        display_path = os.path.relpath(bag_file)
-                    except ValueError:
-                        display_path = os.path.basename(bag_file)
-                        
-                    # Add task with status indicator
-                    task_id = progress.add_task(
-                        description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [dim](waiting)[/dim]", 
-                        total=None,
-                        visible=True
-                    )
-                    file_tasks[bag_file] = task_id
-                
-                # Process each file sequentially
-                for i, bag_file in enumerate(bag_files):
-                    # Try to get a shorter representation of the path
-                    try:
-                        display_path = os.path.relpath(bag_file)
-                    except ValueError:
-                        display_path = os.path.basename(bag_file)
+                for bag_file in selected_files:
+                    # Create output path
+                    output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
                     
-                    # Update all tasks to show current progress
-                    for j, bf in enumerate(bag_files):
-                        if j < i:
-                            # Already processed
-                            progress.update(file_tasks[bf], description=f"[dim]{j+1}/{len(bag_files)}[/dim] {os.path.relpath(bf, start=os.getcwd()) if os.path.isabs(bf) else bf} [green]✓[/green]")
-                        elif j > i:
-                            # Waiting
-                            progress.update(file_tasks[bf], description=f"[dim]{j+1}/{len(bag_files)}[/dim] {os.path.relpath(bf, start=os.getcwd()) if os.path.isabs(bf) else bf} [dim](processing)[/dim]")
-                    
-                    # Update current task to show it's active
-                    progress.update(file_tasks[bag_file], description=f"[bold]{i+1}/{len(bag_files)} {display_path}[/bold] [yellow](处理中)[/yellow]")
-                    
-                    # Prepare output path
-                    output_bag = os.path.join(
-                        os.path.dirname(bag_file),
-                        os.path.splitext(os.path.basename(bag_file))[0] + "_filtered.bag"
+                    # Add progress task
+                    task = progress.add_task(
+                        f"Processing {os.path.relpath(bag_file, answers['directory'])}...",
+                        total=100
                     )
                     
-                    # Process the file
-                    try:
-                        success = self.filter_bag(
-                            bag_file, 
-                            output_bag, 
-                            selected_topics, 
-                            whitelist_path, 
-                            show_stats=False,
-                            progress_context=progress
-                        )
-                        
-                        if success:
-                            # Mark task as completed
-                            progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [green]✓[/green]")
-                        else:
-                            # Mark task as failed
-                            progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [red]✗[/red]")
-                    except Exception as e:
-                        # Mark task as failed with error message
-                        progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [red]✗ - {str(e)}[/red]")
-                
-            self.console.print("\nDone!", style="green")
-
-    def _process_single_bag(self, input_bag: str):
-        """Process a single bag file"""
-        while True:
-            # Select action
-            action = questionary.select(
-                "Select action:",
-                choices=[
-                    Choice("1. Show bag information", "info"),
-                    Choice("2. Filter bag file", "filter"),
-                    Choice("3. Back", "back")
-                ],
-                style=CUSTOM_STYLE
-            ).ask()
+                    # Process file
+                    self._process_single_bag(
+                        bag_file,
+                        output_bag,
+                        answers["filter_method"],
+                        progress_context=progress,
+                        task_id=task
+                    )
+                    
+                    # Update progress
+                    progress.update(task, completed=100)
+                    
+            rprint(Panel("All files processed successfully!", style="green"))
             
-            if action == "back":
+    def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, 
+                          progress_context: Optional[Progress] = None, task_id: Optional[int] = None):
+        """Process a single bag file"""
+        # Load bag info
+        self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
+        
+        # Get filter parameters based on method
+        whitelist = None
+        time_range = None
+        
+        if filter_method in ["whitelist", "both"]:
+            whitelist = self._select_whitelist()
+            if not whitelist:
                 return
-            elif action == "info":
-                self._show_bag_info(input_bag, self.topics, self.connections, self.time_range)
-                continue
-            elif action == "filter":
-                # Select filter method
-                method = questionary.select(
-                    "Select filter method:",
-                    choices=[
-                        Choice("1. Use whitelist file", "whitelist"),
-                        Choice("2. Select topics manually", "manual"),
-                        Choice("3. Back", "back")
-                    ],
-                    style=CUSTOM_STYLE
-                ).ask()
                 
-                if method == "back":
-                    continue
-                    
-                # Get selected topics
-                selected_topics = None
-                whitelist_path = None
-                if method == "whitelist":
-                    whitelist_path = self._select_whitelist()
-                    if not whitelist_path:
-                        continue
-                else:
-                    selected_topics = self._select_topics(self.topics, self.connections)
-                    if not selected_topics:
-                        continue
+        if filter_method in ["time", "both"]:
+            time_range = self._select_time_range()
+            if not time_range:
+                return
                 
-                # Get output path
-                output_bag = self._ask_for_output_bag()
-                if not output_bag:
-                    continue
-                    
-                # Run filter
-                self.filter_bag(input_bag, output_bag, selected_topics, whitelist_path)
-                
-                # Ask what to do next
-                next_action = questionary.select(
-                    "What would you like to do next?",
-                    choices=[
-                        Choice("1. Filter another bag", "continue"),
-                        Choice("2. Back", "back")
-                    ],
-                    style=CUSTOM_STYLE
-                ).ask()
-                
-                if next_action == "continue":
-                    self._run_quick_filter()
-                    return
-                elif next_action == "back":
-                    continue
-    
+        # Filter bag
+        self.parser.filter_bag(
+            input_bag,
+            output_bag,
+            whitelist,
+            time_range,
+            progress_context=progress_context,
+            task_id=task_id
+        )
+        
+        # Show results
+        if not progress_context:  # Only show stats for single file processing
+            self._show_filter_stats(input_bag, output_bag)
+            
+    def _select_whitelist(self) -> Optional[List[str]]:
+        """Select whitelist topics"""
+        # Create topic selection questions
+        topic_choices = [
+            Choice(
+                f"{topic} ({self.connections[topic]})",
+                topic
+            ) for topic in sorted(self.topics)
+        ]
+        
+        questions = [
+            {
+                "type": "checkbox",
+                "name": "selected_topics",
+                "message": "Select topics to include:",
+                "choices": topic_choices,
+                "style": CUSTOM_STYLE
+            }
+        ]
+        
+        # Get selected topics
+        answers = prompt(questions)
+        if not answers or not answers["selected_topics"]:
+            return None
+            
+        return answers["selected_topics"]
+        
+    def _select_time_range(self) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+        """Select time range"""
+        # Create time range questions
+        questions = [
+            {
+                "type": "text",
+                "name": "start_time",
+                "message": "Enter start time (YY/MM/DD HH:MM:SS):",
+                "style": CUSTOM_STYLE
+            },
+            {
+                "type": "text",
+                "name": "end_time",
+                "message": "Enter end time (YY/MM/DD HH:MM:SS):",
+                "style": CUSTOM_STYLE
+            }
+        ]
+        
+        # Get time range
+        answers = prompt(questions)
+        if not answers:
+            return None
+            
+        try:
+            return TimeUtil.convert_time_range_to_tuple(
+                answers["start_time"],
+                answers["end_time"]
+            )
+        except Exception as e:
+            rprint(Panel(f"Error parsing time range: {str(e)}", style="red"))
+            return None
+
     def _run_whitelist_manager(self):
         """Run whitelist management workflow"""
         while True:
@@ -625,29 +649,6 @@ class CliTool:
         self.console.print(f"\nWhitelist: {selected}", style="bold green")
         self.console.print("─" * 80)
         self.console.print(content)
-    
-    def _select_whitelist(self) -> Optional[str]:
-        """Select a whitelist file"""
-        whitelist_dir = "whitelists"
-        if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style="yellow")
-            return None
-            
-        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
-        if not whitelists:
-            self.console.print("No whitelists found", style="yellow")
-            return None
-            
-        selected = questionary.select(
-            "Select whitelist:",
-            choices=whitelists,
-            style=CUSTOM_STYLE
-        ).ask()
-        
-        if not selected:
-            return None
-            
-        return os.path.join(whitelist_dir, selected)
     
     def _select_topics(self, topics: List[str], connections: dict) -> Optional[List[str]]:
         """Select topics manually"""
