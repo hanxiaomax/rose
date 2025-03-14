@@ -221,11 +221,20 @@ class CliTool:
             self.console.print("No bag files found in the directory", style="yellow")
             return None
             
-        # Create choices for selection
-        choices = [
-            Choice(title=f"{os.path.basename(f)} ({os.path.getsize(f) / (1024*1024):.1f} MB)", value=f)
-            for f in bag_files
-        ]
+        # Create choices for selection with relative paths
+        choices = []
+        for f in bag_files:
+            # Get relative path if possible
+            try:
+                rel_path = os.path.relpath(f, directory)
+            except ValueError:
+                # Fall back to basename if on different drives
+                rel_path = os.path.basename(f)
+                
+            file_size_mb = os.path.getsize(f) / (1024*1024)
+            choices.append(
+                Choice(title=f"{rel_path} ({file_size_mb:.1f} MB)", value=f)
+            )
         
         # Add "Select All" option
         choices.insert(0, Choice(title="[Select All]", value="all"))
@@ -315,7 +324,18 @@ class CliTool:
                     return
             
             # Process all files with a progress display
-            self.console.print("\n开始批量处理文件...", style="bold blue")
+            self.console.print("\nStarting batch processing...", style="bold blue")
+            
+            # Display all files that will be processed
+            self.console.print("\nFiles to be processed:", style="bold yellow")
+            for i, bag_file in enumerate(bag_files, 1):
+                # Try to get a shorter representation of the path
+                try:
+                    display_path = os.path.relpath(bag_file)
+                except ValueError:
+                    display_path = bag_file
+                self.console.print(f"{i}. {display_path}")
+            self.console.print(f"\n{len(bag_files)} files in total\n", style="bold yellow")
             
             # Create a progress display with one task per file
             with Progress(
@@ -323,18 +343,42 @@ class CliTool:
                 TextColumn("[progress.description]{task.description}"),
                 transient=False,
             ) as progress:
-                # Create a task for each file (initially hidden)
+                # Create a task for each file (all visible but only current one active)
                 file_tasks = {}
-                for bag_file in bag_files:
-                    file_name = os.path.basename(bag_file)
-                    task_id = progress.add_task(description=f"{file_name}", visible=False)
+                for i, bag_file in enumerate(bag_files):
+                    # Try to get a shorter representation of the path
+                    try:
+                        display_path = os.path.relpath(bag_file)
+                    except ValueError:
+                        display_path = os.path.basename(bag_file)
+                        
+                    # Add task with status indicator
+                    task_id = progress.add_task(
+                        description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [dim](waiting)[/dim]", 
+                        total=None,
+                        visible=True
+                    )
                     file_tasks[bag_file] = task_id
                 
                 # Process each file sequentially
                 for i, bag_file in enumerate(bag_files):
-                    # Show current file in progress
-                    file_name = os.path.basename(bag_file)
-                    progress.update(file_tasks[bag_file], description=f"{file_name}", visible=True)
+                    # Try to get a shorter representation of the path
+                    try:
+                        display_path = os.path.relpath(bag_file)
+                    except ValueError:
+                        display_path = os.path.basename(bag_file)
+                    
+                    # Update all tasks to show current progress
+                    for j, bf in enumerate(bag_files):
+                        if j < i:
+                            # Already processed
+                            progress.update(file_tasks[bf], description=f"[dim]{j+1}/{len(bag_files)}[/dim] {os.path.relpath(bf, start=os.getcwd()) if os.path.isabs(bf) else bf} [green]✓[/green]")
+                        elif j > i:
+                            # Waiting
+                            progress.update(file_tasks[bf], description=f"[dim]{j+1}/{len(bag_files)}[/dim] {os.path.relpath(bf, start=os.getcwd()) if os.path.isabs(bf) else bf} [dim](processing)[/dim]")
+                    
+                    # Update current task to show it's active
+                    progress.update(file_tasks[bag_file], description=f"[bold]{i+1}/{len(bag_files)} {display_path}[/bold] [yellow](处理中)[/yellow]")
                     
                     # Prepare output path
                     output_bag = os.path.join(
@@ -355,13 +399,13 @@ class CliTool:
                         
                         if success:
                             # Mark task as completed
-                            progress.update(file_tasks[bag_file], description=f"{file_name} ✓")
+                            progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [green]✓[/green]")
                         else:
                             # Mark task as failed
-                            progress.update(file_tasks[bag_file], description=f"{file_name} ✗")
+                            progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [red]✗[/red]")
                     except Exception as e:
                         # Mark task as failed with error message
-                        progress.update(file_tasks[bag_file], description=f"{file_name} ✗ - {str(e)}")
+                        progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [red]✗ - {str(e)}[/red]")
                 
             self.console.print("\n所有文件处理完成！", style="green")
 
