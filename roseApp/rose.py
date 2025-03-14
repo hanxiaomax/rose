@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-from datetime import datetime
+import time
 from typing import List, Optional, Tuple
 
-import click
+import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
+
 from roseApp.core.parser import create_parser, ParserType
 from roseApp.core.util import get_logger, TimeUtil
 from roseApp.tui import RoseTUI     
 import logging
-import time
 
 # Initialize logger
 logger = get_logger("RoseCLI")
+console = Console()
+app = typer.Typer(help="ROS bag filter utility - A powerful tool for ROS bag manipulation")
 
 def configure_logging(verbosity: int):
     """Configure logging level based on verbosity count
@@ -54,44 +57,40 @@ def parse_time_range(time_range: str) -> Optional[Tuple[Tuple[int, int], Tuple[i
         return TimeUtil.convert_time_range_to_tuple(start_str.strip(), end_str.strip())
     except Exception as e:
         logger.error(f"Error parsing time range: {str(e)}")
-        raise click.BadParameter(
+        raise typer.BadParameter(
             "Time range must be in format 'YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS'"
         )
 
-@click.group(invoke_without_command=True)
-@click.option('-v', '--verbose', count=True, help='Increase verbosity (e.g. -v, -vv, -vvv)')
-@click.pass_context
-def cli(ctx, verbose):
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: typer.Context,
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="增加详细程度 (例如 -v, -vv, -vvv)")
+):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
     configure_logging(verbose)
-    ctx.ensure_object(dict)
-    ctx.obj['VERBOSE'] = verbose
     
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        typer.echo(ctx.get_help())
 
-@cli.command()
+@app.command()
 def tui():
-    """Launch the TUI (Terminal User Interface) for interactive operation"""
+    """启动TUI（终端用户界面）进行交互式操作"""
     app = RoseTUI()
     app.run()
 
-@cli.command()
-@click.argument('input_bag', type=click.Path(exists=True))
-@click.argument('output_bag', type=click.Path())
-@click.option('--whitelist', '-w', type=click.Path(exists=True),
-              help='Path to topic whitelist file')
-@click.option('--time-range', '-t', 
-              help='Time range in format "YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS"')
-@click.option('--topics', '-tp', multiple=True,
-              help='Topics to include (can be specified multiple times). Alternative to whitelist file.')
-@click.option('--dry-run', is_flag=True,
-              help='Show what would be done without actually doing it')
-def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
-    """Filter ROS bag by topic whitelist and/or time range.
+@app.command()
+def filter(
+    input_bag: str = typer.Argument(..., help="输入bag文件路径"),
+    output_bag: str = typer.Argument(..., help="输出bag文件路径"),
+    whitelist: Optional[str] = typer.Option(None, "--whitelist", "-w", help="话题白名单文件路径"),
+    time_range: Optional[str] = typer.Option(None, "--time-range", "-t", help="时间范围，格式为 \"YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS\""),
+    topics: Optional[List[str]] = typer.Option(None, "--topics", "-tp", help="要包含的话题（可多次指定）。作为白名单文件的替代方式。"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="显示将要执行的操作，但不实际执行")
+):
+    """根据话题白名单和/或时间范围过滤ROS bag文件。
     
-    Examples:
-    \b
+    示例:
+    
         rose filter input.bag output.bag -w whitelist.txt
         rose filter input.bag output.bag -t "23/01/01 00:00:00,23/01/01 00:10:00"
         rose filter input.bag output.bag --topics /topic1 --topics /topic2
@@ -99,13 +98,23 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
     try:
         parser = create_parser(ParserType.PYTHON)
         
-        # Get all topics from input bag
+        # 检查输入文件是否存在
+        if not os.path.exists(input_bag):
+            typer.echo(f"错误: 输入文件 '{input_bag}' 不存在", err=True)
+            raise typer.Exit(code=1)
+            
+        # 检查白名单文件是否存在
+        if whitelist and not os.path.exists(whitelist):
+            typer.echo(f"错误: 白名单文件 '{whitelist}' 不存在", err=True)
+            raise typer.Exit(code=1)
+        
+        # 从输入bag获取所有话题
         all_topics, connections, _ = parser.load_bag(input_bag)
         
-        # Parse time range if provided
+        # 解析时间范围（如果提供）
         time_range_tuple = parse_time_range(time_range) if time_range else None
         
-        # Get topics from whitelist file or command line arguments
+        # 从白名单文件或命令行参数获取话题
         whitelist_topics = set()
         if whitelist:
             whitelist_topics.update(parser.load_whitelist(whitelist))
@@ -113,98 +122,110 @@ def filter(input_bag, output_bag, whitelist, time_range, topics, dry_run):
             whitelist_topics.update(topics)
             
         if not whitelist_topics:
-            raise click.ClickException("No topics specified. Use --whitelist or --topics")
+            typer.echo("错误: 未指定话题。请使用 --whitelist 或 --topics", err=True)
+            raise typer.Exit(code=1)
             
-        # Show what will be done in dry run mode
+        # 在dry run模式下显示将要执行的操作
         if dry_run:
-            click.secho("DRY RUN - No changes will be made", fg='yellow', bold=True)
-            click.echo(f"Would filter {click.style(input_bag, fg='green')} to {click.style(output_bag, fg='blue')}")
+            typer.secho("DRY RUN - 不会进行任何更改", fg=typer.colors.YELLOW, bold=True)
+            typer.echo(f"将过滤 {typer.style(input_bag, fg=typer.colors.GREEN)} 到 {typer.style(output_bag, fg=typer.colors.BLUE)}")
             
-            # Show all topics with selection status
-            click.echo("\nTopic Selection:")
-            click.echo("─" * 80)
+            # 显示所有话题及其选择状态
+            typer.echo("\n话题选择:")
+            typer.echo("─" * 80)
             for topic in sorted(all_topics):
                 is_selected = topic in whitelist_topics
-                status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
-                topic_style = 'green' if is_selected else 'white'
-                msg_type_style = 'cyan' if is_selected else 'white'
+                status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
+                topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
+                msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
                 topic_str = f"{topic:<40}"
-                click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
-                          f"{click.style(connections[topic], fg=msg_type_style)}")
+                typer.echo(f"  {status_icon} {typer.style(topic_str, fg=topic_style)} "
+                          f"{typer.style(connections[topic], fg=msg_type_style)}")
             
             if time_range_tuple:
                 start_time, end_time = time_range_tuple
-                click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
-                          f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
+                typer.echo(f"\n时间范围: {typer.style(TimeUtil.to_datetime(start_time), fg=typer.colors.YELLOW)} 到 "
+                          f"{typer.style(TimeUtil.to_datetime(end_time), fg=typer.colors.YELLOW)}")
             return
         
-        # Print filter information
-        click.secho("\nStarting bag filter:", bold=True)
-        click.echo(f"Input:  {click.style(input_bag, fg='green')}")
-        click.echo(f"Output: {click.style(output_bag, fg='blue')}")
+        # 打印过滤信息
+        typer.secho("\n开始bag过滤:", bold=True)
+        typer.echo(f"输入:  {typer.style(input_bag, fg=typer.colors.GREEN)}")
+        typer.echo(f"输出: {typer.style(output_bag, fg=typer.colors.BLUE)}")
         
-        # Show all topics with selection status
-        click.echo("\nTopic Selection:")
-        click.echo("─" * 80)
+        # 显示所有话题及其选择状态
+        typer.echo("\n话题选择:")
+        typer.echo("─" * 80)
         selected_count = 0
         for topic in sorted(all_topics):
             is_selected = topic in whitelist_topics
             if is_selected:
                 selected_count += 1
-            status_icon = click.style('✓', fg='green') if is_selected else click.style('○', fg='yellow')
-            topic_style = 'green' if is_selected else 'white'
-            msg_type_style = 'cyan' if is_selected else 'white'
+            status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
+            topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
+            msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
             topic_str = f"{topic:<40}"
-            click.echo(f"  {status_icon} {click.style(topic_str, fg=topic_style)} "
-                      f"{click.style(connections[topic], fg=msg_type_style)}")
+            typer.echo(f"  {status_icon} {typer.style(topic_str, fg=topic_style)} "
+                      f"{typer.style(connections[topic], fg=msg_type_style)}")
         
-        # Show selection summary
-        click.echo("─" * 80)
-        click.echo(f"Selected: {click.style(str(selected_count), fg='green')} of "
-                  f"{click.style(str(len(all_topics)), fg='white')} topics")
+        # 显示选择摘要
+        typer.echo("─" * 80)
+        typer.echo(f"已选择: {typer.style(str(selected_count), fg=typer.colors.GREEN)} / "
+                  f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} 个话题")
         
         if time_range_tuple:
             start_time, end_time = time_range_tuple
-            click.echo(f"\nTime range: {click.style(TimeUtil.to_datetime(start_time), fg='yellow')} to "
-                      f"{click.style(TimeUtil.to_datetime(end_time), fg='yellow')}")
+            typer.echo(f"\n时间范围: {typer.style(TimeUtil.to_datetime(start_time), fg=typer.colors.YELLOW)} 到 "
+                      f"{typer.style(TimeUtil.to_datetime(end_time), fg=typer.colors.YELLOW)}")
         
-        # Run the filter with progress bar
-        click.echo("\nProcessing:")
+        # 使用进度条运行过滤
+        typer.echo("\n处理中:")
         start_time = time.time()
-        with click.progressbar(length=100, label='Filtering bag file', 
-                             show_eta=True, show_percent=True) as bar:
+        
+        # 使用Rich的进度条替代Click的进度条
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=False,
+        ) as progress:
+            task = progress.add_task("过滤bag文件...", total=100)
             result = parser.filter_bag(
                 input_bag, 
                 output_bag, 
                 list(whitelist_topics),
                 time_range_tuple
             )
-            bar.update(100)
+            progress.update(task, completed=100)
         
-        # Show filtering results
+        # 显示过滤结果
         end_time = time.time()
         elapsed = end_time - start_time
         input_size = os.path.getsize(input_bag)
         output_size = os.path.getsize(output_bag)
         size_reduction = (1 - output_size/input_size) * 100
         
-        click.secho("\nFilter Results:", fg='green', bold=True)
-        click.echo("─" * 80)
-        click.echo(f"Time taken: {int(elapsed//60)}m {elapsed%60:.2f}s")
-        click.echo(f"Input size:  {click.style(f'{input_size/1024/1024:.2f} MB', fg='yellow')}")
-        click.echo(f"Output size: {click.style(f'{output_size/1024/1024:.2f} MB', fg='yellow')}")
-        click.echo(f"Reduction:   {click.style(f'{size_reduction:.1f}%', fg='green')}")
-        click.echo(result)
+        typer.secho("\n过滤结果:", fg=typer.colors.GREEN, bold=True)
+        typer.echo("─" * 80)
+        typer.echo(f"耗时: {int(elapsed//60)}分 {elapsed%60:.2f}秒")
+        typer.echo(f"输入大小:  {typer.style(f'{input_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
+        typer.echo(f"输出大小: {typer.style(f'{output_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
+        typer.echo(f"减少比例:   {typer.style(f'{size_reduction:.1f}%', fg=typer.colors.GREEN)}")
+        typer.echo(result)
         
     except Exception as e:
-        logger.error(f"Error during filtering: {str(e)}", exc_info=True)
-        raise click.ClickException(str(e))
+        logger.error(f"过滤过程中出错: {str(e)}", exc_info=True)
+        typer.echo(f"错误: {str(e)}", err=True)
+        raise typer.Exit(code=1)
 
-@cli.command('cli')
+@app.command('cli')
 def cli_tool():
-    """Launch interactive command-line interface"""
+    """启动交互式命令行界面"""
     from .cli_tool import main
     main()
 
+def main():
+    """Entry point for the CLI tool"""
+    app()
+
 if __name__ == '__main__':
-    cli()
+    app()

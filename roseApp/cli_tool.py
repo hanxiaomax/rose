@@ -407,7 +407,7 @@ class CliTool:
                         # Mark task as failed with error message
                         progress.update(file_tasks[bag_file], description=f"[dim]{i+1}/{len(bag_files)}[/dim] {display_path} [red]✗ - {str(e)}[/red]")
                 
-            self.console.print("\n所有文件处理完成！", style="green")
+            self.console.print("\nDone!", style="green")
 
     def _process_single_bag(self, input_bag: str):
         """Process a single bag file"""
