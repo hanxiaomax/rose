@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Tuple, List, Dict, Optional
 import rosbag
 from roseApp.core.util import TimeUtil, get_logger
-
+from time import sleep
 _logger = get_logger(__name__)
 
 # Initialize C++ implementation flag
@@ -136,6 +136,7 @@ class BagParser(IBagParser):
         """
         try:
             start_time = time.time()
+            sleep(2)
             with rosbag.Bag(output_bag, 'w') as outbag:
                 # If time range is provided, convert it to seconds
                 start_sec = None

@@ -131,68 +131,242 @@ class CliTool:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
 
-    def filter_bag(self, input_bag: str, output_bag: str, whitelist: Optional[str] = None):
+    def filter_bag(self, input_bag: str, output_bag: str, selected_topics: Optional[List[str]] = None, whitelist_path: Optional[str] = None, show_stats: bool = True, progress_context: Optional[Progress] = None):
         """Filter a bag file using whitelist or manual selection"""
         try:
             # Load bag file
-            with self.show_loading("Loading bag file...") as progress:
-                progress.add_task(description="Loading...")
+            if progress_context:
+                # If we're in a batch process, update the existing progress
+                task_id = progress_context.add_task(f"Loading {os.path.basename(input_bag)}...", total=None)
                 self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-            
-            # Get selected topics
-            selected_topics = []
-            if whitelist:
-                selected_topics = self.parser.load_whitelist(whitelist)
-            else:
-                selected_topics = self._select_topics(self.topics, self.connections)
-                if not selected_topics:
-                    return
-            
-            # Run filter
-            start_time = time.time()
-            with self.show_loading("Filtering bag file...") as progress:
-                progress.add_task(description="Processing...")
+                progress_context.update(task_id, description=f"Filtering {os.path.basename(input_bag)}...", visible=True)
                 self.parser.filter_bag(input_bag, output_bag, selected_topics)
-            end_time = time.time()
-            
-            # Show statistics
-            input_size = os.path.getsize(input_bag)
-            output_size = os.path.getsize(output_bag)
-            input_size_mb = input_size / (1024 * 1024)
-            output_size_mb = output_size / (1024 * 1024)
-            reduction_ratio = (1 - output_size / input_size) * 100
-            
-            stats = (
-                f"Filter Statistics:\n"
-                f"• Time: {end_time - start_time:.2f} seconds\n"
-                f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-                f"• Reduction: {reduction_ratio:.1f}%\n"
-                f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
-            )
-            rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
-            
-            self.console.print(f"\nFilter completed: {output_bag}", style="green")
+                progress_context.remove_task(task_id)
+            else:
+                # Normal single-file process with separate progress indicators
+                with self.show_loading("Loading bag file...") as progress:
+                    progress.add_task(description="Loading...")
+                    self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
+                
+                # Get selected topics
+                if whitelist_path:
+                    selected_topics = self.parser.load_whitelist(whitelist_path)
+                elif not selected_topics:
+                    selected_topics = self._select_topics(self.topics, self.connections)
+                    if not selected_topics:
+                        return
+                
+                # Run filter
+                start_time = time.time()
+                with self.show_loading("Filtering bag file...") as progress:
+                    progress.add_task(description="Processing...")
+                    self.parser.filter_bag(input_bag, output_bag, selected_topics)
+                end_time = time.time()
+                
+                # Show statistics if requested
+                if show_stats:
+                    input_size = os.path.getsize(input_bag)
+                    output_size = os.path.getsize(output_bag)
+                    input_size_mb = input_size / (1024 * 1024)
+                    output_size_mb = output_size / (1024 * 1024)
+                    reduction_ratio = (1 - output_size / input_size) * 100
+                    
+                    stats = (
+                        f"Filter Statistics:\n"
+                        f"• Time: {end_time - start_time:.2f} seconds\n"
+                        f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
+                        f"• Reduction: {reduction_ratio:.1f}%\n"
+                        f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
+                    )
+                    rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
+                    
+                    self.console.print(f"\nFilter completed: {output_bag}", style="green")
             
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
-            raise typer.Exit(1)
-    
+            if not progress_context:  # Only raise in single-file mode
+                raise typer.Exit(1)
+            return False
+        return True
+
+    def _find_bag_files(self, directory: str) -> List[str]:
+        """Recursively find all bag files in the given directory"""
+        bag_files = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.bag'):
+                    bag_files.append(os.path.join(root, file))
+        return sorted(bag_files)
+
+    def _select_bag_files(self) -> Optional[List[str]]:
+        """Ask user to select bag files to process"""
+        # Get directory path
+        directory = questionary.path(
+            "Enter directory path to search for bag files:",
+            only_directories=True,
+            style=CUSTOM_STYLE
+        ).ask()
+        
+        if not directory or not os.path.exists(directory):
+            self.console.print("Error: Directory does not exist", style="red")
+            return None
+            
+        # Find all bag files
+        with self.show_loading("Searching for bag files...") as progress:
+            progress.add_task(description="Searching...")
+            bag_files = self._find_bag_files(directory)
+            
+        if not bag_files:
+            self.console.print("No bag files found in the directory", style="yellow")
+            return None
+            
+        # Create choices for selection
+        choices = [
+            Choice(title=f"{os.path.basename(f)} ({os.path.getsize(f) / (1024*1024):.1f} MB)", value=f)
+            for f in bag_files
+        ]
+        
+        # Add "Select All" option
+        choices.insert(0, Choice(title="[Select All]", value="all"))
+        
+        # Select files
+        selected = questionary.checkbox(
+            "Select bag files to process:",
+            choices=choices,
+            instruction="\n[space] to select/unselect files \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
+            style=CUSTOM_STYLE
+        ).ask()
+        
+        if not selected:
+            return None
+            
+        # Handle "Select All" option
+        if "all" in selected:
+            selected = [f for f in bag_files if f != "all"]
+            
+        return selected
+
     def _run_quick_filter(self):
         """Run quick filter workflow"""
-        # Get input bag
-        self.input_bag = self.ask_for_bag("Enter input bag file path:")
-        if not self.input_bag:
+        # Select input method
+        input_method = questionary.select(
+            "Select input method:",
+            choices=[
+                Choice("1. Single bag file", "single"),
+                Choice("2. Multiple bag files from directory", "multiple"),
+                Choice("3. Back", "back")
+            ],
+            style=CUSTOM_STYLE
+        ).ask()
+        
+        if input_method == "back":
             return
+        elif input_method == "single":
+            # Get input bag
+            self.input_bag = self.ask_for_bag("Enter input bag file path:")
+            if not self.input_bag:
+                return
+                
+            # Load bag file
+            with self.show_loading("Loading bag file...") as progress:
+                progress.add_task(description="Loading...")
+                self.topics, self.connections, self.time_range = self.parser.load_bag(self.input_bag)
             
-        # Load bag file
-        with self.show_loading("Loading bag file...") as progress:
-            progress.add_task(description="Loading...")
-            self.topics, self.connections, self.time_range = self.parser.load_bag(self.input_bag)
-        
-        # Show bag info
-        self._show_current_bag_info(self.input_bag, self.topics)
-        
+            # Show bag info
+            self._show_current_bag_info(self.input_bag, self.topics)
+            
+            # Process single file
+            self._process_single_bag(self.input_bag)
+        else:
+            # Select multiple files
+            bag_files = self._select_bag_files()
+            if not bag_files:
+                return
+                
+            # Select filter method for all files
+            method = questionary.select(
+                "Select filter method for all files:",
+                choices=[
+                    Choice("1. Use whitelist file", "whitelist"),
+                    Choice("2. Select topics manually", "manual"),
+                    Choice("3. Back", "back")
+                ],
+                style=CUSTOM_STYLE
+            ).ask()
+            
+            if method == "back":
+                return
+                
+            # Get selected topics
+            selected_topics = None
+            whitelist_path = None
+            if method == "whitelist":
+                whitelist_path = self._select_whitelist()
+                if not whitelist_path:
+                    return
+            else:
+                # Load first bag to get topics
+                with self.show_loading("Loading bag file...") as progress:
+                    progress.add_task(description="Loading...")
+                    self.topics, self.connections, _ = self.parser.load_bag(bag_files[0])
+                selected_topics = self._select_topics(self.topics, self.connections)
+                if not selected_topics:
+                    return
+            
+            # Process all files with a progress display
+            self.console.print("\n开始批量处理文件...", style="bold blue")
+            
+            # Create a progress display with one task per file
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=False,
+            ) as progress:
+                # Create a task for each file (initially hidden)
+                file_tasks = {}
+                for bag_file in bag_files:
+                    file_name = os.path.basename(bag_file)
+                    task_id = progress.add_task(description=f"{file_name}", visible=False)
+                    file_tasks[bag_file] = task_id
+                
+                # Process each file sequentially
+                for i, bag_file in enumerate(bag_files):
+                    # Show current file in progress
+                    file_name = os.path.basename(bag_file)
+                    progress.update(file_tasks[bag_file], description=f"{file_name}", visible=True)
+                    
+                    # Prepare output path
+                    output_bag = os.path.join(
+                        os.path.dirname(bag_file),
+                        os.path.splitext(os.path.basename(bag_file))[0] + "_filtered.bag"
+                    )
+                    
+                    # Process the file
+                    try:
+                        success = self.filter_bag(
+                            bag_file, 
+                            output_bag, 
+                            selected_topics, 
+                            whitelist_path, 
+                            show_stats=False,
+                            progress_context=progress
+                        )
+                        
+                        if success:
+                            # Mark task as completed
+                            progress.update(file_tasks[bag_file], description=f"{file_name} ✓")
+                        else:
+                            # Mark task as failed
+                            progress.update(file_tasks[bag_file], description=f"{file_name} ✗")
+                    except Exception as e:
+                        # Mark task as failed with error message
+                        progress.update(file_tasks[bag_file], description=f"{file_name} ✗ - {str(e)}")
+                
+            self.console.print("\n所有文件处理完成！", style="green")
+
+    def _process_single_bag(self, input_bag: str):
+        """Process a single bag file"""
         while True:
             # Select action
             action = questionary.select(
@@ -208,7 +382,7 @@ class CliTool:
             if action == "back":
                 return
             elif action == "info":
-                self._show_bag_info(self.input_bag, self.topics, self.connections, self.time_range)
+                self._show_bag_info(input_bag, self.topics, self.connections, self.time_range)
                 continue
             elif action == "filter":
                 # Select filter method
@@ -226,12 +400,12 @@ class CliTool:
                     continue
                     
                 # Get selected topics
-                selected_topics = []
+                selected_topics = None
+                whitelist_path = None
                 if method == "whitelist":
                     whitelist_path = self._select_whitelist()
                     if not whitelist_path:
                         continue
-                    selected_topics = self.parser.load_whitelist(whitelist_path)
                 else:
                     selected_topics = self._select_topics(self.topics, self.connections)
                     if not selected_topics:
@@ -243,29 +417,7 @@ class CliTool:
                     continue
                     
                 # Run filter
-                start_time = time.time()
-                with self.show_loading("Filtering bag file...") as progress:
-                    progress.add_task(description="Processing...")
-                    self.parser.filter_bag(self.input_bag, output_bag, selected_topics)
-                end_time = time.time()
-                
-                # Show statistics
-                input_size = os.path.getsize(self.input_bag)
-                output_size = os.path.getsize(output_bag)
-                input_size_mb = input_size / (1024 * 1024)
-                output_size_mb = output_size / (1024 * 1024)
-                reduction_ratio = (1 - output_size / input_size) * 100
-                
-                stats = (
-                    f"Filter Statistics:\n"
-                    f"• Time: {end_time - start_time:.2f} seconds\n"
-                    f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-                    f"• Reduction: {reduction_ratio:.1f}%\n"
-                    f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
-                )
-                rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
-                
-                self.console.print(f"\nFilter completed: {output_bag}", style="green")
+                self.filter_bag(input_bag, output_bag, selected_topics, whitelist_path)
                 
                 # Ask what to do next
                 next_action = questionary.select(
@@ -559,7 +711,7 @@ def filter(
 ):
     """Filter a bag file using whitelist or manual selection"""
     tool = CliTool()
-    tool.filter_bag(input_bag, output_bag, whitelist)
+    tool.filter_bag(input_bag, output_bag, whitelist_path=whitelist)
 
 def main():
     """Entry point for the CLI tool"""
