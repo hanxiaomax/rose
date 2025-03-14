@@ -202,22 +202,18 @@ class CliTool:
                 Choice(title=f"{rel_path} ({file_size_mb:.1f} MB)", value=f)
             )
         
-
+        
         # Select files
         selected = inquirer.checkbox(
             message="Select bag files to process:",
             choices=choices,
             instruction="[space] to select/unselect files \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
             validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one file"
+            invalid_message="Please select at least one file",
         ).execute()
         
         if not selected:
             return None
-            
-        # Handle "Select All" option
-        if "all" in selected:
-            selected = [f for f in bag_files if f != "all"]
             
         return selected
 
@@ -319,14 +315,16 @@ class CliTool:
                     name=f"{os.path.relpath(f, directory)} ({os.path.getsize(f)/1024/1024:.1f} MB)"
                 ) for f in bag_files
             ]
-            
+            def bag_list_transformer(result):
+                return f"{len(result)} files selected\n" + '\n'.join([f"{bag}" for bag in result])
             # Select files
             selected_files = inquirer.checkbox(
                 message="Select bag files to process:",
                 choices=file_choices,
                 instruction="[space] to select/unselect, [enter] to confirm",
                 validate=lambda result: len(result) > 0,
-                invalid_message="Please select at least one file"
+                invalid_message="Please select at least one file",
+                transformer=bag_list_transformer,
             ).execute()
             
             if not selected_files:
@@ -720,7 +718,8 @@ class CliTool:
             choices=topic_choices,
             instruction="[space] to select/unselect topics \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
             validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one topic"
+            invalid_message="Please select at least one topic",
+            transformer=lambda result: f"{len(result)} Topics{'s' if len(result) > 1 else ''} selected",
         ).execute()
         
         return selected_topics
