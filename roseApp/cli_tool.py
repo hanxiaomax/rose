@@ -411,7 +411,7 @@ class CliTool:
                     
                     try:
                         # Update task to show it's being processed
-                        progress.update(task, description=f"Processing: {rel_path}", style="white")
+                        progress.update(task, description=f"Processing: {rel_path}", style="yellow")
                         
                         # Create output path
                         output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
@@ -426,18 +426,31 @@ class CliTool:
                             task_id=task
                         )
                         
-                        # Update task to show success
-                        progress.update(task, description=f"✓ {rel_path}", style="green")
+                        # Update task to show success with green color
+                        progress.update(task, description=f"✓ {rel_path}", style="bold green")
                         
                     except Exception as e:
-                        # Update task to show failure
-                        progress.update(task, description=f"✗ {rel_path}: {str(e)}", style="red")
+                        # Update task to show failure with red color
+                        progress.update(task, description=f"✗ {rel_path}: {str(e)}", style="bold red")
                         logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     
                     # Update progress
                     progress.update(task, completed=100)
                     
-            rprint(Panel("All files processed!", style="green"))
+            # Show final summary with color-coded results
+            success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
+            fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
+            
+            summary = (
+                f"Processing Complete!\n"
+                f"• Successfully processed: {success_count} files\n"
+                f"• Failed: {fail_count} files"
+            )
+            
+            if fail_count == 0:
+                rprint(Panel(summary, style="bold green", title="[bold]Results[/bold]"))
+            else:
+                rprint(Panel(summary, style="bold red", title="[bold]Results[/bold]"))
             
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, 
                           whitelist: Optional[List[str]] = None,
