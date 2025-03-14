@@ -427,11 +427,11 @@ class CliTool:
                         )
                         
                         # Update task to show success with green color
-                        progress.update(task, description=f"✓ {rel_path}", style="bold green")
+                        progress.update(task, description=f"[green]✓ {rel_path}[/green]")
                         
                     except Exception as e:
                         # Update task to show failure with red color
-                        progress.update(task, description=f"✗ {rel_path}: {str(e)}", style="bold red")
+                        progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]")
                         logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     
                     # Update progress
@@ -448,9 +448,9 @@ class CliTool:
             )
             
             if fail_count == 0:
-                rprint(Panel(summary, style="bold green", title="[bold]Results[/bold]"))
+                rprint(Panel(summary,  title="[bold]Results[/bold]"))
             else:
-                rprint(Panel(summary, style="bold red", title="[bold]Results[/bold]"))
+                rprint(Panel(summary,  title="[bold]Results[/bold]"))
             
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, 
                           whitelist: Optional[List[str]] = None,
