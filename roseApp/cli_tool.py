@@ -348,6 +348,45 @@ class CliTool:
             if not filter_method or filter_method == "back":
                 return
                 
+            # Load first bag file to get topics for selection
+            with self.show_loading("Loading bag file for topic selection...") as progress:
+                progress.add_task(description="Loading...")
+                self.topics, self.connections, self.time_range = self.parser.load_bag(selected_files[0])
+            
+            # Get whitelist or selected topics once for all files
+            whitelist = None
+            if filter_method == "whitelist":
+                # Get whitelist file
+                whitelist_dir = "whitelists"
+                if not os.path.exists(whitelist_dir):
+                    self.console.print("No whitelists found", style="yellow")
+                    return
+                    
+                whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+                if not whitelists:
+                    self.console.print("No whitelists found", style="yellow")
+                    return
+                    
+                # Select whitelist to use
+                selected = inquirer.select(
+                    message="Select whitelist to use:",
+                    choices=whitelists
+                ).execute()
+                
+                if not selected:
+                    return
+                    
+                # Load selected whitelist
+                whitelist_path = os.path.join(whitelist_dir, selected)
+                whitelist = self.parser.load_whitelist(whitelist_path)
+                if not whitelist:
+                    return
+                    
+            elif filter_method == "manual":
+                whitelist = self._select_topics(self.topics, self.connections)
+                if not whitelist:
+                    return
+                
             # Create progress display for all files
             with Progress(
                 SpinnerColumn(),
@@ -377,11 +416,12 @@ class CliTool:
                         # Create output path
                         output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
                         
-                        # Process file
+                        # Process file with the selected whitelist
                         self._process_single_bag(
                             bag_file,
                             output_bag,
                             filter_method,
+                            whitelist=whitelist,  # Pass the pre-selected whitelist
                             progress_context=progress,
                             task_id=task
                         )
