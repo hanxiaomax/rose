@@ -222,7 +222,7 @@ class CliTool:
         while True:
             # Ask for input bag file or directory
             input_path = inquirer.filepath(
-                message="Enter bag file or directory path (or leave empty to go back):",
+                message="Load Bag file(s):\n • Please specify the bag file or a directory to search \n • Leave blank to return to main menu\nFilename/Directory:",
                 validate=lambda x: os.path.exists(x) or "Path does not exist",
             ).execute()
             
