@@ -219,237 +219,230 @@ class CliTool:
 
     def _run_quick_filter(self):
         """Run quick filter workflow"""
-        # Get input method
-        input_method = inquirer.select(
-            message="Select input method:",
-            choices=[
-                Choice(value="single", name="1. Single bag file"),
-                Choice(value="multiple", name="2. Multiple bag files from directory"),
-                Choice(value="back", name="3. Back")
-            ]
-        ).execute()
-        
-        if not input_method or input_method == "back":
-            return
-            
-        if input_method == "single":
-            # Get input bag
-            input_bag = inquirer.filepath(
-                message="Enter input bag file path:",
-                validate=PathValidator(is_file=True, message="File does not exist"),
-                filter=lambda x: x if x.endswith('.bag') else None,
-                invalid_message="File must be a .bag file"
+        while True:
+            # Ask for input bag file or directory
+            input_path = inquirer.filepath(
+                message="Enter bag file or directory path (or leave empty to go back):",
+                validate=lambda x: os.path.exists(x) or "Path does not exist",
             ).execute()
             
-            if not input_bag:
-                return
+            if not input_path:
+                return  # Return to main menu
                 
-            # Load bag info
-            with self.show_loading("Loading bag file...") as progress:
-                progress.add_task(description="Loading...")
-                self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-            
-            # Ask user what to do next
-            next_action = inquirer.select(
-                message="What would you like to do?",
-                choices=[
-                    Choice(value="info", name="1. Show bag information"),
-                    Choice(value="filter", name="2. Filter bag file"),
-                    Choice(value="back", name="3. Back")
-                ]
-            ).execute()
-            
-            if next_action == "back":
-                return
-            elif next_action == "info":
-                self._show_bag_info(input_bag, self.topics, self.connections, self.time_range)
-                return
-                
-            # Get output bag
-            output_bag = inquirer.filepath(
-                message="Enter output bag file path:",
-                default=os.path.splitext(input_bag)[0] + "_filtered.bag",
-                validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
-            ).execute()
-            
-            if not output_bag:
-                return
-                
-            # Get filter method
-            filter_method = inquirer.select(
-                message="Select filter method:",
-                choices=[
-                    Choice(value="whitelist", name="1. Use whitelist"),
-                    Choice(value="manual", name="2. Select topics manually"),
-                    Choice(value="back", name="3. Back")
-                ]
-            ).execute()
-            
-            if not filter_method or filter_method == "back":
-                return
-                
-            # Process single file
-            self._process_single_bag(input_bag, output_bag, filter_method)
-            
-        else:  # multiple
-            # Get directory path
-            directory = inquirer.filepath(
-                message="Enter directory path:",
-                validate=PathValidator(is_dir=True, message="Directory does not exist"),
-                only_directories=True
-            ).execute()
-            
-            if not directory:
-                return
-                
-            # Find and select bag files
-            bag_files = self._find_bag_files(directory)
-            if not bag_files:
-                rprint(Panel("No bag files found in directory", style="red"))
-                return
-                
-            # Create file selection choices
-            file_choices = [
-                Choice(
-                    value=f,
-                    name=f"{os.path.relpath(f, directory)} ({os.path.getsize(f)/1024/1024:.1f} MB)"
-                ) for f in bag_files
-            ]
-            def bag_list_transformer(result):
-                return f"{len(result)} files selected\n" + '\n'.join([f"{bag}" for bag in result])
-            # Select files
-            selected_files = inquirer.checkbox(
-                message="Select bag files to process:",
-                choices=file_choices,
-                instruction="[space] to select/unselect, [enter] to confirm",
-                validate=lambda result: len(result) > 0,
-                invalid_message="Please select at least one file",
-                transformer=bag_list_transformer,
-            ).execute()
-            
-            if not selected_files:
-                return
-                
-            if "all" in selected_files:
-                selected_files = bag_files
-                
-            # Get filter method
-            filter_method = inquirer.select(
-                message="Select filter method:",
-                choices=[
-                    Choice(value="whitelist", name="1. Use whitelist"),
-                    Choice(value="manual", name="2. Select topics manually"),
-                    Choice(value="back", name="3. Back")
-                ]
-            ).execute()
-            
-            if not filter_method or filter_method == "back":
-                return
-                
-            # Load first bag file to get topics for selection
-            with self.show_loading("Loading bag file for topic selection...") as progress:
-                progress.add_task(description="Loading...")
-                self.topics, self.connections, self.time_range = self.parser.load_bag(selected_files[0])
-            
-            # Get whitelist or selected topics once for all files
-            whitelist = None
-            if filter_method == "whitelist":
-                # Get whitelist file
-                whitelist_dir = "whitelists"
-                if not os.path.exists(whitelist_dir):
-                    self.console.print("No whitelists found", style="yellow")
-                    return
+            # Check if input is a file or directory
+            if os.path.isfile(input_path):
+                # Single bag file processing
+                if not input_path.endswith('.bag'):
+                    self.console.print("File must be a .bag file", style="red")
+                    continue
                     
-                whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
-                if not whitelists:
-                    self.console.print("No whitelists found", style="yellow")
-                    return
-                    
-                # Select whitelist to use
-                selected = inquirer.select(
-                    message="Select whitelist to use:",
-                    choices=whitelists
+                # Load bag info
+                with self.show_loading("Loading bag file...") as progress:
+                    progress.add_task(description="Loading...")
+                    self.topics, self.connections, self.time_range = self.parser.load_bag(input_path)
+                
+                # Ask user what to do next
+                next_action = inquirer.select(
+                    message="What would you like to do?",
+                    choices=[
+                        Choice(value="info", name="1. Show bag information"),
+                        Choice(value="filter", name="2. Filter bag file"),
+                        Choice(value="back", name="3. Back")
+                    ]
                 ).execute()
                 
-                if not selected:
-                    return
+                if next_action == "back":
+                    continue  # Go back to input selection
+                elif next_action == "info":
+                    self._show_bag_info(input_path, self.topics, self.connections, self.time_range)
+                    continue  # Go back to input selection
                     
-                # Load selected whitelist
-                whitelist_path = os.path.join(whitelist_dir, selected)
-                whitelist = self.parser.load_whitelist(whitelist_path)
-                if not whitelist:
-                    return
-                    
-            elif filter_method == "manual":
-                whitelist = self._select_topics(self.topics, self.connections)
-                if not whitelist:
-                    return
+                # Get output bag
+                output_bag = inquirer.filepath(
+                    message="Enter output bag file path:",
+                    default=os.path.splitext(input_path)[0] + "_filtered.bag",
+                    validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
+                ).execute()
                 
-            # Create progress display for all files
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                transient=False,
-            ) as progress:
-                # Create tasks for all files
-                tasks = {}
-                for bag_file in selected_files:
-                    rel_path = os.path.relpath(bag_file, directory)
-                    task = progress.add_task(
-                        f"Waiting: {rel_path}",
-                        total=100,
-                        style="dim"
-                    )
-                    tasks[bag_file] = task
-                
-                # Process each file
-                for bag_file in selected_files:
-                    rel_path = os.path.relpath(bag_file, directory)
-                    task = tasks[bag_file]
+                if not output_bag:
+                    continue  # Go back to input selection
                     
-                    try:
-                        # Update task to show it's being processed
-                        progress.update(task, description=f"Processing: {rel_path}", style="yellow")
+                # Get filter method
+                filter_method = inquirer.select(
+                    message="Select filter method:",
+                    choices=[
+                        Choice(value="whitelist", name="1. Use whitelist"),
+                        Choice(value="manual", name="2. Select topics manually"),
+                        Choice(value="back", name="3. Back")
+                    ]
+                ).execute()
+                
+                if not filter_method or filter_method == "back":
+                    continue  # Go back to input selection
+                    
+                # Process single file
+                self._process_single_bag(input_path, output_bag, filter_method)
+                
+            else:  # Directory processing
+                # Find and select bag files
+                bag_files = self._find_bag_files(input_path)
+                if not bag_files:
+                    self.console.print("No bag files found in directory", style="red")
+                    continue  # Go back to input selection
+                    
+                # Create file selection choices
+                file_choices = [
+                    Choice(
+                        value=f,
+                        name=f"{os.path.relpath(f, input_path)} ({os.path.getsize(f)/1024/1024:.1f} MB)"
+                    ) for f in bag_files
+                ]
+                
+                def bag_list_transformer(result):
+                    return f"{len(result)} files selected\n" + '\n'.join([f"{os.path.basename(bag)}" for bag in result])
+                
+                # Select files
+                selected_files = inquirer.checkbox(
+                    message="Select bag files to process:",
+                    choices=file_choices,
+                    instruction="[space] to select/unselect, [enter] to confirm, [a] to select all",
+                    validate=lambda result: len(result) > 0,
+                    invalid_message="Please select at least one file",
+                    transformer=bag_list_transformer,
+                ).execute()
+                
+                if not selected_files:
+                    continue  # Go back to input selection
+                    
+                # Get filter method
+                filter_method = inquirer.select(
+                    message="Select filter method:",
+                    choices=[
+                        Choice(value="whitelist", name="1. Use whitelist"),
+                        Choice(value="manual", name="2. Select topics manually"),
+                        Choice(value="back", name="3. Back")
+                    ]
+                ).execute()
+                
+                if not filter_method or filter_method == "back":
+                    continue  # Go back to input selection
+                    
+                # Load first bag file to get topics for selection
+                with self.show_loading("Loading bag file for topic selection...") as progress:
+                    progress.add_task(description="Loading...")
+                    self.topics, self.connections, self.time_range = self.parser.load_bag(selected_files[0])
+                
+                # Get whitelist or selected topics once for all files
+                whitelist = None
+                if filter_method == "whitelist":
+                    # Get whitelist file
+                    whitelist_dir = "whitelists"
+                    if not os.path.exists(whitelist_dir):
+                        self.console.print("No whitelists found", style="yellow")
+                        continue  # Go back to input selection
                         
-                        # Create output path
-                        output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
+                    whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+                    if not whitelists:
+                        self.console.print("No whitelists found", style="yellow")
+                        continue  # Go back to input selection
                         
-                        # Process file with the selected whitelist
-                        self._process_single_bag(
-                            bag_file,
-                            output_bag,
-                            filter_method,
-                            whitelist=whitelist,  # Pass the pre-selected whitelist
-                            progress_context=progress,
-                            task_id=task
+                    # Select whitelist to use
+                    selected = inquirer.select(
+                        message="Select whitelist to use:",
+                        choices=whitelists
+                    ).execute()
+                    
+                    if not selected:
+                        continue  # Go back to input selection
+                        
+                    # Load selected whitelist
+                    whitelist_path = os.path.join(whitelist_dir, selected)
+                    whitelist = self.parser.load_whitelist(whitelist_path)
+                    if not whitelist:
+                        continue  # Go back to input selection
+                        
+                elif filter_method == "manual":
+                    whitelist = self._select_topics(self.topics, self.connections)
+                    if not whitelist:
+                        continue  # Go back to input selection
+                
+                # Create progress display for all files
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    transient=False,
+                ) as progress:
+                    # Create tasks for all files
+                    tasks = {}
+                    for bag_file in selected_files:
+                        rel_path = os.path.relpath(bag_file, input_path)
+                        task = progress.add_task(
+                            f"Waiting: {rel_path}",
+                            total=100,
+                            style="dim"
                         )
-                        
-                        # Update task to show success with green color
-                        progress.update(task, description=f"[green]✓ {rel_path}[/green]")
-                        
-                    except Exception as e:
-                        # Update task to show failure with red color
-                        progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]")
-                        logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
+                        tasks[bag_file] = task
                     
-                    # Update progress
-                    progress.update(task, completed=100)
-                    
-            # Show final summary with color-coded results
-            success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
-            fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
-            
-            summary = (
-                f"Processing Complete!\n"
-                f"• Successfully processed: {success_count} files\n"
-                f"• Failed: {fail_count} files"
-            )
-            
-            if fail_count == 0:
-                rprint(Panel(summary,  title="[bold]Results[/bold]"))
-            else:
-                rprint(Panel(summary,  title="[bold]Results[/bold]"))
-            
+                    # Process each file
+                    for bag_file in selected_files:
+                        rel_path = os.path.relpath(bag_file, input_path)
+                        task = tasks[bag_file]
+                        
+                        try:
+                            # Update task to show it's being processed
+                            progress.update(task, description=f"Processing: {rel_path}", style="yellow")
+                            
+                            # Create output path
+                            output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
+                            
+                            # Process file with the selected whitelist
+                            self._process_single_bag(
+                                bag_file,
+                                output_bag,
+                                filter_method,
+                                whitelist=whitelist,  # Pass the pre-selected whitelist
+                                progress_context=progress,
+                                task_id=task
+                            )
+                            
+                            # Update task to show success with green color
+                            progress.update(task, description=f"[green]✓ {rel_path}[/green]")
+                            
+                        except Exception as e:
+                            # Update task to show failure with red color
+                            progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]")
+                            logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
+                        
+                        # Update progress
+                        progress.update(task, completed=100)
+                        
+                # Show final summary with color-coded results
+                success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
+                fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
+                
+                summary = (
+                    f"Processing Complete!\n"
+                    f"• Successfully processed: {success_count} files\n"
+                    f"• Failed: {fail_count} files"
+                )
+                
+                if fail_count == 0:
+                    rprint(Panel(summary, title="[bold]Results[/bold]"))
+                else:
+                    rprint(Panel(summary, title="[bold]Results[/bold]"))
+                
+                # Ask if user wants to continue or go back to main menu
+                continue_action = inquirer.select(
+                    message="What would you like to do next?",
+                    choices=[
+                        Choice(value="continue", name="1. Process more files"),
+                        Choice(value="main", name="2. Return to main menu")
+                    ]
+                ).execute()
+                
+                if continue_action == "main":
+                    return  # Return to main menu
+
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, 
                           whitelist: Optional[List[str]] = None,
                           progress_context: Optional[Progress] = None, task_id: Optional[int] = None):
