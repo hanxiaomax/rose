@@ -58,7 +58,6 @@ class CliTool:
     def __init__(self):
         self.console = Console()
         self.parser = create_parser(ParserType.PYTHON)
-        self.input_bag = None
         self.topics = None
         self.connections = None
         self.time_range = None
@@ -672,37 +671,21 @@ class CliTool:
         
         return selected_topics
     
-    def _ask_for_output_bag(self) -> Optional[str]:
-        """Ask for output bag path"""
-        # Get default output name based on input bag
-        input_name = os.path.basename(self.input_bag)
-        default_name = os.path.splitext(input_name)[0] + "_filtered.bag"
-        default_path = os.path.join(os.path.dirname(self.input_bag), default_name)
+    def _show_filter_stats(self, input_bag: str, output_bag: str):
+        """Show filtering statistics"""
+        input_size = os.path.getsize(input_bag)
+        output_size = os.path.getsize(output_bag)
+        input_size_mb:float = input_size / (1024 * 1024)
+        output_size_mb:float = output_size / (1024 * 1024)
+        reduction_ratio = (1 - output_size / input_size) * 100
         
-        while True:
-            output = inquirer.filepath(
-                message="Enter output bag path:",
-                default=default_path,
-                validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
-                style=_style
-            ).execute()
-            
-            if not output:
-                return None
-                
-            # Check if file exists
-            if os.path.exists(output):
-                overwrite = inquirer.confirm(
-                    message=f"File {output} already exists. Overwrite?",
-                    default=False,
-                    style=_style
-                ).execute()
-                
-                if not overwrite:
-                    continue
-            
-            return output
-    
+        stats = (
+            f"Filter Statistics:\n"
+            f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
+            f"• Reduction: {reduction_ratio:.1f}%\n"
+        )
+        rprint(Panel(stats, style="green", title="Filter Results"))
+        
     def _delete_whitelist(self):
         """Delete a whitelist file"""
         whitelist_dir = "whitelists"
@@ -740,34 +723,6 @@ class CliTool:
             self.console.print(f"\nDeleted whitelist: {selected}", style="green")
         except Exception as e:
             self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
-
-    def _show_current_bag_info(self, input_bag: str, topics: List[str]):
-        """Show current bag information"""
-        # Load bag info
-        with self.show_loading("Loading bag file...") as progress:
-            progress.add_task(description="Loading...")
-            self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-        
-        # Show bag info
-        self._show_bag_info(input_bag, self.topics, self.connections, self.time_range)
-
-    def _show_filter_stats(self, input_bag: str, output_bag: str):
-        """Show filtering statistics"""
-        input_size = os.path.getsize(input_bag)
-        output_size = os.path.getsize(output_bag)
-        input_size_mb = input_size / (1024 * 1024)
-        output_size_mb = output_size / (1024 * 1024)
-        reduction_ratio = (1 - output_size / input_size) * 100
-        
-        stats = (
-            f"Filter Statistics:\n"
-            f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-            f"• Reduction: {reduction_ratio:.1f}%\n"
-            f"• Topics: {len(self.topics)} -> {len(self.connections)}"
-        )
-        rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
-        
-        self.console.print(f"\nFilter completed: {output_bag}", style="green")
 
 # Typer commands
 @app.command()
