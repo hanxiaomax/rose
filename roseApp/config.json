@@ -3,8 +3,8 @@
     "theme": "cassette-walkman",
     "load_cpp_parser": false,
     "whitelists": {
-        "demo": "./whitelists/demo.txt",
-        "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt"
+        "demo": "../whitelists/demo.txt",
+        "radar": "../whitelists/radar.txt",
+        "invalid": "../whitelists/invalid.txt"
     }
 }

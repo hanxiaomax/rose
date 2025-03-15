@@ -12,8 +12,8 @@ from rich.text import Text
 import typer
 from InquirerPy.validator import PathValidator
 
-from .core.parser import create_parser, ParserType
-from .core.util import get_logger, TimeUtil
+from ..core.parser import create_parser, ParserType
+from ..core.util import get_logger, TimeUtil
 
 logger = get_logger("RoseCLI-Tool")
 

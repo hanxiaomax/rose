@@ -11,7 +11,7 @@ from textual.fuzzy import FuzzySearch
 from textual.widgets import Input, Tree
 
 # Local application imports
-from roseApp.components.BagExplorer import BagExplorer
+from roseApp.tui.components.BagExplorer import BagExplorer
 from roseApp.core.BagManager import BagManager
 from roseApp.core.util import get_logger
 

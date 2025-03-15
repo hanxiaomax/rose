@@ -12,8 +12,8 @@ from textual.widgets import Button, Input, Label
 from textual.worker import Worker, WorkerState
 
 # Local application imports
-from roseApp.components.BagExplorer import BagExplorer
-from roseApp.components.StatusBar import StatusBar
+from roseApp.tui.components.BagExplorer import BagExplorer
+from roseApp.tui.components.StatusBar import StatusBar
 from roseApp.core.BagManager import BagManager, BagStatus, FilterConfig
 from roseApp.core.util import TimeUtil, get_logger
 

@@ -17,18 +17,19 @@ from textual.widgets import (
     Footer, Header, Link, Pretty, RichLog, Rule, SelectionList, 
     Static, Tab, Tabs, TextArea
 )
+from textual.reactive import reactive
 
 # Local application imports
-from roseApp.components.BagExplorer import BagExplorer
-from roseApp.components.ControlPanel import ControlPanel
-from roseApp.components.Dialog import ConfirmDialog
-from roseApp.components.StatusBar import StatusBar
-from roseApp.components.TaskTable import TaskTable
-from roseApp.components.TopicPanel import TopicTreePanel
 from roseApp.core.util import get_logger
-from roseApp.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
+from roseApp.tui.components.BagExplorer import BagExplorer
+from roseApp.tui.components.ControlPanel import ControlPanel
+from roseApp.tui.components.Dialog import ConfirmDialog
+from roseApp.tui.components.StatusBar import StatusBar
+from roseApp.tui.components.TaskTable import TaskTable
+from roseApp.tui.components.TopicPanel import TopicTreePanel
+from roseApp.tui.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
 
-from textual.reactive import reactive
+
 
 # Initialize logging at the start of the file
 logger = get_logger("RoseTUI")

@@ -10,7 +10,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from roseApp.core.parser import create_parser, ParserType
 from roseApp.core.util import get_logger, TimeUtil
-from roseApp.tui import RoseTUI     
+from roseApp.tui.tui import RoseTUI     
 import logging
 
 # Initialize logger
@@ -220,7 +220,7 @@ def filter(
 @app.command('cli')
 def cli_tool():
     """Launch interactive command-line interface"""
-    from .cli_tool import main
+    from .cli.cli_tool import main
     main()
 
 def main():
