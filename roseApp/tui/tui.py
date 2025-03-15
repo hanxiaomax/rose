@@ -18,7 +18,7 @@ from textual.widgets import (
     Static, Tab, Tabs, TextArea
 )
 from textual.reactive import reactive
-
+import typer
 # Local application imports
 from roseApp.core.util import get_logger
 from roseApp.tui.components.BagExplorer import BagExplorer
@@ -30,7 +30,7 @@ from roseApp.tui.components.TopicPanel import TopicTreePanel
 from roseApp.tui.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
 
 
-
+app = typer.Typer(help="ROS Bag Filter Tool Textual UI")
 # Initialize logging at the start of the file
 logger = get_logger("RoseTUI")
 
@@ -500,5 +500,14 @@ class RoseTUI(App):
         """Switch to debug info screen"""
         self.switch_mode("debug")
 
+
+
+# Typer commands
+@app.command()
+def tui():
+    """Interactive CLI mode with menu interface"""
+    app = RoseTUI()
+    app.run()
+
 if __name__ == "__main__":
-    RoseTUI().run()
+    app()

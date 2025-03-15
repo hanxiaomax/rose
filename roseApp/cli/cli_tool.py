@@ -17,6 +17,8 @@ from ..core.util import get_logger, TimeUtil
 
 logger = get_logger("RoseCLI-Tool")
 
+app = typer.Typer(help="ROS Bag Filter Tool")
+
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
 ██╔══██╗██╔═══██╗██╔════╝██╔════╝
@@ -50,7 +52,7 @@ DEFAULT_STYLE = {
 }
 _style = get_style(DEFAULT_STYLE, style_override=True)
 
-app = typer.Typer(help="ROS Bag Filter Tool")
+
 
 class CliTool:
     def __init__(self):
@@ -774,15 +776,6 @@ def cli():
     tool = CliTool()
     tool.run_cli()
 
-@app.command()
-def filter(
-    input_bag: str = typer.Argument(..., help="Input bag file path"),
-    output_bag: str = typer.Argument(..., help="Output bag file path"),
-    whitelist: Optional[str] = typer.Option(None, help="Whitelist file path")
-):
-    """Filter a bag file using whitelist or manual selection"""
-    tool = CliTool()
-    tool.filter_bag(input_bag, output_bag, whitelist_path=whitelist)
 
 def main():
     """Entry point for the CLI tool"""
