@@ -241,47 +241,50 @@ class CliTool:
                     progress.add_task(description="Loading...")
                     self.topics, self.connections, self.time_range = self.parser.load_bag(input_path)
                 
-                # Ask user what to do next
-                next_action = inquirer.select(
-                    message="What would you like to do?",
-                    choices=[
-                        Choice(value="info", name="1. Show bag information"),
-                        Choice(value="filter", name="2. Filter bag file"),
-                        Choice(value="back", name="3. Back")
-                    ]
-                ).execute()
-                
-                if next_action == "back":
-                    continue  # Go back to input selection
-                elif next_action == "info":
-                    self._show_bag_info(input_path, self.topics, self.connections, self.time_range)
-                    continue  # Go back to input selection
+                # Create a loop for bag operations
+                while True:
+                    # Ask user what to do next
+                    next_action = inquirer.select(
+                        message="What would you like to do?",
+                        choices=[
+                            Choice(value="info", name="1. Show bag information"),
+                            Choice(value="filter", name="2. Filter bag file"),
+                            Choice(value="back", name="3. Back to file selection")
+                        ]
+                    ).execute()
                     
-                # Get output bag
-                output_bag = inquirer.filepath(
-                    message="Enter output bag file path:",
-                    default=os.path.splitext(input_path)[0] + "_filtered.bag",
-                    validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
-                ).execute()
-                
-                if not output_bag:
-                    continue  # Go back to input selection
-                    
-                # Get filter method
-                filter_method = inquirer.select(
-                    message="Select filter method:",
-                    choices=[
-                        Choice(value="whitelist", name="1. Use whitelist"),
-                        Choice(value="manual", name="2. Select topics manually"),
-                        Choice(value="back", name="3. Back")
-                    ]
-                ).execute()
-                
-                if not filter_method or filter_method == "back":
-                    continue  # Go back to input selection
-                    
-                # Process single file
-                self._process_single_bag(input_path, output_bag, filter_method)
+                    if next_action == "back":
+                        break  # Go back to input selection
+                    elif next_action == "info":
+                        self._show_bag_info(input_path, self.topics, self.connections, self.time_range)
+                        continue  # Stay in the current menu
+                    elif next_action == "filter":
+                        # Get output bag
+                        output_bag = inquirer.filepath(
+                            message="Enter output bag file path:",
+                            default=os.path.splitext(input_path)[0] + "_filtered.bag",
+                            validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
+                        ).execute()
+                        
+                        if not output_bag:
+                            continue  # Stay in the current menu
+                            
+                        # Get filter method
+                        filter_method = inquirer.select(
+                            message="Select filter method:",
+                            choices=[
+                                Choice(value="whitelist", name="1. Use whitelist"),
+                                Choice(value="manual", name="2. Select topics manually"),
+                                Choice(value="back", name="3. Back")
+                            ]
+                        ).execute()
+                        
+                        if not filter_method or filter_method == "back":
+                            continue  # Stay in the current menu
+                            
+                        # Process single file
+                        self._process_single_bag(input_path, output_bag, filter_method)
+                        # Continue in the same menu after processing
                 
             else:  # Directory processing
                 # Find and select bag files
