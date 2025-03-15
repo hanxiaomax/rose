@@ -514,26 +514,6 @@ class CliTool:
         if not progress_context:  # Only show stats for single file processing
             self._show_filter_stats(input_bag, output_bag)
             
-    def _select_whitelist(self) -> Optional[List[str]]:
-        """Select whitelist topics"""
-        # Create topic selection choices
-        topic_choices = [
-            Choice(
-                value=topic,
-                name=topic
-            ) for topic in sorted(self.topics)
-        ]
-        
-        # Get selected topics
-        selected_topics = inquirer.checkbox(
-            message="Select topics to include:",
-            choices=topic_choices,
-            instruction="[space] to select/unselect, [enter] to confirm",
-            validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one topic"
-        ).execute()
-        
-        return selected_topics
         
     def _select_time_range(self) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Select time range"""
@@ -706,20 +686,29 @@ class CliTool:
     
     def _select_topics(self, topics: List[str], connections: dict) -> Optional[List[str]]:
         """Select topics manually"""
-        topic_choices = [
-            Choice(
-                value=topic,
-                name=topic
-            ) for topic in sorted(topics)
-        ]
+        topic_choices = sorted(topics)
         
-        selected_topics = inquirer.checkbox(
+        # Display usage instructions
+        self.console.print("\nUsage Instructions:",style="bold magenta")
+        self.console.print("1. [magenta]Type to search[/magenta]")
+        self.console.print("2. [magenta]↑/↓[/magenta] to navigate options")
+        self.console.print("3. [magenta]Tab[/magenta] to select and move to next item")
+        self.console.print("4. [magenta]Shift+Tab[/magenta] to select and move to previous item")
+        self.console.print("5. [magenta]Ctrl+A[/magenta] to select all")
+        self.console.print("6. [magenta]Enter[/magenta] to confirm selection\n")
+        
+        selected_topics = inquirer.fuzzy(
             message="Select topics to include:",
             choices=topic_choices,
-            instruction="[space] to select/unselect topics \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
+            multiselect=True,
             validate=lambda result: len(result) > 0,
             invalid_message="Please select at least one topic",
-            transformer=lambda result: f"{len(result)} Topics{'s' if len(result) > 1 else ''} selected",
+            transformer=lambda result: f"{len(result)} topic{'s' if len(result) > 1 else ''} selected",
+            max_height="70%",
+            instruction="",
+            marker="● ",
+            border=True,
+            cycle=True,
         ).execute()
         
         return selected_topics

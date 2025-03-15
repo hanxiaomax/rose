@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir \
     typer \
     InquirerPy \
     numpy \
-    pycryptodomex
+    pycryptodomex 
 
 # Install rosbag Python package
 RUN pip install --no-cache-dir --extra-index-url https://rospypi.github.io/simple/ \
