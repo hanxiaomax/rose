@@ -3,7 +3,6 @@ import time
 from typing import Optional, List, Tuple
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
-from InquirerPy.separator import Separator
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
@@ -11,6 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 import typer
 from InquirerPy.validator import PathValidator
+from InquirerPy import get_style
 
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger, TimeUtil
@@ -25,6 +25,30 @@ ROSE_BANNER = """
 ██║  ██║╚██████╔╝███████║███████╗
 ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
 """
+
+DEFAULT_STYLE = {
+    "questionmark": "#e5c07b",
+    "answermark": "#e5c07b",
+    "answer": "#98c379",
+    "input": "#35A77c",
+    "question": "#c678dd",
+    "answered_question": "#9379e5",
+    "instruction": "#e69875",
+    "long_instruction": "#e69875",
+    "pointer": "#Fef2d5",
+    "checkbox": "#98c379",
+    "separator": "",
+    "skipped": "#5c6370",
+    "validator": "",
+    "marker": "#98c379",
+    "fuzzy_prompt": "#c678dd",
+    "fuzzy_info": "#e69875",
+    "fuzzy_border": "#e69875",
+    "fuzzy_match": "#c678dd",
+    "spinner_pattern": "#e5c07b",
+    "spinner_text": "",
+}
+_style = get_style(DEFAULT_STYLE, style_override=True)
 
 app = typer.Typer(help="ROS Bag Filter Tool")
 
@@ -52,7 +76,8 @@ class CliTool:
                 message=message,
                 validate=PathValidator(is_file=True, message="File does not exist"),
                 filter=lambda x: x if x.endswith('.bag') else None,
-                invalid_message="File must be a .bag file"
+                invalid_message="File must be a .bag file",
+                style=_style
             ).execute()
             
             if input_bag is None:  # User cancelled
@@ -81,7 +106,8 @@ class CliTool:
                         Choice(value="filter", name="1. Bag Editor - View and filter bag files"),
                         Choice(value="whitelist", name="2. Whitelist - Manage topic whitelists"),
                         Choice(value="exit", name="3. Exit")
-                    ]
+                    ],
+                    style=_style
                 ).execute()
                 
                 if action == "exit":
@@ -165,58 +191,6 @@ class CliTool:
                     bag_files.append(os.path.join(root, file))
         return sorted(bag_files)
 
-    def _select_bag_files(self) -> Optional[List[str]]:
-        """Ask user to select bag files to process"""
-        # Get directory path
-        directory = inquirer.filepath(
-            message="Enter directory path to search for bag files:",
-            validate=PathValidator(is_dir=True, message="Directory does not exist"),
-            only_directories=True
-        ).execute()
-        
-        if not directory or not os.path.exists(directory):
-            self.console.print("Error: Directory does not exist", style="red")
-            return None
-            
-        # Find all bag files
-        with self.show_loading("Searching for bag files...") as progress:
-            progress.add_task(description="Searching...")
-            bag_files = self._find_bag_files(directory)
-            
-        if not bag_files:
-            self.console.print("No bag files found in the directory", style="yellow")
-            return None
-            
-        # Create choices for selection with relative paths
-        choices = []
-        for f in bag_files:
-            # Get relative path if possible
-            try:
-                rel_path = os.path.relpath(f, directory)
-            except ValueError:
-                # Fall back to basename if on different drives
-                rel_path = os.path.basename(f)
-                
-            file_size_mb = os.path.getsize(f) / (1024*1024)
-            choices.append(
-                Choice(title=f"{rel_path} ({file_size_mb:.1f} MB)", value=f)
-            )
-        
-        
-        # Select files
-        selected = inquirer.checkbox(
-            message="Select bag files to process:",
-            choices=choices,
-            instruction="[space] to select/unselect files \n[enter] to confirm \n[a] to select all \n[i] to invert selection",
-            validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one file",
-        ).execute()
-        
-        if not selected:
-            return None
-            
-        return selected
-
     def _run_quick_filter(self):
         """Run quick filter workflow"""
         while True:
@@ -224,6 +198,7 @@ class CliTool:
             input_path = inquirer.filepath(
                 message="Load Bag file(s):\n • Please specify the bag file or a directory to search \n • Leave blank to return to main menu\nFilename/Directory:",
                 validate=lambda x: os.path.exists(x) or "Path does not exist",
+                style=_style
             ).execute()
             
             if not input_path:
@@ -250,7 +225,8 @@ class CliTool:
                             Choice(value="info", name="1. Show bag information"),
                             Choice(value="filter", name="2. Filter bag file"),
                             Choice(value="back", name="3. Back to file selection")
-                        ]
+                        ],
+                        style=_style
                     ).execute()
                     
                     if next_action == "back":
@@ -263,7 +239,8 @@ class CliTool:
                         output_bag = inquirer.filepath(
                             message="Enter output bag file path:",
                             default=os.path.splitext(input_path)[0] + "_filtered.bag",
-                            validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
+                            validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
+                            style=_style
                         ).execute()
                         
                         if not output_bag:
@@ -276,7 +253,8 @@ class CliTool:
                                 Choice(value="whitelist", name="1. Use whitelist"),
                                 Choice(value="manual", name="2. Select topics manually"),
                                 Choice(value="back", name="3. Back")
-                            ]
+                            ],
+                            style=_style
                         ).execute()
                         
                         if not filter_method or filter_method == "back":
@@ -312,6 +290,7 @@ class CliTool:
                     validate=lambda result: len(result) > 0,
                     invalid_message="Please select at least one file",
                     transformer=bag_list_transformer,
+                    style=_style
                 ).execute()
                 
                 if not selected_files:
@@ -324,7 +303,8 @@ class CliTool:
                         Choice(value="whitelist", name="1. Use whitelist"),
                         Choice(value="manual", name="2. Select topics manually"),
                         Choice(value="back", name="3. Back")
-                    ]
+                    ],
+                    style=_style
                 ).execute()
                 
                 if not filter_method or filter_method == "back":
@@ -352,7 +332,8 @@ class CliTool:
                     # Select whitelist to use
                     selected = inquirer.select(
                         message="Select whitelist to use:",
-                        choices=whitelists
+                        choices=whitelists,
+                        style=_style
                     ).execute()
                     
                     if not selected:
@@ -440,7 +421,8 @@ class CliTool:
                     choices=[
                         Choice(value="continue", name="1. Process more files"),
                         Choice(value="main", name="2. Return to main menu")
-                    ]
+                    ],
+                    style=_style
                 ).execute()
                 
                 if continue_action == "main":
@@ -478,7 +460,8 @@ class CliTool:
                 # Select whitelist to use
                 selected = inquirer.select(
                     message="Select whitelist to use:",
-                    choices=whitelists
+                    choices=whitelists,
+                    style=_style
                 ).execute()
                 
                 if not selected:
@@ -511,34 +494,6 @@ class CliTool:
             self._show_filter_stats(input_bag, output_bag)
             
         
-    def _select_time_range(self) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
-        """Select time range"""
-        # Get start time
-        start_time = inquirer.text(
-            message="Enter start time (YY/MM/DD HH:MM:SS):",
-            validate=lambda x: TimeUtil.is_valid_time_format(x),
-            invalid_message="Invalid time format"
-        ).execute()
-        
-        if not start_time:
-            return None
-            
-        # Get end time
-        end_time = inquirer.text(
-            message="Enter end time (YY/MM/DD HH:MM:SS):",
-            validate=lambda x: TimeUtil.is_valid_time_format(x),
-            invalid_message="Invalid time format"
-        ).execute()
-        
-        if not end_time:
-            return None
-            
-        try:
-            return TimeUtil.convert_time_range_to_tuple(start_time, end_time)
-        except Exception as e:
-            rprint(Panel(f"Error parsing time range: {str(e)}", style="red"))
-            return None
-
     def _run_whitelist_manager(self):
         """Run whitelist management workflow"""
         while True:
@@ -549,7 +504,8 @@ class CliTool:
                     Choice(value="view", name="2. View whitelist"),
                     Choice(value="delete", name="3. Delete whitelist"),
                     Choice(value="back", name="4. Back")
-                ]
+                ],
+                style=_style
             ).execute()
             
             if action == "back":
@@ -584,7 +540,8 @@ class CliTool:
         
         use_default = inquirer.confirm(
             message=f"Use default path? ({default_path})",
-            default=True
+            default=True,
+            style=_style
         ).execute()
         
         if use_default:
@@ -593,7 +550,8 @@ class CliTool:
             output = inquirer.filepath(
                 message="Enter save path:",
                 default="whitelists/my_whitelist.txt",
-                validate=lambda x: x.endswith('.txt') or "File must be a .txt file"
+                validate=lambda x: x.endswith('.txt') or "File must be a .txt file",
+                style=_style
             ).execute()
             
             if not output:
@@ -617,7 +575,8 @@ class CliTool:
             choices=[
                 Choice(value="continue", name="1. Create another whitelist"),
                 Choice(value="back", name="2. Back")
-            ]
+            ],
+            style=_style
         ).execute()
         
         if next_action == "continue":
@@ -665,7 +624,8 @@ class CliTool:
         # Select whitelist to view
         selected = inquirer.select(
             message="Select whitelist to view:",
-            choices=whitelists
+            choices=whitelists,
+            style=_style
         ).execute()
         
         if not selected:
@@ -705,6 +665,7 @@ class CliTool:
             marker="● ",
             border=True,
             cycle=True,
+            style=_style
         ).execute()
         
         return selected_topics
@@ -720,7 +681,8 @@ class CliTool:
             output = inquirer.filepath(
                 message="Enter output bag path:",
                 default=default_path,
-                validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
+                validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
+                style=_style
             ).execute()
             
             if not output:
@@ -730,7 +692,8 @@ class CliTool:
             if os.path.exists(output):
                 overwrite = inquirer.confirm(
                     message=f"File {output} already exists. Overwrite?",
-                    default=False
+                    default=False,
+                    style=_style
                 ).execute()
                 
                 if not overwrite:
@@ -753,7 +716,8 @@ class CliTool:
         # Select whitelist to delete
         selected = inquirer.select(
             message="Select whitelist to delete:",
-            choices=whitelists
+            choices=whitelists,
+            style=_style
         ).execute()
         
         if not selected:
@@ -762,7 +726,8 @@ class CliTool:
         # Confirm deletion
         if not inquirer.confirm(
             message=f"Are you sure you want to delete '{selected}'?",
-            default=False
+            default=False,
+            style=_style
         ).execute():
             return
             
