@@ -49,11 +49,10 @@ RUN pip install --no-cache-dir \
     pytest \
     pytest-asyncio \
     typing-extensions \
-    click \
     art \
     matplotlib \
-    tqdm \
-    questionary \
+    typer \
+    InquirerPy \
     RUN pip install --extra-index-url https://rospypi.github.io/simple rosbag
 
 # Create workspace directory
