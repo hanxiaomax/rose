@@ -230,7 +230,12 @@ class CliTool:
             return  # Go back to input selection
             
         # Get whitelist based on filter method
-        whitelist = self._get_whitelist_for_multiple_bags(filter_method, selected_files)
+        if filter_method == "whitelist":
+            whitelist = self._get_filter_topics_from_whitelist()
+                
+        elif filter_method == "manual":
+            whitelist = self._get_filter_topics_from_manual_selection(selected_files)
+            
         if not whitelist:
             return  # Go back to input selection
         
@@ -251,71 +256,66 @@ class CliTool:
             return True  # Signal to return to main menu
         return False  # Continue with directory processing
     
-    def _get_whitelist_for_multiple_bags(self, filter_method: str, selected_files: List[str]) -> Optional[List[str]]:
-        """Get whitelist for multiple bag files based on filter method
-        
-        Args:
-            filter_method: The filter method ('whitelist' or 'manual')
-            selected_files: List of selected bag files
+    def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
+        whitelist_dir = "whitelists"
+        if not os.path.exists(whitelist_dir):
+            self.console.print("No whitelists found", style=YELLOW)
+            return None
             
+        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+        if not whitelists:
+            self.console.print("No whitelists found", style=YELLOW)
+            return None
+            
+        # Select whitelist to use
+        selected = inquirer.select(
+            message="Select whitelist to use:",
+            choices=whitelists,
+            style=style
+        ).execute()
+        
+        if not selected:
+            return None
+            
+        # Load selected whitelist
+        whitelist_path = os.path.join(whitelist_dir, selected)
+        return self.parser.load_whitelist(whitelist_path)
+
+    def _get_filter_topics_from_manual_selection(self, selected_files: List[str]) -> Optional[List[str]]:
+        """Get topics from manual selection
+        
         Returns:
             List of topics to include, or None if cancelled
         """
-        if filter_method == "whitelist":
-            # Get whitelist file
-            whitelist_dir = "whitelists"
-            if not os.path.exists(whitelist_dir):
-                self.console.print("No whitelists found", style=YELLOW)
-                return None
-                
-            whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
-            if not whitelists:
-                self.console.print("No whitelists found", style=YELLOW)
-                return None
-                
-            # Select whitelist to use
-            selected = inquirer.select(
-                message="Select whitelist to use:",
-                choices=whitelists,
-                style=style
-            ).execute()
+        # Load all bag files to get the union of topics
+        all_topics = set()
+        all_connections = {}
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Loading bag files for topic selection...", total=len(selected_files))
             
-            if not selected:
-                return None
-                
-            # Load selected whitelist
-            whitelist_path = os.path.join(whitelist_dir, selected)
-            return self.parser.load_whitelist(whitelist_path)
-                
-        elif filter_method == "manual":
-            # Load all bag files to get the union of topics
-            all_topics = set()
-            all_connections = {}
-            
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                transient=True,
-            ) as progress:
-                task = progress.add_task("Loading bag files for topic selection...", total=len(selected_files))
-                
-                for i, bag_file in enumerate(selected_files):
-                    progress.update(task, description=f"Loading {i+1}/{len(selected_files)}: {os.path.basename(bag_file)}")
-                    try:
-                        topics, connections, _ = self.parser.load_bag(bag_file)
-                        all_topics.update(topics)
-                        all_connections.update(connections)
-                        progress.advance(task)
-                    except Exception as e:
-                        self.console.print(f"Error loading {bag_file}: {str(e)}", style="red")
-                        # Continue with other files
-            
-            if not all_topics:
-                self.console.print("No topics found in selected bag files", style="red")
-                return None
-            
-            self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
-            return self._select_topics(list(all_topics), all_connections)
+            for i, bag_file in enumerate(selected_files):
+                progress.update(task, description=f"Loading {i+1}/{len(selected_files)}: {os.path.basename(bag_file)}")
+                try:
+                    topics, connections, _ = self.parser.load_bag(bag_file)
+                    all_topics.update(topics)
+                    all_connections.update(connections)
+                    progress.advance(task)
+                except Exception as e:
+                    self.console.print(f"Error loading {bag_file}: {str(e)}", style="red")
+                    # Continue with other files
+        
+        if not all_topics:
+            self.console.print("No topics found in selected bag files", style="red")
+            return None
+        
+        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
+        return self._select_topics(list(all_topics), all_connections)
+
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist):
         """Process multiple bag files in parallel
@@ -397,7 +397,7 @@ class CliTool:
                         active_files.remove(bag_file)
             
             max_workers = WORKERS
-            self.console.print(f"Processing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
             
             # Initialize the first batch of files as "Waiting"
             initial_batch = []
