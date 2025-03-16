@@ -294,27 +294,30 @@ hatch publish
 ### Project Structure
 ```
 project_root/
-├── roseApp/        # Python application
-│   ├── rose.py     # main script
-│   ├── cli/        # CLI tools
-│   │   ├── cli_tool.py  # Interactive CLI
-│   │   ├── theme.py     # CLI theme configuration
-│   │   └── util.py      # CLI utilities
-│   ├── themes/     # TUI themes
-│   ├── components/ # TUI components 
-│   ├── core/       # Core functionality
-│   │   ├── parser.py    # Bag file parser
-│   │   └── util.py      # Utility functions
-│   ├── tui.py      # TUI implementation
-│   ├── whitelists/ # Topic whitelist folder
-│   ├── config.json # Configuration file
-│   └── style.tcss  # TUI style sheet
-├── docker/         # Docker support
+├── roseApp/                # Python application
+│   ├── rose.py             # Main entry script
+│   ├── cli/                # CLI tools
+│   │   ├── cli_tool.py     # Interactive CLI implementation
+│   │   ├── theme.py        # CLI theme and color configuration
+│   │   └── <inline-cmd>.py # Command-line commands implementation
+│   ├── core/               # Core functionality
+│   │   ├── parser.py       # Bag file parser
+│   │   └── util.py         # Utility functions and logging
+│   ├── tui/                # TUI components
+│   │   ├── tui.py          # Main TUI application
+│   │   └── components/     # Custom widgets
+│   │   ├── config.json     # Configuration file
+│   │   ├── themes/         # TUI themes
+│   │   └── style.tcss          # TUI style sheet
+│   ├── whitelists/         # Topic whitelist folder
+│   │   └── *.txt           # Whitelist files
+├── docker/                 # Docker support
 │   ├── Dockerfile
 │   └── go_docker.sh
-├── docs/           # Documentation
-├── requirements.txt # Dependencies
-└── README.md       # Project documentation
+├── docs/                   # Documentation
+├── pyproject.toml          # Project metadata and dependencies
+├── requirements.txt        # Development dependencies
+└── README.md               # Project documentation
 ```
 
 ### Tech stack
