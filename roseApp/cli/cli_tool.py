@@ -53,6 +53,18 @@ DEFAULT_STYLE = {
 _style = get_style(DEFAULT_STYLE, style_override=True)
 
 
+def print_usage_instructions(console:Console, is_fuzzy:bool = False):
+    console.print("\nUsage Instructions:",style="bold magenta")
+    if is_fuzzy:
+        console.print("•  [magenta]Type to search[/magenta]")
+    else:
+        console.print("•  [magenta][Space][/magenta] to select/unselect") 
+    console.print("•  [magenta]↑/↓[/magenta] to navigate options")
+    console.print("•  [magenta]Tab[/magenta] to select and move to next item")
+    console.print("•  [magenta]Shift+Tab[/magenta] to select and move to previous item")
+    console.print("•  [magenta]Ctrl+A[/magenta] to select all")
+    console.print("•  [magenta]Enter[/magenta] to confirm selection\n")
+
 
 class CliTool:
     def __init__(self):
@@ -160,8 +172,8 @@ class CliTool:
                 if show_stats:
                     input_size = os.path.getsize(input_bag)
                     output_size = os.path.getsize(output_bag)
-                    input_size_mb = input_size / (1024 * 1024)
-                    output_size_mb = output_size / (1024 * 1024)
+                    input_size_mb:float = input_size / (1024 * 1024)
+                    output_size_mb:float = output_size / (1024 * 1024)
                     reduction_ratio = (1 - output_size / input_size) * 100
                     
                     stats = (
@@ -169,7 +181,6 @@ class CliTool:
                         f"• Time: {end_time - start_time:.2f} seconds\n"
                         f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
                         f"• Reduction: {reduction_ratio:.1f}%\n"
-                        f"• Topics: {len(self.topics)} -> {len(selected_topics)}"
                     )
                     rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
                     
@@ -283,11 +294,12 @@ class CliTool:
                 def bag_list_transformer(result):
                     return f"{len(result)} files selected\n" + '\n'.join([f"{os.path.basename(bag)}" for bag in result])
                 
-                # Select files
+                print_usage_instructions(self.console)
+
                 selected_files = inquirer.checkbox(
                     message="Select bag files to process:",
                     choices=file_choices,
-                    instruction="[space] to select/unselect, [enter] to confirm, [a] to select all",
+                    instruction="",
                     validate=lambda result: len(result) > 0,
                     invalid_message="Please select at least one file",
                     transformer=bag_list_transformer,
@@ -646,13 +658,7 @@ class CliTool:
         topic_choices = sorted(topics)
         
         # Display usage instructions
-        self.console.print("\nUsage Instructions:",style="bold magenta")
-        self.console.print("1. [magenta]Type to search[/magenta]")
-        self.console.print("2. [magenta]↑/↓[/magenta] to navigate options")
-        self.console.print("3. [magenta]Tab[/magenta] to select and move to next item")
-        self.console.print("4. [magenta]Shift+Tab[/magenta] to select and move to previous item")
-        self.console.print("5. [magenta]Ctrl+A[/magenta] to select all")
-        self.console.print("6. [magenta]Enter[/magenta] to confirm selection\n")
+        print_usage_instructions(self.console, is_fuzzy=True)
         
         selected_topics = inquirer.fuzzy(
             message="Select topics to include:",
