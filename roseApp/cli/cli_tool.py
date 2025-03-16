@@ -7,7 +7,10 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import typer
 from InquirerPy.validator import PathValidator
-
+# Process files in parallel
+import concurrent.futures
+import threading
+import queue
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger
 from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
@@ -288,10 +291,7 @@ class CliTool:
                         )
                         tasks[bag_file] = task
                     
-                    # Process files in parallel
-                    import concurrent.futures
-                    import threading
-                    import queue
+
                     
                     # Create a thread-local storage for progress updates
                     thread_local = threading.local()
