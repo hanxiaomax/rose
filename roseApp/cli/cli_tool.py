@@ -208,22 +208,18 @@ class CliTool:
                     
                 
 
-                with self.show_loading("Loading bag file for topic selection...") as progress:
-                    progress.add_task(description="Loading...")
-                    self.topics, self.connections, self.time_range = self.parser.load_bag(selected_files[0])
-                
-                # Get whitelist or selected topics once for all files
+                # Load first bag file to get topics for selection
                 whitelist = None
                 if filter_method == "whitelist":
                     # Get whitelist file
                     whitelist_dir = "whitelists"
                     if not os.path.exists(whitelist_dir):
-                        self.console.print("No whitelists found", style="yellow")
+                        self.console.print("No whitelists found", style=YELLOW)
                         continue  # Go back to input selection
                         
                     whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
                     if not whitelists:
-                        self.console.print("No whitelists found", style="yellow")
+                        self.console.print("No whitelists found", style=YELLOW)
                         continue  # Go back to input selection
                         
                     # Select whitelist to use
@@ -243,10 +239,34 @@ class CliTool:
                         continue  # Go back to input selection
                         
                 elif filter_method == "manual":
-                    # Load first bag file to get topics for selection
-                    #TODO: topics should be generated from all bag files
-                    self.console.print(f"Note:Topics are generated from the first bag file: {selected_files[0]}",style=YELLOW)
-                    whitelist = self._select_topics(self.topics, self.connections)
+                    # Load all bag files to get the union of topics
+                    all_topics = set()
+                    all_connections = {}
+                    
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        transient=True,
+                    ) as progress:
+                        task = progress.add_task("Loading bag files for topic selection...", total=len(selected_files))
+                        
+                        for i, bag_file in enumerate(selected_files):
+                            progress.update(task, description=f"Loading {i+1}/{len(selected_files)}: {os.path.basename(bag_file)}")
+                            try:
+                                topics, connections, _ = self.parser.load_bag(bag_file)
+                                all_topics.update(topics)
+                                all_connections.update(connections)
+                                progress.advance(task)
+                            except Exception as e:
+                                self.console.print(f"Error loading {bag_file}: {str(e)}", style="red")
+                                # Continue with other files
+                    
+                    if not all_topics:
+                        self.console.print("No topics found in selected bag files", style="red")
+                        continue  # Go back to input selection
+                    
+                    self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
+                    whitelist = self._select_topics(list(all_topics), all_connections)
                     if not whitelist:
                         continue  # Go back to input selection
                 
