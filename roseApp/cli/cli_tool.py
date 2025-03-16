@@ -401,18 +401,13 @@ class CliTool:
             # workaround for progress bar spacing
             self.console.print(f"\n"*(len(selected_files)))
 
-            # Initialize the first batch of files as "Waiting"
-            batch = []
-            for _ in range(len(selected_files)):
-                if not file_queue.empty():
-                    next_file = file_queue.get()
-                    batch.append(next_file)
-            
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit initial batch of tasks and immediately mark them as processing
                 futures = {}
-                for bag_file in file_queue:
+                # Submit all tasks to the executor
+                while not file_queue.empty():
+                    bag_file = file_queue.get()
                     rel_path = os.path.relpath(bag_file, input_path)
                     progress.update(tasks[bag_file], description=f"Waiting: {rel_path}", style="yellow")
                     futures[executor.submit(_process_bag_file, bag_file)] = bag_file
