@@ -4,7 +4,10 @@ from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors a
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import os
-from typing import List
+from typing import List, Dict, Optional, Any, Union
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
+
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
 ██╔══██╗██╔═══██╗██╔════╝██╔════╝
@@ -66,10 +69,6 @@ def collect_bag_files(directory: str) -> List[str]:
 
 def print_bag_info(console:Console, bag_path: str, topics: List[str], connections: dict, time_range: tuple):
     """Show bag file information using rich panels"""
-    from InquirerPy import inquirer
-    from InquirerPy.base.control import Choice
-    from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE
-    
     # Calculate file info
     file_size = os.path.getsize(bag_path)
     file_size_mb = file_size / (1024 * 1024)
@@ -107,27 +106,14 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
         if action == "back":
             return
         elif action == "filter":
-            # Show usage instructions for fuzzy search
-            console.print("\nFuzzy Search Instructions:", style="bold magenta")
-            console.print("•  [magenta]Type to search[/magenta]")
-            console.print("•  [magenta]↑/↓[/magenta] to navigate options")
-            console.print("•  [magenta]Space[/magenta] to select/unselect")
-            console.print("•  [magenta]Tab[/magenta] to select and move to next item")
-            console.print("•  [magenta]Enter[/magenta] to confirm selection\n")
-            
-            # Use fuzzy search to filter topics
-            filtered_topics = inquirer.fuzzy(
+            # Use the new select_topics_with_fuzzy function
+            filtered_topics = select_topics_with_fuzzy(
+                console=console,
+                topics=topics,
                 message="Search topics:",
-                choices=sorted(topics),
-                multiselect=True,
-                transformer=lambda result: f"{len(result)} topic{'s' if len(result) > 1 else ''} selected",
-                max_height="70%",
-                instruction="",
-                marker="● ",
-                border=True,
-                cycle=True,
-                style=style
-            ).execute()
+                require_selection=False,
+                show_instructions=True
+            )
             
             if not filtered_topics:
                 console.print("No topics selected. Showing all topics.", style=YELLOW)
@@ -181,3 +167,57 @@ def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress)
         console.print(Panel(summary,style="green", title="[bold]Results[/bold]"))
     else:
         console.print(Panel(summary,style="red", title="[bold]Results[/bold]"))
+
+def ask_topics_with_fuzzy(
+    console: Console, 
+    topics: List[str], 
+    message: str = "Select topics:",
+    require_selection: bool = True,
+    show_instructions: bool = True,
+    preselected: Optional[List[str]] = None
+) -> List[str]:
+    """Select topics using fuzzy search
+    
+    Args:
+        console: Rich console instance for displaying messages
+        topics: List of topics to select from
+        message: Prompt message to display
+        require_selection: Whether to require at least one topic to be selected
+        show_instructions: Whether to show usage instructions
+        preselected: List of topics to preselect
+        
+    Returns:
+        List of selected topics
+    """
+    # Sort topics for consistent display
+    topic_choices = sorted(topics)
+    
+    # Display usage instructions if requested
+    if show_instructions:
+        print_usage_instructions(console, is_fuzzy=True)
+    
+    # Prepare validation if required
+    validate = None
+    invalid_message = None
+    if require_selection:
+        validate = lambda result: len(result) > 0
+        invalid_message = "Please select at least one topic"
+    
+    # Use fuzzy search to select topics
+    selected_topics = inquirer.fuzzy(
+        message=message,
+        choices=topic_choices,
+        multiselect=True,
+        validate=validate,
+        invalid_message=invalid_message,
+        transformer=lambda result: f"{len(result)} topic{'s' if len(result) > 1 else ''} selected",
+        max_height="70%",
+        instruction="",
+        marker="● ",
+        border=True,
+        cycle=True,
+        style=style,
+        default=preselected
+    ).execute()
+    
+    return selected_topics

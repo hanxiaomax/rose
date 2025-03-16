@@ -19,7 +19,8 @@ from .util import (build_banner,
                    print_usage_instructions, 
                    print_bag_info, 
                    print_filter_stats,
-                   print_batch_filter_summary)
+                   print_batch_filter_summary,
+                   ask_topics_with_fuzzy)
 logger = get_logger("RoseCLI-Tool")
 
 WORKERS = os.cpu_count() - 2
@@ -601,28 +602,13 @@ class CliTool:
         self.console.print(content)
     
     def _select_topics(self, topics: List[str], connections: dict) -> Optional[List[str]]:
-        """Select topics manually"""
-        topic_choices = sorted(topics)
-        
-        # Display usage instructions
-        print_usage_instructions(self.console, is_fuzzy=True)
-        
-        selected_topics = inquirer.fuzzy(
+        return ask_topics_with_fuzzy(
+            console=self.console,
+            topics=topics,
             message="Select topics to include:",
-            choices=topic_choices,
-            multiselect=True,
-            validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one topic",
-            transformer=lambda result: f"{len(result)} topic{'s' if len(result) > 1 else ''} selected",
-            max_height="70%",
-            instruction="",
-            marker="● ",
-            border=True,
-            cycle=True,
-            style=style
-        ).execute()
-        
-        return selected_topics
+            require_selection=True,
+            show_instructions=True
+        )
     
 
         
