@@ -111,11 +111,11 @@ class CliTool:
                     continue
                 
                 # Process single bag file
-                self._process_single_bag_interactive(input_path)
+                self.handle_single_bag_interactive(input_path)
             else:
                 # Process multiple bag files from directory
                 # If return value is True, return to main menu
-                self._process_multiple_bags_interactive(input_path)
+                self.handle_multiple_bags_interactive(input_path)
                 # Ask if user wants to continue or go back to main menu
                 continue_action = inquirer.select(
                     message="What would you like to do next?",
@@ -145,7 +145,7 @@ class CliTool:
             style=style
         ).execute()
     
-    def _process_single_bag_interactive(self, bag_path: str):
+    def handle_single_bag_interactive(self, bag_path: str):
         """Process a single bag file interactively
         
         Args:
@@ -193,9 +193,10 @@ class CliTool:
                     continue  # Stay in the current menu
                     
                 # Process single file
+                
                 self._process_single_bag(bag_path, output_bag, filter_method)
     
-    def _process_multiple_bags_interactive(self, directory_path: str):
+    def handle_multiple_bags_interactive(self, directory_path: str):
         """Process multiple bag files from a directory interactively
         
         Args:
@@ -250,6 +251,13 @@ class CliTool:
             return  # Go back to input selection
         
         # Process bag files in parallel
+        confirm = inquirer.confirm(
+            message="Are you sure you want to process these bag files?",
+            default=False,
+            style=style
+        ).execute()
+        if not confirm:
+            return  # Go back to input selection
         self._process_bags_in_parallel(selected_files, directory_path, whitelist)
         
         
@@ -475,6 +483,13 @@ class CliTool:
             if not whitelist:
                 return
 
+        confirm = inquirer.confirm(
+                    message="Are you sure you want to process this bag file?",
+                    default=False,
+                    style=style
+                ).execute()
+        if not confirm:
+            return
         with self._show_loading("Filtering bag file...") as progress:
             progress.add_task(description="Processing...")
             self.parser.filter_bag(input_bag, output_bag, whitelist)
