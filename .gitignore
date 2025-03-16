@@ -34,3 +34,7 @@ localnotes/**
 roseApp/venv/**
 dist/** 
 .pypirc
+*.txt
+*.log
+*.bag
+*.cast

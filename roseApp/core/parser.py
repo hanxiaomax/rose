@@ -3,7 +3,6 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 """
 
 import time
-import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Tuple, List, Dict, Optional
@@ -12,29 +11,11 @@ from roseApp.core.util import TimeUtil, get_logger
 from time import sleep
 _logger = get_logger(__name__)
 
-# Initialize C++ implementation flag
-_HAS_CPP_IMPL = False
 
 class ParserType(Enum):
     """Enum for different parser implementations"""
     PYTHON = "python"
     CPP = "cpp"
-
-def check_cpp_impl() -> bool:
-    """Check if C++ implementation is available
-    
-    Returns:
-        bool: True if C++ implementation is available, False otherwise
-    """
-    global _HAS_CPP_IMPL
-    if not _HAS_CPP_IMPL:
-        try:
-            import rosbag_io_py
-            _HAS_CPP_IMPL = True
-            _logger.info("Successfully loaded C++ implementation (rosbag_io_py)")
-        except ImportError:
-            _logger.warning("C++ implementation (rosbag_io_py) not available. Only Python implementation will be used.")
-    return _HAS_CPP_IMPL
 
 class IBagParser(ABC):
     """Abstract base class for bag parser implementations"""
@@ -237,129 +218,6 @@ class BagParser(IBagParser):
             _logger.error(f"Error getting message counts: {e}")
             raise Exception(f"Error getting message counts: {e}")
 
-class BagParserCPP(IBagParser):
-    """C++ implementation of bag parser using rosbag_io_py"""
-    
-    def __init__(self):
-        """Initialize BagParserCPP"""
-        if not check_cpp_impl():
-            raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
-        # Import here to avoid early import
-        import rosbag_io_py
-        self._rosbag_io_py = rosbag_io_py
-    
-    def load_whitelist(self, whitelist_path: str) -> List[str]:
-        """
-        Load topics from whitelist file
-        
-        Args:
-            whitelist_path: Path to the whitelist file
-            
-        Returns:
-            List of topic names
-        """
-        with open(whitelist_path) as f:
-            topics = []
-            for line in f.readlines():
-                if line.strip() and not line.strip().startswith('#'):
-                    topics.append(line.strip())
-            return topics
-    
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
-        """
-        Filter rosbag using C++ interface
-        
-        Args:
-            input_bag: Path to input bag file
-            output_bag: Path to output bag file  
-            topics: List of topics to include
-            time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
-        
-        Returns:
-            Status message with completion time
-        """
-        try:
-            start_time = time.time()
-            io = self._rosbag_io_py.rosbag_io()
-
-            io.load(str(input_bag))
-            io.dump(str(output_bag), topics, time_range)
-            
-            end_time = time.time()
-            elapsed = end_time - start_time
-            mins, secs = divmod(elapsed, 60)
-            return f"Filtering completed in {int(mins)}m {secs:.2f}s"
-            
-        except Exception as e:
-            _logger.error(f"Error filtering bag: {e}")
-            raise Exception(f"Error filtering bag: {e}")
-
-    def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
-        """
-        Load bag file and return topics, connections and time range
-        
-        Args:
-            bag_path: Path to bag file
-            
-        Returns:
-            Tuple containing:
-            - List of topics
-            - Dict mapping topics to message types
-            - Tuple of (start_time, end_time)
-        """
-        io = self._rosbag_io_py.rosbag_io()
-        io.load(bag_path)
-        topics = io.get_topics()
-        connections = io.get_connections()
-        timerange = io.get_time_range()
-        
-        return topics, connections, timerange
-    
-    def inspect_bag(self, bag_path: str) -> str:
-        """
-        List all topics and message types using C++ interface
-        
-        Args:
-            bag_path: Path to bag file
-            
-        Returns:
-            Formatted string containing bag information
-        """
-        try:
-            topics, connections, (start_time, end_time) = self.load_bag(bag_path)
-            
-            result = [f"\nTopics in {bag_path}:"]
-            result.append("{:<40} {:<30}".format("Topic", "Message Type"))
-            result.append("-" * 80)
-            for topic in topics:
-                result.append("{:<40} {:<30}".format(topic, connections[topic]))
-            
-            result.append(f"\nTime range: {TimeUtil.to_datetime(start_time)} - {TimeUtil.to_datetime(end_time)}")
-            return "\n".join(result)
-            
-        except Exception as e:
-            _logger.error(f"Error inspecting bag file: {e}")
-            raise Exception(f"Error inspecting bag file: {e}")
-
-    def get_message_counts(self, bag_path: str) -> Dict[str, int]:
-        """
-        Get message counts for each topic in the bag file
-        
-        Args:
-            bag_path: Path to bag file
-            
-        Returns:
-            Dict mapping topic names to message counts
-        """
-        try:
-            io = self._rosbag_io_py.rosbag_io()
-            io.load(bag_path)
-            topics = io.get_topics()
-            return {topic: io.get_message_count(topic) for topic in topics}
-        except Exception as e:
-            _logger.error(f"Error getting message counts: {e}")
-            raise Exception(f"Error getting message counts: {e}")
-
 def create_parser(parser_type: ParserType) -> IBagParser:
     """
     Factory function to create parser instances
@@ -375,9 +233,7 @@ def create_parser(parser_type: ParserType) -> IBagParser:
     """
     if parser_type == ParserType.PYTHON:
         return BagParser()
-    elif parser_type == ParserType.CPP:
-        if not check_cpp_impl():
-            raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
-        return BagParserCPP()
+    elif parser_type == ParserType.CPP:     
+        raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
     else:
         raise ValueError(f"Unknown parser type: {parser_type}")

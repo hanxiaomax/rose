@@ -1,0 +1,12 @@
+{
+    "show_splash_screen": true,
+    "theme": "cassette-walkman",
+    "load_cpp_parser": false,
+    "whitelists": {
+        "demo": "whitelists/1.txt",
+        "demo-whitelist": "whitelists/demo-whitelist.txt",
+        "whitelist_20250316_105757": "whitelists/whitelist_20250316_105757.txt",
+        "whitelist_20250316_105846": "whitelists/whitelist_20250316_105846.txt",
+        "whitelist_20250316_110029": "whitelists/whitelist_20250316_110029.txt"
+    }
+}

@@ -17,26 +17,28 @@ from textual.widgets import (
     Footer, Header, Link, Pretty, RichLog, Rule, SelectionList, 
     Static, Tab, Tabs, TextArea
 )
-
-# Local application imports
-from roseApp.components.BagExplorer import BagExplorer
-from roseApp.components.ControlPanel import ControlPanel
-from roseApp.components.Dialog import ConfirmDialog
-from roseApp.components.StatusBar import StatusBar
-from roseApp.components.TaskTable import TaskTable
-from roseApp.components.TopicPanel import TopicTreePanel
-from roseApp.core.util import get_logger
-from roseApp.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
-
 from textual.reactive import reactive
+import typer
+# Local application imports
+from roseApp.core.util import get_logger
+from roseApp.tui.components.BagExplorer import BagExplorer
+from roseApp.tui.components.ControlPanel import ControlPanel
+from roseApp.tui.components.Dialog import ConfirmDialog
+from roseApp.tui.components.StatusBar import StatusBar
+from roseApp.tui.components.TaskTable import TaskTable
+from roseApp.tui.components.TopicPanel import TopicTreePanel
+from roseApp.tui.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEME_WALKMAN
 
+
+app = typer.Typer(help="ROS Bag Filter Tool Textual UI")
 # Initialize logging at the start of the file
 logger = get_logger("RoseTUI")
 
+config_path = os.path.join(os.path.dirname(__file__), 'config.json')
 def load_config():
     """Load configuration from config.json"""
     try:
-        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        # config_path = os.path.join(os.path.dirname(__file__), 'config.json')
         logger.info(f"Loading config from: {config_path}")
         
         if not os.path.exists(config_path):
@@ -216,7 +218,7 @@ class MainScreen(Screen):
             # Update config with new whitelist
             whitelist_name = f"whitelist_{timestamp}"
             self.config.setdefault("whitelists", {})[whitelist_name] = str(whitelist_path)
-            with open("config.json", "w") as f:
+            with open(config_path, "w") as f:
                 json.dump(self.config, f, indent=4)
             
             self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="information")
@@ -499,5 +501,14 @@ class RoseTUI(App):
         """Switch to debug info screen"""
         self.switch_mode("debug")
 
+
+
+# Typer commands
+@app.command()
+def tui():
+    """Interactive CLI mode with menu interface"""
+    app = RoseTUI()
+    app.run()
+
 if __name__ == "__main__":
-    RoseTUI().run()
+    app()
