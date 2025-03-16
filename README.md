@@ -154,6 +154,11 @@ Key features:
 - Create, view, and manage whitelists
 - Process multiple files in batch mode
 
+#### Single Bag Process with manual selected topics
+[![asciicast](https://asciinema.org/a/9gPaTECIBlAGyM7HcgKvqT9Qj.svg)](https://asciinema.org/a/9gPaTECIBlAGyM7HcgKvqT9Qj)
+
+
+
 ### TUI Interface
 
 > [!IMPORTANT]
