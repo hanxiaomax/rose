@@ -99,7 +99,7 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     stats = (
         f"Filter Statistics:\n"
         f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-        f"• Reduction: {reduction_ratio:.1f}%\n"
+        f"• Reduction: {reduction_ratio:.1f}%"
     )
     console.print(Panel(stats, style=GREEN, title="Filter Results"))
 
