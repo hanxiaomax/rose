@@ -19,6 +19,7 @@ from .util import (build_banner,
                    print_batch_filter_summary)
 logger = get_logger("RoseCLI-Tool")
 
+WORKERS = os.cpu_count() - 2
 app = typer.Typer(help="ROS Bag Filter Tool")
 
 
@@ -281,7 +282,7 @@ class CliTool:
                     for bag_file in selected_files:
                         rel_path = os.path.relpath(bag_file, input_path)
                         task = progress.add_task(
-                            f"Waiting: {rel_path}",
+                            f"Queued: {rel_path}",  # Set initial status to "Queued"
                             total=100,
                             style="dim"
                         )
@@ -290,6 +291,7 @@ class CliTool:
                     # Process files in parallel
                     import concurrent.futures
                     import threading
+                    import queue
                     
                     # Create a thread-local storage for progress updates
                     thread_local = threading.local()
@@ -297,14 +299,24 @@ class CliTool:
                     # Generate a timestamp for this batch
                     batch_timestamp = time.strftime("%Y%m%d_%H%M%S")
                     
+                    # Create a queue for files to process
+                    file_queue = queue.Queue()
+                    for bag_file in selected_files:
+                        file_queue.put(bag_file)
+                    
+                    # Track active files
+                    active_files = set()
+                    active_files_lock = threading.Lock()
+                    
                     def process_bag_file(bag_file):
                         rel_path = os.path.relpath(bag_file, input_path)
                         task = tasks[bag_file]
                         
+                        # Mark file as active
+                        with active_files_lock:
+                            active_files.add(bag_file)
+                        
                         try:
-                            # Update task to show it's being processed
-                            progress.update(task, description=f"Processing: {rel_path}", style="yellow")
-                            
                             # Create output path with timestamp
                             base_name = os.path.splitext(bag_file)[0]
                             output_bag = f"{base_name}_filtered_{batch_timestamp}.bag"
@@ -314,43 +326,72 @@ class CliTool:
                             if not hasattr(thread_local, 'parser'):
                                 thread_local.parser = create_parser(ParserType.PYTHON)
                                 
-                            # Load bag info
-                            progress.update(task, description=f"Loading: {rel_path}", style="yellow", completed=10)
-                            topics, connections, time_range = thread_local.parser.load_bag(bag_file)
-                            
                             # Filter bag
-                            progress.update(task, description=f"Filtering: {rel_path}", style="yellow", completed=30)
+                            progress.update(task, description=f"Filtering: {rel_path}", style=f"{PURPLE}", completed=30)
                             thread_local.parser.filter_bag(bag_file, output_bag, whitelist)
                             
                             # Update task to show success with green color and include output filename
-                            output_filename = os.path.basename(output_bag)
-                            progress.update(task, description=f"[green]✓ {rel_path} → {output_filename}[/green]", completed=100)
+                            progress.update(task, description=f"[green]✓ {rel_path}[/green]",completed=100)
                             return True
                             
                         except Exception as e:
                             # Update task to show failure with red color
-                            progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]", completed=100)
+                            progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]",completed=100)
                             logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                             return False
+                        finally:
+                            # Remove file from active set
+                            with active_files_lock:
+                                active_files.remove(bag_file)
+                                # We don't need to get the next file here anymore
+                                # as it's handled in the main loop after a future completes
                     
-                    # Determine the number of workers based on CPU count
-                    max_workers = min(os.cpu_count() or 4, len(selected_files))
+                    max_workers = WORKERS
                     self.console.print(f"Processing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
+                    
+                    # Initialize the first batch of files as "Waiting"
+                    initial_batch = []
+                    for _ in range(min(max_workers, len(selected_files))):
+                        if not file_queue.empty():
+                            next_file = file_queue.get()
+                            next_rel_path = os.path.relpath(next_file, input_path)
+                            progress.update(tasks[next_file], description=f"Waiting: {next_rel_path}", style="dim")
+                            initial_batch.append(next_file)
                     
                     # Use ThreadPoolExecutor for parallel processing
                     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        # Submit all tasks
-                        future_to_file = {executor.submit(process_bag_file, bag_file): bag_file for bag_file in selected_files}
+                        # Submit initial batch of tasks and immediately mark them as processing
+                        futures = {}
+                        for bag_file in initial_batch:
+                            rel_path = os.path.relpath(bag_file, input_path)
+                            progress.update(tasks[bag_file], description=f"Processing: {rel_path}", style="yellow")
+                            futures[executor.submit(process_bag_file, bag_file)] = bag_file
                         
                         # Wait for all tasks to complete
-                        for future in concurrent.futures.as_completed(future_to_file):
-                            bag_file = future_to_file[future]
-                            try:
-                                future.result()  # This will re-raise any exception from the thread
-                            except Exception as e:
-                                # This should not happen as exceptions are caught in process_bag_file
-                                logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
-                        
+                        while futures:
+                            # Wait for the next task to complete
+                            done, _ = concurrent.futures.wait(
+                                futures, 
+                                return_when=concurrent.futures.FIRST_COMPLETED
+                            )
+                            
+                            # Process completed futures
+                            for future in done:
+                                bag_file = futures.pop(future)
+                                try:
+                                    future.result()  # This will re-raise any exception from the thread
+                                except Exception as e:
+                                    # This should not happen as exceptions are caught in process_bag_file
+                                    logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
+                                
+                                # Submit next task if available
+                                with active_files_lock:
+                                    if not file_queue.empty():
+                                        next_file = file_queue.get()
+                                        next_rel_path = os.path.relpath(next_file, input_path)
+                                        progress.update(tasks[next_file], description=f"Processing: {next_rel_path}", style="yellow")
+                                        futures[executor.submit(process_bag_file, next_file)] = next_file
+                
                 # Show final summary with color-coded results
                 print_batch_filter_summary(self.console, tasks, progress)
                 
