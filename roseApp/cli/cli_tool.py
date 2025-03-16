@@ -14,7 +14,7 @@ import queue
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger
 from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
-from .util import (build_banner, 
+from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
                    print_bag_info, 
@@ -35,7 +35,7 @@ class CliTool:
         self.connections = None
         self.time_range = None
  
-    def _ask_for_bag(self, message: str = "Enter bag file path:") -> Optional[str]:
+    def ask_for_bag(self, message: str = "Enter bag file path:") -> Optional[str]:
         """Ask user to input a bag file path"""
         while True:
             input_bag = inquirer.filepath(
@@ -51,13 +51,7 @@ class CliTool:
                 
             return input_bag
     
-    def _show_loading(self, message: str):
-        """Show a loading spinner with message"""
-        return Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-        )
+
     
     def run_cli(self):
         """Run the CLI tool with improved menu logic"""
@@ -152,7 +146,7 @@ class CliTool:
             bag_path: Path to the bag file
         """
         # Load bag info
-        with self._show_loading("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
         
@@ -297,11 +291,7 @@ class CliTool:
         all_topics = set()
         all_connections = {}
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-        ) as progress:
+        with LoadingAnimation("Loading bag files for topic selection...") as progress:
             task = progress.add_task("Loading bag files for topic selection...", total=len(selected_files))
             
             for i, bag_file in enumerate(selected_files):
@@ -320,7 +310,7 @@ class CliTool:
             return None
         
         self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
-        return self._select_topics(list(all_topics), all_connections)
+        return self.ask_topics(list(all_topics), all_connections)
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist):
@@ -335,11 +325,7 @@ class CliTool:
             Dictionary mapping bag files to their task IDs
         """
         # Create progress display for all files
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=False,
-        ) as progress:
+        with LoadingAnimation("Processing bag files...") as progress:
             # Create tasks for all files
             tasks = {}
             for bag_file in selected_files:
@@ -444,7 +430,7 @@ class CliTool:
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
         """Process a single bag file"""
         # Load bag info
-        with self._show_loading("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
         
@@ -479,7 +465,7 @@ class CliTool:
                 return
                 
         elif filter_method == "manual":
-            whitelist = self._select_topics(self.topics, self.connections)
+            whitelist = self.ask_topics(self.topics, self.connections)
             if not whitelist:
                 return
 
@@ -490,7 +476,7 @@ class CliTool:
                 ).execute()
         if not confirm:
             return
-        with self._show_loading("Filtering bag file...") as progress:
+        with LoadingAnimation("Filtering bag file...") as progress:
             progress.add_task(description="Processing...")
             self.parser.filter_bag(input_bag, output_bag, whitelist)
         
@@ -523,17 +509,17 @@ class CliTool:
     def _create_whitelist_workflow(self):
         """Create whitelist workflow"""
         # Get bag file
-        input_bag = self._ask_for_bag("Enter bag file path to create whitelist from:")
+        input_bag = self.ask_for_bag("Enter bag file path to create whitelist from:")
         if not input_bag:
             return
             
         # Load bag file
-        with self._show_loading("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             topics, connections, _ = self.parser.load_bag(input_bag)
         
         # Select topics
-        selected_topics = self._select_topics(topics, connections)
+        selected_topics = self.ask_topics(topics, connections)
         if not selected_topics:
             return
             
@@ -616,7 +602,7 @@ class CliTool:
         self.console.print("─" * 80)
         self.console.print(content)
     
-    def _select_topics(self, topics: List[str], connections: dict) -> Optional[List[str]]:
+    def ask_topics(self, topics: List[str]) -> Optional[List[str]]:
         return ask_topics_with_fuzzy(
             console=self.console,
             topics=topics,

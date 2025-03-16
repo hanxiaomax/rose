@@ -221,3 +221,11 @@ def ask_topics_with_fuzzy(
     ).execute()
     
     return selected_topics
+
+def LoadingAnimation(message: str):
+    """Show a loading spinner with message"""
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    )
