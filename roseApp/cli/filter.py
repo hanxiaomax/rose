@@ -20,7 +20,6 @@ def filter(
     input_bag: str = typer.Argument(..., help="Input bag file path"),
     output_bag: str = typer.Argument(..., help="Output bag file path"),
     whitelist: Optional[str] = typer.Option(None, "--whitelist", "-w", help="Path to topic whitelist file"),
-    time_range: Optional[str] = typer.Option(None, "--time-range", "-t", help="Time range in format \"YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS\""),
     topics: Optional[List[str]] = typer.Option(None, "--topics", "-tp", help="Topics to include (can be specified multiple times). Alternative to whitelist file."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without actually doing it")
 ):
@@ -48,9 +47,7 @@ def filter(
         # Get all topics from input bag
         all_topics, connections, _ = parser.load_bag(input_bag)
         
-        # Parse time range if provided
-        time_range_tuple = parse_time_range(time_range) if time_range else None
-        
+
         # Get topics from whitelist file or command line arguments
         whitelist_topics = set()
         if whitelist:
@@ -79,10 +76,6 @@ def filter(
                 typer.echo(f"  {status_icon} {typer.style(topic_str, fg=topic_style)} "
                           f"{typer.style(connections[topic], fg=msg_type_style)}")
             
-            if time_range_tuple:
-                start_time, end_time = time_range_tuple
-                typer.echo(f"\nTime range: {typer.style(TimeUtil.to_datetime(start_time), fg=typer.colors.YELLOW)} to "
-                          f"{typer.style(TimeUtil.to_datetime(end_time), fg=typer.colors.YELLOW)}")
             return
         
         # Print filter information
@@ -110,11 +103,7 @@ def filter(
         typer.echo(f"Selected: {typer.style(str(selected_count), fg=typer.colors.GREEN)} of "
                   f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics")
         
-        if time_range_tuple:
-            start_time, end_time = time_range_tuple
-            typer.echo(f"\nTime range: {typer.style(TimeUtil.to_datetime(start_time), fg=typer.colors.YELLOW)} to "
-                      f"{typer.style(TimeUtil.to_datetime(end_time), fg=typer.colors.YELLOW)}")
-        
+
         # Run the filter with progress bar
         typer.echo("\nProcessing:")
         start_time = time.time()
@@ -129,8 +118,7 @@ def filter(
             result = parser.filter_bag(
                 input_bag, 
                 output_bag, 
-                list(whitelist_topics),
-                time_range_tuple
+                list(whitelist_topics)
             )
             progress.update(task, completed=100)
         
