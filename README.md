@@ -128,9 +128,6 @@ rose filter demo.bag --dry-run | grep "gps" > whitelists/gps_topics.txt
 
 # 2. Filter the bag file using the whitelist
 rose filter demo.bag gps_only.bag -w whitelists/gps_topics.txt
-
-# 3. Filter data within a specific time range
-rose filter gps_only.bag gps_timerange.bag -r "2023/01/01 10:00:00,2023/01/01 10:30:00"
 ```
 
 ### Interactive CLI
@@ -154,9 +151,11 @@ Key features:
 - Create, view, and manage whitelists
 - Process multiple files in batch mode
 
-#### Single Bag Process with manual selected topics
-[![asciicast](https://asciinema.org/a/9gPaTECIBlAGyM7HcgKvqT9Qj.svg)](https://asciinema.org/a/9gPaTECIBlAGyM7HcgKvqT9Qj)
+#### Single Bag Processing
+![asciicast](screen-shots/single-bag.gif)
 
+#### Multi-Bag Processing
+![asciicast](screen-shots/multi-bag.gif)
 
 
 ### TUI Interface
@@ -174,6 +173,8 @@ For a full-featured terminal user interface:
 # Launch the TUI
 rose tui
 ```
+![asciicast](screen-shots/tui.gif)
+
 
 Key bindings:
 - `q`: to quit
@@ -206,7 +207,7 @@ RoseApp TUI provides two built-in themes: `cassette-walkman` (default light them
 
 | cassette-walkman | cassette-dark |
 |------------|-------------|
-| ![Light Theme TUI](main-light.png) | ![Dark Theme TUI](main-dark.png) |
+| ![Light Theme TUI](screen-shots/main-light.png) | ![Dark Theme TUI](screen-shots/main-dark.png) |
 
 1. Modify `config.json` to specify your preferred theme:
 
@@ -218,20 +219,28 @@ RoseApp TUI provides two built-in themes: `cassette-walkman` (default light them
 2. Switch Theme in TUI with command palette(the buttom in bottom right corner or keybinding ^p)
 
 
-#### Whitelist
+### Whitelist
 
 You can filter bag files with pre-configured whitelist. To select pre-configured whitelists, press `w` in TUI. But before that, you need to create your own whitelist.
 
 You can create your own whitelist in 3 ways:
 
-1. Create whitelist with interactive cli and choose **2. whitelist**:
-   ```bash
-   rose cli
-   ```
+#### 1. Create topic whitelist with your favorite text editor and save it to `whitelist/`:
 
-2. Create topic whitelist with your favorite text editor and save it to `whitelist/`:
 
-3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
+#### 2. Create whitelist with interactive cli and choose **2. whitelist**:
+```bash
+rose cli
+```
+
+![asciicast](screen-shots/whitelist.gif)
+
+#### 3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
+
+you can create/view/delete whitelists
+
+![asciicast](screen-shots/tui-whitelist.gif)
+
 
 After whitelist created, add it to `config.json` so RoseApp can find it:
 ```json
