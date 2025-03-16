@@ -14,12 +14,13 @@ import queue
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger
 from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
-from .util import (build_banner, 
+from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
                    print_bag_info, 
                    print_filter_stats,
-                   print_batch_filter_summary)
+                   print_batch_filter_summary,
+                   ask_topics_with_fuzzy)
 logger = get_logger("RoseCLI-Tool")
 
 WORKERS = os.cpu_count() - 2
@@ -50,13 +51,7 @@ class CliTool:
                 
             return input_bag
     
-    def show_loading(self, message: str):
-        """Show a loading spinner with message"""
-        return Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-        )
+
     
     def run_cli(self):
         """Run the CLI tool with improved menu logic"""
@@ -79,9 +74,9 @@ class CliTool:
                 if action == "exit":
                     break
                 elif action == "filter":
-                    self._run_interactive_filter()
+                    self.interactive_filter()
                 elif action == "whitelist":
-                    self._run_whitelist_manager()
+                    self.whitelist_manager()
                 
         except KeyboardInterrupt:
             self.console.print("\nOperation cancelled by user", style=YELLOW)
@@ -89,8 +84,7 @@ class CliTool:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
 
-
-    def _run_interactive_filter(self):
+    def interactive_filter(self):
         """Run interactive filter workflow"""
         while True:
             # Ask for input bag file or directory
@@ -111,11 +105,22 @@ class CliTool:
                     continue
                 
                 # Process single bag file
-                self._process_single_bag_interactive(input_path)
+                self.handle_single_bag_interactive(input_path)
             else:
                 # Process multiple bag files from directory
                 # If return value is True, return to main menu
-                if self._process_multiple_bags_interactive(input_path):
+                self.handle_multiple_bags_interactive(input_path)
+                # Ask if user wants to continue or go back to main menu
+                continue_action = inquirer.select(
+                    message="What would you like to do next?",
+                    choices=[
+                        Choice(value="continue", name="1. Process more files"),
+                        Choice(value="main", name="2. Return to main menu")
+                    ],
+                    style=style
+                ).execute()
+                
+                if continue_action == "main":
                     return
     
     def _get_filter_method(self):
@@ -134,14 +139,14 @@ class CliTool:
             style=style
         ).execute()
     
-    def _process_single_bag_interactive(self, bag_path: str):
+    def handle_single_bag_interactive(self, bag_path: str):
         """Process a single bag file interactively
         
         Args:
             bag_path: Path to the bag file
         """
         # Load bag info
-        with self.show_loading("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
         
@@ -182,10 +187,10 @@ class CliTool:
                     continue  # Stay in the current menu
                     
                 # Process single file
+                
                 self._process_single_bag(bag_path, output_bag, filter_method)
-                # Continue in the same menu after processing
     
-    def _process_multiple_bags_interactive(self, directory_path: str):
+    def handle_multiple_bags_interactive(self, directory_path: str):
         """Process multiple bag files from a directory interactively
         
         Args:
@@ -240,21 +245,16 @@ class CliTool:
             return  # Go back to input selection
         
         # Process bag files in parallel
-        self._process_bags_in_parallel(selected_files, directory_path, whitelist)
-        
-        # Ask if user wants to continue or go back to main menu
-        continue_action = inquirer.select(
-            message="What would you like to do next?",
-            choices=[
-                Choice(value="continue", name="1. Process more files"),
-                Choice(value="main", name="2. Return to main menu")
-            ],
+        confirm = inquirer.confirm(
+            message="Are you sure you want to process these bag files?",
+            default=False,
             style=style
         ).execute()
+        if not confirm:
+            return  # Go back to input selection
+        self._process_bags_in_parallel(selected_files, directory_path, whitelist)
         
-        if continue_action == "main":
-            return True  # Signal to return to main menu
-        return False  # Continue with directory processing
+        
     
     def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
         whitelist_dir = "whitelists"
@@ -291,11 +291,7 @@ class CliTool:
         all_topics = set()
         all_connections = {}
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-        ) as progress:
+        with LoadingAnimation("Loading bag files for topic selection...") as progress:
             task = progress.add_task("Loading bag files for topic selection...", total=len(selected_files))
             
             for i, bag_file in enumerate(selected_files):
@@ -314,7 +310,7 @@ class CliTool:
             return None
         
         self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
-        return self._select_topics(list(all_topics), all_connections)
+        return self.ask_topics(list(all_topics), all_connections)
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist):
@@ -329,11 +325,7 @@ class CliTool:
             Dictionary mapping bag files to their task IDs
         """
         # Create progress display for all files
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=False,
-        ) as progress:
+        with LoadingAnimation("Processing bag files...") as progress:
             # Create tasks for all files
             tasks = {}
             for bag_file in selected_files:
@@ -435,73 +427,63 @@ class CliTool:
         
         return tasks
 
-    def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, 
-                          whitelist: Optional[List[str]] = None,
-                          progress_context: Optional[Progress] = None, task_id: Optional[int] = None):
+    def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
         """Process a single bag file"""
         # Load bag info
-        if progress_context:
-            # In batch mode, use the provided progress context
-            progress_context.update(task_id, description=f"Loading: {os.path.basename(input_bag)}")
+        with LoadingAnimation("Loading bag file...") as progress:
+            progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-        else:
-            # In single file mode, use independent loading animation
-            with self.show_loading("Loading bag file...") as progress:
-                progress.add_task(description="Loading...")
-                self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
         
         # Get filter parameters based on method if not provided
-        if whitelist is None:
-            if filter_method == "whitelist":
-                # Get whitelist file
-                whitelist_dir = "whitelists"
-                if not os.path.exists(whitelist_dir):
-                    self.console.print("No whitelists found", style="yellow")
-                    return
-                    
-                whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
-                if not whitelists:
-                    self.console.print("No whitelists found", style="yellow")
-                    return
-                    
-                # Select whitelist to use
-                selected = inquirer.select(
-                    message="Select whitelist to use:",
-                    choices=whitelists,
+        
+        if filter_method == "whitelist":
+            # Get whitelist file
+            whitelist_dir = "whitelists"
+            if not os.path.exists(whitelist_dir):
+                self.console.print("No whitelists found", style="yellow")
+                return
+                
+            whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+            if not whitelists:
+                self.console.print("No whitelists found", style="yellow")
+                return
+                
+            # Select whitelist to use
+            selected = inquirer.select(
+                message="Select whitelist to use:",
+                choices=whitelists,
+                style=style
+            ).execute()
+            
+            if not selected:
+                return
+                
+            # Load selected whitelist
+            whitelist_path = os.path.join(whitelist_dir, selected)
+            whitelist = self.parser.load_whitelist(whitelist_path)
+            if not whitelist:
+                return
+                
+        elif filter_method == "manual":
+            whitelist = self.ask_topics(self.topics, self.connections)
+            if not whitelist:
+                return
+
+        confirm = inquirer.confirm(
+                    message="Are you sure you want to process this bag file?",
+                    default=False,
                     style=style
                 ).execute()
-                
-                if not selected:
-                    return
-                    
-                # Load selected whitelist
-                whitelist_path = os.path.join(whitelist_dir, selected)
-                whitelist = self.parser.load_whitelist(whitelist_path)
-                if not whitelist:
-                    return
-                    
-            elif filter_method == "manual":
-                whitelist = self._select_topics(self.topics, self.connections)
-                if not whitelist:
-                    return
-                
-        # Filter bag
-        if progress_context:
-            # In batch mode, use the provided progress context
-            progress_context.update(task_id, description=f"Filtering: {os.path.basename(input_bag)}")
+        if not confirm:
+            return
+        with LoadingAnimation("Filtering bag file...") as progress:
+            progress.add_task(description="Processing...")
             self.parser.filter_bag(input_bag, output_bag, whitelist)
-        else:
-            # In single file mode, use independent loading animation
-            with self.show_loading("Filtering bag file...") as progress:
-                progress.add_task(description="Processing...")
-                self.parser.filter_bag(input_bag, output_bag, whitelist)
         
-        # Show results
-        if not progress_context:  # Only show stats for single file processing
-            print_filter_stats(self.console, input_bag, output_bag)
+        print_filter_stats(self.console, input_bag, output_bag)
             
         
-    def _run_whitelist_manager(self):
+    def whitelist_manager(self):
         """Run whitelist management workflow"""
         while True:
             action = inquirer.select(
@@ -532,12 +514,12 @@ class CliTool:
             return
             
         # Load bag file
-        with self.show_loading("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             topics, connections, _ = self.parser.load_bag(input_bag)
         
         # Select topics
-        selected_topics = self._select_topics(topics, connections)
+        selected_topics = self.ask_topics(topics, connections)
         if not selected_topics:
             return
             
@@ -620,29 +602,14 @@ class CliTool:
         self.console.print("─" * 80)
         self.console.print(content)
     
-    def _select_topics(self, topics: List[str], connections: dict) -> Optional[List[str]]:
-        """Select topics manually"""
-        topic_choices = sorted(topics)
-        
-        # Display usage instructions
-        print_usage_instructions(self.console, is_fuzzy=True)
-        
-        selected_topics = inquirer.fuzzy(
+    def ask_topics(self, topics: List[str]) -> Optional[List[str]]:
+        return ask_topics_with_fuzzy(
+            console=self.console,
+            topics=topics,
             message="Select topics to include:",
-            choices=topic_choices,
-            multiselect=True,
-            validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one topic",
-            transformer=lambda result: f"{len(result)} topic{'s' if len(result) > 1 else ''} selected",
-            max_height="70%",
-            instruction="",
-            marker="● ",
-            border=True,
-            cycle=True,
-            style=style
-        ).execute()
-        
-        return selected_topics
+            require_selection=True,
+            show_instructions=True
+        )
     
 
         
