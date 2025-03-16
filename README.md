@@ -82,48 +82,55 @@ No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 
 ### Inline CLI
 
-Rose provides command-line tools for direct bag file operations:
+Rose provides a command-line tool for direct bag file operations. Currently, it supports the filter command:
 
-1. Analyze topics and create whitelist:
-   ```bash
-   # Show all topics in the bag file
-   ./rose.py inspect input.bag
-
-   # Filter topics by pattern and show
-   ./rose.py inspect input.bag -p ".*gps.*"
-
-   # Filter topics and save to whitelist
-   ./rose.py inspect input.bag -p ".*sensor.*" -s sensor_whitelist.txt
-
-   # Output in JSON format
-   ./rose.py inspect input.bag --json
-   ```
-
-2. Filter bag file:
-   ```bash
-   # Filter using whitelist file
-   ./rose.py filter input.bag output.bag -w whitelist.txt
-
-   # Filter by specific topics
-   ./rose.py filter input.bag output.bag --topics /topic1 --topics /topic2
-
-   # Filter by time range
-   ./rose.py filter input.bag output.bag -w whitelist.txt -t "23/01/01 00:00:00,23/01/01 00:10:00"
-
-   # Dry run to preview changes
-   ./rose.py filter input.bag output.bag -w whitelist.txt --dry-run
-   ```
-
-Common workflow example:
 ```bash
-# 1. First inspect the bag file
-./rose.py info demo.bag
+# Basic usage
+rose filter <input_bag> <output_bag> [OPTIONS]
+```
 
-# 2. Create a whitelist with GPS related topics
-./rose.py inspect demo.bag -p ".*gps.*" -s gps_whitelist.txt
+**Parameters:**
 
-# 3. Filter the bag file using the whitelist
-./rose.py filter demo.bag gps_only.bag -w gps_whitelist.txt
+- `<input_bag>`: Path to the input bag file (required)
+- `<output_bag>`: Path to the output bag file (required)
+
+**Options:**
+
+- `-w, --whitelist TEXT`: Specify a topic whitelist file path
+- `-t, --topics TEXT`: Specify topics to include, can be used multiple times to add multiple topics
+- `-r, --time-range TEXT`: Specify time range in format "start_time,end_time", e.g., "23/01/01 00:00:00,23/01/01 00:10:00"
+- `--dry-run`: Preview the operation without actually executing it
+- `--help`: Show help information
+
+**Usage Examples:**
+
+1. Filter a bag file using a whitelist:
+   ```bash
+   rose filter input.bag output.bag -w whitelist.txt
+   ```
+
+2. Filter specific topics:
+   ```bash
+   rose filter input.bag output.bag -t /topic1 -t /topic2 -t /topic3
+   ```
+
+3. Preview filtering results without execution:
+   ```bash
+   rose filter input.bag output.bag -w whitelist.txt --dry-run
+   ```
+
+**Common Workflow Example:**
+
+```bash
+# 1. Create a whitelist containing GPS-related topics
+mkdir -p whitelists
+rose filter demo.bag --dry-run | grep "gps" > whitelists/gps_topics.txt
+
+# 2. Filter the bag file using the whitelist
+rose filter demo.bag gps_only.bag -w whitelists/gps_topics.txt
+
+# 3. Filter data within a specific time range
+rose filter gps_only.bag gps_timerange.bag -r "2023/01/01 10:00:00,2023/01/01 10:30:00"
 ```
 
 ### Interactive CLI
@@ -132,7 +139,7 @@ For a guided experience with interactive prompts:
 
 ```bash
 # Launch the interactive CLI tool
-./rose.py cli
+rose cli
 ```
 
 The interactive CLI provides:
@@ -160,7 +167,7 @@ For a full-featured terminal user interface:
 
 ```bash
 # Launch the TUI
-./rose.py tui
+rose tui
 ```
 
 Key bindings:
@@ -212,9 +219,9 @@ You can filter bag files with pre-configured whitelist. To select pre-configured
 
 You can create your own whitelist in 3 ways:
 
-1. Create topic whitelist from command line:
+1. Create whitelist with interactive cli and choose **2. whitelist**:
    ```bash
-   ./rose.py inspect input.bag | awk '{print $1}' > whitelist/example.txt
+   rose cli
    ```
 
 2. Create topic whitelist with your favorite text editor and save it to `whitelist/`:
