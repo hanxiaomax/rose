@@ -287,8 +287,17 @@ class CliTool:
                         )
                         tasks[bag_file] = task
                     
-                    # Process each file
-                    for bag_file in selected_files:
+                    # Process files in parallel
+                    import concurrent.futures
+                    import threading
+                    
+                    # Create a thread-local storage for progress updates
+                    thread_local = threading.local()
+                    
+                    # Generate a timestamp for this batch
+                    batch_timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    
+                    def process_bag_file(bag_file):
                         rel_path = os.path.relpath(bag_file, input_path)
                         task = tasks[bag_file]
                         
@@ -296,29 +305,51 @@ class CliTool:
                             # Update task to show it's being processed
                             progress.update(task, description=f"Processing: {rel_path}", style="yellow")
                             
-                            # Create output path
-                            output_bag = os.path.splitext(bag_file)[0] + "_filtered.bag"
+                            # Create output path with timestamp
+                            base_name = os.path.splitext(bag_file)[0]
+                            output_bag = f"{base_name}_filtered_{batch_timestamp}.bag"
                             
                             # Process file with the selected whitelist
-                            self._process_single_bag(
-                                bag_file,
-                                output_bag,
-                                filter_method,
-                                whitelist=whitelist,  # Pass the pre-selected whitelist
-                                progress_context=progress,
-                                task_id=task
-                            )
+                            # We need to create a new parser instance for each thread
+                            if not hasattr(thread_local, 'parser'):
+                                thread_local.parser = create_parser(ParserType.PYTHON)
+                                
+                            # Load bag info
+                            progress.update(task, description=f"Loading: {rel_path}", style="yellow", completed=10)
+                            topics, connections, time_range = thread_local.parser.load_bag(bag_file)
                             
-                            # Update task to show success with green color
-                            progress.update(task, description=f"[green]✓ {rel_path}[/green]")
+                            # Filter bag
+                            progress.update(task, description=f"Filtering: {rel_path}", style="yellow", completed=30)
+                            thread_local.parser.filter_bag(bag_file, output_bag, whitelist)
+                            
+                            # Update task to show success with green color and include output filename
+                            output_filename = os.path.basename(output_bag)
+                            progress.update(task, description=f"[green]✓ {rel_path} → {output_filename}[/green]", completed=100)
+                            return True
                             
                         except Exception as e:
                             # Update task to show failure with red color
-                            progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]")
+                            progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]", completed=100)
                             logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
+                            return False
+                    
+                    # Determine the number of workers based on CPU count
+                    max_workers = min(os.cpu_count() or 4, len(selected_files))
+                    self.console.print(f"Processing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
+                    
+                    # Use ThreadPoolExecutor for parallel processing
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit all tasks
+                        future_to_file = {executor.submit(process_bag_file, bag_file): bag_file for bag_file in selected_files}
                         
-                        # Update progress
-                        progress.update(task, completed=100)
+                        # Wait for all tasks to complete
+                        for future in concurrent.futures.as_completed(future_to_file):
+                            bag_file = future_to_file[future]
+                            try:
+                                future.result()  # This will re-raise any exception from the thread
+                            except Exception as e:
+                                # This should not happen as exceptions are caught in process_bag_file
+                                logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
                         
                 # Show final summary with color-coded results
                 print_batch_filter_summary(self.console, tasks, progress)
