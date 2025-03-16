@@ -76,11 +76,29 @@ class CliTool:
         
     def show_banner(self):
         """Display the ROSE banner"""
-        rprint(Panel(
-            Text(ROSE_BANNER, style="bold green"),
-            title="[bold]ROS Bag Filter Tool[/bold]",
-            subtitle="[dim]Press Ctrl+C to exit[/dim]"
-        ))
+        # Create title with link
+        title = Text()
+        title.append("ROS Bag Filter Tool") 
+        subtitle = Text()
+        subtitle.append("Github", style=" #e5c07b link https://github.com/hanxiaomax/rose")  # Using a nice blue color
+        subtitle.append(" • ", style="dim")
+        subtitle.append("Author", style=" #e5c07b link https://github.com/hanxiaomax")  # Using a nice blue color
+
+        # Create banner content
+        content = Text()
+        content.append(ROSE_BANNER, style="")  # Using the green from DEFAULT_STYLE
+        content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style="dim #98c379 ")
+        # Create panel with all elements
+        panel = Panel(
+            content,
+            title=title,
+            subtitle=subtitle,  
+            border_style="#e5c07b",  
+            highlight=True
+        )
+        
+        # Print the panel
+        self.console.print(panel)
     
     def ask_for_bag(self, message: str = "Enter bag file path:") -> Optional[str]:
         """Ask user to input a bag file path"""
@@ -551,16 +569,7 @@ class CliTool:
         for topic in sorted(topics):
             msg_type = connections[topic]
             self.console.print(f"• {topic:<40} {msg_type}")
-    
-    def _show_topics(self, topics: List[str], connections: dict):
-        """Show topics with message types"""
-        self.console.print("\nTopics List:", style="bold green")
-        self.console.print("─" * 80)
-        self.console.print(f"{'Topic':<50} {'Type':<35}")
-        self.console.print("─" * 80)
-        
-        for topic in sorted(topics):
-            self.console.print(f"{topic:<50} {connections[topic]}")
+
     
     def _browse_whitelists(self):
         """Browse and view whitelist files"""
