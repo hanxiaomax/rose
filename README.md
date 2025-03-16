@@ -25,10 +25,10 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Key Features and Todos
 
-- High-performance C++ processing core (Optional,ROS required)
-- 🎉 ROS Environment independent. current rosbag and later to [rosbags](https://pypi.org/project/rosbags/)
+- 🎉 ROS Environment independent using [rosbags](https://pypi.org/project/rosbags/)
 - 🌟 Interactive TUI for easy operation
 - 🌟 Command-line interface for automation
+- 🌟 Interactive CLI for guided operations
 - Filter ROS bag files 
   - 🌟 with whitelists 
   - with manually selected topics
@@ -56,9 +56,8 @@ pip install rose-bag
 git clone https://github.com/hanxiaomax/rose.git
 cd rose
 
-# Run the installation script
-chmod +x install.sh
-./install.sh
+# Install dependencies
+pip install -r requirements.txt
 ```
 
 To uninstall Rose, run the following command:
@@ -76,53 +75,14 @@ export TERM=xterm-256color
 
 No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag) and give it a try!
 
-> [!NOTE]
-> Want to try C++ Parser instead of [Python API(lib rosbag)](https://wiki.ros.org/rosbag/Code%20API#Python_API)?
-> 
-> Since Rose's C++ parser depends on [ROS Noetic](https://wiki.ros.org/noetic/Installation) environment, you need to install it first.
->
-> Option 1: Install ROS Noetic (Ubuntu 20.04), refer to [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
->
-> Option 2: Use docker image
-> 1. Build the Docker image:
->    ```bash
->    cd docker
->    docker build -t rose .
->    ```
-> 2. Run the container:
->    ```bash
->    ./go_docker.sh
->    ```
-> Once you have ros environment installed, you can build `rosbag_io_py` lib which is required by roseApp to operate.
-> 1. Build the ROS project:
->    ```bash
->    cd ros
->    ./build.sh
->    ```
-> 2. Set up environment which will make sure `rosbag_io_py` add to `PYTHONPATH`
->    ```bash
->    source setup.sh
->    ```
-> **You are all set! Now you can use RoseApp to filter ROS bag files.**
->
-> Note: Rose's C++ parser is very simple and not support ROS2. It is slightly faster than Python API(lib rosbag) (Refer to [benchmark](./benchmark/README.md)). But I am not sure if it is worth the effort to maintain it.
-
-
-
-
 ## Usage
 
-> [!IMPORTANT]
-> If you experience color display issues in your terminal, set the following environment variable:
-> ```bash
-> export TERM=xterm-256color
-> ```
-> This ensures proper color rendering in both CLI and TUI interfaces.
 
 ### Command Line Interface
 
-Rose provides several command-line tools for bag file operations:
+### Inline CLI
 
+Rose provides command-line tools for direct bag file operations:
 
 1. Analyze topics and create whitelist:
    ```bash
@@ -166,19 +126,49 @@ Common workflow example:
 ./rose.py filter demo.bag gps_only.bag -w gps_whitelist.txt
 ```
 
-### TUI Interface
+### Interactive CLI
 
-To launch the TUI:
+For a guided experience with interactive prompts:
+
 ```bash
-python3 rose.py tui
+# Launch the interactive CLI tool
+./rose.py cli
 ```
 
-2. Some key bindings:
-   - `q`: to quit
-   - `f`: to filter bag files
-   - `w`: to load whitelist
-   - `s`: to save whitelist
-   - `a`: to toggle select all topics
+The interactive CLI provides:
+- Menu-driven interface for bag file operations
+- Guided workflow for filtering and whitelist management
+- Batch processing capabilities for multiple files
+- Progress indicators and detailed results
+
+Key features:
+- Load single bag files or entire directories
+- Select topics with fuzzy search
+- Create, view, and manage whitelists
+- Process multiple files in batch mode
+
+### TUI Interface
+
+> [!IMPORTANT]
+> If you experience color display issues in your terminal, set the following environment variable:
+> ```bash
+> export TERM=xterm-256color
+> ```
+> This ensures proper color rendering in both CLI and TUI interfaces.
+
+For a full-featured terminal user interface:
+
+```bash
+# Launch the TUI
+./rose.py tui
+```
+
+Key bindings:
+- `q`: to quit
+- `f`: to filter bag files
+- `w`: to load whitelist
+- `s`: to save whitelist
+- `a`: to toggle select all topics
 
 #### Configuration
 
@@ -187,7 +177,6 @@ Rose is configured with `roseApp/config.json`.
 {
     "show_splash_screen": true,
     "theme": "cassette-walkman",
-    "load_cpp_parser": false,
     "whitelists": {
         "demo": "./whitelists/demo.txt",
         "radar": "./whitelists/radar.txt",
@@ -198,11 +187,7 @@ Rose is configured with `roseApp/config.json`.
 
 - `show_splash_screen`: whether to show the splash screen, default is true
 - `theme`: the theme of the TUI, default is `cassette-walkman`, check [Theme](#theme) for more details
-- `load_cpp_parser`: whether to use C++ implementation for better performance, default is false
 - `whitelists`: the whitelists of the TUI, default is empty, check [Whitelist](#whitelist) for more details
-
-> [!NOTE]
-> The `load_cpp_parser` option is set to false by default to improve startup time. Enable it only if you need better performance and have the C++ implementation properly installed.
 
 #### Theme
 RoseApp TUI provides two built-in themes: `cassette-walkman` (default light theme) and `cassette-dark`. You can configure the theme in two ways:
@@ -249,10 +234,10 @@ After whitelist created, add it to `config.json` so RoseApp can find it:
 
 ## Development
 
-### Run locally in docker
+### Run locally
 
 ```bash
-python roseApp/rose.py
+python -m roseApp.rose --help
 ```
 
 ### Publishing to PyPI
@@ -288,42 +273,40 @@ hatch publish
 ### Project Structure
 ```
 project_root/
-├── ros/            # ROS C++ core
-│   ├── CMakeLists.txt
-│   ├── devel/      # ros development folder
-│   ├── build/      # build folder
-│   ├── src/        # source code folder
-|   ├── setup.sh    # setup script
-|   └── build_rosecode.sh # build script
 ├── roseApp/        # Python application
 │   ├── rose.py     # main script
-│   ├── themes/     
-│   ├── components/ # components 
-│   ├── core/       # data types and utils
-|   |── tui.py      # main tui script
-│   ├── whitelists/ # topic whitelist folder
-│   ├── config.json # config file
-│   └── style.tcss   # style sheet
-├── docker/              # Docker support
-│   └── Dockerfile
+│   ├── cli/        # CLI tools
+│   │   ├── cli_tool.py  # Interactive CLI
+│   │   ├── theme.py     # CLI theme configuration
+│   │   └── util.py      # CLI utilities
+│   ├── themes/     # TUI themes
+│   ├── components/ # TUI components 
+│   ├── core/       # Core functionality
+│   │   ├── parser.py    # Bag file parser
+│   │   └── util.py      # Utility functions
+│   ├── tui.py      # TUI implementation
+│   ├── whitelists/ # Topic whitelist folder
+│   ├── config.json # Configuration file
+│   └── style.tcss  # TUI style sheet
+├── docker/         # Docker support
+│   ├── Dockerfile
 │   └── go_docker.sh
-├── docs/         # documentation
-├── requirements.txt # dependencies
-├── README.md     
+├── docs/           # Documentation
+├── requirements.txt # Dependencies
+└── README.md       # Project documentation
 ```
 
 ### Tech stack
 
-- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI (Text User Interface) applications. Used for creating the interactive terminal interface.
-- **[Click](https://click.palletsprojects.com/)**: A Python package for creating beautiful command line interfaces in a composable way. Used for building the CLI interface.
-- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation of both CLI and TUI.
-- **[Pybind11](https://pybind11.readthedocs.io/)**: A lightweight header-only library that exposes C++ types in Python and vice versa. Used for wrapping ROS C++ interfaces to Python.
+- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI applications. Used for creating the interactive terminal interface.
+- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation in both CLI and TUI.
+- **[InquirerPy](https://github.com/kazhala/InquirerPy)**: A Python library for building interactive command line interfaces with elegant prompts. Used for the interactive CLI.
+- **[Typer](https://typer.tiangolo.com/)**: A Python library for building CLI applications. Used for building the inline command-line interface.
+- **[rosbags](https://pypi.org/project/rosbags/)**: A pure Python library for reading and writing ROS bag files. Used for ROS bag file processing without ROS dependencies.
 
 ### Rough ideas - data driven rendering
 
 ![1](docs/notes/sketch.png)
-
-
 
 >[!TIP]
 > Before you start with Textual, there are some docs worth reading:
@@ -333,12 +316,9 @@ project_root/
 > - [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
 > - Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
 
-
-
 ## Resources
 
 - Demo bag file: [webviz demo.bag](https://storage.googleapis.com/cruise-webviz-public/demo.bag)
-- [ROS Noetic Installation](http://wiki.ros.org/noetic/Installation)
 
 
 
