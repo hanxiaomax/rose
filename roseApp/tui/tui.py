@@ -34,10 +34,11 @@ app = typer.Typer(help="ROS Bag Filter Tool Textual UI")
 # Initialize logging at the start of the file
 logger = get_logger("RoseTUI")
 
+config_path = os.path.join(os.path.dirname(__file__), 'config.json')
 def load_config():
     """Load configuration from config.json"""
     try:
-        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        # config_path = os.path.join(os.path.dirname(__file__), 'config.json')
         logger.info(f"Loading config from: {config_path}")
         
         if not os.path.exists(config_path):
@@ -217,7 +218,7 @@ class MainScreen(Screen):
             # Update config with new whitelist
             whitelist_name = f"whitelist_{timestamp}"
             self.config.setdefault("whitelists", {})[whitelist_name] = str(whitelist_path)
-            with open("config.json", "w") as f:
+            with open(config_path, "w") as f:
                 json.dump(self.config, f, indent=4)
             
             self.app.notify(f"Whitelist saved to {whitelist_path}", title="Success", severity="information")
