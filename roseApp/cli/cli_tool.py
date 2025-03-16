@@ -1,69 +1,25 @@
 import os
 import time
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich import print as rprint
-from rich.panel import Panel
-from rich.text import Text
 import typer
 from InquirerPy.validator import PathValidator
-from InquirerPy import get_style
 
 from ..core.parser import create_parser, ParserType
-from ..core.util import get_logger, TimeUtil
-
+from ..core.util import get_logger
+from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
+from .util import (build_banner, 
+                   collect_bag_files, 
+                   print_usage_instructions, 
+                   print_bag_info, 
+                   print_filter_stats,
+                   print_batch_filter_summary)
 logger = get_logger("RoseCLI-Tool")
 
 app = typer.Typer(help="ROS Bag Filter Tool")
-
-ROSE_BANNER = """
-██████╗  ██████╗ ███████╗███████╗
-██╔══██╗██╔═══██╗██╔════╝██╔════╝
-██████╔╝██║   ██║███████╗█████╗  
-██╔══██╗██║   ██║╚════██║██╔══╝  
-██║  ██║╚██████╔╝███████║███████╗
-╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
-"""
-
-DEFAULT_STYLE = {
-    "questionmark": "#e5c07b",
-    "answermark": "#e5c07b",
-    "answer": "#98c379",
-    "input": "#35A77c",
-    "question": "#c678dd",
-    "answered_question": "#9379e5",
-    "instruction": "#e69875",
-    "long_instruction": "#e69875",
-    "pointer": "#Fef2d5",
-    "checkbox": "#98c379",
-    "separator": "",
-    "skipped": "#5c6370",
-    "validator": "",
-    "marker": "#98c379",
-    "fuzzy_prompt": "#c678dd",
-    "fuzzy_info": "#e69875",
-    "fuzzy_border": "#e69875",
-    "fuzzy_match": "#c678dd",
-    "spinner_pattern": "#e5c07b",
-    "spinner_text": "",
-}
-_style = get_style(DEFAULT_STYLE, style_override=True)
-
-
-def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style="bold magenta")
-    if is_fuzzy:
-        console.print("•  [magenta]Type to search[/magenta]")
-    else:
-        console.print("•  [magenta]Space[/magenta] to select/unselect") 
-    console.print("•  [magenta]↑/↓[/magenta] to navigate options")
-    console.print("•  [magenta]Tab[/magenta] to select and move to next item")
-    console.print("•  [magenta]Shift+Tab[/magenta] to select and move to previous item")
-    console.print("•  [magenta]Ctrl+A[/magenta] to select all")
-    console.print("•  [magenta]Enter[/magenta] to confirm selection\n")
 
 
 class CliTool:
@@ -73,33 +29,7 @@ class CliTool:
         self.topics = None
         self.connections = None
         self.time_range = None
-        
-    def show_banner(self):
-        """Display the ROSE banner"""
-        # Create title with link
-        title = Text()
-        title.append("ROS Bag Filter Tool") 
-        subtitle = Text()
-        subtitle.append("Github", style=" #e5c07b link https://github.com/hanxiaomax/rose")  # Using a nice blue color
-        subtitle.append(" • ", style="dim")
-        subtitle.append("Author", style=" #e5c07b link https://github.com/hanxiaomax")  # Using a nice blue color
-
-        # Create banner content
-        content = Text()
-        content.append(ROSE_BANNER, style="")  # Using the green from DEFAULT_STYLE
-        content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style="dim #98c379 ")
-        # Create panel with all elements
-        panel = Panel(
-            content,
-            title=title,
-            subtitle=subtitle,  
-            border_style="#e5c07b",  
-            highlight=True
-        )
-        
-        # Print the panel
-        self.console.print(panel)
-    
+ 
     def ask_for_bag(self, message: str = "Enter bag file path:") -> Optional[str]:
         """Ask user to input a bag file path"""
         while True:
@@ -108,7 +38,7 @@ class CliTool:
                 validate=PathValidator(is_file=True, message="File does not exist"),
                 filter=lambda x: x if x.endswith('.bag') else None,
                 invalid_message="File must be a .bag file",
-                style=_style
+                style=style
             ).execute()
             
             if input_bag is None:  # User cancelled
@@ -127,7 +57,8 @@ class CliTool:
     def run_cli(self):
         """Run the CLI tool with improved menu logic"""
         try:
-            self.show_banner()
+            # Show banner
+            self.console.print(build_banner())
             
             while True:
                 # Show main menu
@@ -138,39 +69,31 @@ class CliTool:
                         Choice(value="whitelist", name="2. Whitelist - Manage topic whitelists"),
                         Choice(value="exit", name="3. Exit")
                     ],
-                    style=_style
+                    style=style
                 ).execute()
                 
                 if action == "exit":
                     break
                 elif action == "filter":
-                    self._run_quick_filter()
+                    self._run_interactive_filter()
                 elif action == "whitelist":
                     self._run_whitelist_manager()
                 
         except KeyboardInterrupt:
-            self.console.print("\nOperation cancelled by user", style="yellow")
+            self.console.print("\nOperation cancelled by user", style=YELLOW)
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
 
-    def _find_bag_files(self, directory: str) -> List[str]:
-        """Recursively find all bag files in the given directory"""
-        bag_files = []
-        for root, _, files in os.walk(directory):
-            for file in files:
-                if file.endswith('.bag'):
-                    bag_files.append(os.path.join(root, file))
-        return sorted(bag_files)
 
-    def _run_quick_filter(self):
+    def _run_interactive_filter(self):
         """Run quick filter workflow"""
         while True:
             # Ask for input bag file or directory
             input_path = inquirer.filepath(
                 message="Load Bag file(s):\n • Please specify the bag file or a directory to search \n • Leave blank to return to main menu\nFilename/Directory:",
                 validate=lambda x: os.path.exists(x) or "Path does not exist",
-                style=_style
+                style=style
             ).execute()
             
             if not input_path:
@@ -198,13 +121,13 @@ class CliTool:
                             Choice(value="filter", name="2. Filter bag file"),
                             Choice(value="back", name="3. Back to file selection")
                         ],
-                        style=_style
+                        style=style
                     ).execute()
                     
                     if next_action == "back":
                         break  # Go back to input selection
                     elif next_action == "info":
-                        self._show_bag_info(input_path, self.topics, self.connections, self.time_range)
+                        print_bag_info(self.console, input_path, self.topics, self.connections, self.time_range)
                         continue  # Stay in the current menu
                     elif next_action == "filter":
                         # Get output bag
@@ -212,7 +135,7 @@ class CliTool:
                             message="Enter output bag file path:",
                             default=os.path.splitext(input_path)[0] + "_filtered.bag",
                             validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
-                            style=_style
+                            style=style
                         ).execute()
                         
                         if not output_bag:
@@ -226,7 +149,7 @@ class CliTool:
                                 Choice(value="manual", name="2. Select topics manually"),
                                 Choice(value="back", name="3. Back")
                             ],
-                            style=_style
+                            style=style
                         ).execute()
                         
                         if not filter_method or filter_method == "back":
@@ -238,7 +161,7 @@ class CliTool:
                 
             else:  # Directory processing
                 # Find and select bag files
-                bag_files = self._find_bag_files(input_path)
+                bag_files = collect_bag_files(input_path)
                 if not bag_files:
                     self.console.print("No bag files found in directory", style="red")
                     continue  # Go back to input selection
@@ -252,7 +175,7 @@ class CliTool:
                 ]
                 
                 def bag_list_transformer(result):
-                    return f"{len(result)} files selected\n" + '\n'.join([f"{os.path.basename(bag)}" for bag in result])
+                    return f"{len(result)} files selected\n" + '\n'.join([f"• {os.path.basename(bag)}" for bag in result])
                 
                 print_usage_instructions(self.console)
 
@@ -263,7 +186,7 @@ class CliTool:
                     validate=lambda result: len(result) > 0,
                     invalid_message="Please select at least one file",
                     transformer=bag_list_transformer,
-                    style=_style
+                    style=style
                 ).execute()
                 
                 if not selected_files:
@@ -277,13 +200,14 @@ class CliTool:
                         Choice(value="manual", name="2. Select topics manually"),
                         Choice(value="back", name="3. Back")
                     ],
-                    style=_style
+                    style=style
                 ).execute()
                 
                 if not filter_method or filter_method == "back":
                     continue  # Go back to input selection
                     
-                # Load first bag file to get topics for selection
+                
+
                 with self.show_loading("Loading bag file for topic selection...") as progress:
                     progress.add_task(description="Loading...")
                     self.topics, self.connections, self.time_range = self.parser.load_bag(selected_files[0])
@@ -306,7 +230,7 @@ class CliTool:
                     selected = inquirer.select(
                         message="Select whitelist to use:",
                         choices=whitelists,
-                        style=_style
+                        style=style
                     ).execute()
                     
                     if not selected:
@@ -319,6 +243,9 @@ class CliTool:
                         continue  # Go back to input selection
                         
                 elif filter_method == "manual":
+                    # Load first bag file to get topics for selection
+                    #TODO: topics should be generated from all bag files
+                    self.console.print(f"Note:Topics are generated from the first bag file: {selected_files[0]}",style=YELLOW)
                     whitelist = self._select_topics(self.topics, self.connections)
                     if not whitelist:
                         continue  # Go back to input selection
@@ -374,19 +301,7 @@ class CliTool:
                         progress.update(task, completed=100)
                         
                 # Show final summary with color-coded results
-                success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
-                fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
-                
-                summary = (
-                    f"Processing Complete!\n"
-                    f"• Successfully processed: {success_count} files\n"
-                    f"• Failed: {fail_count} files"
-                )
-                
-                if fail_count == 0:
-                    rprint(Panel(summary,style="green", title="[bold]Results[/bold]"))
-                else:
-                    rprint(Panel(summary,style="red", title="[bold]Results[/bold]"))
+                print_batch_filter_summary(self.console, tasks, progress)
                 
                 # Ask if user wants to continue or go back to main menu
                 continue_action = inquirer.select(
@@ -395,7 +310,7 @@ class CliTool:
                         Choice(value="continue", name="1. Process more files"),
                         Choice(value="main", name="2. Return to main menu")
                     ],
-                    style=_style
+                    style=style
                 ).execute()
                 
                 if continue_action == "main":
@@ -434,7 +349,7 @@ class CliTool:
                 selected = inquirer.select(
                     message="Select whitelist to use:",
                     choices=whitelists,
-                    style=_style
+                    style=style
                 ).execute()
                 
                 if not selected:
@@ -464,7 +379,7 @@ class CliTool:
         
         # Show results
         if not progress_context:  # Only show stats for single file processing
-            self._show_filter_stats(input_bag, output_bag)
+            print_filter_stats(self.console, input_bag, output_bag)
             
         
     def _run_whitelist_manager(self):
@@ -478,7 +393,7 @@ class CliTool:
                     Choice(value="delete", name="3. Delete whitelist"),
                     Choice(value="back", name="4. Back")
                 ],
-                style=_style
+                style=style
             ).execute()
             
             if action == "back":
@@ -514,7 +429,7 @@ class CliTool:
         use_default = inquirer.confirm(
             message=f"Use default path? ({default_path})",
             default=True,
-            style=_style
+            style=style
         ).execute()
         
         if use_default:
@@ -524,7 +439,7 @@ class CliTool:
                 message="Enter save path:",
                 default="whitelists/my_whitelist.txt",
                 validate=lambda x: x.endswith('.txt') or "File must be a .txt file",
-                style=_style
+                style=style
             ).execute()
             
             if not output:
@@ -548,28 +463,11 @@ class CliTool:
                 Choice(value="continue", name="1. Create another whitelist"),
                 Choice(value="back", name="2. Back")
             ],
-            style=_style
+            style=style
         ).execute()
         
         if next_action == "continue":
             self._create_whitelist_workflow()
-    
-    def _show_bag_info(self, bag_path: str, topics: List[str], connections: dict, time_range: tuple):
-        """Show bag file information"""
-        file_size = os.path.getsize(bag_path)
-        file_size_mb = file_size / (1024 * 1024)
-        
-        self.console.print("\nBag Summary:", style="bold green")
-        self.console.print("─" * 80)
-        self.console.print(f"File Size: {file_size_mb:.2f} MB ({file_size:,} bytes)")
-        self.console.print(f"Location: {os.path.abspath(bag_path)}")
-        self.console.print(f"\nTopics: {len(topics)} total")
-        self.console.print("─" * 80)
-        
-        for topic in sorted(topics):
-            msg_type = connections[topic]
-            self.console.print(f"• {topic:<40} {msg_type}")
-
     
     def _browse_whitelists(self):
         """Browse and view whitelist files"""
@@ -588,7 +486,7 @@ class CliTool:
         selected = inquirer.select(
             message="Select whitelist to view:",
             choices=whitelists,
-            style=_style
+            style=style
         ).execute()
         
         if not selected:
@@ -622,43 +520,30 @@ class CliTool:
             marker="● ",
             border=True,
             cycle=True,
-            style=_style
+            style=style
         ).execute()
         
         return selected_topics
     
-    def _show_filter_stats(self, input_bag: str, output_bag: str):
-        """Show filtering statistics"""
-        input_size = os.path.getsize(input_bag)
-        output_size = os.path.getsize(output_bag)
-        input_size_mb:float = input_size / (1024 * 1024)
-        output_size_mb:float = output_size / (1024 * 1024)
-        reduction_ratio = (1 - output_size / input_size) * 100
-        
-        stats = (
-            f"Filter Statistics:\n"
-            f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-            f"• Reduction: {reduction_ratio:.1f}%\n"
-        )
-        rprint(Panel(stats, style="green", title="Filter Results"))
+
         
     def _delete_whitelist(self):
         """Delete a whitelist file"""
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style="yellow")
+            self.console.print("No whitelists found", style=YELLOW)
             return
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style="yellow")
+            self.console.print("No whitelists found", style=YELLOW)
             return
             
         # Select whitelist to delete
         selected = inquirer.select(
             message="Select whitelist to delete:",
             choices=whitelists,
-            style=_style
+            style=style
         ).execute()
         
         if not selected:
@@ -668,7 +553,7 @@ class CliTool:
         if not inquirer.confirm(
             message=f"Are you sure you want to delete '{selected}'?",
             default=False,
-            style=_style
+            style=style
         ).execute():
             return
             
@@ -676,7 +561,7 @@ class CliTool:
         path = os.path.join(whitelist_dir, selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style="green")
+            self.console.print(f"\nDeleted whitelist: {selected}", style=GREEN)
         except Exception as e:
             self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
 
