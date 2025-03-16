@@ -136,64 +136,6 @@ class CliTool:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style="red")
 
-    def filter_bag(self, input_bag: str, output_bag: str, selected_topics: Optional[List[str]] = None, whitelist_path: Optional[str] = None, show_stats: bool = True, progress_context: Optional[Progress] = None):
-        """Filter a bag file using whitelist or manual selection"""
-        try:
-            # Load bag file
-            if progress_context:
-                # If we're in a batch process, update the existing progress
-                task_id = progress_context.add_task(f"Loading {os.path.basename(input_bag)}...", total=None)
-                self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-                progress_context.update(task_id, description=f"Filtering {os.path.basename(input_bag)}...", visible=True)
-                self.parser.filter_bag(input_bag, output_bag, selected_topics)
-                progress_context.remove_task(task_id)
-            else:
-                # Normal single-file process with separate progress indicators
-                with self.show_loading("Loading bag file...") as progress:
-                    progress.add_task(description="Loading...")
-                    self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-                
-                # Get selected topics
-                if whitelist_path:
-                    selected_topics = self.parser.load_whitelist(whitelist_path)
-                elif not selected_topics:
-                    selected_topics = self._select_topics(self.topics, self.connections)
-                    if not selected_topics:
-                        return
-                
-                # Run filter
-                start_time = time.time()
-                with self.show_loading("Filtering bag file...") as progress:
-                    progress.add_task(description="Processing...")
-                    self.parser.filter_bag(input_bag, output_bag, selected_topics)
-                end_time = time.time()
-                
-                # Show statistics if requested
-                if show_stats:
-                    input_size = os.path.getsize(input_bag)
-                    output_size = os.path.getsize(output_bag)
-                    input_size_mb:float = input_size / (1024 * 1024)
-                    output_size_mb:float = output_size / (1024 * 1024)
-                    reduction_ratio = (1 - output_size / input_size) * 100
-                    
-                    stats = (
-                        f"Filter Statistics:\n"
-                        f"• Time: {end_time - start_time:.2f} seconds\n"
-                        f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-                        f"• Reduction: {reduction_ratio:.1f}%\n"
-                    )
-                    rprint(Panel(stats, style="bold green", title="[bold]Filter Results[/bold]"))
-                    
-                    self.console.print(f"\nFilter completed: {output_bag}", style="green")
-            
-        except Exception as e:
-            logger.error(f"Error: {str(e)}", exc_info=True)
-            self.console.print(f"\nError: {str(e)}", style="red")
-            if not progress_context:  # Only raise in single-file mode
-                raise typer.Exit(1)
-            return False
-        return True
-
     def _find_bag_files(self, directory: str) -> List[str]:
         """Recursively find all bag files in the given directory"""
         bag_files = []
