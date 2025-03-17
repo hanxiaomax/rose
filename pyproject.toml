@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rose-bag"
-version = "0.3.1"
+version = "0.3.2"
 description = "A modern CLI/TUI tool for ROS bag file analysis and filtering"
 readme = "README.md"
 authors = [
@@ -35,6 +35,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "questionary>=2.0.0",
     "click>=8.0.0",
+    "InquirerPy"
 ]
 requires-python = ">=3.8"
 
@@ -43,7 +44,7 @@ Homepage = "https://github.com/hanxiaomax/rose"
 "Bug Tracker" = "https://github.com/hanxiaomax/rose/issues"
 
 [project.scripts]
-rose = "roseApp.rose:cli"
+rose = "roseApp.rose:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["roseApp"]
