@@ -4,7 +4,7 @@ import typer
 from typing import List, Optional, Tuple
 from roseApp.core.parser import create_parser, ParserType
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 
 import logging
 
@@ -109,19 +109,32 @@ def filter(
         typer.echo("\n处理中:")
         start_time = time.time()
         
-        # 使用Rich的进度条
+        # 使用Rich的增强进度条
         with Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
             transient=False,
         ) as progress:
-            task = progress.add_task("正在过滤bag文件...", total=100)
+            # 创建进度任务
+            task_id = progress.add_task("正在过滤bag文件...", total=100)
+            
+            # 定义进度更新回调函数
+            def update_progress(percent: int):
+                progress.update(task_id, completed=percent)
+            
+            # 执行过滤
             result = parser.filter_bag(
                 input_bag, 
                 output_bag, 
-                list(whitelist_topics)
+                list(whitelist_topics),
+                progress_callback=update_progress
             )
-            progress.update(task, completed=100)
         
         # 显示过滤结果
         end_time = time.time()

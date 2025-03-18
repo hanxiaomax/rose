@@ -5,7 +5,7 @@ ROS bag parser module that provides functionality for reading and filtering ROS 
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Callable
 import rosbag
 from roseApp.core.util import TimeUtil, get_logger
 from time import sleep
@@ -34,7 +34,9 @@ class IBagParser(ABC):
         pass
     
     @abstractmethod
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
+                  time_range: Optional[Tuple] = None, 
+                  progress_callback: Optional[Callable] = None) -> str:
         """
         Filter rosbag using selected implementation
         
@@ -43,6 +45,7 @@ class IBagParser(ABC):
             output_bag: Path to output bag file  
             topics: List of topics to include
             time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
+            progress_callback: Optional callback function that accepts a float (0-100) progress percentage
         
         Returns:
             Status message with completion time
@@ -102,7 +105,9 @@ class BagParser(IBagParser):
                     topics.append(line.strip())
             return topics
     
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], time_range: Optional[Tuple] = None) -> str:
+    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
+                  time_range: Optional[Tuple] = None,
+                  progress_callback: Optional[Callable] = None) -> str:
         """
         Filter rosbag using rosbag Python API
         
@@ -111,34 +116,73 @@ class BagParser(IBagParser):
             output_bag: Path to output bag file  
             topics: List of topics to include
             time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
+            progress_callback: Optional callback function to report progress percentage (0-100)
         
         Returns:
             Status message with completion time
         """
         try:
             start_time = time.time()
-            sleep(2)
+            
+            # 先获取消息总数，用于计算百分比
+            total_messages = 0
+            selected_topic_counts = {}
+            
+            # 获取要处理的消息总数
+            with rosbag.Bag(input_bag, 'r') as inbag:
+                info = inbag.get_type_and_topic_info()
+                for topic in topics:
+                    if topic in info.topics:
+                        count = info.topics[topic].message_count
+                        selected_topic_counts[topic] = count
+                        total_messages += count
+            
+            if total_messages == 0:
+                _logger.warning(f"No messages found for selected topics in {input_bag}")
+                if progress_callback:
+                    progress_callback(100)  # 直接设为100%完成
+                return "No messages found for selected topics"
+            
+            # 开始过滤过程
             with rosbag.Bag(output_bag, 'w') as outbag:
-                # If time range is provided, convert it to seconds
+                # 转换时间范围
                 start_sec = None
                 end_sec = None
                 if time_range:
                     start_sec = time_range[0][0] + time_range[0][1]/1e9
                     end_sec = time_range[1][0] + time_range[1][1]/1e9
                 
+                # 处理消息，同时更新进度
+                processed_messages = 0
+                last_progress = -1  # 上次报告的进度
+                
                 for topic, msg, t in rosbag.Bag(input_bag).read_messages(topics=topics):
-                    # Check if message is within time range (if specified)
+                    # 检查消息是否在时间范围内
                     msg_time = t.to_sec()
                     if time_range:
                         if msg_time >= start_sec and msg_time <= end_sec:
                             outbag.write(topic, msg, t)
                     else:
-                        # If no time range specified, include all messages
+                        # 如果没有指定时间范围，则包含所有消息
                         outbag.write(topic, msg, t)
+                    
+                    # 更新进度
+                    processed_messages += 1
+                    if progress_callback and total_messages > 0:
+                        current_progress = int((processed_messages / total_messages) * 100)
+                        # 只有当进度发生变化时才回调，减少不必要的更新
+                        if current_progress != last_progress:
+                            progress_callback(current_progress)
+                            last_progress = current_progress
 
             end_time = time.time()
             elapsed = end_time - start_time
             mins, secs = divmod(elapsed, 60)
+            
+            # 确保最终进度为100%
+            if progress_callback and last_progress < 100:
+                progress_callback(100)
+                
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
             
         except Exception as e:
@@ -234,6 +278,6 @@ def create_parser(parser_type: ParserType) -> IBagParser:
     if parser_type == ParserType.PYTHON:
         return BagParser()
     elif parser_type == ParserType.CPP:     
-        raise ValueError("C++ implementation not available. Please install rosbag_io_py first.")
+        raise ValueError("C++ implementation not available.")
     else:
         raise ValueError(f"Unknown parser type: {parser_type}")

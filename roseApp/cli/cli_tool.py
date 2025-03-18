@@ -4,7 +4,7 @@ from typing import Optional, List
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 import typer
 from InquirerPy.validator import PathValidator
 # Process files in parallel
@@ -369,18 +369,34 @@ class CliTool:
                     # We need to create a new parser instance for each thread
                     if not hasattr(thread_local, 'parser'):
                         thread_local.parser = create_parser(ParserType.PYTHON)
-                        
-                    # Filter bag
-                    progress.update(task, description=f"Processing: {rel_path}", style=f"{PURPLE}", completed=30)
-                    thread_local.parser.filter_bag(bag_file, output_bag, whitelist)
                     
-                    # Update task to show success with green color and include output filename
-                    progress.update(task, description=f"[green]✓ {rel_path}[/green]",completed=100)
+                    # 初始设置进度为30%表示准备完成
+                    progress.update(task, description=f"Processing: {rel_path}", style=f"{PURPLE}", completed=30)
+                    
+                    # 定义进度更新回调函数
+                    def update_progress(percent: int):
+                        # 将百分比映射到30%-100%的范围，因为30%表示准备工作完成
+                        mapped_percent = 30 + (percent * 0.7)
+                        progress.update(task, 
+                                       description=f"Processing: {rel_path} ({percent}%)", 
+                                       style=f"{PURPLE}", 
+                                       completed=mapped_percent)
+                    
+                    # 使用进度回调进行过滤
+                    thread_local.parser.filter_bag(
+                        bag_file, 
+                        output_bag, 
+                        whitelist,
+                        progress_callback=update_progress
+                    )
+                    
+                    # 更新任务状态为完成，并显示绿色成功标记
+                    progress.update(task, description=f"[green]✓ {rel_path}[/green]", completed=100)
                     return True
                     
                 except Exception as e:
-                    # Update task to show failure with red color
-                    progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]",completed=100)
+                    # 更新任务状态为失败，显示红色错误标记
+                    progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     return False
                 finally:
@@ -428,16 +444,15 @@ class CliTool:
         return tasks
 
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
-        """Process a single bag file"""
-        # Load bag info
+        """处理单个bag文件"""
+        # 加载bag信息
         with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
         
-        # Get filter parameters based on method if not provided
-        
+        # 根据方法获取过滤参数（如果未提供）
         if filter_method == "whitelist":
-            # Get whitelist file
+            # 获取白名单文件
             whitelist_dir = "whitelists"
             if not os.path.exists(whitelist_dir):
                 self.console.print("No whitelists found", style="yellow")
@@ -448,7 +463,7 @@ class CliTool:
                 self.console.print("No whitelists found", style="yellow")
                 return
                 
-            # Select whitelist to use
+            # 选择要使用的白名单
             selected = inquirer.select(
                 message="Select whitelist to use:",
                 choices=whitelists,
@@ -458,7 +473,7 @@ class CliTool:
             if not selected:
                 return
                 
-            # Load selected whitelist
+            # 加载所选白名单
             whitelist_path = os.path.join(whitelist_dir, selected)
             whitelist = self.parser.load_whitelist(whitelist_path)
             if not whitelist:
@@ -469,6 +484,7 @@ class CliTool:
             if not whitelist:
                 return
 
+        # 确认处理
         confirm = inquirer.confirm(
                     message="Are you sure you want to process this bag file?",
                     default=False,
@@ -476,10 +492,38 @@ class CliTool:
                 ).execute()
         if not confirm:
             return
-        with LoadingAnimation("Filtering bag file...") as progress:
-            progress.add_task(description="Processing...")
-            self.parser.filter_bag(input_bag, output_bag, whitelist)
         
+        # 使用富进度条处理文件
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            console=self.console,
+            transient=False,
+        ) as progress:
+            # 创建进度任务
+            task_id = progress.add_task("Filtering bag file...", total=100)
+            
+            # 定义进度更新回调函数
+            def update_progress(percent: int):
+                progress.update(task_id, completed=percent)
+            
+            # 执行过滤，传入进度回调
+            result = self.parser.filter_bag(
+                input_bag, 
+                output_bag, 
+                whitelist,
+                progress_callback=update_progress
+            )
+        
+        # 显示过滤结果统计
         print_filter_stats(self.console, input_bag, output_bag)
             
         
