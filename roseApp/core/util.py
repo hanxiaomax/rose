@@ -28,24 +28,23 @@ def set_app_mode(mode: str):
     if mode in [AppMode.TUI, AppMode.CLI]:
         _app_mode = mode
 
-def get_log_file_path() -> Optional[str]:
-    """获取当前日志文件路径"""
-    global _log_file_path
+def get_log_file_path():
+    """Get current log file path"""
     return _log_file_path
 
 def get_logger(name: str = None) -> logging.Logger:
-    """获取日志记录器实例"""
+    """Get logger instance"""
     global _logger
     if _logger is None:
         _logger = _setup_logging()
     return _logger.getChild(name) if name else _logger
 
 def setup_logging():
-    """向后兼容函数"""
+    """Backward compatibility function"""
     return get_logger()
 
 def _setup_logging():
-    """配置应用程序的日志设置"""
+    """Configure application logging settings"""
     global _log_file_path
     
     # 创建日志目录

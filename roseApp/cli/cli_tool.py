@@ -369,19 +369,19 @@ class CliTool:
                     if not hasattr(thread_local, 'parser'):
                         thread_local.parser = create_parser(ParserType.PYTHON)
                     
-                    # 初始设置进度为30%表示准备完成
+                    # Initialize progress to 30% to indicate preparation complete
                     progress.update(task, description=f"Processing: {rel_path}", style=f"{PURPLE}", completed=30)
                     
-                    # 定义进度更新回调函数
+                    # Define progress update callback function
                     def update_progress(percent: int):
-                        # 将百分比映射到30%-100%的范围，因为30%表示准备工作完成
+                        # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         mapped_percent = 30 + (percent * 0.7)
                         progress.update(task, 
                                        description=f"Processing: {rel_path} ({percent}%)", 
                                        style=f"{PURPLE}", 
                                        completed=mapped_percent)
                     
-                    # 使用进度回调进行过滤
+                    # Use progress callback for filtering
                     thread_local.parser.filter_bag(
                         bag_file, 
                         output_bag, 
@@ -389,12 +389,12 @@ class CliTool:
                         progress_callback=update_progress
                     )
                     
-                    # 更新任务状态为完成，并显示绿色成功标记
+                    # Update task status to complete, showing green success mark
                     progress.update(task, description=f"[green]✓ {rel_path}[/green]", completed=100)
                     return True
                     
                 except Exception as e:
-                    # 更新任务状态为失败，显示红色错误标记
+                    # Update task status to failed, showing red error mark
                     progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     return False
@@ -443,15 +443,15 @@ class CliTool:
         return tasks
 
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
-        """处理单个bag文件"""
-        # 加载bag信息
+        """Process a single bag file"""
+        # Load bag information
         with LoadingAnimation("Loading bag file...") as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
         
-        # 根据方法获取过滤参数（如果未提供）
+        # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
-            # 获取白名单文件
+            # Get whitelist file
             whitelist_dir = "whitelists"
             if not os.path.exists(whitelist_dir):
                 self.console.print("No whitelists found", style="yellow")
@@ -462,7 +462,7 @@ class CliTool:
                 self.console.print("No whitelists found", style="yellow")
                 return
                 
-            # 选择要使用的白名单
+            # Select whitelist to use
             selected = inquirer.select(
                 message="Select whitelist to use:",
                 choices=whitelists,
@@ -472,7 +472,7 @@ class CliTool:
             if not selected:
                 return
                 
-            # 加载所选白名单
+            # Load selected whitelist
             whitelist_path = os.path.join(whitelist_dir, selected)
             whitelist = self.parser.load_whitelist(whitelist_path)
             if not whitelist:
@@ -483,7 +483,7 @@ class CliTool:
             if not whitelist:
                 return
 
-        # 确认处理
+        # Confirm processing
         confirm = inquirer.confirm(
                     message="Are you sure you want to process this bag file?",
                     default=False,
@@ -492,7 +492,7 @@ class CliTool:
         if not confirm:
             return
         
-        # 使用富进度条处理文件
+        # Use rich progress bar to process file
         from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
         
         with Progress(
@@ -507,14 +507,14 @@ class CliTool:
             console=self.console,
             transient=False,
         ) as progress:
-            # 创建进度任务
+            # Create progress task
             task_id = progress.add_task("Filtering bag file...", total=100)
             
-            # 定义进度更新回调函数
+            # Define progress update callback function
             def update_progress(percent: int):
                 progress.update(task_id, completed=percent)
             
-            # 执行过滤，传入进度回调
+            # Execute filtering with progress callback
             result = self.parser.filter_bag(
                 input_bag, 
                 output_bag, 
@@ -522,7 +522,7 @@ class CliTool:
                 progress_callback=update_progress
             )
         
-        # 显示过滤结果统计
+        # Show filtering result statistics
         print_filter_stats(self.console, input_bag, output_bag)
             
         
