@@ -2,7 +2,7 @@ from rich.panel import Panel
 from rich.text import Text
 from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 import os
 from typing import List, Dict, Optional, Any, Union
 from InquirerPy import inquirer
@@ -228,7 +228,9 @@ def ask_topics_with_fuzzy(
 def LoadingAnimation(message: str):
     """Show a loading spinner with message"""
     return Progress(
-        SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=30),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
         transient=True,
     )

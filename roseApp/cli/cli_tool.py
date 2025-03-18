@@ -333,7 +333,6 @@ class CliTool:
                 task = progress.add_task(
                     f"[yellow]Load[/yellow] {rel_path}",  # Set initial status to "Queued"
                     total=100,
-                    style="dim"
                 )
                 tasks[bag_file] = task
             
