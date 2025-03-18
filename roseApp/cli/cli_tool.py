@@ -326,15 +326,8 @@ class CliTool:
         """
         # Create progress display for all files
         with LoadingAnimation("Processing bag files...") as progress:
-            # Create tasks for all files
+            # Track tasks for all files (will be created when processing starts)
             tasks = {}
-            for bag_file in selected_files:
-                rel_path = os.path.relpath(bag_file, input_path)
-                task = progress.add_task(
-                    f"[yellow]Load[/yellow] {rel_path}",  # Set initial status to "Queued"
-                    total=100,
-                )
-                tasks[bag_file] = task
             
             # Create a thread-local storage for progress updates
             thread_local = threading.local()
@@ -353,10 +346,16 @@ class CliTool:
             
             def _process_bag_file(bag_file):
                 rel_path = os.path.relpath(bag_file, input_path)
-                task = tasks[bag_file]
                 
-                # Mark file as active
+                # Create task for this file at the start of processing
                 with active_files_lock:
+                    task = progress.add_task(
+                        f"Processing: {rel_path}",
+                        total=100,
+                        completed=0,
+                        style=f"{PURPLE}"
+                    )
+                    tasks[bag_file] = task
                     active_files.add(bag_file)
                 
                 try:
@@ -405,18 +404,15 @@ class CliTool:
             
             max_workers = WORKERS
             self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
-            # workaround for progress bar spacing
-            self.console.print(f"\n"*(len(selected_files)))
-
+            
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit initial batch of tasks and immediately mark them as processing
+                # Submit all tasks to the executor without creating progress tasks yet
                 futures = {}
-                # Submit all tasks to the executor
+                
+                # Submit all files to the executor
                 while not file_queue.empty():
                     bag_file = file_queue.get()
-                    rel_path = os.path.relpath(bag_file, input_path)
-                    progress.update(tasks[bag_file], description=f"Waiting: {rel_path}", style="yellow")
                     futures[executor.submit(_process_bag_file, bag_file)] = bag_file
                 
                 # Wait for all tasks to complete
@@ -435,7 +431,6 @@ class CliTool:
                         except Exception as e:
                             # This should not happen as exceptions are caught in process_bag_file
                             logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
-                        
 
         # Show final summary with color-coded results
         print_batch_filter_summary(self.console, tasks, progress)

@@ -148,8 +148,20 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
 
 def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress):
     """Show filtering results for batch processing"""
-    success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
-    fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
+    # Count successful and failed tasks based on the description
+    # Now we only check tasks that were actually created
+    success_count = 0
+    fail_count = 0
+    
+    for task_id in tasks.values():
+        if task_id in progress.tasks:
+            desc = progress.tasks[task_id].description
+            if "✓" in desc:
+                success_count += 1
+            elif "✗" in desc:
+                fail_count += 1
+    
+    total_processed = success_count + fail_count
     
     summary = (
         f"Processing Complete!\n"
@@ -158,9 +170,9 @@ def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress)
     )
     
     if fail_count == 0:
-        console.print(Panel(summary,style="green", title="[bold]Results[/bold]"))
+        console.print(Panel(summary, style="green", title="[bold]Results[/bold]"))
     else:
-        console.print(Panel(summary,style="red", title="[bold]Results[/bold]"))
+        console.print(Panel(summary, style="red", title="[bold]Results[/bold]"))
 
 def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
