@@ -20,7 +20,7 @@ from .util import (LoadingAnimation, build_banner,
                    print_bag_info, 
                    print_filter_stats,
                    print_batch_filter_summary,
-                   ask_topics_with_fuzzy)
+                   ask_topics)
 logger = get_logger("RoseCLI-Tool")
 
 WORKERS = os.cpu_count() - 2
@@ -310,7 +310,7 @@ class CliTool:
             return None
         
         self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
-        return self.ask_topics(list(all_topics), all_connections)
+        return ask_topics(self.console, list(all_topics))
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist):
@@ -465,7 +465,7 @@ class CliTool:
                 return
                 
         elif filter_method == "manual":
-            whitelist = self.ask_topics(self.topics, self.connections)
+            whitelist = ask_topics(self.console, self.topics)
             if not whitelist:
                 return
 
@@ -519,7 +519,7 @@ class CliTool:
             topics, connections, _ = self.parser.load_bag(input_bag)
         
         # Select topics
-        selected_topics = self.ask_topics(topics, connections)
+        selected_topics = ask_topics(self.console, topics)
         if not selected_topics:
             return
             
@@ -602,14 +602,7 @@ class CliTool:
         self.console.print("─" * 80)
         self.console.print(content)
     
-    def ask_topics(self, topics: List[str]) -> Optional[List[str]]:
-        return ask_topics_with_fuzzy(
-            console=self.console,
-            topics=topics,
-            message="Select topics to include:",
-            require_selection=True,
-            show_instructions=True
-        )
+
     
 
         

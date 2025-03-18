@@ -107,13 +107,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             return
         elif action == "filter":
             # Use the new select_topics_with_fuzzy function
-            filtered_topics = select_topics_with_fuzzy(
-                console=console,
-                topics=topics,
-                message="Search topics:",
-                require_selection=False,
-                show_instructions=True
-            )
+            filtered_topics = ask_topics(console, topics)
             
             if not filtered_topics:
                 console.print("No topics selected. Showing all topics.", style=YELLOW)
@@ -167,6 +161,15 @@ def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress)
         console.print(Panel(summary,style="green", title="[bold]Results[/bold]"))
     else:
         console.print(Panel(summary,style="red", title="[bold]Results[/bold]"))
+
+def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
+    return ask_topics_with_fuzzy(
+        console=console,
+        topics=topics,
+        message="Select topics:",
+        require_selection=True,
+        show_instructions=True
+    )
 
 def ask_topics_with_fuzzy(
     console: Console, 

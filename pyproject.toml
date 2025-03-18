@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rose-bag"
-version = "0.3.2"
+version = "0.3.4"
 description = "A modern CLI/TUI tool for ROS bag file analysis and filtering"
 readme = "README.md"
 authors = [
@@ -33,7 +33,6 @@ dependencies = [
     "rich>=13.0.0",
     "typer>=0.9.0",
     "pydantic>=2.0.0",
-    "questionary>=2.0.0",
     "click>=8.0.0",
     "InquirerPy"
 ]
