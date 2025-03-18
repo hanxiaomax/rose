@@ -5,60 +5,122 @@ This module provides the same interface as parser.py but uses rosbag_io_py for o
 
 import time
 import logging
+import os
+import tempfile
+import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 from textual.logging import TextualHandler
 
+# 应用程序模式
+class AppMode:
+    TUI = "tui"
+    CLI = "cli"
 
-# Add this at the top of the file, after imports
+# 添加日志变量
 _logger = None
+_log_file_path = None
+_app_mode = AppMode.TUI  # 默认为TUI模式
+
+def set_app_mode(mode: str):
+    """设置应用程序模式 (TUI 或 CLI)"""
+    global _app_mode
+    if mode in [AppMode.TUI, AppMode.CLI]:
+        _app_mode = mode
+
+def get_log_file_path() -> Optional[str]:
+    """获取当前日志文件路径"""
+    global _log_file_path
+    return _log_file_path
 
 def get_logger(name: str = None) -> logging.Logger:
-    """Get a logger instance with the given name"""
+    """获取日志记录器实例"""
     global _logger
     if _logger is None:
         _logger = _setup_logging()
     return _logger.getChild(name) if name else _logger
 
 def setup_logging():
-    """Backward compatibility function"""
+    """向后兼容函数"""
     return get_logger()
 
 def _setup_logging():
-    """Configure logging settings for the application"""
-    # Create logs directory if it doesn't exist
+    """配置应用程序的日志设置"""
+    global _log_file_path
+    
+    # 创建日志目录
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
-    # Define log file path
-    log_file = log_dir / "rose_tui.log"
+    # 定义日志文件路径
+    if _app_mode == AppMode.TUI:
+        _log_file_path = log_dir / "rose_tui.log"
+    else:  # CLI模式使用临时日志文件
+        temp_dir = log_dir / "temp"
+        temp_dir.mkdir(exist_ok=True)
+        _log_file_path = temp_dir / f"rose_cli_{int(time.time())}.log"
     
-    # Create formatter
+    # 创建格式化程序
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # File handler
-    file_handler = logging.FileHandler(log_file)
+    # 文件处理程序
+    file_handler = logging.FileHandler(_log_file_path)
     file_handler.setFormatter(formatter)
     
-    # Configure root logger
+    # 配置根日志记录器
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)  # Set default level to INFO
-    root_logger.addHandler(file_handler)
     
-    # Add custom handler for Textual if needed
-    try:
-        textual_handler = TextualHandler()
-        textual_handler.setFormatter(formatter)
-        root_logger.addHandler(textual_handler)
-    except ImportError:
-        pass
+    # 清除现有处理程序
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+        
+    # 添加文件处理程序
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.INFO)  # 默认级别设置为INFO
+    
+    # 如果是TUI模式，添加Textual处理程序
+    if _app_mode == AppMode.TUI:
+        try:
+            textual_handler = TextualHandler()
+            textual_handler.setFormatter(formatter)
+            root_logger.addHandler(textual_handler)
+        except ImportError:
+            pass
+    
+    # 将ROS相关日志重定向到文件而不是终端
+    for logger_name in ["rospy", "rosout", "gnupg", "rosbag", "rosbags", "roslib", "topicmanager", "rosmaster"]:
+        ros_logger = logging.getLogger(logger_name)
+        
+        # 清除现有处理程序
+        for handler in ros_logger.handlers[:]:
+            ros_logger.removeHandler(handler)
+            
+        # 添加文件处理程序
+        ros_logger.addHandler(file_handler)
+        
+        # 设置级别并禁止传播
+        ros_logger.setLevel(logging.INFO)  # 保存所有日志到文件
+        ros_logger.propagate = False  # 不传播到根日志记录器
     
     return root_logger
 
-# Call setup_logging once when module is imported
+# 初始化模块时设置日志记录
 _logger = _setup_logging()
+
+# 记录CLI错误并提示日志位置的辅助函数
+def log_cli_error(e: Exception) -> str:
+    """记录CLI错误并返回包含日志文件位置的消息"""
+    global _log_file_path
+    
+    if _logger:
+        _logger.error(f"发生错误: {str(e)}", exc_info=True)
+    
+    if _log_file_path:
+        return f"错误: {str(e)}\n详细信息已记录到: {_log_file_path}"
+    else:
+        return f"错误: {str(e)}"
 
 
 class TimeUtil:

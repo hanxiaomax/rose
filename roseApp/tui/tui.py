@@ -20,7 +20,11 @@ from textual.widgets import (
 from textual.reactive import reactive
 import typer
 # Local application imports
-from roseApp.core.util import get_logger
+from roseApp.core.util import get_logger, set_app_mode, AppMode, get_log_file_path
+
+# 设置为TUI模式
+set_app_mode(AppMode.TUI)
+
 from roseApp.tui.components.BagExplorer import BagExplorer
 from roseApp.tui.components.ControlPanel import ControlPanel
 from roseApp.tui.components.Dialog import ConfirmDialog
@@ -31,7 +35,7 @@ from roseApp.tui.themes.cassette_theme import CASSETTE_THEME_DARK, CASSETTE_THEM
 
 
 app = typer.Typer(help="ROS Bag Filter Tool Textual UI")
-# Initialize logging at the start of the file
+# 初始化日志记录
 logger = get_logger("RoseTUI")
 
 config_path = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -415,9 +419,9 @@ class InfoScreen(Screen):
     def load_logs(self) -> str:
         """Load logs from file"""
         try:
-            log_path = Path("logs/rose_tui.log")
+            log_path = Path(get_log_file_path())
             if not log_path.exists():
-                return "[red]No log file found at logs/rose_tui.log[/red]"
+                return f"[red]No log file found at {log_path}[/red]"
                 
             with open(log_path, "r") as f:
                 return f.read()
