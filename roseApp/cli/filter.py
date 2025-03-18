@@ -102,24 +102,22 @@ def filter_bag(
         typer.echo("\nProcessing:")
         start_time = time.time()
         
-        # Use Rich's enhanced progress bar
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(bar_width=40),
-            TaskProgressColumn(),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            TextColumn("•"),
-            TimeRemainingColumn(),
-            transient=False,
-        ) as progress:
-            # Create progress task
-            task_id = progress.add_task("Filtering bag file...", total=100)
+        # 获取要显示的文件名，对较长的文件名进行处理
+        input_basename = os.path.basename(input_bag)
+        display_name = input_basename
+        if len(input_basename) > 40:
+            display_name = f"{input_basename[:15]}...{input_basename[-20:]}"
             
-            # Define progress update callback
+        # Use LoadingAnimation from util.py for consistent progress display
+        from .util import LoadingAnimation
+        
+        with LoadingAnimation("Filtering bag file...") as progress:
+            # Create progress task
+            task_id = progress.add_task(f"Filtering: {display_name}", total=100)
+            
+            # Define progress update callback function
             def update_progress(percent: int):
-                progress.update(task_id, completed=percent)
+                progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
             
             # Execute filtering
             result = parser.filter_bag(
@@ -128,7 +126,11 @@ def filter_bag(
                 list(whitelist_topics),
                 progress_callback=update_progress
             )
+            
+            # Update final status
+            progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
         
+        # Add some extra space to ensure progress bar is fully visible        
         # Show filtering result
         end_time = time.time()
         elapsed = end_time - start_time

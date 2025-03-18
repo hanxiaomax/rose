@@ -346,11 +346,16 @@ class CliTool:
             
             def _process_bag_file(bag_file):
                 rel_path = os.path.relpath(bag_file, input_path)
+                # 对较长的文件路径进行处理，确保显示合适
+                display_path = rel_path
+                if len(rel_path) > 40:
+                    # 保留路径前15个字符和后20个字符，中间用 ... 表示
+                    display_path = f"{rel_path[:15]}...{rel_path[-20:]}"
                 
                 # Create task for this file at the start of processing
                 with active_files_lock:
                     task = progress.add_task(
-                        f"Processing: {rel_path}",
+                        f"Processing: {display_path}",
                         total=100,
                         completed=0,
                         style=f"{PURPLE}"
@@ -369,14 +374,14 @@ class CliTool:
                         thread_local.parser = create_parser(ParserType.PYTHON)
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {rel_path}", style=f"{PURPLE}", completed=30)
+                    progress.update(task, description=f"Processing: {display_path}", style=f"{PURPLE}", completed=30)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         mapped_percent = 30 + (percent * 0.7)
                         progress.update(task, 
-                                       description=f"Processing: {rel_path} ({percent}%)", 
+                                       description=f"Processing: {display_path} ({percent}%)", 
                                        style=f"{PURPLE}", 
                                        completed=mapped_percent)
                     
@@ -389,12 +394,12 @@ class CliTool:
                     )
                     
                     # Update task status to complete, showing green success mark
-                    progress.update(task, description=f"[green]✓ {rel_path}[/green]", completed=100)
+                    progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
                     return True
                     
                 except Exception as e:
                     # Update task status to failed, showing red error mark
-                    progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]", completed=100)
+                    progress.update(task, description=f"[red]✗ {display_path}: {str(e)}[/red]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     return False
                 finally:
@@ -433,6 +438,8 @@ class CliTool:
                             logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
 
         # Show final summary with color-coded results
+        # 添加一些额外空行以确保进度条完整显示
+        self.console.print("\n\n")
         print_batch_filter_summary(self.console, tasks, progress)
         
         return tasks
@@ -487,27 +494,20 @@ class CliTool:
         if not confirm:
             return
         
+        # 获取要显示的文件名，对较长的文件名进行处理
+        input_basename = os.path.basename(input_bag)
+        display_name = input_basename
+        if len(input_basename) > 40:
+            display_name = f"{input_basename[:15]}...{input_basename[-20:]}"
+            
         # Use rich progress bar to process file
-        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(bar_width=40),
-            TaskProgressColumn(),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            TextColumn("•"),
-            TimeRemainingColumn(),
-            console=self.console,
-            transient=False,
-        ) as progress:
+        with LoadingAnimation("Processing bag file...") as progress:
             # Create progress task
-            task_id = progress.add_task("Filtering bag file...", total=100)
+            task_id = progress.add_task(f"Filtering: {display_name}", total=100)
             
             # Define progress update callback function
             def update_progress(percent: int):
-                progress.update(task_id, completed=percent)
+                progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
             
             # Execute filtering with progress callback
             result = self.parser.filter_bag(
@@ -516,6 +516,12 @@ class CliTool:
                 whitelist,
                 progress_callback=update_progress
             )
+            
+            # 更新最终状态
+            progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
+        
+        # 添加一些额外空行以确保进度条完整显示
+        self.console.print("\n\n")
         
         # Show filtering result statistics
         print_filter_stats(self.console, input_bag, output_bag)
