@@ -161,7 +161,7 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
         
         # Define progress update callback function
         def update_progress(percent: int):
-            progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
+            progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
         
         # Execute filtering
         result = parser.filter_bag(
