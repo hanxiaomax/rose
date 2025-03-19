@@ -100,26 +100,23 @@ def _setup_logging():
         ros_logger.addHandler(file_handler)
         
         # 设置级别并禁止传播
-        ros_logger.setLevel(logging.INFO)  # 保存所有日志到文件
-        ros_logger.propagate = False  # 不传播到根日志记录器
+        ros_logger.setLevel(logging.INFO) 
+        ros_logger.propagate = False  
     
     return root_logger
 
-# 初始化模块时设置日志记录
 _logger = _setup_logging()
 
-# 记录CLI错误并提示日志位置的辅助函数
 def log_cli_error(e: Exception) -> str:
-    """记录CLI错误并返回包含日志文件位置的消息"""
     global _log_file_path
     
     if _logger:
-        _logger.error(f"发生错误: {str(e)}", exc_info=True)
+        _logger.error(f"Error: {str(e)}", exc_info=True)
     
     if _log_file_path:
-        return f"错误: {str(e)}\n详细信息已记录到: {_log_file_path}"
+        return f"Error: {str(e)}\nDetailed information has been recorded to: {_log_file_path}"
     else:
-        return f"错误: {str(e)}"
+        return f"Error: {str(e)}"
 
 
 class TimeUtil:

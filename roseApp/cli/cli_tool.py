@@ -328,6 +328,10 @@ class CliTool:
         with LoadingAnimation("Processing bag files...") as progress:
             # Track tasks for all files (will be created when processing starts)
             tasks = {}
+            # Track success and failure counts
+            success_count = 0
+            fail_count = 0
+            success_fail_lock = threading.Lock()
             
             # Create a thread-local storage for progress updates
             thread_local = threading.local()
@@ -395,21 +399,32 @@ class CliTool:
                     
                     # Update task status to complete, showing green success mark
                     progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
+                    
+                    # Increment success count
+                    with success_fail_lock:
+                        nonlocal success_count
+                        success_count += 1
+                        
                     return True
                     
                 except Exception as e:
                     # Update task status to failed, showing red error mark
                     progress.update(task, description=f"[red]✗ {display_path}: {str(e)}[/red]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
+                    
+                    # Increment failure count
+                    with success_fail_lock:
+                        nonlocal fail_count
+                        fail_count += 1
+                        
                     return False
                 finally:
                     # Remove file from active set
                     with active_files_lock:
                         active_files.remove(bag_file)
             
-            max_workers = WORKERS
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
-            
+            max_workers = min(len(selected_files), WORKERS)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=BLUE)
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks to the executor without creating progress tasks yet
@@ -438,9 +453,7 @@ class CliTool:
                             logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
 
         # Show final summary with color-coded results
-        # 添加一些额外空行以确保进度条完整显示
-        self.console.print("\n\n")
-        print_batch_filter_summary(self.console, tasks, progress)
+        print_batch_filter_summary(self.console, success_count, fail_count)
         
         return tasks
 

@@ -146,21 +146,14 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     console.print(Panel(stats, style=GREEN, title="Filter Results"))
 
-def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress):
-    """Show filtering results for batch processing"""
-    # Count successful and failed tasks based on the description
-    # Now we only check tasks that were actually created
-    success_count = 0
-    fail_count = 0
+def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
+    """Show filtering results for batch processing
     
-    for task_id in tasks.values():
-        if task_id in progress.tasks:
-            desc = progress.tasks[task_id].description
-            if "✓" in desc:
-                success_count += 1
-            elif "✗" in desc:
-                fail_count += 1
-    
+    Args:
+        console: Rich console instance to print results
+        success_count: Number of successfully processed files
+        fail_count: Number of files that failed to process
+    """
     total_processed = success_count + fail_count
     
     summary = (
