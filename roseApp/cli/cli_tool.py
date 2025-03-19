@@ -147,8 +147,9 @@ class CliTool:
         """
         # Load bag info
         with LoadingAnimation("Loading bag file...") as progress:
-            progress.add_task(description="Loading...")
+            task_id = progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
+            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Create a loop for bag operations
         while True:
@@ -378,16 +379,15 @@ class CliTool:
                         thread_local.parser = create_parser(ParserType.PYTHON)
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {display_path}", style=f"{PURPLE}", completed=30)
+                    progress.update(task, description=f"Processing: {display_path}", style=f"{PURPLE}", completed=0)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
-                        mapped_percent = 30 + (percent * 0.7)
                         progress.update(task, 
-                                       description=f"Processing: {display_path} ({percent}%)", 
+                                       description=f"Processing: {display_path}", 
                                        style=f"{PURPLE}", 
-                                       completed=mapped_percent)
+                                       completed=percent)
                     
                     # Use progress callback for filtering
                     thread_local.parser.filter_bag(
@@ -461,8 +461,9 @@ class CliTool:
         """Process a single bag file"""
         # Load bag information
         with LoadingAnimation("Loading bag file...") as progress:
-            progress.add_task(description="Loading...")
+            task_id = progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
+            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
@@ -507,7 +508,6 @@ class CliTool:
         if not confirm:
             return
         
-        # 获取要显示的文件名，对较长的文件名进行处理
         input_basename = os.path.basename(input_bag)
         display_name = input_basename
         if len(input_basename) > 40:
@@ -520,7 +520,7 @@ class CliTool:
             
             # Define progress update callback function
             def update_progress(percent: int):
-                progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
+                progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
             
             # Execute filtering with progress callback
             result = self.parser.filter_bag(
@@ -530,11 +530,8 @@ class CliTool:
                 progress_callback=update_progress
             )
             
-            # 更新最终状态
             progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
         
-        # 添加一些额外空行以确保进度条完整显示
-        self.console.print("\n\n")
         
         # Show filtering result statistics
         print_filter_stats(self.console, input_bag, output_bag)
@@ -572,8 +569,9 @@ class CliTool:
             
         # Load bag file
         with LoadingAnimation("Loading bag file...") as progress:
-            progress.add_task(description="Loading...")
+            task_id = progress.add_task(description="Loading...")
             topics, connections, _ = self.parser.load_bag(input_bag)
+            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Select topics
         selected_topics = ask_topics(self.console, topics)
