@@ -7,6 +7,7 @@ from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_c
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
 from .theme import GREEN, YELLOW, BLUE, PURPLE, ORANGE
+from .util import LoadingAnimation
 
 
 # Set to CLI mode
@@ -266,8 +267,6 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
             if len(rel_path) > 40:
                 display_name = f"{rel_path[:15]}...{rel_path[-20:]}"
                 
-            # Use LoadingAnimation for progress
-            from .util import LoadingAnimation
             
             with LoadingAnimation("Filtering bag file...") as progress:
                 # Create progress task

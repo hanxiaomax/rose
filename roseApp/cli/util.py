@@ -230,12 +230,12 @@ def ask_topics_with_fuzzy(
     
     return selected_topics
 
-def LoadingAnimation(message: str):
+def LoadingAnimation(message: str,dismiss=False):
     """Show a loading spinner with message"""
     return Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(bar_width=None),  # 设置为 None 以自适应宽度
         TaskProgressColumn(),
         TimeRemainingColumn(),
-        transient=False,  # 设置为 False 以保持任务完成后的显示
+        transient=dismiss,  # 设置为 False 以保持任务完成后的显示
     )

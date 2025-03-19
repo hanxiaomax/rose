@@ -146,10 +146,9 @@ class CliTool:
             bag_path: Path to the bag file
         """
         # Load bag info
-        with LoadingAnimation("Loading bag file...") as progress:
-            task_id = progress.add_task(description="Loading...")
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
+            progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
-            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Create a loop for bag operations
         while True:
@@ -460,10 +459,9 @@ class CliTool:
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
         """Process a single bag file"""
         # Load bag information
-        with LoadingAnimation("Loading bag file...") as progress:
-            task_id = progress.add_task(description="Loading...")
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
+            progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
-            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
@@ -568,10 +566,9 @@ class CliTool:
             return
             
         # Load bag file
-        with LoadingAnimation("Loading bag file...") as progress:
-            task_id = progress.add_task(description="Loading...")
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
+            progress.add_task(description="Loading...")
             topics, connections, _ = self.parser.load_bag(input_bag)
-            progress.update(task_id, description=f"[green]✓ Loading complete[/green]", completed=100)
         
         # Select topics
         selected_topics = ask_topics(self.console, topics)
