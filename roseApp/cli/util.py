@@ -163,9 +163,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(Panel(summary, style="green", title="[bold]Results[/bold]"))
+        console.print(summary, style="green")
     else:
-        console.print(Panel(summary, style="red", title="[bold]Results[/bold]"))
+        console.print(summary, style="red")
 
 def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -230,12 +230,31 @@ def ask_topics_with_fuzzy(
     
     return selected_topics
 
-def LoadingAnimation(message: str,dismiss=False):
-    """Show a loading spinner with message"""
-    return Progress(
+
+class PanelProgress(Progress):
+    def __init__(self, *columns, title: Optional[str] = None, **kwargs):
+        self.title = title
+        super().__init__(*columns, **kwargs)
+
+    def get_renderables(self):
+        yield Panel(self.make_tasks_table(self.tasks), title=self.title)
+
+def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
+    """Show a loading spinner with message in a panel
+    
+    Args:
+        title (Optional[str], optional): The title of the panel. Defaults to None.
+        dismiss (bool, optional): Whether to dismiss the panel after completion. Defaults to False.
+    
+    Returns:
+        PanelProgress: A progress bar wrapped in a panel with optional title
+    """
+    return PanelProgress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(bar_width=None),  # 设置为 None 以自适应宽度
         TaskProgressColumn(),
         TimeRemainingColumn(),
+        title=title,
         transient=dismiss,  # 设置为 False 以保持任务完成后的显示
     )
+

@@ -252,6 +252,7 @@ class CliTool:
         ).execute()
         if not confirm:
             return  # Go back to input selection
+        
         self._process_bags_in_parallel(selected_files, directory_path, whitelist)
         
         
@@ -325,7 +326,7 @@ class CliTool:
             Dictionary mapping bag files to their task IDs
         """
         # Create progress display for all files
-        with LoadingAnimation("Processing bag files...") as progress:
+        with LoadingAnimation() as progress:
             # Track tasks for all files (will be created when processing starts)
             tasks = {}
             # Track success and failure counts
@@ -350,10 +351,8 @@ class CliTool:
             
             def _process_bag_file(bag_file):
                 rel_path = os.path.relpath(bag_file, input_path)
-                # 对较长的文件路径进行处理，确保显示合适
                 display_path = rel_path
                 if len(rel_path) > 40:
-                    # 保留路径前15个字符和后20个字符，中间用 ... 表示
                     display_path = f"{rel_path[:15]}...{rel_path[-20:]}"
                 
                 # Create task for this file at the start of processing
@@ -497,14 +496,7 @@ class CliTool:
             if not whitelist:
                 return
 
-        # Confirm processing
-        confirm = inquirer.confirm(
-                    message="Are you sure you want to process this bag file?",
-                    default=False,
-                    style=style
-                ).execute()
-        if not confirm:
-            return
+        #no confirm for single bag
         
         input_basename = os.path.basename(input_bag)
         display_name = input_basename
