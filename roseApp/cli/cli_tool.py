@@ -504,7 +504,7 @@ class CliTool:
             display_name = f"{input_basename[:15]}...{input_basename[-20:]}"
             
         # Use rich progress bar to process file
-        with LoadingAnimation("Processing bag file...") as progress:
+        with LoadingAnimation("Processing bag file...",dismiss=True) as progress:
             # Create progress task
             task_id = progress.add_task(f"Filtering: {display_name}", total=100)
             
@@ -520,7 +520,7 @@ class CliTool:
                 progress_callback=update_progress
             )
             
-            progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
+            # progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
         
         
         # Show filtering result statistics

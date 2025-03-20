@@ -1,5 +1,6 @@
 from rich.panel import Panel
 from rich.text import Text
+from rich.table import Table
 from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
@@ -132,19 +133,35 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             console.print(filtered_panel)
 
 def print_filter_stats(console:Console, input_bag: str, output_bag: str):
-    """Show filtering statistics"""
+    """Show filtering statistics in a three-column table format comparing input, output and changes"""
     input_size = os.path.getsize(input_bag)
     output_size = os.path.getsize(output_bag)
     input_size_mb:float = input_size / (1024 * 1024)
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    stats = (
-        f"Filter Statistics:\n"
-        f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-        f"• Reduction: {reduction_ratio:.1f}%"
+    # 创建三列表格
+    table = Table(box=None, padding=(0, 2))
+    table.add_column("Input", style=f"{BLUE}")
+    table.add_column("Output", style=f"{GREEN}")
+    table.add_column("Changes", style=f"{PURPLE}")
+    
+    # 添加文件名行
+    table.add_row(
+        os.path.basename(input_bag),
+        os.path.basename(output_bag),
+        "File name"
     )
-    console.print(Panel(stats, style=GREEN, title="Filter Results"))
+    
+    # 添加大小行
+    table.add_row(
+        f"{input_size_mb:.2f} MB",
+        f"{output_size_mb:.2f} MB",
+        f"↓ {reduction_ratio:.1f}% smaller"
+    )
+    
+    # 将表格放在面板中显示
+    console.print(Panel(table, title="Filter Results", border_style=GREEN))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
