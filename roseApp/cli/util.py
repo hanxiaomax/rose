@@ -77,19 +77,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {SUCCESS}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"{DIM_INFO}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"{DIM_INFO}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style="bold")
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {PRIMARY}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {PRIMARY}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=ACCENT)
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{SUCCESS}")
-        bag_info.append(f"{connections[topic]}\n", style=f"{DIM_INFO}")
+        bag_info.append(f"• {topic:<40}", style=f"{PRIMARY}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {PRIMARY}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=INFO,
+                  border_style=ACCENT,
                   padding=(0, 1))
     
     console.print(panel)
@@ -117,7 +117,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {SUCCESS}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
@@ -128,13 +128,13 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=SUCCESS,
+                                  border_style=PRIMARY,
                                   padding=(0, 1))
             
             console.print(filtered_panel)
 
 def print_filter_stats(console:Console, input_bag: str, output_bag: str):
-    """Show filtering statistics in a three-column table format comparing input, output and changes"""
+    """Show filtering statistics in a two-column table format with input and output in separate rows"""
     input_size = os.path.getsize(input_bag)
     output_size = os.path.getsize(output_bag)
     input_size_mb:float = input_size / (1024 * 1024)
@@ -142,25 +142,19 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     reduction_ratio = (1 - output_size / input_size) * 100
     
     table = Table(box=None, padding=(0, 2))
-    table.add_column("Input", style=PRIMARY)
-    table.add_column("Output", style=DIM_INFO)
-    table.add_column("Changes", style=ACCENT)
+    table.add_column("File", style=f"{PRIMARY}")
+    table.add_column("Size", style=f"{PRIMARY}")
     
-
     table.add_row(
-        os.path.basename(input_bag),
-        os.path.basename(output_bag),
-        " "
+        f"[{PRIMARY}]Input: {os.path.basename(input_bag)}[/{PRIMARY}]",
+        f"[{PRIMARY}]{input_size_mb:.2f} MB[/{PRIMARY}]"
     )
-
     table.add_row(
-        f"{input_size_mb:.2f} MB",
-        f"{output_size_mb:.2f} MB",
-        f"↓ {reduction_ratio:.1f}% smaller"
+        f"[{ACCENT}]Output: {os.path.basename(output_bag)}[/{ACCENT}]",
+        f"[{ACCENT}]{output_size_mb:.2f} MB [dim](↓ {reduction_ratio:.1f}%)[/dim][/{ACCENT}]"
     )
     
-
-    console.print(Panel(table, title="Filter Results", border_style=PRIMARY))
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
