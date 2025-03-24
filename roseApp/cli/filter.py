@@ -6,7 +6,7 @@ from roseApp.core.parser import create_parser, ParserType
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
-from .theme import GREEN, YELLOW, BLUE, PURPLE, ORANGE
+from .theme import SUCCESS, INFO, ACCENT, PRIMARY
 from .util import LoadingAnimation
 
 
@@ -371,7 +371,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     f"Processing: {display_path}",
                     total=100,
                     completed=0,
-                    style=f"{PURPLE}"
+                    style=f"{ACCENT}"
                 )
                 tasks[bag_file] = task
                 active_files.add(bag_file)
@@ -382,7 +382,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     thread_local.parser = create_parser(ParserType.PYTHON)
                 
                 # Initialize progress to 30% to indicate preparation complete
-                progress.update(task, description=f"Processing: {display_path}", style=f"{PURPLE}", completed=30)
+                progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=30)
                 
                 # Define progress update callback function
                 def update_progress(percent: int):
@@ -390,7 +390,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     mapped_percent = 30 + (percent * 0.7)
                     progress.update(task, 
                                   description=f"Processing: {display_path} ({percent}%)", 
-                                  style=f"{PURPLE}", 
+                                  style=f"{ACCENT}", 
                                   completed=mapped_percent)
                 
                 # Execute filtering

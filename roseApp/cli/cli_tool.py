@@ -13,7 +13,7 @@ import threading
 import queue
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger
-from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
+from .theme import style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -310,7 +310,7 @@ class CliTool:
             self.console.print("No topics found in selected bag files", style="red")
             return None
         
-        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
+        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=SUCCESS)
         return ask_topics(self.console, list(all_topics))
 
 
@@ -361,7 +361,7 @@ class CliTool:
                         f"Processing: {display_path}",
                         total=100,
                         completed=0,
-                        style=f"{PURPLE}"
+                        style=f"{ACCENT}"
                     )
                     tasks[bag_file] = task
                     active_files.add(bag_file)
@@ -377,14 +377,14 @@ class CliTool:
                         thread_local.parser = create_parser(ParserType.PYTHON)
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {display_path}", style=f"{PURPLE}", completed=0)
+                    progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=0)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         progress.update(task, 
                                        description=f"Processing: {display_path}", 
-                                       style=f"{PURPLE}", 
+                                       style=f"{ACCENT}", 
                                        completed=percent)
                     
                     # Use progress callback for filtering
@@ -422,7 +422,7 @@ class CliTool:
                         active_files.remove(bag_file)
             
             max_workers = min(len(selected_files), WORKERS)
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=BLUE)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=INFO)
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks to the executor without creating progress tasks yet
@@ -599,7 +599,7 @@ class CliTool:
             for topic in sorted(selected_topics):
                 f.write(f"{topic}\n")
         
-        self.console.print(f"\nSaved whitelist to: {output}", style="green")
+        self.console.print(f"\nSaved whitelist to: {output}", style=PRIMARY)
         
         # Ask what to do next
         next_action = inquirer.select(
@@ -642,7 +642,7 @@ class CliTool:
         with open(path) as f:
             content = f.read()
             
-        self.console.print(f"\nWhitelist: {selected}", style="bold green")
+        self.console.print(f"\nWhitelist: {selected}", style=f"bold {PRIMARY}")
         self.console.print("─" * 80)
         self.console.print(content)
     
@@ -684,7 +684,7 @@ class CliTool:
         path = os.path.join(whitelist_dir, selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style=GREEN)
+            self.console.print(f"\nDeleted whitelist: {selected}", style=PRIMARY)
         except Exception as e:
             self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
 

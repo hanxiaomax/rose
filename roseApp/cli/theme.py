@@ -6,35 +6,35 @@ This module contains color schemes and style definitions.
 from InquirerPy import get_style
 
 # Color definitions
-GREEN = "#98c379"
-YELLOW = "#e5c07b"
-BLUE = "#61afef"
-PURPLE = "#c678dd"
-ORANGE = "#e69875"
-GRAY = "#5c6370"
-DIM_WHITE = "#Fef2d5"
-INPUT_GREEN = "#35A77c"
+SUCCESS = "#35A77c"
+YELLOW = "#DDA853"
+INFO = "#5B99C2"
+ACCENT = "#DF6D2D"
+PRIMARY = "#F9DBBA"
+GRAY = "#F3F7EC"
+DIM_INFO = "#8D77AB"
+INPUT_SECONDARY = "#FFF5E0"
 
 # Style configuration for InquirerPy
 DEFAULT_STYLE = {
-    "questionmark": YELLOW,
-    "answermark": YELLOW,
-    "answer": GREEN,
-    "input": INPUT_GREEN,
-    "question": PURPLE,
-    "answered_question": "#9379e5",
-    "instruction": ORANGE,
-    "long_instruction": ORANGE,
-    "pointer": DIM_WHITE,
-    "checkbox": GREEN,
+    "questionmark": PRIMARY,
+    "answermark": PRIMARY,
+    "answer": PRIMARY,
+    "input": INPUT_SECONDARY,
+    "question": ACCENT,
+    "answered_question": "#FFFAE6",
+    "instruction": DIM_INFO,
+    "long_instruction": DIM_INFO,
+    "pointer": PRIMARY,
+    "checkbox": ACCENT,
     "separator": "",
     "skipped": GRAY,
     "validator": "",
-    "marker": GREEN,
-    "fuzzy_prompt": PURPLE,
-    "fuzzy_info": GREEN,
-    "fuzzy_border": GREEN,
-    "fuzzy_match": PURPLE,
+    "marker": ACCENT,
+    "fuzzy_prompt": PRIMARY,
+    "fuzzy_info": PRIMARY,
+    "fuzzy_border": PRIMARY,
+    "fuzzy_match": ACCENT,
     "spinner_pattern": YELLOW,
     "spinner_text": "",
 }

@@ -1,7 +1,8 @@
+from sre_constants import SUCCESS
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
-from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
+from .theme import DIM_INFO, style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 import os
@@ -31,7 +32,7 @@ def build_banner():
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {GREEN}")
+    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {PRIMARY}")
     
     # Create panel with all elements
     panel = Panel(
@@ -47,16 +48,16 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style="bold magenta")
+    console.print("\nUsage Instructions:",style=f"bold {ACCENT}")
     if is_fuzzy:
-        console.print("•  [magenta]Type to search[/magenta]")
+        console.print(f"•  [{ACCENT}]Type to search[/{ACCENT}]")
     else:
-        console.print("•  [magenta]Space[/magenta] to select/unselect") 
-    console.print("•  [magenta]↑/↓[/magenta] to navigate options")
-    console.print("•  [magenta]Tab[/magenta] to select and move to next item")
-    console.print("•  [magenta]Shift+Tab[/magenta] to select and move to previous item")
-    console.print("•  [magenta]Ctrl+A[/magenta] to select all")
-    console.print("•  [magenta]Enter[/magenta] to confirm selection\n")
+        console.print(f"•  [{ACCENT}]Space[/{ACCENT}] to select/unselect") 
+    console.print(f"•  [{ACCENT}]↑/↓[/{ACCENT}] to navigate options")
+    console.print(f"•  [{ACCENT}]Tab[/{ACCENT}] to select and move to next item")
+    console.print(f"•  [{ACCENT}]Shift+Tab[/{ACCENT}] to select and move to previous item")
+    console.print(f"•  [{ACCENT}]Ctrl+A[/{ACCENT}] to select all")
+    console.print(f"•  [{ACCENT}]Enter[/{ACCENT}] to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -76,19 +77,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {GREEN}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n")
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {SUCCESS}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"{DIM_INFO}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"{DIM_INFO}")
     bag_info.append(f"Topics({len(topics)} in total):\n", style="bold")
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{PURPLE}")
-        bag_info.append(f"{connections[topic]}\n", style="dim")
+        bag_info.append(f"• {topic:<40}", style=f"{SUCCESS}")
+        bag_info.append(f"{connections[topic]}\n", style=f"{DIM_INFO}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=BLUE,
+                  border_style=INFO,
                   padding=(0, 1))
     
     console.print(panel)
@@ -116,18 +117,18 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {GREEN}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {SUCCESS}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=f"{PURPLE}")
+                filtered_info.append(f"• {topic:<40}", style=PRIMARY)
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=GREEN,
+                                  border_style=SUCCESS,
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -140,28 +141,26 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    # 创建三列表格
     table = Table(box=None, padding=(0, 2))
-    table.add_column("Input", style=f"{BLUE}")
-    table.add_column("Output", style=f"{GREEN}")
-    table.add_column("Changes", style=f"{PURPLE}")
+    table.add_column("Input", style=PRIMARY)
+    table.add_column("Output", style=DIM_INFO)
+    table.add_column("Changes", style=ACCENT)
     
-    # 添加文件名行
+
     table.add_row(
         os.path.basename(input_bag),
         os.path.basename(output_bag),
-        "File name"
+        " "
     )
-    
-    # 添加大小行
+
     table.add_row(
         f"{input_size_mb:.2f} MB",
         f"{output_size_mb:.2f} MB",
         f"↓ {reduction_ratio:.1f}% smaller"
     )
     
-    # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=GREEN))
+
+    console.print(Panel(table, title="Filter Results", border_style=PRIMARY))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -180,9 +179,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style="green")
+        console.print(summary, style=f"{SUCCESS}")
     else:
-        console.print(summary, style="red")
+        console.print(summary, style=f"{ACCENT}")
 
 def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
