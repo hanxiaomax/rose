@@ -85,50 +85,54 @@ No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 Rose provides a command-line tool for direct bag file operations. Currently, it supports the filter command:
 
 ```bash
-# Basic usage
+# Basic usage for single file
 rose filter <input_bag> <output_bag> [OPTIONS]
+
+# Basic usage for directory
+rose filter <input_directory> <output_directory> [OPTIONS]
 ```
 
 **Parameters:**
 
-- `<input_bag>`: Path to the input bag file (required)
-- `<output_bag>`: Path to the output bag file (required)
+- `<input_bag/directory>`: Path to the input bag file or directory containing bag files (required)
+- `<output_bag/directory>`: Path to the output bag file (for single file) or directory (required for directory input)
 
 **Options:**
 
 - `-w, --whitelist TEXT`: Specify a topic whitelist file path
 - `-t, --topics TEXT`: Specify topics to include, can be used multiple times to add multiple topics
-- `-r, --time-range TEXT`: Specify time range in format "start_time,end_time", e.g., "23/01/01 00:00:00,23/01/01 00:10:00"
+- `-p, --parallel`: Process files in parallel when input is a directory
+- `--workers INTEGER`: Number of parallel workers (default: CPU count - 2)
 - `--dry-run`: Preview the operation without actually executing it
 - `--help`: Show help information
 
 **Usage Examples:**
 
-1. Filter a bag file using a whitelist:
+1. Filter a single bag file using a whitelist:
    ```bash
    rose filter input.bag output.bag -w whitelist.txt
    ```
 
-2. Filter specific topics:
+2. Filter specific topics from a single file:
    ```bash
    rose filter input.bag output.bag -t /topic1 -t /topic2 -t /topic3
    ```
 
-3. Preview filtering results without execution:
+3. Process all bag files in a directory:
+   ```bash
+   rose filter input_dir/ output_dir/ -w whitelist.txt
+   ```
+
+4. Process directory with parallel execution:
+   ```bash
+   rose filter input_dir/ output_dir/ -w whitelist.txt --parallel
+   ```
+
+5. Preview filtering results without execution:
    ```bash
    rose filter input.bag output.bag -w whitelist.txt --dry-run
    ```
 
-**Common Workflow Example:**
-
-```bash
-# 1. Create a whitelist containing GPS-related topics
-mkdir -p whitelists
-rose filter demo.bag --dry-run | grep "gps" > whitelists/gps_topics.txt
-
-# 2. Filter the bag file using the whitelist
-rose filter demo.bag gps_only.bag -w whitelists/gps_topics.txt
-```
 
 ### Interactive CLI
 

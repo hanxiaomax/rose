@@ -1,8 +1,11 @@
+from sre_constants import SUCCESS
 from rich.panel import Panel
 from rich.text import Text
-from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
+from rich.table import Table
+from rich.box import SIMPLE  # 添加box样式导入
+from .theme import DIM_INFO, style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 import os
 from typing import List, Dict, Optional, Any, Union
 from InquirerPy import inquirer
@@ -30,7 +33,7 @@ def build_banner():
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {GREEN}")
+    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {PRIMARY}")
     
     # Create panel with all elements
     panel = Panel(
@@ -46,16 +49,16 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style="bold magenta")
+    console.print("\nUsage Instructions:",style=f"bold {ACCENT}")
     if is_fuzzy:
-        console.print("•  [magenta]Type to search[/magenta]")
+        console.print(f"•  [{ACCENT}]Type to search[/{ACCENT}]")
     else:
-        console.print("•  [magenta]Space[/magenta] to select/unselect") 
-    console.print("•  [magenta]↑/↓[/magenta] to navigate options")
-    console.print("•  [magenta]Tab[/magenta] to select and move to next item")
-    console.print("•  [magenta]Shift+Tab[/magenta] to select and move to previous item")
-    console.print("•  [magenta]Ctrl+A[/magenta] to select all")
-    console.print("•  [magenta]Enter[/magenta] to confirm selection\n")
+        console.print(f"•  [{ACCENT}]Space[/{ACCENT}] to select/unselect") 
+    console.print(f"•  [{ACCENT}]↑/↓[/{ACCENT}] to navigate options")
+    console.print(f"•  [{ACCENT}]Tab[/{ACCENT}] to select and move to next item")
+    console.print(f"•  [{ACCENT}]Shift+Tab[/{ACCENT}] to select and move to previous item")
+    console.print(f"•  [{ACCENT}]Ctrl+A[/{ACCENT}] to select all")
+    console.print(f"•  [{ACCENT}]Enter[/{ACCENT}] to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -75,19 +78,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {GREEN}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style="bold")
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {PRIMARY}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {PRIMARY}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=ACCENT)
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{PURPLE}")
-        bag_info.append(f"{connections[topic]}\n", style="dim")
+        bag_info.append(f"• {topic:<40}", style=f"{PRIMARY}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {PRIMARY}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=BLUE,
+                  border_style=ACCENT,
                   padding=(0, 1))
     
     console.print(panel)
@@ -115,41 +118,70 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {GREEN}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=f"{PURPLE}")
+                filtered_info.append(f"• {topic:<40}", style=PRIMARY)
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=GREEN,
+                                  border_style=PRIMARY,
                                   padding=(0, 1))
             
             console.print(filtered_panel)
 
 def print_filter_stats(console:Console, input_bag: str, output_bag: str):
-    """Show filtering statistics"""
+    """Show filtering statistics in a table format with headers and three rows"""
     input_size = os.path.getsize(input_bag)
     output_size = os.path.getsize(output_bag)
     input_size_mb:float = input_size / (1024 * 1024)
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    stats = (
-        f"Filter Statistics:\n"
-        f"• Size: {input_size_mb:.2f} MB -> {output_size_mb:.2f} MB\n"
-        f"• Reduction: {reduction_ratio:.1f}%"
+    # 创建无边框表格
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        box=None,  # 无边框
+        padding=(0, 2),
+        collapse_padding=True
     )
-    console.print(Panel(stats, style=GREEN, title="Filter Results"))
+    
+    # 添加三列，第一列较窄
+    table.add_column("", style=f"{PRIMARY}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{PRIMARY}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{PRIMARY}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    
+    # 添加input行
+    table.add_row(
+        "In",
+        os.path.basename(input_bag),
+        f"{input_size_mb:.0f}MB"
+    )
+    
+    # 添加output行，包含缩小百分比，使用ACCENT颜色
+    table.add_row(
+        f"[{ACCENT}]Out[/{ACCENT}]",
+        f"[{ACCENT}]{os.path.basename(output_bag)}[/{ACCENT}]",
+        f"[{ACCENT}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{ACCENT}]"
+    )
+    
+    # 将表格放在面板中显示
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT}"))
 
-def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress):
-    """Show filtering results for batch processing"""
-    success_count = sum(1 for task in tasks.values() if "✓" in progress.tasks[task].description)
-    fail_count = sum(1 for task in tasks.values() if "✗" in progress.tasks[task].description)
+def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
+    """Show filtering results for batch processing
+    
+    Args:
+        console: Rich console instance to print results
+        success_count: Number of successfully processed files
+        fail_count: Number of files that failed to process
+    """
+    total_processed = success_count + fail_count
     
     summary = (
         f"Processing Complete!\n"
@@ -158,9 +190,9 @@ def print_batch_filter_summary(console:Console, tasks: dict, progress: Progress)
     )
     
     if fail_count == 0:
-        console.print(Panel(summary,style="green", title="[bold]Results[/bold]"))
+        console.print(summary, style=f"{SUCCESS}")
     else:
-        console.print(Panel(summary,style="red", title="[bold]Results[/bold]"))
+        console.print(summary, style=f"{ACCENT}")
 
 def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -225,10 +257,31 @@ def ask_topics_with_fuzzy(
     
     return selected_topics
 
-def LoadingAnimation(message: str):
-    """Show a loading spinner with message"""
-    return Progress(
-        SpinnerColumn(),
+
+class PanelProgress(Progress):
+    def __init__(self, *columns, title: Optional[str] = None, **kwargs):
+        self.title = title
+        super().__init__(*columns, **kwargs)
+
+    def get_renderables(self):
+        yield Panel(self.make_tasks_table(self.tasks), title=self.title)
+
+def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
+    """Show a loading spinner with message in a panel
+    
+    Args:
+        title (Optional[str], optional): The title of the panel. Defaults to None.
+        dismiss (bool, optional): Whether to dismiss the panel after completion. Defaults to False.
+    
+    Returns:
+        PanelProgress: A progress bar wrapped in a panel with optional title
+    """
+    return PanelProgress(
         TextColumn("[progress.description]{task.description}"),
-        transient=True,
+        BarColumn(bar_width=None),  # 设置为 None 以自适应宽度
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        title=title,
+        transient=dismiss,  # 设置为 False 以保持任务完成后的显示
     )
+

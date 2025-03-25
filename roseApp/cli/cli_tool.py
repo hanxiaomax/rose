@@ -4,7 +4,7 @@ from typing import Optional, List
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 import typer
 from InquirerPy.validator import PathValidator
 # Process files in parallel
@@ -13,7 +13,7 @@ import threading
 import queue
 from ..core.parser import create_parser, ParserType
 from ..core.util import get_logger
-from .theme import style, GREEN, YELLOW, BLUE, PURPLE, ORANGE  # Import colors and style
+from .theme import style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -146,7 +146,7 @@ class CliTool:
             bag_path: Path to the bag file
         """
         # Load bag info
-        with LoadingAnimation("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
         
@@ -252,6 +252,7 @@ class CliTool:
         ).execute()
         if not confirm:
             return  # Go back to input selection
+        
         self._process_bags_in_parallel(selected_files, directory_path, whitelist)
         
         
@@ -309,7 +310,7 @@ class CliTool:
             self.console.print("No topics found in selected bag files", style="red")
             return None
         
-        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=GREEN)
+        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=SUCCESS)
         return ask_topics(self.console, list(all_topics))
 
 
@@ -325,17 +326,13 @@ class CliTool:
             Dictionary mapping bag files to their task IDs
         """
         # Create progress display for all files
-        with LoadingAnimation("Processing bag files...") as progress:
-            # Create tasks for all files
+        with LoadingAnimation() as progress:
+            # Track tasks for all files (will be created when processing starts)
             tasks = {}
-            for bag_file in selected_files:
-                rel_path = os.path.relpath(bag_file, input_path)
-                task = progress.add_task(
-                    f"[yellow]Load[/yellow] {rel_path}",  # Set initial status to "Queued"
-                    total=100,
-                    style="dim"
-                )
-                tasks[bag_file] = task
+            # Track success and failure counts
+            success_count = 0
+            fail_count = 0
+            success_fail_lock = threading.Lock()
             
             # Create a thread-local storage for progress updates
             thread_local = threading.local()
@@ -354,10 +351,19 @@ class CliTool:
             
             def _process_bag_file(bag_file):
                 rel_path = os.path.relpath(bag_file, input_path)
-                task = tasks[bag_file]
+                display_path = rel_path
+                if len(rel_path) > 40:
+                    display_path = f"{rel_path[:15]}...{rel_path[-20:]}"
                 
-                # Mark file as active
+                # Create task for this file at the start of processing
                 with active_files_lock:
+                    task = progress.add_task(
+                        f"Processing: {display_path}",
+                        total=100,
+                        completed=0,
+                        style=f"{ACCENT}"
+                    )
+                    tasks[bag_file] = task
                     active_files.add(bag_file)
                 
                 try:
@@ -369,39 +375,62 @@ class CliTool:
                     # We need to create a new parser instance for each thread
                     if not hasattr(thread_local, 'parser'):
                         thread_local.parser = create_parser(ParserType.PYTHON)
-                        
-                    # Filter bag
-                    progress.update(task, description=f"Processing: {rel_path}", style=f"{PURPLE}", completed=30)
-                    thread_local.parser.filter_bag(bag_file, output_bag, whitelist)
                     
-                    # Update task to show success with green color and include output filename
-                    progress.update(task, description=f"[green]✓ {rel_path}[/green]",completed=100)
+                    # Initialize progress to 30% to indicate preparation complete
+                    progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=0)
+                    
+                    # Define progress update callback function
+                    def update_progress(percent: int):
+                        # Map percentage to 30%-100% range, as 30% indicates preparation work complete
+                        progress.update(task, 
+                                       description=f"Processing: {display_path}", 
+                                       style=f"{ACCENT}", 
+                                       completed=percent)
+                    
+                    # Use progress callback for filtering
+                    thread_local.parser.filter_bag(
+                        bag_file, 
+                        output_bag, 
+                        whitelist,
+                        progress_callback=update_progress
+                    )
+                    
+                    # Update task status to complete, showing green success mark
+                    progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
+                    
+                    # Increment success count
+                    with success_fail_lock:
+                        nonlocal success_count
+                        success_count += 1
+                        
                     return True
                     
                 except Exception as e:
-                    # Update task to show failure with red color
-                    progress.update(task, description=f"[red]✗ {rel_path}: {str(e)}[/red]",completed=100)
+                    # Update task status to failed, showing red error mark
+                    progress.update(task, description=f"[red]✗ {display_path}: {str(e)}[/red]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
+                    
+                    # Increment failure count
+                    with success_fail_lock:
+                        nonlocal fail_count
+                        fail_count += 1
+                        
                     return False
                 finally:
                     # Remove file from active set
                     with active_files_lock:
                         active_files.remove(bag_file)
             
-            max_workers = WORKERS
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers", style=BLUE)
-            # workaround for progress bar spacing
-            self.console.print(f"\n"*(len(selected_files)))
-
+            max_workers = min(len(selected_files), WORKERS)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=INFO)
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit initial batch of tasks and immediately mark them as processing
+                # Submit all tasks to the executor without creating progress tasks yet
                 futures = {}
-                # Submit all tasks to the executor
+                
+                # Submit all files to the executor
                 while not file_queue.empty():
                     bag_file = file_queue.get()
-                    rel_path = os.path.relpath(bag_file, input_path)
-                    progress.update(tasks[bag_file], description=f"Waiting: {rel_path}", style="yellow")
                     futures[executor.submit(_process_bag_file, bag_file)] = bag_file
                 
                 # Wait for all tasks to complete
@@ -420,22 +449,20 @@ class CliTool:
                         except Exception as e:
                             # This should not happen as exceptions are caught in process_bag_file
                             logger.error(f"Unexpected error processing {bag_file}: {str(e)}", exc_info=True)
-                        
 
         # Show final summary with color-coded results
-        print_batch_filter_summary(self.console, tasks, progress)
+        print_batch_filter_summary(self.console, success_count, fail_count)
         
         return tasks
 
     def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
         """Process a single bag file"""
-        # Load bag info
-        with LoadingAnimation("Loading bag file...") as progress:
+        # Load bag information
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
             self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
         
-        # Get filter parameters based on method if not provided
-        
+        # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
             # Get whitelist file
             whitelist_dir = "whitelists"
@@ -469,17 +496,34 @@ class CliTool:
             if not whitelist:
                 return
 
-        confirm = inquirer.confirm(
-                    message="Are you sure you want to process this bag file?",
-                    default=False,
-                    style=style
-                ).execute()
-        if not confirm:
-            return
-        with LoadingAnimation("Filtering bag file...") as progress:
-            progress.add_task(description="Processing...")
-            self.parser.filter_bag(input_bag, output_bag, whitelist)
+        #no confirm for single bag
         
+        input_basename = os.path.basename(input_bag)
+        display_name = input_basename
+        if len(input_basename) > 40:
+            display_name = f"{input_basename[:15]}...{input_basename[-20:]}"
+            
+        # Use rich progress bar to process file
+        with LoadingAnimation("Processing bag file...",dismiss=True) as progress:
+            # Create progress task
+            task_id = progress.add_task(f"Filtering: {display_name}", total=100)
+            
+            # Define progress update callback function
+            def update_progress(percent: int):
+                progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
+            
+            # Execute filtering with progress callback
+            result = self.parser.filter_bag(
+                input_bag, 
+                output_bag, 
+                whitelist,
+                progress_callback=update_progress
+            )
+            
+            # progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
+        
+        
+        # Show filtering result statistics
         print_filter_stats(self.console, input_bag, output_bag)
             
         
@@ -514,7 +558,7 @@ class CliTool:
             return
             
         # Load bag file
-        with LoadingAnimation("Loading bag file...") as progress:
+        with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
             topics, connections, _ = self.parser.load_bag(input_bag)
         
@@ -555,7 +599,7 @@ class CliTool:
             for topic in sorted(selected_topics):
                 f.write(f"{topic}\n")
         
-        self.console.print(f"\nSaved whitelist to: {output}", style="green")
+        self.console.print(f"\nSaved whitelist to: {output}", style=PRIMARY)
         
         # Ask what to do next
         next_action = inquirer.select(
@@ -598,7 +642,7 @@ class CliTool:
         with open(path) as f:
             content = f.read()
             
-        self.console.print(f"\nWhitelist: {selected}", style="bold green")
+        self.console.print(f"\nWhitelist: {selected}", style=f"bold {PRIMARY}")
         self.console.print("─" * 80)
         self.console.print(content)
     
@@ -640,7 +684,7 @@ class CliTool:
         path = os.path.join(whitelist_dir, selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style=GREEN)
+            self.console.print(f"\nDeleted whitelist: {selected}", style=PRIMARY)
         except Exception as e:
             self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
 
