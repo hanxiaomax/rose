@@ -2,6 +2,7 @@ from sre_constants import SUCCESS
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
+from rich.box import SIMPLE  # 添加box样式导入
 from .theme import DIM_INFO, style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
@@ -134,26 +135,42 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             console.print(filtered_panel)
 
 def print_filter_stats(console:Console, input_bag: str, output_bag: str):
-    """Show filtering statistics in a two-column table format with input and output in separate rows"""
+    """Show filtering statistics in a table format with headers and three rows"""
     input_size = os.path.getsize(input_bag)
     output_size = os.path.getsize(output_bag)
     input_size_mb:float = input_size / (1024 * 1024)
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    table = Table(box=None, padding=(0, 2))
-    table.add_column("File", style=f"{PRIMARY}")
-    table.add_column("Size", style=f"{PRIMARY}")
-    
-    table.add_row(
-        f"[{PRIMARY}]Input: {os.path.basename(input_bag)}[/{PRIMARY}]",
-        f"[{PRIMARY}]{input_size_mb:.2f} MB[/{PRIMARY}]"
-    )
-    table.add_row(
-        f"[{ACCENT}]Output: {os.path.basename(output_bag)}[/{ACCENT}]",
-        f"[{ACCENT}]{output_size_mb:.2f} MB [dim](↓ {reduction_ratio:.1f}%)[/dim][/{ACCENT}]"
+    # 创建无边框表格
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        box=None,  # 无边框
+        padding=(0, 2),
+        collapse_padding=True
     )
     
+    # 添加三列，第一列较窄
+    table.add_column("", style=f"{PRIMARY}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{PRIMARY}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{PRIMARY}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    
+    # 添加input行
+    table.add_row(
+        "In",
+        os.path.basename(input_bag),
+        f"{input_size_mb:.0f}MB"
+    )
+    
+    # 添加output行，包含缩小百分比，使用ACCENT颜色
+    table.add_row(
+        f"[{ACCENT}]Out[/{ACCENT}]",
+        f"[{ACCENT}]{os.path.basename(output_bag)}[/{ACCENT}]",
+        f"[{ACCENT}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{ACCENT}]"
+    )
+    
+    # 将表格放在面板中显示
     console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
