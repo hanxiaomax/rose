@@ -228,7 +228,12 @@ class RosbagsBagParser(IBagParser):
                     for connection in reader.connections:
                         if connection.topic in topics:
                             # Extract connection information with proper defaults
-                            callerid = getattr(connection, 'owner', '/unknown')
+                            # Get callerid from ext attribute if available
+                            callerid = '/unknown'
+                            if hasattr(connection, 'ext') and hasattr(connection.ext, 'callerid'):
+                                if connection.ext.callerid is not None:
+                                    callerid = connection.ext.callerid
+                            
                             msgdef = getattr(connection, 'msgdef', None)
                             md5sum = getattr(connection, 'digest', None)
                             
