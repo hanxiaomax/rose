@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from roseApp.core.parser import IBagParser, ParserType, create_parser
+from roseApp.core.parser import IBagParser, ParserType, create_parser, FileExistsError
 from roseApp.core.util import TimeUtil, get_preferred_parser_type
 
 class BagStatus(Enum):
@@ -307,13 +307,24 @@ class BagManager:
         try:
             process_start = time.time()
             
-            self._parser.filter_bag(
-                str(bag_path),
-                str(output_file),
-                config.topic_list,
-                config.time_range,
-                compression=config.compression
-            )
+            try:
+                self._parser.filter_bag(
+                    str(bag_path),
+                    str(output_file),
+                    config.topic_list,
+                    config.time_range,
+                    compression=config.compression
+                )
+            except FileExistsError:
+                # For BagManager, always overwrite existing files
+                self._parser.filter_bag(
+                    str(bag_path),
+                    str(output_file),
+                    config.topic_list,
+                    config.time_range,
+                    compression=config.compression,
+                    overwrite=True
+                )
             
             process_end = time.time()
             time_elapsed = int((process_end - process_start) * 1000)

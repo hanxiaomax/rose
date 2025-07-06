@@ -2,7 +2,7 @@ import os
 import time
 import typer
 from typing import List, Optional, Tuple
-from roseApp.core.parser import create_parser, ParserType
+from roseApp.core.parser import create_parser, ParserType, FileExistsError
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error, get_preferred_parser_type
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
@@ -60,9 +60,24 @@ def filter_bag(
                 # Use output directory as the same as input file if not specified
                 output_bag = os.path.splitext(input_path)[0] + "_filtered.bag"
             else:
-                # Use specified output directory with the original filename
-                os.makedirs(output_dir, exist_ok=True)
-                output_bag = os.path.join(output_dir, os.path.basename(os.path.splitext(input_path)[0]) + "_filtered.bag")
+                # Check if output_dir is actually a file path (common user mistake)
+                if output_dir.endswith('.bag'):
+                    # User probably provided output file path instead of directory
+                    output_bag = output_dir
+                    # Create parent directory if needed
+                    parent_dir = os.path.dirname(output_bag)
+                    if parent_dir:
+                        os.makedirs(parent_dir, exist_ok=True)
+                else:
+                    # Check if output_dir is an existing file
+                    if os.path.isfile(output_dir):
+                        typer.echo(f"Error: '{output_dir}' is an existing file, not a directory. ", err=True)
+                        typer.echo("Either specify a directory path or use a .bag extension for output file.", err=True)
+                        raise typer.Exit(code=1)
+                    
+                    # Use specified output directory with the original filename
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_bag = os.path.join(output_dir, os.path.basename(os.path.splitext(input_path)[0]) + "_filtered.bag")
                 
             # Process single file
             _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, dry_run)
@@ -78,6 +93,12 @@ def filter_bag(
                 typer.echo("Error: Output directory is required when input is a directory", err=True)
                 raise typer.Exit(code=1)
                 
+            # Check if output_dir is an existing file
+            if os.path.isfile(output_dir):
+                typer.echo(f"Error: '{output_dir}' is an existing file, not a directory.", err=True)
+                typer.echo("Please specify a directory path for batch processing.", err=True)
+                raise typer.Exit(code=1)
+            
             # Make sure output directory exists
             os.makedirs(output_dir, exist_ok=True)
                 
@@ -182,13 +203,24 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
             progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
         
         # Execute filtering
-        result = parser.filter_bag(
-            input_bag, 
-            output_bag, 
-            list(whitelist_topics),
-            progress_callback=update_progress,
-            compression=compression
-        )
+        try:
+            result = parser.filter_bag(
+                input_bag, 
+                output_bag, 
+                list(whitelist_topics),
+                progress_callback=update_progress,
+                compression=compression
+            )
+        except FileExistsError:
+            # For CLI command, always overwrite (similar to standard CLI behavior)
+            result = parser.filter_bag(
+                input_bag, 
+                output_bag, 
+                list(whitelist_topics),
+                progress_callback=update_progress,
+                compression=compression,
+                overwrite=True
+            )
         
         # Update final status
         progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -295,13 +327,24 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
                     progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
                 
                 # Execute filtering
-                result = parser.filter_bag(
-                    bag_file, 
-                    output_path, 
-                    whitelist,
-                    progress_callback=update_progress,
-                    compression=compression
-                )
+                try:
+                    result = parser.filter_bag(
+                        bag_file, 
+                        output_path, 
+                        whitelist,
+                        progress_callback=update_progress,
+                        compression=compression
+                    )
+                except FileExistsError:
+                    # For CLI command, always overwrite (similar to standard CLI behavior)
+                    result = parser.filter_bag(
+                        bag_file, 
+                        output_path, 
+                        whitelist,
+                        progress_callback=update_progress,
+                        compression=compression,
+                        overwrite=True
+                    )
                 
                 # Update final status
                 progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -418,13 +461,26 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                                   completed=mapped_percent)
                 
                 # Execute filtering
-                thread_local.parser.filter_bag(
-                    bag_file, 
-                    output_path, 
-                    whitelist,
-                    progress_callback=update_progress,
-                    compression=compression
-                )
+                try:
+                    thread_local.parser.filter_bag(
+                        bag_file, 
+                        output_path, 
+                        whitelist,
+                        progress_callback=update_progress,
+                        compression=compression,
+                        overwrite=True  # For parallel processing, always overwrite
+                    )
+                except FileExistsError:
+                    # This should not happen since we use overwrite=True
+                    # but handle it just in case
+                    thread_local.parser.filter_bag(
+                        bag_file, 
+                        output_path, 
+                        whitelist,
+                        progress_callback=update_progress,
+                        compression=compression,
+                        overwrite=True
+                    )
                 
                 # Update task status to complete, showing green success mark
                 progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)

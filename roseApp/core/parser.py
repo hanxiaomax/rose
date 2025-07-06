@@ -20,6 +20,11 @@ from roseApp.core.util import TimeUtil, get_logger
 _logger = get_logger(__name__)
 
 
+class FileExistsError(Exception):
+    """Custom exception for file exists scenarios"""
+    pass
+
+
 class ParserType(Enum):
     """Enum for different parser implementations"""
     PYTHON = "python"
@@ -47,7 +52,8 @@ class IBagParser(ABC):
     def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
                   time_range: Optional[Tuple] = None, 
                   progress_callback: Optional[Callable] = None,
-                  compression: str = 'none') -> str:
+                  compression: str = 'none',
+                  overwrite: bool = False) -> str:
         """
         Filter rosbag using selected implementation
         
@@ -147,7 +153,8 @@ class RosbagsBagParser(IBagParser):
     def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
                   time_range: Optional[Tuple] = None,
                   progress_callback: Optional[Callable] = None,
-                  compression: str = 'none') -> str:
+                  compression: str = 'none',
+                  overwrite: bool = False) -> str:
         """
         Filter rosbag using rosbags library
         
@@ -158,6 +165,7 @@ class RosbagsBagParser(IBagParser):
             time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
             progress_callback: Optional callback function to report progress percentage (0-100)
             compression: Compression type ('none', 'bz2', 'lz4')
+            overwrite: Whether to overwrite existing output file
         
         Returns:
             Status message with completion time
@@ -213,6 +221,14 @@ class RosbagsBagParser(IBagParser):
                 # Create output bag
                 output_path = Path(output_bag)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Check if output file exists
+                if output_path.exists() and not overwrite:
+                    raise FileExistsError(f"Output file '{output_bag}' already exists. Use overwrite=True to overwrite.")
+                
+                # Remove existing file if overwrite is True
+                if output_path.exists() and overwrite:
+                    output_path.unlink()
                 
                 writer = Rosbag1Writer(output_path)
                 
@@ -281,6 +297,9 @@ class RosbagsBagParser(IBagParser):
         except ValueError as ve:
             # Re-raise ValueError as is (for compression validation errors)
             raise ve
+        except FileExistsError as fe:
+            # Re-raise FileExistsError as is (for file overwrite handling)
+            raise fe
         except Exception as e:
             _logger.error(f"Error filtering bag: {e}")
             raise Exception(f"Error filtering bag: {e}")
@@ -411,7 +430,8 @@ class BagParser(IBagParser):
     def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
                   time_range: Optional[Tuple] = None,
                   progress_callback: Optional[Callable] = None,
-                  compression: str = 'none') -> str:
+                  compression: str = 'none',
+                  overwrite: bool = False) -> str:
         """
         Filter rosbag using legacy rosbag Python API
         
@@ -422,12 +442,21 @@ class BagParser(IBagParser):
             time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
             progress_callback: Optional callback function to report progress percentage (0-100)
             compression: Compression type ('none', 'bz2', 'lz4')
+            overwrite: Whether to overwrite existing output file
         
         Returns:
             Status message with completion time
         """
         try:
             import rosbag
+            
+            # Check if output file exists
+            if os.path.exists(output_bag) and not overwrite:
+                raise FileExistsError(f"Output file '{output_bag}' already exists. Use overwrite=True to overwrite.")
+            
+            # Remove existing file if overwrite is True
+            if os.path.exists(output_bag) and overwrite:
+                os.remove(output_bag)
             
             # Validate compression type before starting
             from roseApp.core.util import validate_compression_type
@@ -496,6 +525,9 @@ class BagParser(IBagParser):
             
         except ValueError as ve:
             raise ve
+        except FileExistsError as fe:
+            # Re-raise FileExistsError as is (for file overwrite handling)
+            raise fe
         except Exception as e:
             _logger.error(f"Error filtering bag: {e}")
             raise Exception(f"Error filtering bag: {e}")

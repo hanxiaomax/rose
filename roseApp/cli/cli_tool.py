@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
@@ -11,7 +11,7 @@ from InquirerPy.validator import PathValidator
 import concurrent.futures
 import threading
 import queue
-from ..core.parser import create_parser, ParserType
+from ..core.parser import create_parser, ParserType, FileExistsError
 from ..core.util import get_logger, get_preferred_parser_type
 from .theme import style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from .util import (LoadingAnimation, build_banner, 
@@ -57,6 +57,46 @@ class CliTool:
                 return None
                 
             return input_bag
+    
+    def ask_for_output_bag(self, default_path: str) -> Tuple[Optional[str], bool]:
+        """
+        Ask user to input output bag file path with overwrite handling
+        
+        Args:
+            default_path: Default file path to suggest
+            
+        Returns:
+            Tuple of (output_path, should_overwrite) or (None, False) if cancelled
+        """
+        while True:
+            output_bag = inquirer.filepath(
+                message="Enter output bag file path:",
+                default=default_path,
+                validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
+                style=style
+            ).execute()
+            
+            if not output_bag:  # User cancelled
+                return None, False
+            
+            # Check if file already exists
+            if os.path.exists(output_bag):
+                # Ask user if they want to overwrite
+                overwrite = inquirer.confirm(
+                    message=f"Output file '{output_bag}' already exists. Do you want to overwrite it?",
+                    default=False,
+                    style=style
+                ).execute()
+                
+                if overwrite:
+                    return output_bag, True  # File path and overwrite=True
+                else:
+                    # User doesn't want to overwrite, ask for different filename
+                    self.console.print("Please choose a different filename.", style=YELLOW)
+                    continue  # Go back to filename input
+            else:
+                # File doesn't exist, no need to overwrite
+                return output_bag, False
     
 
     
@@ -176,16 +216,14 @@ class CliTool:
                 print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range)
                 continue  # Stay in the current menu
             elif next_action == "filter":
-                # Get output bag
-                output_bag = inquirer.filepath(
-                    message="Enter output bag file path:",
-                    default=os.path.splitext(bag_path)[0] + "_filtered.bag",
-                    validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
-                    style=style
-                ).execute()
+                # Get output bag with overwrite handling
+                default_output = os.path.splitext(bag_path)[0] + "_filtered.bag"
+                output_result = self.ask_for_output_bag(default_output)
                 
-                if not output_bag:
+                if output_result[0] is None:  # User cancelled
                     continue  # Stay in the current menu
+                
+                output_bag, should_overwrite = output_result
                     
                 # Get filter method using the helper function
                 filter_method = self._get_filter_method()
@@ -193,9 +231,8 @@ class CliTool:
                 if not filter_method or filter_method == "back":
                     continue  # Stay in the current menu
                     
-                # Process single file
-                
-                self._process_single_bag(bag_path, output_bag, filter_method)
+                # Process single file with overwrite flag
+                self._process_single_bag(bag_path, output_bag, filter_method, should_overwrite)
     
     def handle_multiple_bags_interactive(self, directory_path: str):
         """Process multiple bag files from a directory interactively
@@ -426,13 +463,26 @@ class CliTool:
                                        completed=percent)
                     
                     # Use progress callback for filtering
-                    thread_local.parser.filter_bag(
-                        bag_file, 
-                        output_bag, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression
-                    )
+                    try:
+                        thread_local.parser.filter_bag(
+                            bag_file, 
+                            output_bag, 
+                            whitelist,
+                            progress_callback=update_progress,
+                            compression=compression,
+                            overwrite=True  # For batch processing, always overwrite
+                        )
+                    except FileExistsError:
+                        # This should not happen since we use overwrite=True
+                        # but handle it just in case
+                        thread_local.parser.filter_bag(
+                            bag_file, 
+                            output_bag, 
+                            whitelist,
+                            progress_callback=update_progress,
+                            compression=compression,
+                            overwrite=True
+                        )
                     
                     # Update task status to complete, showing green success mark
                     progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
@@ -494,7 +544,7 @@ class CliTool:
         
         return tasks
 
-    def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str):
+    def _process_single_bag(self, input_bag: str, output_bag: str, filter_method: str, overwrite: bool = False):
         """Process a single bag file"""
         # Load bag information
         with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
@@ -578,7 +628,8 @@ class CliTool:
                 output_bag, 
                 whitelist,
                 progress_callback=update_progress,
-                compression=compression
+                compression=compression,
+                overwrite=overwrite
             )
             
             # progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
