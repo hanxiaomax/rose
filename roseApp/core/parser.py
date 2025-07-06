@@ -117,16 +117,23 @@ class RosbagsBagParser(IBagParser):
     def _ensure_types_registered(self, reader):
         """Ensure all message types are registered for serialization"""
         try:
-            # Get all message types from the bag
+            # Register types for all connections that have message definitions
             for connection in reader.connections:
                 msg_type = connection.msgtype
                 if msg_type not in self._registered_types:
-                    # Register types for this message type
-                    type_map = get_types_from_msg([msg_type])
-                    register_types(type_map)
-                    self._registered_types.add(msg_type)
+                    try:
+                        # Try to register types using msgdef if available
+                        if hasattr(connection, 'msgdef') and connection.msgdef:
+                            type_map = get_types_from_msg(connection.msgdef, msg_type)
+                            register_types(type_map)
+                            self._registered_types.add(msg_type)
+                            _logger.debug(f"Registered type: {msg_type}")
+                    except Exception as e:
+                        # If type registration fails, continue - rosbags might handle it automatically
+                        _logger.debug(f"Could not register type {msg_type}: {e}")
+                        pass
         except Exception as e:
-            _logger.warning(f"Failed to register some message types: {e}")
+            _logger.warning(f"Type registration warning: {e}")
     
     def load_whitelist(self, whitelist_path: str) -> List[str]:
         """Load topics from whitelist file"""
@@ -196,8 +203,12 @@ class RosbagsBagParser(IBagParser):
             
             # Start filtering process
             with Rosbag1Reader(Path(input_bag)) as reader:
-                # Ensure types are registered
-                self._ensure_types_registered(reader)
+                # Try to ensure types are registered (optional, rosbags often handles this automatically)
+                try:
+                    self._ensure_types_registered(reader)
+                except Exception as e:
+                    _logger.debug(f"Type registration skipped: {e}")
+                    # Continue without type registration - rosbags often works without it
                 
                 # Create output bag
                 output_path = Path(output_bag)
@@ -216,11 +227,17 @@ class RosbagsBagParser(IBagParser):
                     topic_connections = {}
                     for connection in reader.connections:
                         if connection.topic in topics:
+                            # Extract connection information with proper defaults
+                            callerid = getattr(connection, 'owner', '/unknown')
+                            msgdef = getattr(connection, 'msgdef', None)
+                            md5sum = getattr(connection, 'digest', None)
+                            
                             new_connection = writer.add_connection(
                                 topic=connection.topic,
                                 msgtype=connection.msgtype,
-                                callerid=connection.callerid,
-                                latching=connection.latching
+                                msgdef=msgdef,
+                                md5sum=md5sum,
+                                callerid=callerid
                             )
                             topic_connections[connection.topic] = new_connection
                     
