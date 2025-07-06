@@ -239,19 +239,29 @@ class CliTool:
             whitelist = self._get_filter_topics_from_whitelist()
                 
         elif filter_method == "manual":
-            whitelist = self._get_filter_topics_from_manual_selection(selected_files)
-            
+            whitelist = ask_topics(self.console, self.topics)
+            if not whitelist:
+                return
+
         if not whitelist:
             return  # Go back to input selection
         
         # Ask user about compression
+        from roseApp.core.util import get_available_compression_types
+        available_compressions = get_available_compression_types()
+        
+        # Create compression choice list based on availability
+        compression_choices = []
+        if "none" in available_compressions:
+            compression_choices.append(Choice(value="none", name="1. No compression (fastest, largest file)"))
+        if "bz2" in available_compressions:
+            compression_choices.append(Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"))
+        if "lz4" in available_compressions:
+            compression_choices.append(Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)"))
+        
         compression = inquirer.select(
             message="Choose compression type:",
-            choices=[
-                Choice(value="none", name="1. No compression (fastest, largest file)"),
-                Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"),
-                Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)")
-            ],
+            choices=compression_choices,
             default="none",
             style=style
         ).execute()
@@ -514,13 +524,21 @@ class CliTool:
                 return
 
         # Ask user about compression
+        from roseApp.core.util import get_available_compression_types
+        available_compressions = get_available_compression_types()
+        
+        # Create compression choice list based on availability
+        compression_choices = []
+        if "none" in available_compressions:
+            compression_choices.append(Choice(value="none", name="1. No compression (fastest, largest file)"))
+        if "bz2" in available_compressions:
+            compression_choices.append(Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"))
+        if "lz4" in available_compressions:
+            compression_choices.append(Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)"))
+        
         compression = inquirer.select(
             message="Choose compression type:",
-            choices=[
-                Choice(value="none", name="1. No compression (fastest, largest file)"),
-                Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"),
-                Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)")
-            ],
+            choices=compression_choices,
             default="none",
             style=style
         ).execute()

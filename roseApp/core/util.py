@@ -11,6 +11,11 @@ import sys
 from pathlib import Path
 from typing import Tuple, Optional
 from textual.logging import TextualHandler
+import json
+import platform
+from datetime import datetime, timezone
+from enum import Enum
+from rich.console import Console
 
 # 应用程序模式
 class AppMode:
@@ -182,3 +187,64 @@ class TimeUtil:
             return (start_time, end_time)
         except ValueError as e:
             raise ValueError(f"Invalid time range format: {e}")
+
+def check_compression_availability():
+    """Check which compression types are available in rosbag
+    
+    Returns:
+        dict: Dictionary mapping compression types to availability status
+    """
+    available_compressions = {
+        'none': True,  # Always available
+        'bz2': True,   # Always available in most rosbag installations
+        'lz4': False   # Check if available
+    }
+    
+    try:
+        import rosbag
+        
+        # Test LZ4 by trying to create a bag with LZ4 compression
+        test_path = "/tmp/test_lz4_availability.bag"
+        try:
+            with rosbag.Bag(test_path, 'w', compression='lz4') as test_bag:
+                available_compressions['lz4'] = True
+            # Clean up
+            if os.path.exists(test_path):
+                os.unlink(test_path)
+        except (ValueError, Exception):
+            # LZ4 not available
+            available_compressions['lz4'] = False
+            
+    except ImportError:
+        # rosbag not available
+        pass
+    
+    return available_compressions
+
+def get_available_compression_types():
+    """Get list of available compression types
+    
+    Returns:
+        List[str]: List of available compression type strings
+    """
+    availability = check_compression_availability()
+    return [comp_type for comp_type, available in availability.items() if available]
+
+def validate_compression_type(compression: str) -> Tuple[bool, str]:
+    """Validate if a compression type is available
+    
+    Args:
+        compression: Compression type to validate
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    available = get_available_compression_types()
+    
+    if compression in available:
+        return True, ""
+    
+    if compression == 'lz4' and compression not in available:
+        return False, f"LZ4 compression is not available in this environment. Available options: {', '.join(available)}"
+    
+    return False, f"Invalid compression type '{compression}'. Available options: {', '.join(available)}"

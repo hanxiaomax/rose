@@ -32,9 +32,10 @@ def filter_bag(
     """Filter topics from one or more ROS bag files"""
     try:
         # Validate compression type
-        valid_compressions = ["none", "bz2", "lz4"]
-        if compression not in valid_compressions:
-            typer.echo(f"Error: Invalid compression type '{compression}'. Must be one of: {valid_compressions}", err=True)
+        from roseApp.core.util import validate_compression_type
+        is_valid, error_message = validate_compression_type(compression)
+        if not is_valid:
+            typer.echo(f"Error: {error_message}", err=True)
             raise typer.Exit(code=1)
         
         parser = create_parser(ParserType.PYTHON)

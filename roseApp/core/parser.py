@@ -125,6 +125,12 @@ class BagParser(IBagParser):
             Status message with completion time
         """
         try:
+            # Validate compression type before starting
+            from roseApp.core.util import validate_compression_type
+            is_valid, error_message = validate_compression_type(compression)
+            if not is_valid:
+                raise ValueError(error_message)
+            
             start_time = time.time()
             
             # 先获取消息总数，用于计算百分比
@@ -188,6 +194,9 @@ class BagParser(IBagParser):
                 
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
             
+        except ValueError as ve:
+            # Re-raise ValueError as is (for compression validation errors)
+            raise ve
         except Exception as e:
             _logger.error(f"Error filtering bag: {e}")
             raise Exception(f"Error filtering bag: {e}")
