@@ -96,18 +96,33 @@ class TestTopicFiltering:
         mock_connection3 = MagicMock()
         mock_connection3.topic = "/scan"
         
-        mock_reader.topics = {
-            "/cmd_vel": mock_connection1,
-            "/odom": mock_connection2,
-            "/scan": mock_connection3
-        }
+        mock_reader.connections = [
+            mock_connection1,
+            mock_connection2,
+            mock_connection3
+        ]
         
         # Mock messages - only cmd_vel and odom should be written
-        mock_reader.messages.return_value = [
-            (mock_connection1, 1000000000, b"cmd_vel_data"),
-            (mock_connection2, 1000000001, b"odom_data"),
-            (mock_connection3, 1000000002, b"scan_data"),  # Should be filtered out
-        ]
+        def mock_messages(connections=None):
+            if connections is None:
+                return iter([
+                    (mock_connection1, 1000000000, b"cmd_vel_data"),
+                    (mock_connection2, 1000000001, b"odom_data"),
+                    (mock_connection3, 1000000002, b"scan_data"),  # Should be filtered out
+                ])
+            else:
+                # Return only messages for the requested connections
+                result = []
+                for conn in connections:
+                    if conn == mock_connection1:
+                        result.append((mock_connection1, 1000000000, b"cmd_vel_data"))
+                    elif conn == mock_connection2:
+                        result.append((mock_connection2, 1000000001, b"odom_data"))
+                    elif conn == mock_connection3:
+                        result.append((mock_connection3, 1000000002, b"scan_data"))
+                return iter(result)
+        
+        mock_reader.messages = mock_messages
         
         # Mock writer
         mock_writer = MagicMock()
@@ -128,9 +143,13 @@ class TestTopicFiltering:
         write_calls = mock_writer.write.call_args_list
         assert len(write_calls) == 2  # Should have 2 calls for cmd_vel and odom
     
-    @patch('rosbag.Bag')
-    def test_legacy_parser_topic_filtering(self, mock_bag_class):
+    @patch('roseApp.core.parser.rosbag')
+    def test_legacy_parser_topic_filtering(self, mock_rosbag):
         """Test BagParser topic filtering with mocked rosbag"""
+        # Mock the entire rosbag module
+        mock_bag_class = MagicMock()
+        mock_rosbag.Bag = mock_bag_class
+        
         parser = BagParser()
         
         # Mock input bag
@@ -151,17 +170,16 @@ class TestTopicFiltering:
         with patch.object(parser, '_get_bag_info') as mock_get_info:
             mock_get_info.return_value = (5, 10.0)  # message_count, duration
             
-            with patch('rosbag.Bag') as mock_bag_read:
-                mock_bag_instance = MagicMock()
-                mock_bag_read.return_value = mock_bag_instance
-                mock_bag_instance.read_messages.return_value = iter(mock_messages)
-                
-                result = parser.filter_bag(
-                    "/input.bag",
-                    "/output.bag",
-                    ["/cmd_vel", "/odom"],
-                    overwrite=True
-                )
+            mock_bag_instance = MagicMock()
+            mock_bag_class.return_value = mock_bag_instance
+            mock_bag_instance.read_messages.return_value = iter(mock_messages)
+            
+            result = parser.filter_bag(
+                "/input.bag",
+                "/output.bag",
+                ["/cmd_vel", "/odom"],
+                overwrite=True
+            )
         
         assert "Filtering completed" in result
     

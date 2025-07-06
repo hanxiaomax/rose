@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 app = typer.Typer()
 
-@app.command("filter")
+@app.command()
 def filter_bag(
     input_path: str = typer.Argument(..., help="Input bag file path or directory containing bag files"),
     output_dir: Optional[str] = typer.Argument(None, help="Output directory for filtered bag files (required for directory input)"),

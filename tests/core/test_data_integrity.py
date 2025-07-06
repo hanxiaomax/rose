@@ -30,10 +30,17 @@ class TestDataIntegrity:
         mock_connection = MagicMock()
         mock_connection.topic = "/test_topic"
         
-        mock_reader.topics = {"/test_topic": mock_connection}
-        mock_reader.messages.return_value = [
-            (mock_connection, 1000000000, test_data)
-        ]
+        mock_reader.connections = [mock_connection]
+        
+        def mock_messages(connections=None):
+            if connections is None:
+                return iter([(mock_connection, 1000000000, test_data)])
+            else:
+                if mock_connection in connections:
+                    return iter([(mock_connection, 1000000000, test_data)])
+                return iter([])
+        
+        mock_reader.messages = mock_messages
         
         # Mock writer
         mock_writer = MagicMock()
@@ -134,14 +141,26 @@ class TestTimeRangeFiltering:
         mock_connection = MagicMock()
         mock_connection.topic = "/test_topic"
         
-        mock_reader.topics = {"/test_topic": mock_connection}
+        mock_reader.connections = [mock_connection]
         
         # Messages with different timestamps
-        mock_reader.messages.return_value = [
-            (mock_connection, 1000000000, b"early_data"),    # Before range
-            (mock_connection, 1500000000, b"in_range_data"), # In range
-            (mock_connection, 2000000000, b"late_data"),     # After range
-        ]
+        def mock_messages(connections=None):
+            if connections is None:
+                return iter([
+                    (mock_connection, 1000000000, b"early_data"),    # Before range
+                    (mock_connection, 1500000000, b"in_range_data"), # In range
+                    (mock_connection, 2000000000, b"late_data"),     # After range
+                ])
+            else:
+                if mock_connection in connections:
+                    return iter([
+                        (mock_connection, 1000000000, b"early_data"),    # Before range
+                        (mock_connection, 1500000000, b"in_range_data"), # In range
+                        (mock_connection, 2000000000, b"late_data"),     # After range
+                    ])
+                return iter([])
+        
+        mock_reader.messages = mock_messages
         
         # Mock writer
         mock_writer = MagicMock()

@@ -101,6 +101,122 @@ pytest tests/ --cov=roseApp --cov-report=html --cov-report=term-missing
 pytest tests/core/test_parser_core.py::TestRosbagsBagParser -v
 ```
 
+## 覆盖率报告
+
+### 生成覆盖率报告
+
+```bash
+# 使用run_tests.py生成覆盖率报告
+python tests/run_tests.py coverage
+
+# 直接使用pytest生成覆盖率报告
+pytest tests/ --cov=roseApp --cov-report=html --cov-report=term-missing
+
+# 或者分步执行
+coverage run -m pytest tests/
+coverage report        # 命令行文本报告
+coverage html          # 生成HTML交互式报告
+```
+
+### 查看文本覆盖率报告
+
+```bash
+# 查看总体覆盖率摘要
+coverage report
+
+# 查看详细覆盖率报告（包含缺失行号）
+coverage report -m
+
+# 只显示特定模块的覆盖率
+coverage report roseApp/core/parser.py
+
+# 按覆盖率排序显示
+coverage report --sort=cover
+```
+
+### 查看HTML交互式报告
+
+HTML报告提供了最详细和直观的覆盖率分析：
+
+```bash
+# 生成HTML报告
+coverage html
+
+# 启动HTTP服务器查看报告
+cd htmlcov
+python -m http.server 8080
+
+# 在浏览器中访问: http://localhost:8080
+```
+
+#### HTML报告功能特性
+
+- **📁 多视图支持**
+  - **Files**: 文件级覆盖率概览
+  - **Functions**: 函数级覆盖率分析  
+  - **Classes**: 类级覆盖率分析
+
+- **🔍 交互功能**
+  - **实时搜索**: 输入框过滤文件
+  - **列排序**: 点击表头按不同指标排序
+  - **隐藏100%**: 隐藏完全覆盖的文件
+  - **键盘快捷键**: 
+    - `f/s/m/x/b/p/c` - 列排序
+    - `[/]` - 上一个/下一个文件
+    - `?` - 显示/隐藏帮助
+
+- **📈 详细分析**
+  - **行级覆盖率**: 红色=未覆盖，绿色=已覆盖
+  - **分支覆盖率**: 条件分支执行情况
+  - **精确定位**: 具体行号定位未测试代码
+
+### 覆盖率指标解释
+
+| 指标 | 说明 |
+|------|------|
+| **statements** | 代码语句总数 |
+| **missing** | 未覆盖的语句数 |
+| **branches** | 分支条件总数 |
+| **partial** | 部分覆盖的分支数 |
+| **coverage** | 覆盖率百分比 |
+
+### 覆盖率目标
+
+| 模块类型 | 目标覆盖率 | 当前状态 |
+|----------|------------|----------|
+| 核心逻辑 | ≥80% | 🟡 需改进 |
+| CLI功能 | ≥70% | 🟠 进行中 |
+| 工具函数 | ≥90% | 🟢 良好 |
+| 整体项目 | ≥75% | 🔴 33% |
+
+### 覆盖率改进建议
+
+1. **优先处理0%覆盖率模块**
+   ```bash
+   # 查看未覆盖模块
+   coverage report --show-missing | grep "0%"
+   ```
+
+2. **关注核心功能模块**
+   - `roseApp/core/parser.py` - 当前48%
+   - `roseApp/cli/filter.py` - 当前34%
+
+3. **增加边界情况测试**
+   - 异常处理路径
+   - 错误输入处理
+   - 边界条件测试
+
+### 停止HTTP服务器
+
+查看完HTML报告后，停止HTTP服务器：
+
+```bash
+# 停止服务器
+pkill -f 'python -m http.server 8080'
+
+# 或者按 Ctrl+C 停止
+```
+
 ## 测试标记
 
 测试使用pytest标记进行分类：

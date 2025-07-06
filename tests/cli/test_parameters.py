@@ -27,7 +27,6 @@ class TestParameterValidation:
         result = runner.invoke(app, [
             "filter",
             "nonexistent.bag",
-            "output.bag",
             "--topics", "/test"
         ])
         assert result.exit_code == 1
@@ -41,7 +40,6 @@ class TestParameterValidation:
             result = runner.invoke(app, [
                 "filter",
                 "input.txt",  # Wrong extension
-                "output.bag",
                 "--topics", "/test"
             ])
             
@@ -66,7 +64,6 @@ class TestParameterValidation:
                 result = runner.invoke(app, [
                     "filter",
                     "input.bag",
-                    "output.bag",
                     "--topics", "/test",
                     "--compression", compression
                 ])
@@ -81,7 +78,6 @@ class TestParameterValidation:
                 result = runner.invoke(app, [
                     "filter",
                     "input.bag",
-                    "output.bag",
                     "--topics", "/test",
                     "--compression", compression
                 ])
@@ -102,7 +98,6 @@ class TestParameterValidation:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--topics", "/topic1",
                 "--topics", "/topic2", 
                 "--topics", "/topic3"
@@ -129,7 +124,6 @@ class TestParameterValidation:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--whitelist", valid_whitelist
             ])
             
@@ -147,7 +141,6 @@ class TestParameterValidation:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--whitelist", "nonexistent.txt"
             ])
             
@@ -212,7 +205,6 @@ class TestParameterCombinations:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--topics", "/cmd_topic",
                 "--whitelist", whitelist_path
             ])
@@ -233,7 +225,6 @@ class TestParameterCombinations:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--topics", "/test",
                 "--parallel"  # Should be ignored for single file
             ])
@@ -310,7 +301,6 @@ class TestParameterDefaults:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--topics", "/test"
                 # No compression specified
             ])
@@ -350,7 +340,6 @@ class TestParameterDefaults:
             result = runner.invoke(app, [
                 "filter",
                 "input.bag",
-                "output.bag",
                 "--topics", "/test"
                 # No dry-run flag
             ])
@@ -369,7 +358,7 @@ class TestParameterHelp:
     
     def test_help_message_contains_all_parameters(self, runner):
         """Test that help message documents all parameters"""
-        result = runner.invoke(app, ["filter", "--help"])
+        result = runner.invoke(app, [ "--help"])
         assert result.exit_code == 0
         
         # Check that all parameters are documented
@@ -383,7 +372,7 @@ class TestParameterHelp:
     
     def test_parameter_descriptions(self, runner):
         """Test that parameters have meaningful descriptions"""
-        result = runner.invoke(app, ["filter", "--help"])
+        result = runner.invoke(app, [ "--help"])
         assert result.exit_code == 0
         
         # Check for key description words

@@ -112,8 +112,14 @@ class TestRosbagsParserCompression:
         # Mock reader
         mock_reader = MagicMock()
         mock_reader_class.return_value.__enter__.return_value = mock_reader
-        mock_reader.topics = {"/test_topic": MagicMock()}
-        mock_reader.messages.return_value = []
+        mock_connection = MagicMock()
+        mock_connection.topic = "/test_topic"
+        mock_reader.connections = [mock_connection]
+        
+        def mock_messages(connections=None):
+            return iter([])
+        
+        mock_reader.messages = mock_messages
         
         # Mock writer
         mock_writer = MagicMock()
@@ -147,9 +153,13 @@ class TestLegacyParserCompression:
     def parser(self):
         return BagParser()
     
-    @patch('rosbag.Bag')
-    def test_legacy_compression_support(self, mock_bag_class, parser):
+    @patch('roseApp.core.parser.rosbag')
+    def test_legacy_compression_support(self, mock_rosbag, parser):
         """Test that legacy parser supports compression parameter"""
+        # Mock the entire rosbag module
+        mock_bag_class = MagicMock()
+        mock_rosbag.Bag = mock_bag_class
+        
         mock_input_bag = MagicMock()
         mock_output_bag = MagicMock()
         
@@ -159,19 +169,18 @@ class TestLegacyParserCompression:
         with patch.object(parser, '_get_bag_info') as mock_get_info:
             mock_get_info.return_value = (0, 0.0)
             
-            with patch('rosbag.Bag') as mock_bag_read:
-                mock_bag_instance = MagicMock()
-                mock_bag_read.return_value = mock_bag_instance
-                mock_bag_instance.read_messages.return_value = iter([])
-                
-                # Test that compression parameter is passed to rosbag.Bag
-                result = parser.filter_bag(
-                    "/input.bag",
-                    "/output.bag", 
-                    ["/test_topic"],
-                    compression="bz2",
-                    overwrite=True
-                )
+            mock_bag_instance = MagicMock()
+            mock_bag_class.return_value = mock_bag_instance
+            mock_bag_instance.read_messages.return_value = iter([])
+            
+            # Test that compression parameter is passed to rosbag.Bag
+            result = parser.filter_bag(
+                "/input.bag",
+                "/output.bag", 
+                ["/test_topic"],
+                compression="bz2",
+                overwrite=True
+            )
         
         assert "Filtering completed" in result
         

@@ -22,27 +22,32 @@ class TestFilterCommandBasics:
             mock_parser = MagicMock()
             mock_parser.filter_bag.return_value = "Filtering completed in 1.23s"
             mock_parser.load_whitelist.return_value = ["/test_topic"]
+            mock_parser.load_bag.return_value = (
+                ["/test_topic"],  # topics
+                {"/test_topic": "std_msgs/String"},  # connections
+                ((0, 0), (100, 0))  # time_range
+            )
             mock.return_value = mock_parser
             yield mock
     
     def test_filter_command_exists(self, runner):
         """Test that filter command exists and shows help"""
-        result = runner.invoke(app, ["filter", "--help"])
+        result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         assert "Filter topics from one or more ROS bag files" in result.output
     
+    @patch('os.path.getsize')
     @patch('os.path.isfile')
     @patch('os.path.exists')
-    def test_single_file_processing(self, mock_exists, mock_isfile, runner, mock_create_parser):
+    def test_single_file_processing(self, mock_exists, mock_isfile, mock_getsize, runner, mock_create_parser):
         """Test processing a single bag file"""
         # Mock file existence
         mock_exists.return_value = True
         mock_isfile.return_value = True
+        mock_getsize.return_value = 1024  # Mock file size
         
         result = runner.invoke(app, [
-            "filter",
             "input.bag",
-            "output.bag", 
             "--topics", "/test_topic",
             "--compression", "none"
         ])
@@ -62,7 +67,6 @@ class TestFilterCommandBasics:
         mock_exists.return_value = True
         
         result = runner.invoke(app, [
-            "filter",
             "/input/dir",
             "/output/dir",
             "--topics", "/test_topic",

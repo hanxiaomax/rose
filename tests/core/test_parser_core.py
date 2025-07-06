@@ -47,8 +47,15 @@ class TestRosbagsBagParser:
         assert sig.parameters['overwrite'].default == False
         assert sig.parameters['compression'].default == 'none'
     
-    def test_filter_bag_overwrite_false_raises_error(self, parser, test_bag_file):
+    @patch('roseApp.core.parser.Rosbag1Reader')
+    def test_filter_bag_overwrite_false_raises_error(self, mock_reader_class, parser, test_bag_file):
         """Test that overwrite=False raises FileExistsError when file exists"""
+        # Mock reader to avoid actual file reading
+        mock_reader = MagicMock()
+        mock_reader_class.return_value.__enter__.return_value = mock_reader
+        mock_reader.connections = []
+        mock_reader.messages = lambda connections=None: iter([])
+        
         with tempfile.NamedTemporaryFile(suffix='.bag', delete=False) as output_file:
             output_path = output_file.name
         
@@ -72,10 +79,20 @@ class TestRosbagsBagParser:
         # Mock reader
         mock_reader = MagicMock()
         mock_reader_class.return_value.__enter__.return_value = mock_reader
-        mock_reader.topics = {"/test_topic": MagicMock()}
-        mock_reader.messages.return_value = [
-            (MagicMock(topic="/test_topic"), 1000000000, b"test_data")
-        ]
+        
+        mock_connection = MagicMock()
+        mock_connection.topic = "/test_topic"
+        mock_reader.connections = [mock_connection]
+        
+        def mock_messages(connections=None):
+            if connections is None:
+                return iter([(mock_connection, 1000000000, b"test_data")])
+            else:
+                if mock_connection in connections:
+                    return iter([(mock_connection, 1000000000, b"test_data")])
+                return iter([])
+        
+        mock_reader.messages = mock_messages
         
         # Mock writer
         mock_writer = MagicMock()
@@ -128,8 +145,13 @@ class TestBagParser:
         assert sig.parameters['overwrite'].default == False
         assert sig.parameters['compression'].default == 'none'
     
-    def test_filter_bag_overwrite_false_raises_error(self, parser, test_bag_file):
+    @patch('roseApp.core.parser.rosbag')
+    def test_filter_bag_overwrite_false_raises_error(self, mock_rosbag, parser, test_bag_file):
         """Test that overwrite=False raises FileExistsError when file exists"""
+        # Mock the entire rosbag module to avoid actual file reading
+        mock_bag_class = MagicMock()
+        mock_rosbag.Bag = mock_bag_class
+        
         with tempfile.NamedTemporaryFile(suffix='.bag', delete=False) as output_file:
             output_path = output_file.name
         
