@@ -24,12 +24,19 @@ def filter_bag(
     output_dir: Optional[str] = typer.Argument(None, help="Output directory for filtered bag files (required for directory input)"),
     whitelist: Optional[str] = typer.Option(None, "--whitelist", "-w", help="Topic whitelist file path"),
     topics: Optional[List[str]] = typer.Option(None, "--topics", "-tp", help="Topics to include (can be specified multiple times). Alternative to whitelist file."),
+    compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4 (default: none)"),
     parallel: bool = typer.Option(False, "--parallel", "-p", help="Process files in parallel when input is a directory"),
     workers: Optional[int] = typer.Option(None, "--workers", help="Number of parallel workers (default: CPU count - 2)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without actually doing it")
 ):
     """Filter topics from one or more ROS bag files"""
     try:
+        # Validate compression type
+        valid_compressions = ["none", "bz2", "lz4"]
+        if compression not in valid_compressions:
+            typer.echo(f"Error: Invalid compression type '{compression}'. Must be one of: {valid_compressions}", err=True)
+            raise typer.Exit(code=1)
+        
         parser = create_parser(ParserType.PYTHON)
         
         # Check if input is a file or directory
@@ -48,7 +55,7 @@ def filter_bag(
                 output_bag = os.path.join(output_dir, os.path.basename(os.path.splitext(input_path)[0]) + "_filtered.bag")
                 
             # Process single file
-            _process_single_bag(parser, input_path, output_bag, whitelist, topics, dry_run)
+            _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, dry_run)
                 
         else:
             # Directory processing
@@ -65,7 +72,7 @@ def filter_bag(
             os.makedirs(output_dir, exist_ok=True)
                 
             # Process directory
-            _process_directory(parser, input_path, output_dir, whitelist, topics, parallel, workers, dry_run)
+            _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, dry_run)
             
     except Exception as e:
         log_cli_error(e)
@@ -73,7 +80,7 @@ def filter_bag(
         raise typer.Exit(code=1)
 
 
-def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], dry_run: bool):
+def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, dry_run: bool):
     """Process a single bag file"""
     # Get all topics from input bag
     all_topics, connections, _ = parser.load_bag(input_bag)
@@ -169,7 +176,8 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
             input_bag, 
             output_bag, 
             list(whitelist_topics),
-            progress_callback=update_progress
+            progress_callback=update_progress,
+            compression=compression
         )
         
         # Update final status
@@ -197,7 +205,7 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
 
 
 def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: Optional[str], topics: Optional[List[str]], 
-                       parallel: bool, workers: Optional[int], dry_run: bool):
+                       compression: str, parallel: bool, workers: Optional[int], dry_run: bool):
     """Process all bag files in a directory"""
     # Get all bag files in the directory (recursive)
     from .util import collect_bag_files
@@ -233,12 +241,12 @@ def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: 
 
     # Process files
     if parallel:
-        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), workers)
+        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, workers)
     else:
-        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics))
+        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression)
 
 
-def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str]):
+def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str):
     """Process bag files sequentially"""
     typer.secho(f"\nProcessing {len(bag_files)} bag files sequentially", fg=typer.colors.BLUE, bold=True)
     
@@ -281,7 +289,8 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
                     bag_file, 
                     output_path, 
                     whitelist,
-                    progress_callback=update_progress
+                    progress_callback=update_progress,
+                    compression=compression
                 )
                 
                 # Update final status
@@ -306,7 +315,7 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
     print_batch_filter_summary(Console(), success_count, fail_count)
 
 
-def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], workers: Optional[int] = None):
+def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, workers: Optional[int] = None):
     """Process bag files in parallel"""
     import concurrent.futures
     import threading
@@ -398,7 +407,8 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     bag_file, 
                     output_path, 
                     whitelist,
-                    progress_callback=update_progress
+                    progress_callback=update_progress,
+                    compression=compression
                 )
                 
                 # Update task status to complete, showing green success mark

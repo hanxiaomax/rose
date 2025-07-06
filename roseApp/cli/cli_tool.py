@@ -244,6 +244,21 @@ class CliTool:
         if not whitelist:
             return  # Go back to input selection
         
+        # Ask user about compression
+        compression = inquirer.select(
+            message="Choose compression type:",
+            choices=[
+                Choice(value="none", name="1. No compression (fastest, largest file)"),
+                Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"),
+                Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)")
+            ],
+            default="none",
+            style=style
+        ).execute()
+        
+        if compression is None:
+            return
+        
         # Process bag files in parallel
         confirm = inquirer.confirm(
             message="Are you sure you want to process these bag files?",
@@ -253,7 +268,7 @@ class CliTool:
         if not confirm:
             return  # Go back to input selection
         
-        self._process_bags_in_parallel(selected_files, directory_path, whitelist)
+        self._process_bags_in_parallel(selected_files, directory_path, whitelist, compression)
         
         
     
@@ -314,13 +329,14 @@ class CliTool:
         return ask_topics(self.console, list(all_topics))
 
 
-    def _process_bags_in_parallel(self, selected_files, input_path, whitelist):
+    def _process_bags_in_parallel(self, selected_files, input_path, whitelist, compression="none"):
         """Process multiple bag files in parallel
         
         Args:
             selected_files: List of bag files to process
             input_path: Base directory path for relative path display
             whitelist: List of topics to include in filtered bags
+            compression: Compression type to use (default: "none")
             
         Returns:
             Dictionary mapping bag files to their task IDs
@@ -392,7 +408,8 @@ class CliTool:
                         bag_file, 
                         output_bag, 
                         whitelist,
-                        progress_callback=update_progress
+                        progress_callback=update_progress,
+                        compression=compression
                     )
                     
                     # Update task status to complete, showing green success mark
@@ -496,7 +513,20 @@ class CliTool:
             if not whitelist:
                 return
 
-        #no confirm for single bag
+        # Ask user about compression
+        compression = inquirer.select(
+            message="Choose compression type:",
+            choices=[
+                Choice(value="none", name="1. No compression (fastest, largest file)"),
+                Choice(value="bz2", name="2. BZ2 compression (slower, smallest file)"),
+                Choice(value="lz4", name="3. LZ4 compression (balanced speed/size)")
+            ],
+            default="none",
+            style=style
+        ).execute()
+        
+        if compression is None:
+            return
         
         input_basename = os.path.basename(input_bag)
         display_name = input_basename
@@ -517,7 +547,8 @@ class CliTool:
                 input_bag, 
                 output_bag, 
                 whitelist,
-                progress_callback=update_progress
+                progress_callback=update_progress,
+                compression=compression
             )
             
             # progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)

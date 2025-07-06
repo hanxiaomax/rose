@@ -33,6 +33,10 @@ More than mere retro styling, this approach serves as poetic resistance to digit
   - 🌟 with whitelists 
   - with manually selected topics
   - by time range (only TUI tested)
+- 🌟 **Bag file compression support** - Reduce file sizes significantly
+  - BZ2 compression (best compression ratio)
+  - LZ4 compression (faster compression/decompression)
+  - No compression (fastest processing)
 - 🌟 Fuzzy search topic in TUI
 - 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
    - 🌟 parallel processing for Multi-selection mode
@@ -186,6 +190,68 @@ Key bindings:
 - `w`: to load whitelist
 - `s`: to save whitelist
 - `a`: to toggle select all topics
+
+## Compression Support
+
+Rose supports automatic compression of filtered bag files to significantly reduce file sizes. This is especially useful for storing and transferring large bag files.
+
+### Available Compression Types
+
+| Type | Description | Compression Ratio | Speed | Use Case |
+|------|-------------|------------------|-------|----------|
+| `none` | No compression | 0% | Fastest | When processing speed is critical |
+| `bz2` | BZ2 compression | ~80-90% | Slower | Best for long-term storage |
+| `lz4` | LZ4 compression | ~60-70% | Faster | Good balance of speed and compression |
+
+### Using Compression
+
+Compression options are presented to users during the filtering process. By default, Rose uses no compression for fastest processing speed. Users can choose from:
+
+- **No compression**: Fastest processing, largest files
+- **BZ2 compression**: Best compression ratio, slower processing  
+- **LZ4 compression**: Balanced speed and compression
+
+**Example compression results:**
+- Original bag file: 696.15 MB
+- After BZ2 compression: 92.03 MB  
+- **Compression ratio: 86.8%**
+
+### Programmatic Usage
+
+```python
+from roseApp.core.BagManager import BagManager, CompressionType
+from roseApp.core.parser import create_parser, ParserType
+
+# Create parser and bag manager
+parser = create_parser(ParserType.PYTHON)
+bag_manager = BagManager(parser)
+
+# Load bag and select topics
+bag_manager.load_bag(Path("input.bag"))
+bag_manager.select_topic("/your_topic")
+
+# Get filter configuration with desired compression
+bag = bag_manager.get_single_bag()
+config = bag.get_filter_config(compression="bz2")  # or "none", "lz4"
+
+# Filter with specified compression
+bag_manager.filter_bag(Path("input.bag"), config, Path("output.bag"))
+```
+
+### Command Line Usage
+
+```bash
+# Filter with BZ2 compression
+rose filter input.bag output.bag -w whitelist.txt -c bz2
+
+# Filter with no compression (fastest)
+rose filter input.bag output.bag -w whitelist.txt -c none
+
+# Filter with LZ4 compression (balanced)
+rose filter input.bag output.bag -w whitelist.txt -c lz4
+```
+
+> **Note**: LZ4 compression requires additional system dependencies. If LZ4 is not available, BZ2 compression will be used as fallback.
 
 #### Configuration
 

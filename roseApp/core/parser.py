@@ -36,7 +36,8 @@ class IBagParser(ABC):
     @abstractmethod
     def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
                   time_range: Optional[Tuple] = None, 
-                  progress_callback: Optional[Callable] = None) -> str:
+                  progress_callback: Optional[Callable] = None,
+                  compression: str = 'none') -> str:
         """
         Filter rosbag using selected implementation
         
@@ -107,7 +108,8 @@ class BagParser(IBagParser):
     
     def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
                   time_range: Optional[Tuple] = None,
-                  progress_callback: Optional[Callable] = None) -> str:
+                  progress_callback: Optional[Callable] = None,
+                  compression: str = 'none') -> str:
         """
         Filter rosbag using rosbag Python API
         
@@ -117,6 +119,7 @@ class BagParser(IBagParser):
             topics: List of topics to include
             time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
             progress_callback: Optional callback function to report progress percentage (0-100)
+            compression: Compression type ('none', 'bz2', 'lz4')
         
         Returns:
             Status message with completion time
@@ -144,7 +147,7 @@ class BagParser(IBagParser):
                 return "No messages found for selected topics"
             
             # 开始过滤过程
-            with rosbag.Bag(output_bag, 'w') as outbag:
+            with rosbag.Bag(output_bag, 'w', compression=compression) as outbag:
                 # 转换时间范围
                 start_sec = None
                 end_sec = None

@@ -16,6 +16,13 @@ class BagStatus(Enum):
     ERROR = "ERROR"
 
 
+class CompressionType(Enum):
+    """Available compression types for bag files"""
+    NONE = "none"
+    BZ2 = "bz2"
+    LZ4 = "lz4"
+
+
 @dataclass
 class BagInfo:
     """Store basic information about a ROS bag"""
@@ -61,6 +68,7 @@ class FilterConfig:
     """Store basic information about a ROS bag"""
     time_range: '[Tuple[tuple, tuple]]'
     topic_list: List[str] #dump API accept list
+    compression: str = 'none'  # Compression type: 'none', 'bz2', 'lz4'
 
 class Bag:
     """Represents a ROS bag file with its metadata"""
@@ -79,11 +87,12 @@ class Bag:
     def set_selected_topics(self, topics: Set[str]) -> None:
         self.selected_topics = topics
     
-    def get_filter_config(self) -> FilterConfig:
+    def get_filter_config(self, compression: str = 'none') -> FilterConfig:
         #fitler config is bag by bag becase time range can be different
         return FilterConfig(
             time_range=self.info.time_range,
-            topic_list=list(self.selected_topics)
+            topic_list=list(self.selected_topics),
+            compression=compression
         )
     def set_status(self, status: BagStatus) -> None:
         self.status = status
@@ -105,6 +114,7 @@ class BagManager:
         self.selected_topics = set()
         self._parser = parser
         self._processed_count = 0  # 添加处理计数器
+        self.compression = CompressionType.NONE.value  # Default: no compression
 
     def __repr__(self) -> str:
         return f"BagManager(bags={self.bags}) \n" \
@@ -256,17 +266,40 @@ class BagManager:
     def reset_processed_count(self) -> None:
         """Reset the processed files counter"""
         self._processed_count = 0
+    
+    def set_compression_type(self, compression: str) -> None:
+        """Set the compression type for bag filtering
+        
+        Args:
+            compression: Compression type ('none', 'bz2', 'lz4')
+        """
+        if compression not in [e.value for e in CompressionType]:
+            raise ValueError(f"Invalid compression type: {compression}. "
+                           f"Must be one of {[e.value for e in CompressionType]}")
+        self.compression = compression
+    
+    def get_compression_type(self) -> str:
+        """Get the current compression type
+        
+        Returns:
+            Current compression type
+        """
+        return self.compression
 
     @publish
     def filter_bag(self, bag_path: Path, config: FilterConfig, output_file: Path) -> None:
         try:
             process_start = time.time()
             
+            # Use the compression from config if specified, otherwise use the BagManager's default
+            compression = config.compression if config.compression != 'none' else self.compression
+            
             self._parser.filter_bag(
                 str(bag_path),
                 str(output_file),
                 config.topic_list,
-                config.time_range
+                config.time_range,
+                compression=compression
             )
             
             process_end = time.time()
