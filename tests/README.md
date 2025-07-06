@@ -28,6 +28,13 @@
   - 传统parser压缩支持
   - 错误处理和参数流传递
 
+- **`test_real_bag.py`** - 真实Bag文件测试 🆕
+  - 使用696MB真实ROS bag文件，减少mock依赖
+  - 真实数据过滤、消息计数验证、压缩功能
+  - 白名单功能测试、错误处理测试
+  - 性能测试、解析器对比测试
+  - 22个测试，100%通过
+
 ### CLI测试 (`tests/cli/`)
 专注于命令行界面和参数处理的集成测试：
 
@@ -43,9 +50,25 @@
   - 默认值验证
   - 帮助信息测试
 
+- **`test_real_bag_cli.py`** - 真实Bag文件CLI测试 🆕
+  - 使用696MB真实bag文件测试CLI功能
+  - 基本过滤、多topic过滤、白名单支持
+  - 压缩选项、并行处理、Dry Run模式
+  - 目录操作和批处理模拟
+  - 13个测试，100%通过
+
 ### 共享工具 (`tests/`)
 - **`conftest.py`** - Pytest配置和共享fixtures
 - **`run_tests.py`** - 便捷的测试运行脚本
+
+### 测试数据文件 🆕
+- **`demo.bag`** - 696MB真实ROS bag文件
+  - 17个不同topics，5,390条消息
+  - 包含传感器数据、GPS、雷达、激光雷达等
+  - 用于真实场景测试，替代mock数据
+- **`fixtures/test_whitelist.txt`** - 测试白名单文件
+  - 包含demo.bag中存在的topics
+  - 支持注释和空行处理测试
 
 ## 运行测试
 
@@ -63,6 +86,10 @@ python tests/run_tests.py cli
 
 # 运行测试并生成覆盖率报告
 python tests/run_tests.py coverage
+
+# 运行真实bag文件测试 🆕
+python tests/run_tests.py specific --path tests/core/test_real_bag.py
+python tests/run_tests.py specific --path tests/cli/test_real_bag_cli.py
 ```
 
 ### 高级用法
@@ -99,6 +126,13 @@ pytest tests/ --cov=roseApp --cov-report=html --cov-report=term-missing
 
 # 运行特定测试
 pytest tests/core/test_parser_core.py::TestRosbagsBagParser -v
+
+# 运行真实bag文件测试 🆕
+pytest tests/core/test_real_bag.py tests/cli/test_real_bag_cli.py -v
+
+# 运行特定真实bag测试
+pytest tests/core/test_real_bag.py::TestRealBagFiltering::test_single_topic_filtering -v
+pytest tests/cli/test_real_bag_cli.py::TestRealBagCLI::test_cli_basic_filtering -v
 ```
 
 ## 覆盖率报告
@@ -182,12 +216,12 @@ python -m http.server 8080
 
 ### 覆盖率目标
 
-| 模块类型 | 目标覆盖率 | 当前状态 |
-|----------|------------|----------|
-| 核心逻辑 | ≥80% | 🟡 需改进 |
-| CLI功能 | ≥70% | 🟠 进行中 |
-| 工具函数 | ≥90% | 🟢 良好 |
-| 整体项目 | ≥75% | 🔴 33% |
+| 模块类型 | 目标覆盖率 | 当前状态 | 备注 |
+|----------|------------|----------|------|
+| 核心逻辑 | ≥80% | 🟡 需改进 | parser.py 53% |
+| CLI功能 | ≥70% | 🟠 进行中 | filter.py 40% |
+| 工具函数 | ≥90% | 🟢 良好 | util.py 66% |
+| 整体项目 | ≥75% | 🟠 36% | ⬆️ 从33%提升 |
 
 ### 覆盖率改进建议
 
@@ -198,10 +232,16 @@ python -m http.server 8080
    ```
 
 2. **关注核心功能模块**
-   - `roseApp/core/parser.py` - 当前48%
-   - `roseApp/cli/filter.py` - 当前34%
+   - `roseApp/core/parser.py` - 当前53% (⬆️ 从48%提升)
+   - `roseApp/cli/filter.py` - 当前40% (⬆️ 从34%提升)
 
-3. **增加边界情况测试**
+3. **真实bag测试贡献 🆕**
+   - 新增35个真实bag测试，100%通过
+   - 覆盖率从33%提升到36%
+   - 减少mock依赖，提高测试真实性
+   - 验证大文件处理能力(696MB)
+
+4. **增加边界情况测试**
    - 异常处理路径
    - 错误输入处理
    - 边界条件测试
