@@ -7,8 +7,8 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from roseApp.core.parser import IBagParser
-from roseApp.core.util import TimeUtil
+from roseApp.core.parser import IBagParser, ParserType, create_parser
+from roseApp.core.util import TimeUtil, get_preferred_parser_type
 
 class BagStatus(Enum):
     IDLE = "IDLE"
@@ -108,11 +108,26 @@ class Bag:
   
 class BagManager:
     """Manages multiple ROS bag files"""
-    def __init__(self, parser: IBagParser):
+    def __init__(self, parser: IBagParser = None):
+        """Initialize BagManager with optimal parser
+        
+        Args:
+            parser: Optional parser instance. If None, will auto-select the best available parser
+        """
         self.bags: Dict[str, Bag] = {}
         self.bag_mutate_callback = None
         self.selected_topics = set()
-        self._parser = parser
+        
+        # Auto-select best parser if none provided
+        if parser is None:
+            preferred_type = get_preferred_parser_type()
+            if preferred_type == 'rosbags':
+                self._parser = create_parser(ParserType.ROSBAGS)
+            else:
+                self._parser = create_parser(ParserType.PYTHON)
+        else:
+            self._parser = parser
+            
         self._processed_count = 0  # 添加处理计数器
         self.compression = CompressionType.NONE.value  # Default: no compression
 
@@ -198,119 +213,129 @@ class BagManager:
         """获取所有bag文件共有的topics
         
         Returns:
-            所有bag文件中都存在的topic集合
+            Set[str]: 所有bag文件共有的topics
         """
         if not self.bags:
             return set()
-            
-        # 获取第一个bag的topics作为基准
+        
+        # 获取第一个bag的topics作为起始点
         common_topics = set(next(iter(self.bags.values())).info.topics)
         
         # 与其他bag的topics取交集
-        for bag in self.bags.values():
-            common_topics &= bag.info.topics
-            
+        for bag in list(self.bags.values())[1:]:
+            common_topics = common_topics.intersection(bag.info.topics)
+        
         return common_topics
     
     def get_topic_summary(self) -> 'dict[str, int]':
-        """获取topic的出现次数统计
+        """获取所有topics的统计信息
         
         Returns:
-            topic到出现次数的映射
+            dict[str, int]: topic名称到出现次数的映射
         """
-        topic_summary = {}
-        common_topics = self.get_common_topics()
-        
+        topic_counts = {}
         for bag in self.bags.values():
             for topic in bag.info.topics:
-                # 只统计共有topics
-                if topic in common_topics:
-                    if topic in topic_summary:
-                        topic_summary[topic] += 1
-                    else:
-                        topic_summary[topic] = 1
-        return topic_summary
+                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        return topic_counts
     
     def get_selected_topics(self) -> Set[str]:
         return self.selected_topics
-
+    
     @publish
     def set_output_file(self, bag_path: Path , output_file: str = None) -> None:
-        """Set output file name for specific bag or all bags"""
-        self.bags[bag_path].output_file = Path(str(bag_path.parent / f"{output_file}"))
-
+        if output_file is None:
+            output_file = Path(str(bag_path.parent / f"{bag_path.stem}_out{bag_path.suffix}"))
+        self.bags[bag_path].output_file = output_file
+    
     @publish
     def set_time_range(self, bag_path: Path , time_range: Tuple[tuple, tuple]) -> None:
-        """Set time range for specific bag or all bags"""
         self.bags[bag_path].set_time_range(time_range)
     
     @publish
     def set_status(self, bag_path: Path, status: BagStatus) -> None:
-        """Set status for specific bag or all bags"""
         self.bags[bag_path].set_status(status)
-
+    
     @publish
     def set_time_elapsed(self, bag_path: Path, time_elapsed: float) -> None:
-        """Set time elapsed for specific bag or all bags"""
         self.bags[bag_path].set_time_elapsed(time_elapsed)
-
+    
     @publish
     def set_size_after_filter(self, bag_path: Path, size_after_filter: int) -> None:
-        """Set size after filter for specific bag or all bags"""
         self.bags[bag_path].set_size_after_filter(size_after_filter)
-
+    
     def get_processed_count(self) -> int:
-        """Get number of processed files"""
+        """获取已处理的bag数量"""
         return self._processed_count
-
+    
     def reset_processed_count(self) -> None:
-        """Reset the processed files counter"""
+        """重置已处理的bag数量"""
         self._processed_count = 0
     
     def set_compression_type(self, compression: str) -> None:
-        """Set the compression type for bag filtering
+        """设置压缩类型
         
         Args:
-            compression: Compression type ('none', 'bz2', 'lz4')
+            compression: 压缩类型 ('none', 'bz2', 'lz4')
         """
-        if compression not in [e.value for e in CompressionType]:
-            raise ValueError(f"Invalid compression type: {compression}. "
-                           f"Must be one of {[e.value for e in CompressionType]}")
+        from roseApp.core.util import validate_compression_type
+        
+        is_valid, error_message = validate_compression_type(compression)
+        if not is_valid:
+            raise ValueError(error_message)
+        
         self.compression = compression
     
     def get_compression_type(self) -> str:
-        """Get the current compression type
+        """获取当前压缩类型
         
         Returns:
-            Current compression type
+            str: 当前压缩类型
         """
         return self.compression
-
+    
     @publish
     def filter_bag(self, bag_path: Path, config: FilterConfig, output_file: Path) -> None:
+        """
+        Process a single bag file with the given configuration
+        
+        Args:
+            bag_path: Path to the input bag file
+            config: Filter configuration
+            output_file: Path to the output file
+        """
         try:
             process_start = time.time()
-            
-            # Use the compression from config if specified, otherwise use the BagManager's default
-            compression = config.compression if config.compression != 'none' else self.compression
             
             self._parser.filter_bag(
                 str(bag_path),
                 str(output_file),
                 config.topic_list,
                 config.time_range,
-                compression=compression
+                compression=config.compression
             )
             
             process_end = time.time()
-            # Convert to milliseconds
             time_elapsed = int((process_end - process_start) * 1000)
             
             self.set_time_elapsed(bag_path, time_elapsed)
             self.set_size_after_filter(bag_path, output_file.stat().st_size)
             self.set_status(bag_path, BagStatus.SUCCESS)
-            self._processed_count += 1  # 增加处理计数
             
         except Exception as e:
             self.set_status(bag_path, BagStatus.ERROR)
             raise Exception(f"Error processing bag {bag_path}: {str(e)}")
+    
+    def get_parser_type(self) -> str:
+        """获取当前使用的parser类型
+        
+        Returns:
+            str: parser类型名称
+        """
+        parser_class = self._parser.__class__.__name__
+        if parser_class == 'RosbagsBagParser':
+            return 'rosbags'
+        elif parser_class == 'BagParser':
+            return 'python'
+        else:
+            return 'unknown'

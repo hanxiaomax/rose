@@ -3,7 +3,7 @@ import time
 import typer
 from typing import List, Optional, Tuple
 from roseApp.core.parser import create_parser, ParserType
-from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
+from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error, get_preferred_parser_type
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
 from .theme import SUCCESS, INFO, ACCENT, PRIMARY
@@ -38,7 +38,16 @@ def filter_bag(
             typer.echo(f"Error: {error_message}", err=True)
             raise typer.Exit(code=1)
         
-        parser = create_parser(ParserType.PYTHON)
+        # Auto-select best parser
+        preferred_type = get_preferred_parser_type()
+        if preferred_type == 'rosbags':
+            parser = create_parser(ParserType.ROSBAGS)
+            console = Console()
+            console.print(f"[green]Using rosbags parser for enhanced performance and LZ4 support[/green]")
+        else:
+            parser = create_parser(ParserType.PYTHON)
+            console = Console()
+            console.print(f"[yellow]Using legacy rosbag parser (rosbags not available)[/yellow]")
         
         # Check if input is a file or directory
         if os.path.isfile(input_path):
@@ -389,7 +398,12 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
             try:
                 # Create parser instance for this thread if needed
                 if not hasattr(thread_local, 'parser'):
-                    thread_local.parser = create_parser(ParserType.PYTHON)
+                    # Use same parser type as main parser
+                    preferred_type = get_preferred_parser_type()
+                    if preferred_type == 'rosbags':
+                        thread_local.parser = create_parser(ParserType.ROSBAGS)
+                    else:
+                        thread_local.parser = create_parser(ParserType.PYTHON)
                 
                 # Initialize progress to 30% to indicate preparation complete
                 progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=30)

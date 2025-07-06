@@ -189,35 +189,62 @@ class TimeUtil:
             raise ValueError(f"Invalid time range format: {e}")
 
 def check_compression_availability():
-    """Check which compression types are available in rosbag
+    """Check which compression types are available in rosbag and rosbags
     
     Returns:
         dict: Dictionary mapping compression types to availability status
     """
     available_compressions = {
         'none': True,  # Always available
-        'bz2': True,   # Always available in most rosbag installations
+        'bz2': True,   # Always available in most installations
         'lz4': False   # Check if available
     }
     
+    # First check rosbags (preferred)
     try:
-        import rosbag
+        from rosbags.rosbag1 import Writer as Rosbag1Writer
+        from pathlib import Path
+        import tempfile
         
-        # Test LZ4 by trying to create a bag with LZ4 compression
-        test_path = "/tmp/test_lz4_availability.bag"
+        # Test LZ4 with rosbags
         try:
-            with rosbag.Bag(test_path, 'w', compression='lz4') as test_bag:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                test_path = Path(temp_dir) / "test_lz4_availability.bag"
+                writer = Rosbag1Writer(test_path)
+                
+                # Try to set LZ4 compression
+                writer.set_compression(writer.CompressionFormat.LZ4)
+                
+                # Test that we can open and close the writer
+                writer.open()
+                writer.close()
+                
+                # If we reach here, LZ4 is available
                 available_compressions['lz4'] = True
-            # Clean up
-            if os.path.exists(test_path):
-                os.unlink(test_path)
-        except (ValueError, Exception):
-            # LZ4 not available
+        except Exception:
+            # LZ4 not available in rosbags
             available_compressions['lz4'] = False
             
     except ImportError:
-        # rosbag not available
-        pass
+        # rosbags not available, fall back to legacy rosbag
+        try:
+            import rosbag
+            
+            # Test LZ4 with legacy rosbag
+            try:
+                test_path = "/tmp/test_lz4_availability.bag"
+                with rosbag.Bag(test_path, 'w', compression='lz4') as test_bag:
+                    available_compressions['lz4'] = True
+                # Clean up
+                if os.path.exists(test_path):
+                    os.unlink(test_path)
+            except (ValueError, Exception):
+                # LZ4 not available
+                available_compressions['lz4'] = False
+                
+        except ImportError:
+            # Neither rosbags nor rosbag available
+            pass
     
     return available_compressions
 
@@ -248,3 +275,28 @@ def validate_compression_type(compression: str) -> Tuple[bool, str]:
         return False, f"LZ4 compression is not available in this environment. Available options: {', '.join(available)}"
     
     return False, f"Invalid compression type '{compression}'. Available options: {', '.join(available)}"
+
+def check_rosbags_availability():
+    """Check if rosbags library is available and functional
+    
+    Returns:
+        bool: True if rosbags is available and functional
+    """
+    try:
+        from rosbags.rosbag1 import Reader as Rosbag1Reader, Writer as Rosbag1Writer
+        from rosbags.rosbag2 import Reader, Writer
+        from rosbags.typesys import get_types_from_msg, register_types
+        return True
+    except ImportError:
+        return False
+
+def get_preferred_parser_type():
+    """Get the preferred parser type based on available libraries
+    
+    Returns:
+        str: Preferred parser type ('rosbags' or 'python')
+    """
+    if check_rosbags_availability():
+        return 'rosbags'
+    else:
+        return 'python'

@@ -12,7 +12,7 @@ import concurrent.futures
 import threading
 import queue
 from ..core.parser import create_parser, ParserType
-from ..core.util import get_logger
+from ..core.util import get_logger, get_preferred_parser_type
 from .theme import style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
@@ -30,7 +30,14 @@ app = typer.Typer(help="ROS Bag Filter Tool")
 class CliTool:
     def __init__(self):
         self.console = Console()
-        self.parser = create_parser(ParserType.PYTHON)
+        # Auto-select best parser
+        preferred_type = get_preferred_parser_type()
+        if preferred_type == 'rosbags':
+            self.parser = create_parser(ParserType.ROSBAGS)
+            self.console.print(f"[green]Using rosbags parser for enhanced performance and LZ4 support[/green]")
+        else:
+            self.parser = create_parser(ParserType.PYTHON)
+            self.console.print(f"[yellow]Using legacy rosbag parser (rosbags not available)[/yellow]")
         self.topics = None
         self.connections = None
         self.time_range = None
@@ -400,7 +407,12 @@ class CliTool:
                     # Process file with the selected whitelist
                     # We need to create a new parser instance for each thread
                     if not hasattr(thread_local, 'parser'):
-                        thread_local.parser = create_parser(ParserType.PYTHON)
+                        # Use same parser type as main CLI tool
+                        preferred_type = get_preferred_parser_type()
+                        if preferred_type == 'rosbags':
+                            thread_local.parser = create_parser(ParserType.ROSBAGS)
+                        else:
+                            thread_local.parser = create_parser(ParserType.PYTHON)
                     
                     # Initialize progress to 30% to indicate preparation complete
                     progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=0)
