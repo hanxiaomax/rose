@@ -283,11 +283,18 @@ def check_rosbags_availability():
         bool: True if rosbags is available and functional
     """
     try:
-        from rosbags.rosbag1 import Reader as Rosbag1Reader, Writer as Rosbag1Writer
-        from rosbags.rosbag2 import Reader, Writer
+        from rosbags.highlevel import AnyReader
+        from rosbags.rosbag1 import Writer as Rosbag1Writer
         from rosbags.typesys import get_types_from_msg, register_types
+        
+        # Test basic functionality
+        _logger.debug("RosbagsBagParser (AnyReader/Rosbag1Writer) is available and functional")
         return True
-    except ImportError:
+    except ImportError as e:
+        _logger.warning(f"RosbagsBagParser not available: {e}")
+        return False
+    except Exception as e:
+        _logger.warning(f"RosbagsBagParser check failed: {e}")
         return False
 
 def get_preferred_parser_type():
@@ -297,6 +304,8 @@ def get_preferred_parser_type():
         str: Preferred parser type ('rosbags' or 'python')
     """
     if check_rosbags_availability():
+        _logger.debug("Using enhanced RosbagsBagParser with AnyReader/Rosbag1Writer for optimal performance")
         return 'rosbags'
     else:
+        _logger.warning("Falling back to legacy rosbag parser - consider installing rosbags library")
         return 'python'
