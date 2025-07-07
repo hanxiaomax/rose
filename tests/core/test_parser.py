@@ -199,6 +199,63 @@ class TestParserCore:
         # Verify the output file has content
         assert os.path.getsize(output_path) > 0
     
+    def test_get_topic_sizes(self, demo_bag_path):
+        """Test that get_topic_sizes returns size information for all topics"""
+        parser = RosbagsBagParser()
+        topic_sizes = parser.get_topic_sizes(demo_bag_path)
+        
+        # Verify we get a dictionary with topic names as keys
+        assert isinstance(topic_sizes, dict)
+        assert len(topic_sizes) > 0
+        
+        # Verify all sizes are non-negative integers
+        for topic, size in topic_sizes.items():
+            assert isinstance(size, int)
+            assert size >= 0
+    
+    def test_get_topic_stats(self, demo_bag_path):
+        """Test that get_topic_stats returns comprehensive statistics"""
+        parser = RosbagsBagParser()
+        topic_stats = parser.get_topic_stats(demo_bag_path)
+        
+        # Verify we get a dictionary with topic names as keys
+        assert isinstance(topic_stats, dict)
+        assert len(topic_stats) > 0
+        
+        # Verify each topic has the expected statistics
+        for topic, stats in topic_stats.items():
+            assert isinstance(stats, dict)
+            assert "count" in stats
+            assert "size" in stats
+            assert "avg_size" in stats
+            
+            # Verify stats are non-negative integers
+            assert isinstance(stats['count'], int)
+            assert isinstance(stats['size'], int)
+            assert isinstance(stats['avg_size'], int)
+            assert stats['count'] >= 0
+            assert stats['size'] >= 0
+            assert stats['avg_size'] >= 0
+            
+            # Verify avg_size calculation is correct
+            if stats['count'] > 0:
+                expected_avg = stats['size'] // stats['count']
+                assert stats['avg_size'] == expected_avg
+    
+    def test_topic_stats_consistency(self, demo_bag_path):
+        """Test that topic stats are consistent with individual methods"""
+        parser = RosbagsBagParser()
+        
+        # Get stats from all methods
+        topic_stats = parser.get_topic_stats(demo_bag_path)
+        message_counts = parser.get_message_counts(demo_bag_path)
+        topic_sizes = parser.get_topic_sizes(demo_bag_path)
+        
+        # Verify consistency between methods
+        for topic in topic_stats:
+            assert topic_stats[topic]['count'] == message_counts[topic], f"Count mismatch for topic {topic}"
+            assert topic_stats[topic]['size'] == topic_sizes[topic], f"Size mismatch for topic {topic}"
+    
     def test_parser_load_bag_api(self, demo_bag_path):
         """Test the load_bag API with enhanced parser"""
         parser = RosbagsBagParser()
@@ -361,4 +418,6 @@ class TestParserCore:
             # Check excluded topics are not present
             for topic in excluded_topics:
                 assert topic not in filtered_topics, f"Excluded topic {topic} found in filtered bag"
-                assert topic not in filtered_counts, f"Excluded topic {topic} found in filtered counts" 
+                assert topic not in filtered_counts, f"Excluded topic {topic} found in filtered counts"
+    
+ 

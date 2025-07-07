@@ -111,6 +111,35 @@ class IBagParser(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_topic_sizes(self, bag_path: str) -> Dict[str, int]:
+        """
+        Get total size in bytes for each topic in the bag file
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            Dictionary mapping topic names to total size in bytes
+        """
+        pass
+
+    @abstractmethod
+    def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
+        """
+        Get comprehensive statistics for each topic (count and size) in the bag file
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            Dictionary mapping topic names to stats dict containing:
+            - count: number of messages
+            - size: total size in bytes
+            - avg_size: average message size in bytes
+        """
+        pass
+
 
 class RosbagsBagParser(IBagParser):
     """High-performance rosbags implementation using AnyReader/Rosbag1Writer"""
@@ -323,12 +352,40 @@ class RosbagsBagParser(IBagParser):
         try:
             topics, connections, (start_time, end_time) = self.load_bag(bag_path)
             
-            result = [f"\nTopics in {bag_path}:"]
-            result.append("{:<40} {:<30}".format("Topic", "Message Type"))
-            result.append("-" * 80)
-            for topic in topics:
-                result.append("{:<40} {:<30}".format(topic, connections[topic]))
+            # Get topic statistics
+            topic_stats = self.get_topic_stats(bag_path)
             
+            # Helper function to format size
+            def format_size(size_bytes: int) -> str:
+                """Format size in bytes to human readable format"""
+                for unit in ['B', 'KB', 'MB', 'GB']:
+                    if size_bytes < 1024:
+                        return f"{size_bytes:.1f}{unit}"
+                    size_bytes /= 1024
+                return f"{size_bytes:.1f}TB"
+            
+            result = [f"\nTopics in {bag_path}:"]
+            result.append("{:<35} {:<35} {:<10} {:<10}".format("Topic", "Message Type", "Count", "Size"))
+            result.append("-" * 90)
+            
+            for topic in topics:
+                stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+                count = stats['count']
+                size = stats['size']
+                
+                result.append("{:<35} {:<35} {:<10} {:<10}".format(
+                    topic[:33], 
+                    connections[topic][:33], 
+                    count, 
+                    format_size(size)
+                ))
+            
+            # Calculate totals
+            total_count = sum(stats['count'] for stats in topic_stats.values())
+            total_size = sum(stats['size'] for stats in topic_stats.values())
+            
+            result.append("-" * 90)
+            result.append(f"Total: {len(topics)} topics, {total_count} messages, {format_size(total_size)}")
             result.append(f"\nTime range: {TimeUtil.to_datetime(start_time)} - {TimeUtil.to_datetime(end_time)}")
             return "\n".join(result)
             
@@ -352,6 +409,51 @@ class RosbagsBagParser(IBagParser):
         except Exception as e:
             _logger.error(f"Error getting message counts with AnyReader: {e}")
             raise Exception(f"Error getting message counts: {e}")
+
+    def get_topic_sizes(self, bag_path: str) -> Dict[str, int]:
+        """Get total size in bytes for each topic in the bag file using AnyReader"""
+        try:
+            topic_sizes = {}
+            
+            with AnyReader([Path(bag_path)]) as reader:
+                # Calculate total size for each topic
+                for connection in reader.connections:
+                    total_size = 0
+                    for _, _, rawdata in reader.messages([connection]):
+                        total_size += len(rawdata)
+                    topic_sizes[connection.topic] = total_size
+            
+            return topic_sizes
+                
+        except Exception as e:
+            _logger.error(f"Error getting topic sizes with AnyReader: {e}")
+            raise Exception(f"Error getting topic sizes: {e}")
+
+    def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
+        """Get comprehensive statistics for each topic (count and size) in the bag file"""
+        try:
+            topic_stats = {}
+            
+            with AnyReader([Path(bag_path)]) as reader:
+                # Get statistics for each topic
+                for connection in reader.connections:
+                    count = 0
+                    total_size = 0
+                    for _, _, rawdata in reader.messages([connection]):
+                        count += 1
+                        total_size += len(rawdata)
+                    
+                    topic_stats[connection.topic] = {
+                        'count': count,
+                        'size': total_size,
+                        'avg_size': total_size // count if count > 0 else 0
+                    }
+            
+            return topic_stats
+                
+        except Exception as e:
+            _logger.error(f"Error getting topic stats with AnyReader: {e}")
+            raise Exception(f"Error getting topic stats: {e}")
 
 
 class BagParser(IBagParser):
@@ -504,12 +606,40 @@ class BagParser(IBagParser):
         try:
             topics, connections, (start_time, end_time) = self.load_bag(bag_path)
             
-            result = [f"\nTopics in {bag_path}:"]
-            result.append("{:<40} {:<30}".format("Topic", "Message Type"))
-            result.append("-" * 80)
-            for topic in topics:
-                result.append("{:<40} {:<30}".format(topic, connections[topic]))
+            # Get topic statistics
+            topic_stats = self.get_topic_stats(bag_path)
             
+            # Helper function to format size
+            def format_size(size_bytes: int) -> str:
+                """Format size in bytes to human readable format"""
+                for unit in ['B', 'KB', 'MB', 'GB']:
+                    if size_bytes < 1024:
+                        return f"{size_bytes:.1f}{unit}"
+                    size_bytes /= 1024
+                return f"{size_bytes:.1f}TB"
+            
+            result = [f"\nTopics in {bag_path}:"]
+            result.append("{:<35} {:<35} {:<10} {:<10}".format("Topic", "Message Type", "Count", "Size"))
+            result.append("-" * 90)
+            
+            for topic in topics:
+                stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+                count = stats['count']
+                size = stats['size']
+                
+                result.append("{:<35} {:<35} {:<10} {:<10}".format(
+                    topic[:33], 
+                    connections[topic][:33], 
+                    count, 
+                    format_size(size)
+                ))
+            
+            # Calculate totals
+            total_count = sum(stats['count'] for stats in topic_stats.values())
+            total_size = sum(stats['size'] for stats in topic_stats.values())
+            
+            result.append("-" * 90)
+            result.append(f"Total: {len(topics)} topics, {total_count} messages, {format_size(total_size)}")
             result.append(f"\nTime range: {TimeUtil.to_datetime(start_time)} - {TimeUtil.to_datetime(end_time)}")
             return "\n".join(result)
             
@@ -529,6 +659,52 @@ class BagParser(IBagParser):
         except Exception as e:
             _logger.error(f"Error getting message counts: {e}")
             raise Exception(f"Error getting message counts: {e}")
+    
+    def get_topic_sizes(self, bag_path: str) -> Dict[str, int]:
+        """Get total size in bytes for each topic in the bag file"""
+        try:
+            import rosbag
+            
+            topic_sizes = {}
+            with rosbag.Bag(bag_path) as bag:
+                for topic, msg, _ in bag.read_messages():
+                    if topic not in topic_sizes:
+                        topic_sizes[topic] = 0
+                    # Estimate message size (this is not exact but reasonable approximation)
+                    topic_sizes[topic] += len(str(msg))
+            
+            return topic_sizes
+                
+        except Exception as e:
+            _logger.error(f"Error getting topic sizes: {e}")
+            raise Exception(f"Error getting topic sizes: {e}")
+    
+    def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
+        """Get comprehensive statistics for each topic (count and size) in the bag file"""
+        try:
+            import rosbag
+            
+            topic_stats = {}
+            with rosbag.Bag(bag_path) as bag:
+                for topic, msg, _ in bag.read_messages():
+                    if topic not in topic_stats:
+                        topic_stats[topic] = {'count': 0, 'size': 0}
+                    
+                    topic_stats[topic]['count'] += 1
+                    # Estimate message size (this is not exact but reasonable approximation)
+                    topic_stats[topic]['size'] += len(str(msg))
+                
+                # Calculate average size
+                for topic in topic_stats:
+                    count = topic_stats[topic]['count']
+                    size = topic_stats[topic]['size']
+                    topic_stats[topic]['avg_size'] = size // count if count > 0 else 0
+            
+            return topic_stats
+                
+        except Exception as e:
+            _logger.error(f"Error getting topic stats: {e}")
+            raise Exception(f"Error getting topic stats: {e}")
 
 
 def create_parser(parser_type: ParserType = ParserType.ROSBAGS) -> IBagParser:

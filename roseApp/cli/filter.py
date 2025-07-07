@@ -113,8 +113,11 @@ def filter_bag(
 
 def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, dry_run: bool):
     """Process a single bag file"""
-    # Get all topics from input bag
+    # Get connections info
     all_topics, connections, _ = parser.load_bag(input_bag)
+    
+    # Get topic statistics (count and size)
+    topic_stats = parser.get_topic_stats(input_bag)
     
     # Get whitelist topics from file or command line arguments
     whitelist_topics = set()
@@ -132,6 +135,15 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
         typer.echo("Error: No topics specified. Use --whitelist or --topics to specify", err=True)
         raise typer.Exit(code=1)
         
+    # Helper function to format size
+    def format_size(size_bytes: int) -> str:
+        """Format size in bytes to human readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f}{unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f}TB"
+    
     # In dry run mode, show what would be done
     if dry_run:
         typer.secho("Dry run - no actual modifications will be made", fg=typer.colors.YELLOW, bold=True)
@@ -139,20 +151,35 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
         
         # Show all topics and their selection status
         typer.echo("\nTopic selection:")
-        typer.echo("─" * 80)
+        typer.echo("─" * 120)
+        typer.echo(f"{'Status':<6} {'Topic':<35} {'Message Type':<35} {'Count':<10} {'Size':<10}")
+        typer.echo("─" * 120)
+        
         for topic in sorted(all_topics):
             is_selected = topic in whitelist_topics
             status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
             topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
             msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
-            topic_str = f"{topic:<40}"
-            typer.echo(f"  {status_icon} {typer.style(topic_str, fg=topic_style)} "
-                      f"{typer.style(connections[topic], fg=msg_type_style)}")
+            
+            # Get topic statistics
+            stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+            count = stats['count']
+            size = stats['size']
+            
+            typer.echo(f"{status_icon:<6} {typer.style(topic[:33], fg=topic_style):<35} "
+                      f"{typer.style(connections[topic][:33], fg=msg_type_style):<35} "
+                      f"{typer.style(str(count), fg=typer.colors.CYAN):<10} "
+                      f"{typer.style(format_size(size), fg=typer.colors.YELLOW):<10}")
         
         selected_count = sum(1 for topic in all_topics if topic in whitelist_topics)
-        typer.echo("─" * 80)
+        selected_size = sum(topic_stats.get(topic, {'size': 0})['size'] for topic in all_topics if topic in whitelist_topics)
+        total_size = sum(topic_stats.get(topic, {'size': 0})['size'] for topic in all_topics)
+        
+        typer.echo("─" * 120)
         typer.echo(f"Selected: {typer.style(str(selected_count), fg=typer.colors.GREEN)} / "
-                  f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics")
+                  f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics, "
+                  f"{typer.style(format_size(selected_size), fg=typer.colors.GREEN)} / "
+                  f"{typer.style(format_size(total_size), fg=typer.colors.WHITE)} data")
         return
     
     # Print filtering information
@@ -162,23 +189,42 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
     
     # Show all topics and their selection status
     typer.echo("\nTopic selection:")
-    typer.echo("─" * 80)
+    typer.echo("─" * 120)
+    typer.echo(f"{'Status':<6} {'Topic':<35} {'Message Type':<35} {'Count':<10} {'Size':<10}")
+    typer.echo("─" * 120)
+    
     selected_count = 0
+    selected_size = 0
+    total_size = 0
+    
     for topic in sorted(all_topics):
         is_selected = topic in whitelist_topics
         if is_selected:
             selected_count += 1
+            selected_size += topic_stats.get(topic, {'size': 0})['size']
+        
+        total_size += topic_stats.get(topic, {'size': 0})['size']
+        
         status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
         topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
         msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
-        topic_str = f"{topic:<40}"
-        typer.echo(f"  {status_icon} {typer.style(topic_str, fg=topic_style)} "
-                  f"{typer.style(connections[topic], fg=msg_type_style)}")
+        
+        # Get topic statistics
+        stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+        count = stats['count']
+        size = stats['size']
+        
+        typer.echo(f"{status_icon:<6} {typer.style(topic[:33], fg=topic_style):<35} "
+                  f"{typer.style(connections[topic][:33], fg=msg_type_style):<35} "
+                  f"{typer.style(str(count), fg=typer.colors.CYAN):<10} "
+                  f"{typer.style(format_size(size), fg=typer.colors.YELLOW):<10}")
     
     # Show selection summary
-    typer.echo("─" * 80)
+    typer.echo("─" * 120)
     typer.echo(f"Selected: {typer.style(str(selected_count), fg=typer.colors.GREEN)} / "
-              f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics")
+              f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics, "
+              f"{typer.style(format_size(selected_size), fg=typer.colors.GREEN)} / "
+              f"{typer.style(format_size(total_size), fg=typer.colors.WHITE)} data")
     
 
     # Use progress bar for filtering
