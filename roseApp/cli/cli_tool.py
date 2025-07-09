@@ -34,10 +34,12 @@ class CliTool:
         preferred_type = get_preferred_parser_type()
         if preferred_type == 'rosbags':
             self.parser = create_parser(ParserType.ROSBAGS)
-            self.console.print(f"[green]Using rosbags parser for enhanced performance and LZ4 support[/green]")
+            # Show parser info only when explicitly requested or in debug mode
+            logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
         else:
             self.parser = create_parser(ParserType.PYTHON)
-            self.console.print(f"[yellow]Using legacy rosbag parser (rosbags not available)[/yellow]")
+            # Show parser info only when explicitly requested or in debug mode
+            logger.debug("Using legacy rosbag parser (rosbags not available)")
         self.topics = None
         self.connections = None
         self.time_range = None

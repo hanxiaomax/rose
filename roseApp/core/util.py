@@ -307,5 +307,6 @@ def get_preferred_parser_type():
         _logger.debug("Using enhanced RosbagsBagParser with AnyReader/Rosbag1Writer for optimal performance")
         return 'rosbags'
     else:
-        _logger.warning("Falling back to legacy rosbag parser - consider installing rosbags library")
+        # Only show warning in debug mode to avoid noise during command completion
+        _logger.debug("Falling back to legacy rosbag parser - consider installing rosbags library")
         return 'python'

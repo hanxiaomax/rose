@@ -53,11 +53,13 @@ def filter_bag(
         if preferred_type == 'rosbags':
             parser = create_parser(ParserType.ROSBAGS)
             console = Console()
-            console.print(f"[green]Using rosbags parser for enhanced performance and LZ4 support[/green]")
+            # Show parser info only when explicitly requested or in debug mode
+            logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
         else:
             parser = create_parser(ParserType.PYTHON)
             console = Console()
-            console.print(f"[yellow]Using legacy rosbag parser (rosbags not available)[/yellow]")
+            # Show parser info only when explicitly requested or in debug mode
+            logger.debug("Using legacy rosbag parser (rosbags not available)")
         
         # Check if input is a file or directory
         if os.path.isfile(input_path):

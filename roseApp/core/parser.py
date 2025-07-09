@@ -147,7 +147,8 @@ class RosbagsBagParser(IBagParser):
     def __init__(self):
         """Initialize enhanced rosbags parser"""
         self._registered_types = set()
-        _logger.info("Initialized RosbagsBagParser with enhanced performance features")
+        # Use debug level to avoid noise during command completion
+        _logger.debug("Initialized RosbagsBagParser with enhanced performance features")
     
     def load_whitelist(self, whitelist_path: str) -> List[str]:
         """Load topics from whitelist file"""
@@ -461,7 +462,8 @@ class BagParser(IBagParser):
     
     def __init__(self):
         """Initialize legacy parser"""
-        _logger.warning("Using legacy rosbag parser. Consider migrating to RosbagsBagParser for better performance.")
+        # Use debug level to avoid noise during command completion and normal usage
+        _logger.debug("Using legacy rosbag parser. Consider migrating to RosbagsBagParser for better performance.")
     
     def load_whitelist(self, whitelist_path: str) -> List[str]:
         with open(whitelist_path) as f:
