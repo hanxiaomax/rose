@@ -189,7 +189,7 @@ class TimeUtil:
             raise ValueError(f"Invalid time range format: {e}")
 
 def check_compression_availability():
-    """Check which compression types are available in rosbag and rosbags
+    """Check which compression types are available in rosbags
     
     Returns:
         dict: Dictionary mapping compression types to availability status
@@ -200,7 +200,7 @@ def check_compression_availability():
         'lz4': False   # Check if available
     }
     
-    # First check rosbags (preferred)
+    # Check rosbags for LZ4 support
     try:
         from rosbags.rosbag1 import Writer as Rosbag1Writer
         from pathlib import Path
@@ -226,25 +226,8 @@ def check_compression_availability():
             available_compressions['lz4'] = False
             
     except ImportError:
-        # rosbags not available, fall back to legacy rosbag
-        try:
-            import rosbag
-            
-            # Test LZ4 with legacy rosbag
-            try:
-                test_path = "/tmp/test_lz4_availability.bag"
-                with rosbag.Bag(test_path, 'w', compression='lz4') as test_bag:
-                    available_compressions['lz4'] = True
-                # Clean up
-                if os.path.exists(test_path):
-                    os.unlink(test_path)
-            except (ValueError, Exception):
-                # LZ4 not available
-                available_compressions['lz4'] = False
-                
-        except ImportError:
-            # Neither rosbags nor rosbag available
-            pass
+        # rosbags not available (this shouldn't happen in our use case)
+        available_compressions['lz4'] = False
     
     return available_compressions
 
@@ -276,37 +259,11 @@ def validate_compression_type(compression: str) -> Tuple[bool, str]:
     
     return False, f"Invalid compression type '{compression}'. Available options: {', '.join(available)}"
 
-def check_rosbags_availability():
-    """Check if rosbags library is available and functional
-    
-    Returns:
-        bool: True if rosbags is available and functional
-    """
-    try:
-        from rosbags.highlevel import AnyReader
-        from rosbags.rosbag1 import Writer as Rosbag1Writer
-        from rosbags.typesys import get_types_from_msg, register_types
-        
-        # Test basic functionality
-        _logger.debug("RosbagsBagParser (AnyReader/Rosbag1Writer) is available and functional")
-        return True
-    except ImportError as e:
-        _logger.warning(f"RosbagsBagParser not available: {e}")
-        return False
-    except Exception as e:
-        _logger.warning(f"RosbagsBagParser check failed: {e}")
-        return False
-
 def get_preferred_parser_type():
-    """Get the preferred parser type based on available libraries
+    """Get the preferred parser type (always 'rosbags' since legacy parser is removed)
     
     Returns:
-        str: Preferred parser type ('rosbags' or 'python')
+        str: Parser type ('rosbags')
     """
-    if check_rosbags_availability():
-        _logger.debug("Using enhanced RosbagsBagParser with AnyReader/Rosbag1Writer for optimal performance")
-        return 'rosbags'
-    else:
-        # Only show warning in debug mode to avoid noise during command completion
-        _logger.debug("Falling back to legacy rosbag parser - consider installing rosbags library")
-        return 'python'
+    _logger.debug("Using enhanced RosbagsBagParser with AnyReader/Rosbag1Writer for optimal performance")
+    return 'rosbags'

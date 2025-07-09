@@ -118,13 +118,9 @@ class BagManager:
         self.bag_mutate_callback = None
         self.selected_topics = set()
         
-        # Auto-select best parser if none provided
+        # Auto-select best parser if none provided (always RosbagsBagParser)
         if parser is None:
-            preferred_type = get_preferred_parser_type()
-            if preferred_type == 'rosbags':
-                self._parser = create_parser(ParserType.ROSBAGS)
-            else:
-                self._parser = create_parser(ParserType.PYTHON)
+            self._parser = create_parser(ParserType.ROSBAGS)
         else:
             self._parser = parser
             
@@ -341,12 +337,10 @@ class BagManager:
         """获取当前使用的parser类型
         
         Returns:
-            str: parser类型名称
+            str: parser类型名称 (always 'rosbags')
         """
         parser_class = self._parser.__class__.__name__
         if parser_class == 'RosbagsBagParser':
             return 'rosbags'
-        elif parser_class == 'BagParser':
-            return 'python'
         else:
             return 'unknown'

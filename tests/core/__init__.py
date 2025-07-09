@@ -1,11 +1,7 @@
 """
-Core functionality tests for Rose ROS Bag Tool
+Core package tests.
 
-Tests the core conversion and filtering logic including:
-- Parser implementations (RosbagsBagParser, BagParser)
-- Topic filtering functionality
-- Time range filtering
-- Compression handling
-- Progress callbacks
-- Data integrity validation
+- Parser implementations (RosbagsBagParser only)
+- Bag management functionality
+- Data validation and processing
 """ 

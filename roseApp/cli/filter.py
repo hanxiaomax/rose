@@ -2,7 +2,7 @@ import os
 import time
 import typer
 from typing import List, Optional, Tuple, Dict, Any
-from roseApp.core.parser import create_parser, ParserType, FileExistsError
+from roseApp.core.parser import create_parser, ParserType, IBagParser
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error, get_preferred_parser_type
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
@@ -33,8 +33,18 @@ def filter_bag(
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort topics by: topic, count, size (default: size)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without actually doing it")
 ):
-    """Filter topics from one or more ROS bag files"""
+    """Filter ROS bag files by topics"""
     try:
+        # Initialize logging
+        set_app_mode(AppMode.CLI)
+        logger = get_logger("filter")
+        
+        # Auto-select best parser (always RosbagsBagParser)
+        parser = create_parser(ParserType.ROSBAGS)
+        console = Console()
+        # Show parser info only when explicitly requested or in debug mode
+        logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
+        
         # Validate compression type
         from roseApp.core.util import validate_compression_type
         is_valid, error_message = validate_compression_type(compression)
@@ -47,19 +57,6 @@ def filter_bag(
         if sort_by not in valid_sort_options:
             typer.echo(f"Error: Invalid sort option '{sort_by}'. Valid options: {', '.join(valid_sort_options)}", err=True)
             raise typer.Exit(code=1)
-        
-        # Auto-select best parser
-        preferred_type = get_preferred_parser_type()
-        if preferred_type == 'rosbags':
-            parser = create_parser(ParserType.ROSBAGS)
-            console = Console()
-            # Show parser info only when explicitly requested or in debug mode
-            logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
-        else:
-            parser = create_parser(ParserType.PYTHON)
-            console = Console()
-            # Show parser info only when explicitly requested or in debug mode
-            logger.debug("Using legacy rosbag parser (rosbags not available)")
         
         # Check if input is a file or directory
         if os.path.isfile(input_path):
@@ -598,12 +595,8 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
             try:
                 # Create parser instance for this thread if needed
                 if not hasattr(thread_local, 'parser'):
-                    # Use same parser type as main parser
-                    preferred_type = get_preferred_parser_type()
-                    if preferred_type == 'rosbags':
-                        thread_local.parser = create_parser(ParserType.ROSBAGS)
-                    else:
-                        thread_local.parser = create_parser(ParserType.PYTHON)
+                    # Use RosbagsBagParser for all threads
+                    thread_local.parser = create_parser(ParserType.ROSBAGS)
                 
                 # Initialize progress to 30% to indicate preparation complete
                 progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=30)
