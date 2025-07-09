@@ -1,11 +1,14 @@
 import os
 import time
 import typer
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from roseApp.core.parser import create_parser, ParserType, FileExistsError
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error, get_preferred_parser_type
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+from rich import box
 from .theme import SUCCESS, INFO, ACCENT, PRIMARY
 from .util import LoadingAnimation
 
@@ -27,6 +30,7 @@ def filter_bag(
     compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4 (default: none)"),
     parallel: bool = typer.Option(False, "--parallel", "-p", help="Process files in parallel when input is a directory"),
     workers: Optional[int] = typer.Option(None, "--workers", help="Number of parallel workers (default: CPU count - 2)"),
+    sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort topics by: topic, count, size (default: size)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without actually doing it")
 ):
     """Filter topics from one or more ROS bag files"""
@@ -36,6 +40,12 @@ def filter_bag(
         is_valid, error_message = validate_compression_type(compression)
         if not is_valid:
             typer.echo(f"Error: {error_message}", err=True)
+            raise typer.Exit(code=1)
+        
+        # Validate sort_by parameter
+        valid_sort_options = ["topic", "count", "size"]
+        if sort_by not in valid_sort_options:
+            typer.echo(f"Error: Invalid sort option '{sort_by}'. Valid options: {', '.join(valid_sort_options)}", err=True)
             raise typer.Exit(code=1)
         
         # Auto-select best parser
@@ -80,7 +90,7 @@ def filter_bag(
                     output_bag = os.path.join(output_dir, os.path.basename(os.path.splitext(input_path)[0]) + "_filtered.bag")
                 
             # Process single file
-            _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, dry_run)
+            _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, sort_by, dry_run)
                 
         else:
             # Directory processing
@@ -103,7 +113,7 @@ def filter_bag(
             os.makedirs(output_dir, exist_ok=True)
                 
             # Process directory
-            _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, dry_run)
+            _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, sort_by, dry_run)
             
     except Exception as e:
         log_cli_error(e)
@@ -111,7 +121,147 @@ def filter_bag(
         raise typer.Exit(code=1)
 
 
-def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, dry_run: bool):
+def create_responsive_topic_table(all_topics: List[str], connections: Dict[str, str], topic_stats: Dict[str, Dict[str, Any]], 
+                                  whitelist_topics: set, console: Console, sort_by: str = "size") -> Tuple[Table, int, int, int]:
+    """Create a responsive table for topic display based on terminal width"""
+    # Helper function to format size
+    def format_size(size_bytes: int) -> str:
+        """Format size in bytes to human readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f}{unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f}TB"
+    
+    # Sort topics based on sort_by parameter
+    def sort_topics(topics: List[str]) -> List[str]:
+        if sort_by == "topic":
+            return sorted(topics)
+        elif sort_by == "count":
+            return sorted(topics, key=lambda t: topic_stats.get(t, {'count': 0})['count'], reverse=True)
+        elif sort_by == "size":
+            return sorted(topics, key=lambda t: topic_stats.get(t, {'size': 0})['size'], reverse=True)
+        else:
+            # Default to size sorting if invalid sort_by
+            return sorted(topics, key=lambda t: topic_stats.get(t, {'size': 0})['size'], reverse=True)
+    
+    # Get terminal width for responsive layout
+    terminal_width = console.width
+    
+    # Create table with responsive columns
+    table = Table(box=box.SIMPLE, title="Topic Selection", title_style="bold cyan")
+    
+    # Calculate column widths based on terminal width (without Message Type column)
+    status_width = 6
+    count_width = 10
+    size_width = 10
+    fixed_width = status_width + count_width + size_width + 6  # 6 for borders and padding
+    
+    # Available width for topic column
+    available_width = terminal_width - fixed_width
+    topic_width = max(20, available_width)  # Use all available width for topic column
+        
+    # Add columns with responsive widths
+    table.add_column("Status", justify="center", style="bold", width=status_width)
+    table.add_column("Topic", justify="left", style="bold", width=topic_width, 
+                    overflow="ellipsis", no_wrap=False)
+    table.add_column("Count", justify="right", style="cyan", width=count_width)
+    table.add_column("Size", justify="right", style="yellow", width=size_width)
+    
+    # Calculate summary statistics
+    selected_count = 0
+    selected_size = 0
+    total_size = 0
+    
+    # Sort topics
+    sorted_topics = sort_topics(all_topics)
+    
+    # Add rows
+    for topic in sorted_topics:
+        is_selected = topic in whitelist_topics
+        if is_selected:
+            selected_count += 1
+            selected_size += topic_stats.get(topic, {'size': 0})['size']
+        
+        total_size += topic_stats.get(topic, {'size': 0})['size']
+        
+        # Create status icon
+        status_icon = Text("✓", style="green") if is_selected else Text("○", style="yellow")
+        
+        # Create topic text with appropriate styling and word wrapping
+        topic_text = Text(topic, style="green" if is_selected else "white")
+        
+        # Get topic statistics
+        stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+        count = stats['count']
+        size = stats['size']
+        
+        # Format count and size
+        count_text = Text(f"{count:,}", style="cyan")
+        size_text = Text(format_size(size), style="yellow")
+        
+        # Add row to table
+        table.add_row(status_icon, topic_text, count_text, size_text)
+    
+    return table, selected_count, selected_size, total_size
+
+
+def create_test_report_table(test_results: List[Dict[str, Any]], console: Console) -> Table:
+    """Create a responsive table for test report display with three columns"""
+    # Get terminal width for responsive layout
+    terminal_width = console.width
+    
+    # Create table with responsive columns
+    table = Table(box=box.SIMPLE, title="Test Report", title_style="bold cyan")
+    
+    # Calculate column widths based on terminal width
+    test_item_width = 25
+    status_width = 10
+    fixed_width = test_item_width + status_width + 6  # 6 for borders and padding
+    
+    # Available width for details column
+    details_width = terminal_width - fixed_width
+    
+    # Ensure minimum width for details column
+    if details_width < 30:
+        test_item_width = 20
+        details_width = terminal_width - test_item_width - status_width - 6
+        
+    # Add columns with responsive widths
+    table.add_column("Test Item", justify="left", style="bold", width=test_item_width)
+    table.add_column("Status", justify="center", style="bold", width=status_width)
+    table.add_column("Details", justify="left", style="white", width=details_width, 
+                    overflow="fold", no_wrap=False)
+    
+    # Add rows
+    for result in test_results:
+        test_item = result.get('test_item', 'Unknown')
+        status = result.get('status', 'Unknown')
+        details = result.get('details', 'No details available')
+        
+        # Create test item text
+        test_item_text = Text(test_item, style="cyan")
+        
+        # Create status text with appropriate styling
+        if status.lower() in ['pass', 'passed', 'success', 'ok']:
+            status_text = Text("✓ PASS", style="green")
+        elif status.lower() in ['fail', 'failed', 'error', 'failed']:
+            status_text = Text("✗ FAIL", style="red")
+        elif status.lower() in ['skip', 'skipped', 'pending']:
+            status_text = Text("○ SKIP", style="yellow")
+        else:
+            status_text = Text(status, style="white")
+        
+        # Create details text with word wrapping
+        details_text = Text(details, style="white")
+        
+        # Add row to table
+        table.add_row(test_item_text, status_text, details_text)
+    
+    return table
+
+
+def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, sort_by: str, dry_run: bool):
     """Process a single bag file"""
     # Get connections info
     all_topics, connections, _ = parser.load_bag(input_bag)
@@ -146,85 +296,44 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
     
     # In dry run mode, show what would be done
     if dry_run:
-        typer.secho("Dry run - no actual modifications will be made", fg=typer.colors.YELLOW, bold=True)
-        typer.echo(f"Filtering {typer.style(input_bag, fg=typer.colors.GREEN)} to {typer.style(output_bag, fg=typer.colors.BLUE)}")
+        console = Console()
+        console.print("[bold yellow]Dry run - no actual modifications will be made[/bold yellow]")
+        console.print(f"Filtering [green]{input_bag}[/green] to [blue]{output_bag}[/blue]")
+        console.print()
         
-        # Show all topics and their selection status
-        typer.echo("\nTopic selection:")
-        typer.echo("─" * 120)
-        typer.echo(f"{'Status':<6} {'Topic':<35} {'Message Type':<35} {'Count':<10} {'Size':<10}")
-        typer.echo("─" * 120)
+        # Create and display responsive table
+        table, selected_count, selected_size, total_size = create_responsive_topic_table(
+            all_topics, connections, topic_stats, whitelist_topics, console, sort_by
+        )
         
-        for topic in sorted(all_topics):
-            is_selected = topic in whitelist_topics
-            status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
-            topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
-            msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
-            
-            # Get topic statistics
-            stats = topic_stats.get(topic, {'count': 0, 'size': 0})
-            count = stats['count']
-            size = stats['size']
-            
-            typer.echo(f"{status_icon:<6} {typer.style(topic[:33], fg=topic_style):<35} "
-                      f"{typer.style(connections[topic][:33], fg=msg_type_style):<35} "
-                      f"{typer.style(str(count), fg=typer.colors.CYAN):<10} "
-                      f"{typer.style(format_size(size), fg=typer.colors.YELLOW):<10}")
+        console.print(table)
         
-        selected_count = sum(1 for topic in all_topics if topic in whitelist_topics)
-        selected_size = sum(topic_stats.get(topic, {'size': 0})['size'] for topic in all_topics if topic in whitelist_topics)
-        total_size = sum(topic_stats.get(topic, {'size': 0})['size'] for topic in all_topics)
-        
-        typer.echo("─" * 120)
-        typer.echo(f"Selected: {typer.style(str(selected_count), fg=typer.colors.GREEN)} / "
-                  f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics, "
-                  f"{typer.style(format_size(selected_size), fg=typer.colors.GREEN)} / "
-                  f"{typer.style(format_size(total_size), fg=typer.colors.WHITE)} data")
+        # Show selection summary
+        console.print(f"\n[bold]Selected:[/bold] [green]{selected_count}[/green] / "
+                     f"[white]{len(all_topics)}[/white] topics, "
+                     f"[green]{format_size(selected_size)}[/green] / "
+                     f"[white]{format_size(total_size)}[/white] data")
         return
     
     # Print filtering information
-    typer.secho("\nStarting to filter bag file:", bold=True)
-    typer.echo(f"Input:  {typer.style(input_bag, fg=typer.colors.GREEN)}")
-    typer.echo(f"Output: {typer.style(output_bag, fg=typer.colors.BLUE)}")
+    console = Console()
+    console.print("\n[bold]Starting to filter bag file:[/bold]")
+    console.print(f"Input:  [green]{input_bag}[/green]")
+    console.print(f"Output: [blue]{output_bag}[/blue]")
+    console.print()
     
-    # Show all topics and their selection status
-    typer.echo("\nTopic selection:")
-    typer.echo("─" * 120)
-    typer.echo(f"{'Status':<6} {'Topic':<35} {'Message Type':<35} {'Count':<10} {'Size':<10}")
-    typer.echo("─" * 120)
+    # Create and display responsive table
+    table, selected_count, selected_size, total_size = create_responsive_topic_table(
+        all_topics, connections, topic_stats, whitelist_topics, console, sort_by
+    )
     
-    selected_count = 0
-    selected_size = 0
-    total_size = 0
-    
-    for topic in sorted(all_topics):
-        is_selected = topic in whitelist_topics
-        if is_selected:
-            selected_count += 1
-            selected_size += topic_stats.get(topic, {'size': 0})['size']
-        
-        total_size += topic_stats.get(topic, {'size': 0})['size']
-        
-        status_icon = typer.style('✓', fg=typer.colors.GREEN) if is_selected else typer.style('○', fg=typer.colors.YELLOW)
-        topic_style = typer.colors.GREEN if is_selected else typer.colors.WHITE
-        msg_type_style = typer.colors.CYAN if is_selected else typer.colors.WHITE
-        
-        # Get topic statistics
-        stats = topic_stats.get(topic, {'count': 0, 'size': 0})
-        count = stats['count']
-        size = stats['size']
-        
-        typer.echo(f"{status_icon:<6} {typer.style(topic[:33], fg=topic_style):<35} "
-                  f"{typer.style(connections[topic][:33], fg=msg_type_style):<35} "
-                  f"{typer.style(str(count), fg=typer.colors.CYAN):<10} "
-                  f"{typer.style(format_size(size), fg=typer.colors.YELLOW):<10}")
+    console.print(table)
     
     # Show selection summary
-    typer.echo("─" * 120)
-    typer.echo(f"Selected: {typer.style(str(selected_count), fg=typer.colors.GREEN)} / "
-              f"{typer.style(str(len(all_topics)), fg=typer.colors.WHITE)} topics, "
-              f"{typer.style(format_size(selected_size), fg=typer.colors.GREEN)} / "
-              f"{typer.style(format_size(total_size), fg=typer.colors.WHITE)} data")
+    console.print(f"\n[bold]Selected:[/bold] [green]{selected_count}[/green] / "
+                 f"[white]{len(all_topics)}[/white] topics, "
+                 f"[green]{format_size(selected_size)}[/green] / "
+                 f"[white]{format_size(total_size)}[/white] data")
     
 
     # Use progress bar for filtering
@@ -293,7 +402,7 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
 
 
 def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: Optional[str], topics: Optional[List[str]], 
-                       compression: str, parallel: bool, workers: Optional[int], dry_run: bool):
+                       compression: str, parallel: bool, workers: Optional[int], sort_by: str, dry_run: bool):
     """Process all bag files in a directory"""
     # Get all bag files in the directory (recursive)
     from .util import collect_bag_files
@@ -329,12 +438,12 @@ def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: 
 
     # Process files
     if parallel:
-        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, workers)
+        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, workers, sort_by)
     else:
-        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression)
+        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, sort_by)
 
 
-def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str):
+def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, sort_by: str):
     """Process bag files sequentially"""
     typer.secho(f"\nProcessing {len(bag_files)} bag files sequentially", fg=typer.colors.BLUE, bold=True)
     
@@ -414,7 +523,7 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
     print_batch_filter_summary(Console(), success_count, fail_count)
 
 
-def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, workers: Optional[int] = None):
+def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, workers: Optional[int] = None, sort_by: str = "size"):
     """Process bag files in parallel"""
     import concurrent.futures
     import threading

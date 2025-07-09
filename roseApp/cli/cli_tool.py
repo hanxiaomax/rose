@@ -213,7 +213,7 @@ class CliTool:
             if next_action == "back":
                 break  # Go back to input selection
             elif next_action == "info":
-                print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range)
+                print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range, parser=self.parser)
                 continue  # Stay in the current menu
             elif next_action == "filter":
                 # Get output bag with overwrite handling
@@ -283,7 +283,7 @@ class CliTool:
             whitelist = self._get_filter_topics_from_whitelist()
                 
         elif filter_method == "manual":
-            whitelist = ask_topics(self.console, self.topics)
+            whitelist = self._get_filter_topics_from_manual_selection(selected_files)
             if not whitelist:
                 return
 
@@ -380,7 +380,11 @@ class CliTool:
             return None
         
         self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=SUCCESS)
-        return ask_topics(self.console, list(all_topics))
+        
+        # Use the first bag file for statistics display (as an example)
+        bag_path_for_stats = selected_files[0] if selected_files else None
+        
+        return ask_topics(self.console, list(all_topics), parser=self.parser, bag_path=bag_path_for_stats)
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist, compression="none"):
@@ -581,7 +585,7 @@ class CliTool:
                 return
                 
         elif filter_method == "manual":
-            whitelist = ask_topics(self.console, self.topics)
+            whitelist = ask_topics(self.console, self.topics, parser=self.parser, bag_path=input_bag)
             if not whitelist:
                 return
 
@@ -675,7 +679,7 @@ class CliTool:
             topics, connections, _ = self.parser.load_bag(input_bag)
         
         # Select topics
-        selected_topics = ask_topics(self.console, topics)
+        selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
         if not selected_topics:
             return
             

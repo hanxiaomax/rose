@@ -70,7 +70,7 @@ def collect_bag_files(directory: str) -> List[str]:
                 bag_files.append(os.path.join(root, file))
     return sorted(bag_files)
 
-def print_bag_info(console:Console, bag_path: str, topics: List[str], connections: dict, time_range: tuple):
+def print_bag_info(console:Console, bag_path: str, topics: List[str], connections: dict, time_range: tuple, parser=None):
     """Show bag file information using rich panels"""
     # Calculate file info
     file_size = os.path.getsize(bag_path)
@@ -110,7 +110,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             return
         elif action == "filter":
             # Use the new select_topics_with_fuzzy function
-            filtered_topics = ask_topics(console, topics)
+            filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
                 console.print("No topics selected. Showing all topics.", style=YELLOW)
@@ -194,13 +194,15 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     else:
         console.print(summary, style=f"{ACCENT}")
 
-def ask_topics(console: Console, topics: List[str]) -> Optional[List[str]]:
+def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
         console=console,
         topics=topics,
         message="Select topics:",
         require_selection=True,
-        show_instructions=True
+        show_instructions=True,
+        parser=parser,
+        bag_path=bag_path
     )
 
 def ask_topics_with_fuzzy(
@@ -209,7 +211,9 @@ def ask_topics_with_fuzzy(
     message: str = "Select topics:",
     require_selection: bool = True,
     show_instructions: bool = True,
-    preselected: Optional[List[str]] = None
+    preselected: Optional[List[str]] = None,
+    parser=None,
+    bag_path: Optional[str] = None
 ) -> List[str]:
     """Select topics using fuzzy search
     
@@ -220,12 +224,42 @@ def ask_topics_with_fuzzy(
         require_selection: Whether to require at least one topic to be selected
         show_instructions: Whether to show usage instructions
         preselected: List of topics to preselect
+        parser: Parser instance for getting topic statistics
+        bag_path: Path to bag file for getting topic statistics
         
     Returns:
         List of selected topics
     """
-    # Sort topics for consistent display
-    topic_choices = sorted(topics)
+    # Helper function to format size
+    def format_size(size_bytes: int) -> str:
+        """Format size in bytes to human readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f}{unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f}TB"
+    
+    # Get topic statistics if parser and bag_path are provided
+    topic_stats = {}
+    if parser and bag_path:
+        try:
+            topic_stats = parser.get_topic_stats(bag_path)
+        except Exception:
+            # If getting stats fails, continue without them
+            pass
+    
+    # Create enhanced topic choices with size information
+    topic_choices = []
+    for topic in sorted(topics):
+        if topic in topic_stats:
+            stats = topic_stats[topic]
+            count = stats['count']
+            size = stats['size']
+            display_name = f"{topic:<35} ({count:>5} msgs, {format_size(size):>8})"
+        else:
+            display_name = topic
+        
+        topic_choices.append(Choice(value=topic, name=display_name))
     
     # Display usage instructions if requested
     if show_instructions:
