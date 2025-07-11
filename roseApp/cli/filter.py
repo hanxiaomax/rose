@@ -263,8 +263,11 @@ def create_test_report_table(test_results: List[Dict[str, Any]], console: Consol
 
 def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, sort_by: str, overwrite: bool, dry_run: bool):
     """Process a single bag file"""
-    # Get connections info
-    all_topics, connections, _ = parser.load_bag(input_bag)
+    # Get connections info with progress bar
+    from .util import LoadingAnimationWithTimer
+    with LoadingAnimationWithTimer("Loading bag file...", dismiss=True) as progress:
+        progress.add_task(description="Loading...")
+        all_topics, connections, _ = parser.load_bag(input_bag)
     
     # Get topic statistics (count and size)
     topic_stats = parser.get_topic_stats(input_bag)

@@ -79,8 +79,11 @@ def plot(
         parser = create_parser(ParserType.ROSBAGS)
         logger.debug(f"Parsing bag file: {input_path}")
         
-        # Load bag information
-        topics, connections, time_range = parser.load_bag(input_path)
+        # Load bag information with progress bar
+        from .util import LoadingAnimationWithTimer
+        with LoadingAnimationWithTimer("Loading bag file...", dismiss=True) as progress:
+            progress.add_task(description="Loading...")
+            topics, connections, time_range = parser.load_bag(input_path)
         
         # Check if topic exists
         if topic not in topics:

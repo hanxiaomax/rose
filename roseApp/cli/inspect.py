@@ -77,7 +77,7 @@ def inspect(
     show_compression: bool = typer.Option(False, "--show-compression", "-comp", help="Show compression information"),
     max_topics: Optional[int] = typer.Option(None, "--max-topics", "-n", help="Limit number of topics shown"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache and force re-analysis")
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache and force re-analysis (use 'prune' command to manage cache)")
 ):
     """
     Fast inspection of ROS bag files with flexible display options and caching
@@ -100,6 +100,10 @@ def inspect(
         
         # Force re-analysis without cache
         python -m roseApp.rose inspect data.bag --no-cache
+        
+        # Manage cache files
+        python -m roseApp.rose prune status
+        python -m roseApp.rose prune clean --all
     """
     try:
         # Initialize logging
@@ -185,6 +189,13 @@ def inspect(
 def _analyze_bag_with_progress(parser, bag_path: str, logger, console: Console) -> Dict:
     """Fast analysis of bag file with progress indication"""
     try:
+        # Step 1: Load basic bag info with timing
+        from .util import LoadingAnimationWithTimer
+        with LoadingAnimationWithTimer("Loading bag structure...", dismiss=True) as load_progress:
+            load_progress.add_task(description="Loading bag structure...")
+            topics, connections, time_range = parser.load_bag(bag_path)
+        
+        # Step 2: Continue with analysis
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -193,14 +204,9 @@ def _analyze_bag_with_progress(parser, bag_path: str, logger, console: Console) 
             console=console,
             transient=True
         ) as progress:
-            task = progress.add_task("Analyzing bag file...", total=100)
+            task = progress.add_task("Analyzing topics...", total=70)
             
-            # Step 1: Load basic bag info (30%)
-            progress.update(task, advance=10, description="Loading bag structure...")
-            topics, connections, time_range = parser.load_bag(bag_path)
-            progress.update(task, advance=20, description="Loaded bag structure")
-            
-            # Step 2: Get topic statistics (50%)
+            # Get topic statistics (50%)
             progress.update(task, advance=0, description="Analyzing topics...")
             topic_stats = parser.get_topic_stats(bag_path)
             progress.update(task, advance=50, description="Analyzed topics")

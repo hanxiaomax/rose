@@ -1,15 +1,17 @@
-from sre_constants import SUCCESS
+import time
+import os
+from typing import List, Dict, Optional, Any, Union
+from pathlib import Path
+from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
-from rich.box import SIMPLE  # 添加box样式导入
-from .theme import DIM_INFO, style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
-import os
-from typing import List, Dict, Optional, Any, Union
+from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from InquirerPy.validator import PathValidator
+from .theme import DIM_INFO, style, YELLOW, INFO, PRIMARY, ACCENT, SUCCESS
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -300,6 +302,30 @@ class PanelProgress(Progress):
     def get_renderables(self):
         yield Panel(self.make_tasks_table(self.tasks), title=self.title)
 
+class TimedPanelProgress(PanelProgress):
+    """Progress bar that measures and displays timing information"""
+    
+    def __init__(self, *columns, title: Optional[str] = None, **kwargs):
+        super().__init__(*columns, title=title, **kwargs)
+        self.start_time = None
+        self.end_time = None
+        self._external_console = Console()
+        
+    def __enter__(self):
+        self.start_time = time.time()
+        return super().__enter__()
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.end_time = time.time()
+        result = super().__exit__(exc_type, exc_val, exc_tb)
+        
+        # Display loading time after completion
+        if self.start_time and self.end_time:
+            elapsed = self.end_time - self.start_time
+            self._external_console.print(f"[{SUCCESS}]✓ Bag file loaded in {elapsed:.2f}s[/{SUCCESS}]")
+        
+        return result
+
 def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
     """Show a loading spinner with message in a panel
     
@@ -317,5 +343,24 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
         TimeRemainingColumn(),
         title=title,
         transient=dismiss,  # 设置为 False 以保持任务完成后的显示
+    )
+
+def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False):
+    """Show a loading spinner with message in a panel and measure loading time
+    
+    Args:
+        title (Optional[str], optional): The title of the panel. Defaults to None.
+        dismiss (bool, optional): Whether to dismiss the panel after completion. Defaults to False.
+    
+    Returns:
+        TimedPanelProgress: A progress bar wrapped in a panel with timing functionality
+    """
+    return TimedPanelProgress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        title=title,
+        transient=dismiss,
     )
 
