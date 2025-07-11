@@ -17,15 +17,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from rich.console import Console
 
-# 应用程序模式
 class AppMode:
     TUI = "tui"
     CLI = "cli"
 
-# 添加日志变量
 _logger = None
 _log_file_path = None
-_app_mode = AppMode.TUI  # 默认为TUI模式
+_app_mode = AppMode.TUI  
 
 def set_app_mode(mode: str):
     """设置应用程序模式 (TUI 或 CLI)"""
