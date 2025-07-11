@@ -139,6 +139,22 @@ class IBagParser(ABC):
         """
         pass
 
+    @abstractmethod
+    def read_messages(self, bag_path: str, topics: List[str]):
+        """
+        Read messages from specified topics in the bag file
+        
+        Args:
+            bag_path: Path to bag file
+            topics: List of topic names to read from
+            
+        Yields:
+            Tuple of (timestamp, message) where:
+            - timestamp: tuple of (seconds, nanoseconds)
+            - message: deserialized ROS message
+        """
+        pass
+
 
 class RosbagsBagParser(IBagParser):
     """High-performance rosbags implementation using AnyReader/Rosbag1Writer"""
@@ -219,16 +235,16 @@ class RosbagsBagParser(IBagParser):
                 # Count messages for each selected topic
                 for connection in selected_connections:
                     # Use efficient message counting
-                    count = sum(1 for _ in reader.messages([connection]))
-                    selected_topic_counts[connection.topic] = count
-                    total_messages += count
-                
-                if total_messages == 0:
-                    _logger.warning(f"No messages found for selected topics in {input_bag}")
-                    if progress_callback:
-                        progress_callback(100)
-                    return "No messages found for selected topics"
-                
+                        count = sum(1 for _ in reader.messages([connection]))
+                        selected_topic_counts[connection.topic] = count
+                        total_messages += count
+            
+            if total_messages == 0:
+                _logger.warning(f"No messages found for selected topics in {input_bag}")
+                if progress_callback:
+                    progress_callback(100)
+                return "No messages found for selected topics"
+            
                 # Create output directory if needed
                 output_dir = os.path.dirname(output_bag)
                 if output_dir:
@@ -299,7 +315,7 @@ class RosbagsBagParser(IBagParser):
             
             if progress_callback and last_progress < 100:
                 progress_callback(100)
-            
+                
             # Log performance statistics
             _logger.info(f"Filtered {processed_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s")
             
@@ -406,7 +422,7 @@ class RosbagsBagParser(IBagParser):
                     topic_counts[connection.topic] = count
                 
                 return topic_counts
-                
+            
         except Exception as e:
             _logger.error(f"Error getting message counts: {e}")
             raise Exception(f"Error getting message counts: {e}")
@@ -431,7 +447,7 @@ class RosbagsBagParser(IBagParser):
         except Exception as e:
             _logger.error(f"Error getting topic sizes: {e}")
             raise Exception(f"Error getting topic sizes: {e}")
-
+    
     def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
         """Get comprehensive statistics for each topic using AnyReader"""
         try:
@@ -462,6 +478,52 @@ class RosbagsBagParser(IBagParser):
         except Exception as e:
             _logger.error(f"Error getting topic stats: {e}")
             raise Exception(f"Error getting topic stats: {e}")
+
+    def read_messages(self, bag_path: str, topics: List[str]):
+        """
+        Read messages from specified topics in the bag file
+        
+        Args:
+            bag_path: Path to bag file
+            topics: List of topic names to read from
+            
+        Yields:
+            Tuple of (timestamp, message) where:
+            - timestamp: tuple of (seconds, nanoseconds)
+            - message: deserialized ROS message
+        """
+        try:
+            with AnyReader([Path(bag_path)]) as reader:
+                # Pre-filter connections based on selected topics
+                selected_connections = [
+                    conn for conn in reader.connections 
+                    if conn.topic in topics
+                ]
+                
+                if not selected_connections:
+                    _logger.warning(f"No matching topics found in {bag_path}")
+                    return
+                
+                # Use AnyReader's high-level message iteration with automatic deserialization
+                for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
+                    try:
+                        # Use AnyReader's built-in deserialize method
+                        msg = reader.deserialize(rawdata, connection.msgtype)
+                        
+                        # Convert nanosecond timestamp to (seconds, nanoseconds) format
+                        seconds = timestamp // 1_000_000_000
+                        nanoseconds = timestamp % 1_000_000_000
+                        time_tuple = (int(seconds), int(nanoseconds))
+                        
+                        yield (time_tuple, msg)
+                        
+                    except Exception as e:
+                        _logger.warning(f"Could not deserialize message for {connection.topic} ({connection.msgtype}): {e}")
+                        continue
+             
+        except Exception as e:
+            _logger.error(f"Error reading messages from bag with AnyReader: {e}")
+            raise Exception(f"Error reading messages from bag: {e}")
 
 
 def create_parser(parser_type: ParserType = ParserType.ROSBAGS) -> IBagParser:

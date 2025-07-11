@@ -444,7 +444,7 @@ class CliTool:
                     # We need to create a new parser instance for each thread
                     if not hasattr(thread_local, 'parser'):
                         # Use RosbagsBagParser for all threads
-                        thread_local.parser = create_parser(ParserType.ROSBAGS)
+                            thread_local.parser = create_parser(ParserType.ROSBAGS)
                     
                     # Initialize progress to 30% to indicate preparation complete
                     progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=0)

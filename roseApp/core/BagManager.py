@@ -120,7 +120,7 @@ class BagManager:
         
         # Auto-select best parser if none provided (always RosbagsBagParser)
         if parser is None:
-            self._parser = create_parser(ParserType.ROSBAGS)
+                self._parser = create_parser(ParserType.ROSBAGS)
         else:
             self._parser = parser
             
