@@ -31,6 +31,7 @@ def filter_bag(
     parallel: bool = typer.Option(False, "--parallel", "-p", help="Process files in parallel when input is a directory"),
     workers: Optional[int] = typer.Option(None, "--workers", help="Number of parallel workers (default: CPU count - 2)"),
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort topics by: topic, count, size (default: size)"),
+    overwrite: bool = typer.Option(True, "--overwrite/--no-overwrite", help="Overwrite existing output files (default: True)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without actually doing it")
 ):
     """Filter ROS bag files by topics"""
@@ -89,7 +90,7 @@ def filter_bag(
                     output_bag = os.path.join(output_dir, os.path.basename(os.path.splitext(input_path)[0]) + "_filtered.bag")
                 
             # Process single file
-            _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, sort_by, dry_run)
+            _process_single_bag(parser, input_path, output_bag, whitelist, topics, compression, sort_by, overwrite, dry_run)
                 
         else:
             # Directory processing
@@ -112,7 +113,7 @@ def filter_bag(
             os.makedirs(output_dir, exist_ok=True)
                 
             # Process directory
-            _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, sort_by, dry_run)
+            _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, sort_by, overwrite, dry_run)
             
     except Exception as e:
         log_cli_error(e)
@@ -260,7 +261,7 @@ def create_test_report_table(test_results: List[Dict[str, Any]], console: Consol
     return table
 
 
-def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, sort_by: str, dry_run: bool):
+def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file: Optional[str], topics: Optional[List[str]], compression: str, sort_by: str, overwrite: bool, dry_run: bool):
     """Process a single bag file"""
     # Get connections info
     all_topics, connections, _ = parser.load_bag(input_bag)
@@ -357,24 +358,14 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
             progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
         
         # Execute filtering
-        try:
-            result = parser.filter_bag(
-                input_bag, 
-                output_bag, 
-                list(whitelist_topics),
-                progress_callback=update_progress,
-                compression=compression
-            )
-        except FileExistsError:
-            # For CLI command, always overwrite (similar to standard CLI behavior)
-            result = parser.filter_bag(
-                input_bag, 
-                output_bag, 
-                list(whitelist_topics),
-                progress_callback=update_progress,
-                compression=compression,
-                overwrite=True
-            )
+        result = parser.filter_bag(
+            input_bag, 
+            output_bag, 
+            list(whitelist_topics),
+            progress_callback=update_progress,
+            compression=compression,
+            overwrite=overwrite
+        )
         
         # Update final status
         progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -401,7 +392,7 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
 
 
 def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: Optional[str], topics: Optional[List[str]], 
-                       compression: str, parallel: bool, workers: Optional[int], sort_by: str, dry_run: bool):
+                       compression: str, parallel: bool, workers: Optional[int], sort_by: str, overwrite: bool, dry_run: bool):
     """Process all bag files in a directory"""
     # Get all bag files in the directory (recursive)
     from .util import collect_bag_files
@@ -437,12 +428,12 @@ def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: 
 
     # Process files
     if parallel:
-        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, workers, sort_by)
+        _process_directory_parallel(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, workers, sort_by, overwrite)
     else:
-        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, sort_by)
+        _process_directory_sequential(parser, bag_files, input_dir, output_dir, list(whitelist_topics), compression, sort_by, overwrite)
 
 
-def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, sort_by: str):
+def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, sort_by: str, overwrite: bool):
     """Process bag files sequentially"""
     typer.secho(f"\nProcessing {len(bag_files)} bag files sequentially", fg=typer.colors.BLUE, bold=True)
     
@@ -481,24 +472,14 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
                     progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
                 
                 # Execute filtering
-                try:
-                    result = parser.filter_bag(
-                        bag_file, 
-                        output_path, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression
-                    )
-                except FileExistsError:
-                    # For CLI command, always overwrite (similar to standard CLI behavior)
-                    result = parser.filter_bag(
-                        bag_file, 
-                        output_path, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression,
-                        overwrite=True
-                    )
+                result = parser.filter_bag(
+                    bag_file, 
+                    output_path, 
+                    whitelist,
+                    progress_callback=update_progress,
+                    compression=compression,
+                    overwrite=overwrite
+                )
                 
                 # Update final status
                 progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -522,7 +503,7 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
     print_batch_filter_summary(Console(), success_count, fail_count)
 
 
-def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, workers: Optional[int] = None, sort_by: str = "size"):
+def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, output_dir: str, whitelist: List[str], compression: str, workers: Optional[int] = None, sort_by: str = "size", overwrite: bool = True):
     """Process bag files in parallel"""
     import concurrent.futures
     import threading
@@ -611,26 +592,14 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                                   completed=mapped_percent)
                 
                 # Execute filtering
-                try:
-                    thread_local.parser.filter_bag(
-                        bag_file, 
-                        output_path, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression,
-                        overwrite=True  # For parallel processing, always overwrite
-                    )
-                except FileExistsError:
-                    # This should not happen since we use overwrite=True
-                    # but handle it just in case
-                    thread_local.parser.filter_bag(
-                        bag_file, 
-                        output_path, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression,
-                        overwrite=True
-                    )
+                thread_local.parser.filter_bag(
+                    bag_file, 
+                    output_path, 
+                    whitelist,
+                    progress_callback=update_progress,
+                    compression=compression,
+                    overwrite=overwrite
+                )
                 
                 # Update task status to complete, showing green success mark
                 progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
