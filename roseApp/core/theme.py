@@ -1,197 +1,175 @@
 #!/usr/bin/env python3
 """
 Unified theme system for the Rose application
-Provides consistent colors across CLI, TUI, and plotting modules
+Uses index.css as base theme and provides conversions for different platforms
 """
 
 from typing import Dict, List, Any, Optional
-from InquirerPy import get_style
-from textual.theme import Theme
-from textual.color import Color
+import os
+
+# Import the new simplified theme parser
+from .theme_parser import (
+    theme_parser,
+    get_cli_colors,
+    get_plot_colors,
+    get_html_colors,
+    get_inquirer_style,
+    apply_matplotlib_style,
+    generate_html_css
+)
+
+# Detect theme preference from environment
+def get_theme_mode() -> bool:
+    """Detect if dark mode should be used (legacy compatibility)"""
+    # Check environment variables
+    theme_env = os.environ.get('ROSE_THEME', '').lower()
+    if theme_env in ['dark', 'true', '1']:
+        return True
+    elif theme_env in ['light', 'false', '0']:
+        return False
+    
+    # Default to dark mode for better terminal experience
+    return True
+
+# Global theme mode (kept for compatibility)
+DARK_MODE = get_theme_mode()
 
 class RoseTheme:
     """Unified theme class for Rose application"""
     
-    # Core color palette - inspired by cassette theme
-    PRIMARY = "#b1b329"      # Lime green
-    SECONDARY = "#008001"    # Dark green  
-    ACCENT = "#9b50b7"       # Purple
-    WARNING = "#DDA853"      # Gold/Yellow
-    ERROR = "#FF4500"        # Orange red
-    SUCCESS = "#35A77c"      # Teal green
-    INFO = "#5B99C2"         # Blue
+    def __init__(self, dark_mode: bool = None):
+        """Initialize theme with specified mode (mode parameter kept for compatibility)"""
+        if dark_mode is None:
+            dark_mode = DARK_MODE
+        
+        self.dark_mode = dark_mode
+        # Use CLI colors for theme properties (since CLI uses dark theme)
+        self._cli_colors = get_cli_colors()
+        self._plot_colors = get_plot_colors()
+        self._html_colors = get_html_colors()
     
-    # Surface colors
-    BACKGROUND = "#002f33"   # Dark teal
-    FOREGROUND = "#FAF0E6"   # Light cream
-    SURFACE = "#262626"      # Dark gray
-    PANEL = "#333333"        # Light gray
+    # Core color properties
+    @property
+    def PRIMARY(self) -> str:
+        return self._cli_colors['primary']
     
-    # Text colors
-    TEXT_PRIMARY = "#FAF0E6"     # Light cream
-    TEXT_SECONDARY = "#C0C0C0"   # Silver
-    TEXT_DIM = "#8D77AB"         # Dim purple
-    TEXT_MUTED = "#666666"       # Gray
+    @property
+    def SECONDARY(self) -> str:
+        return self._cli_colors['secondary']
+    
+    @property
+    def ACCENT(self) -> str:
+        return self._cli_colors['accent']
+    
+    @property
+    def WARNING(self) -> str:
+        return self._cli_colors['warning']
+    
+    @property
+    def ERROR(self) -> str:
+        return self._cli_colors['error']
+    
+    @property
+    def SUCCESS(self) -> str:
+        return self._cli_colors['success']
+    
+    @property
+    def INFO(self) -> str:
+        return self._cli_colors['info']
+    
+    @property
+    def BACKGROUND(self) -> str:
+        return self._cli_colors['background']
+    
+    @property
+    def FOREGROUND(self) -> str:
+        return self._cli_colors['text_primary']
+    
+    @property
+    def SURFACE(self) -> str:
+        return self._cli_colors['background']
+    
+    @property
+    def PANEL(self) -> str:
+        return self._cli_colors['background']
+    
+    @property
+    def TEXT_PRIMARY(self) -> str:
+        return self._cli_colors['text_primary']
+    
+    @property
+    def TEXT_SECONDARY(self) -> str:
+        return self._cli_colors['text_secondary']
+    
+    @property
+    def TEXT_DIM(self) -> str:
+        return self._cli_colors['text_secondary']
+    
+    @property
+    def TEXT_MUTED(self) -> str:
+        return self._cli_colors['text_secondary']
+    
+    @property
+    def BORDER(self) -> str:
+        return self._cli_colors['border']
     
     # Data visualization colors (for plots)
-    PLOT_COLORS = [
-        "#b1b329",  # Primary lime
-        "#9b50b7",  # Accent purple
-        "#008001",  # Secondary green
-        "#DDA853",  # Warning gold
-        "#5B99C2",  # Info blue
-        "#35A77c",  # Success teal
-        "#FF4500",  # Error orange
-        "#C0C0C0",  # Silver
-    ]
+    @property
+    def PLOT_COLORS(self) -> List[str]:
+        return self._plot_colors
     
-    # Rich console color mappings
-    RICH_COLORS = {
-        'primary': PRIMARY,
-        'secondary': SECONDARY,
-        'accent': ACCENT,
-        'warning': WARNING,
-        'error': ERROR,
-        'success': SUCCESS,
-        'info': INFO,
-        'text_primary': TEXT_PRIMARY,
-        'text_secondary': TEXT_SECONDARY,
-        'text_dim': TEXT_DIM,
-        'text_muted': TEXT_MUTED,
-    }
-    
-    # InquirerPy style configuration
-    INQUIRER_STYLE = {
-        "questionmark": PRIMARY,
-        "answermark": PRIMARY,
-        "answer": PRIMARY,
-        "input": "#FFF5E0",
-        "question": ACCENT,
-        "answered_question": "#FFFAE6",
-        "instruction": TEXT_DIM,
-        "long_instruction": TEXT_DIM,
-        "pointer": PRIMARY,
-        "checkbox": ACCENT,
-        "separator": "",
-        "skipped": TEXT_MUTED,
-        "validator": "",
-        "marker": ACCENT,
-        "fuzzy_prompt": PRIMARY,
-        "fuzzy_info": PRIMARY,
-        "fuzzy_border": PRIMARY,
-        "fuzzy_match": ACCENT,
-        "spinner_pattern": WARNING,
-        "spinner_text": "",
-    }
-    
-    # Matplotlib style configuration
-    MATPLOTLIB_STYLE = {
-        'axes.facecolor': BACKGROUND,
-        'axes.edgecolor': TEXT_SECONDARY,
-        'axes.labelcolor': TEXT_PRIMARY,
-        'axes.titlecolor': TEXT_PRIMARY,
-        'figure.facecolor': BACKGROUND,
-        'figure.edgecolor': BACKGROUND,
-        'text.color': TEXT_PRIMARY,
-        'xtick.color': TEXT_SECONDARY,
-        'ytick.color': TEXT_SECONDARY,
-        'grid.color': TEXT_MUTED,
-        'axes.spines.left': True,
-        'axes.spines.bottom': True,
-        'axes.spines.top': False,
-        'axes.spines.right': False,
-    }
-    
-    # Plotly template configuration
-    PLOTLY_TEMPLATE = {
-        'layout': {
-            'paper_bgcolor': BACKGROUND,
-            'plot_bgcolor': BACKGROUND,
-            'font': {'color': TEXT_PRIMARY},
-            'title': {'font': {'color': TEXT_PRIMARY}},
-            'xaxis': {
-                'gridcolor': TEXT_MUTED,
-                'linecolor': TEXT_SECONDARY,
-                'tickcolor': TEXT_SECONDARY,
-                'title': {'font': {'color': TEXT_PRIMARY}},
-                'tickfont': {'color': TEXT_SECONDARY},
-            },
-            'yaxis': {
-                'gridcolor': TEXT_MUTED,
-                'linecolor': TEXT_SECONDARY,
-                'tickcolor': TEXT_SECONDARY,
-                'title': {'font': {'color': TEXT_PRIMARY}},
-                'tickfont': {'color': TEXT_SECONDARY},
-            },
-            'colorway': PLOT_COLORS,
-        }
-    }
-    
-    @classmethod
-    def get_rich_color(cls, color_name: str) -> str:
+    def get_rich_color(self, color_name: str) -> str:
         """Get a Rich console color by name"""
-        return cls.RICH_COLORS.get(color_name, cls.TEXT_PRIMARY)
+        return self._cli_colors.get(color_name, self.TEXT_PRIMARY)
     
-    @classmethod
-    def get_plot_color(cls, index: int) -> str:
+    def get_plot_color(self, index: int) -> str:
         """Get a plot color by index (cycles through available colors)"""
-        return cls.PLOT_COLORS[index % len(cls.PLOT_COLORS)]
+        return self.PLOT_COLORS[index % len(self.PLOT_COLORS)]
     
-    @classmethod
-    def get_inquirer_style(cls):
+    def get_inquirer_style(self):
         """Get InquirerPy style configuration"""
-        return get_style(cls.INQUIRER_STYLE, style_override=True)
+        return get_inquirer_style()
     
-    @classmethod
-    def get_textual_theme(cls, theme_name: str = "cassette-dark") -> Theme:
-        """Get Textual theme configuration"""
-        return Theme(
-            name=theme_name,
-            primary=cls.PRIMARY,
-            secondary=cls.SECONDARY,
-            accent=cls.ACCENT,
-            background=cls.BACKGROUND,
-            foreground=cls.FOREGROUND,
-            success=cls.SUCCESS,
-            warning=cls.WARNING,
-            error=cls.ERROR,
-            surface=cls.SURFACE,
-            panel=cls.PANEL,
-            dark=True,
-            variables={
-                "border": f"{cls.PRIMARY} 60%",
-                "scrollbar": cls.BACKGROUND,
-                "button-background": cls.PRIMARY,
-                "button-color-foreground": cls.BACKGROUND,
-                "footer-key-foreground": cls.ACCENT,
-                "input-cursor-background": cls.WARNING,
-                "datatable--header-cursor": cls.WARNING,
-                "button-focus-text-style": "bold",
-            }
-        )
+    def get_textual_theme(self):
+        """Get Textual theme configuration (legacy compatibility)"""
+        # Return basic theme dict for compatibility
+        return {
+            'primary': self.PRIMARY,
+            'secondary': self.SECONDARY,
+            'accent': self.ACCENT,
+            'background': self.BACKGROUND,
+            'foreground': self.FOREGROUND,
+            'success': self.SUCCESS,
+            'warning': self.WARNING,
+            'error': self.ERROR,
+        }
     
-    @classmethod
-    def apply_matplotlib_style(cls):
+    def apply_matplotlib_style(self):
         """Apply matplotlib style configuration"""
-        try:
-            import matplotlib.pyplot as plt
-            plt.style.use('dark_background')
-            for key, value in cls.MATPLOTLIB_STYLE.items():
-                plt.rcParams[key] = value
-        except ImportError:
-            pass
+        apply_matplotlib_style()
     
-    @classmethod
-    def get_plotly_template(cls) -> Dict[str, Any]:
-        """Get Plotly template configuration"""
-        return cls.PLOTLY_TEMPLATE
+    def get_plotly_template(self) -> Dict[str, Any]:
+        """Get Plotly template configuration (legacy compatibility)"""
+        # Return basic template for compatibility
+        return {
+            'layout': {
+                'paper_bgcolor': self._html_colors['background'],
+                'plot_bgcolor': self._html_colors['background'],
+                'font': {'color': self._html_colors['foreground']},
+                'colorway': self._plot_colors,
+            }
+        }
+    
+    def generate_html_css(self) -> str:
+        """Generate CSS for HTML export"""
+        return generate_html_css()
 
 # Create global theme instance
 theme = RoseTheme()
 
 # Backward compatibility exports
 SUCCESS = theme.SUCCESS
-WARNING = theme.WARNING
+WARNING = theme.WARNING  
 INFO = theme.INFO
 ACCENT = theme.ACCENT
 PRIMARY = theme.PRIMARY
@@ -199,7 +177,18 @@ SECONDARY = theme.SECONDARY
 ERROR = theme.ERROR
 GRAY = theme.TEXT_MUTED
 DIM_INFO = theme.TEXT_DIM
-INPUT_SECONDARY = "#FFF5E0"
+INPUT_SECONDARY = theme.BORDER  # Use border color as input secondary
 
 # Export style for backward compatibility
-style = theme.get_inquirer_style() 
+style = theme.get_inquirer_style()
+
+# Export functions for easy access
+def get_theme(dark_mode: bool = None) -> RoseTheme:
+    """Get theme instance for specified mode"""
+    return RoseTheme(dark_mode)
+
+def set_theme_mode(dark_mode: bool):
+    """Set global theme mode"""
+    global DARK_MODE, theme
+    DARK_MODE = dark_mode
+    theme = RoseTheme(dark_mode) 

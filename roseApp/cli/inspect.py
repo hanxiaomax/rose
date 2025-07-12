@@ -592,263 +592,133 @@ def _export_to_csv(json_data: Dict[str, Any], output_path: str):
 
 
 def _export_to_html(json_data: Dict[str, Any], output_path: str):
-    """Export topics data to HTML file with unified theme styling"""
+    """Export topics data to HTML file with Tailwind CSS CDN - minimal, clean, compact design"""
+    import time
+    
     summary = json_data['summary']
     topics = json_data['topics']
     
-    # CSS styles using unified theme
-    css_styles = f"""
+    # Get theme colors for custom properties
+    from roseApp.core.theme_parser import get_html_colors
+    html_colors = get_html_colors()
+    
+    # Minimal HTML with Tailwind CSS CDN
+    html_content = f"""<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS Bag Report - {summary['file_name']}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {{
+            theme: {{
+                extend: {{
+                    colors: {{
+                        'rose': {{
+                            50: '{html_colors['background']}',
+                            500: '{html_colors['primary']}',
+                            600: '{html_colors['accent']}',
+                            900: '{html_colors['foreground']}'
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    </script>
     <style>
-        :root {{
-            --primary: {theme.PRIMARY};
-            --secondary: {theme.SECONDARY};
-            --accent: {theme.ACCENT};
-            --warning: {theme.WARNING};
-            --success: {theme.SUCCESS};
-            --info: {theme.INFO};
-            --error: {theme.ERROR};
-            --background: {theme.BACKGROUND};
-            --foreground: {theme.FOREGROUND};
-            --surface: {theme.SURFACE};
-            --text-primary: {theme.TEXT_PRIMARY};
-            --text-secondary: {theme.TEXT_SECONDARY};
-            --text-muted: {theme.TEXT_MUTED};
-        }}
-        
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: var(--background);
-            color: var(--text-primary);
-            margin: 0;
-            padding: 20px;
-            line-height: 1.6;
-        }}
-        
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: var(--surface);
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }}
-        
-        h1 {{
-            color: var(--primary);
-            border-bottom: 3px solid var(--primary);
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-        }}
-        
-        h2 {{
-            color: var(--accent);
-            margin-top: 40px;
-            margin-bottom: 20px;
-        }}
-        
-        .summary {{
-            background-color: var(--background);
-            padding: 20px;
-            border-radius: 6px;
-            margin-bottom: 30px;
-            border-left: 4px solid var(--primary);
-        }}
-        
-        .summary-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }}
-        
-        .summary-item {{
-            background-color: var(--surface);
-            padding: 15px;
-            border-radius: 4px;
-            border: 1px solid var(--text-muted);
-        }}
-        
-        .summary-item .label {{
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            margin-bottom: 5px;
-        }}
-        
-        .summary-item .value {{
-            color: var(--primary);
-            font-weight: bold;
-            font-size: 1.1em;
-        }}
-        
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background-color: var(--surface);
-            border-radius: 6px;
-            overflow: hidden;
-        }}
-        
-        th {{
-            background-color: var(--primary);
-            color: var(--background);
-            padding: 12px;
-            text-align: left;
-            font-weight: bold;
-        }}
-        
-        td {{
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--text-muted);
-        }}
-        
-        tr:nth-child(even) {{
-            background-color: var(--background);
-        }}
-        
-        tr:hover {{
-            background-color: var(--accent);
-            color: var(--background);
-        }}
-        
-        .topic-name {{
-            color: var(--info);
-            font-weight: bold;
-        }}
-        
-        .message-type {{
-            color: var(--secondary);
-            font-family: monospace;
-            font-size: 0.9em;
-        }}
-        
-        .count {{
-            color: var(--success);
-            font-weight: bold;
-        }}
-        
-        .size {{
-            color: var(--accent);
-            font-weight: bold;
-        }}
-        
-        .frequency {{
-            color: var(--warning);
-            font-weight: bold;
-        }}
-        
-        .footer {{
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid var(--text-muted);
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            text-align: center;
-        }}
-        
-        .timestamp {{
-            color: var(--text-muted);
-            font-size: 0.8em;
-        }}
-        
-        @media (max-width: 768px) {{
-            .container {{
-                padding: 15px;
-            }}
-            
-            table {{
-                font-size: 0.9em;
-            }}
-            
-            th, td {{
-                padding: 8px;
-            }}
-        }}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body {{ font-family: 'Inter', sans-serif; }}
+        .mono {{ font-family: 'JetBrains Mono', monospace; }}
     </style>
-    """
-    
-    # HTML content
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ROS Bag Analysis Report - {summary['file_name']}</title>
-        {css_styles}
-    </head>
-    <body>
-        <div class="container">
-            <h1>ROS Bag Analysis Report</h1>
-            
-            <div class="summary">
-                <h2>Summary</h2>
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <div class="label">File Name</div>
-                        <div class="value">{summary['file_name']}</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="label">Topics</div>
-                        <div class="value">{summary['topic_count']}</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="label">Messages</div>
-                        <div class="value">{summary['total_messages']:,}</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="label">File Size</div>
-                        <div class="value">{summary['file_size_formatted']}</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="label">Duration</div>
-                        <div class="value">{summary['duration_formatted']}</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="label">Average Rate</div>
-                        <div class="value">{summary['avg_rate_formatted']}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <h2>Topics</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Topic</th>
-                        <th>Message Type</th>
-                        <th>Count</th>
-                        <th>Size</th>
-                        <th>Frequency</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-    
-    # Add topic rows
-    for topic in topics:
-        html_content += f"""
-                    <tr>
-                        <td class="topic-name">{topic['topic']}</td>
-                        <td class="message-type">{topic['message_type']}</td>
-                        <td class="count">{topic['count']:,} msgs</td>
-                        <td class="size">{topic['size_formatted']}</td>
-                        <td class="frequency">{topic['frequency_formatted']}</td>
-                    </tr>
-        """
-    
-    html_content += f"""
-                </tbody>
-            </table>
-            
-            <div class="footer">
-                <p>Generated by Rose ROS Bag Tool</p>
-                <p class="timestamp">Report generated at {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+</head>
+<body class="min-h-full bg-rose-50 text-rose-900">
+    <div class="max-w-7xl mx-auto p-4 sm:p-6">
+        <!-- Header -->
+        <div class="border-b-2 border-rose-500 pb-4 mb-6">
+            <h1 class="text-2xl sm:text-3xl font-bold text-rose-500">ROS Bag Analysis</h1>
+            <p class="text-sm text-gray-600 mt-1">
+                <span class="font-medium">{summary['file_name']}</span> • 
+                Generated {time.strftime('%Y-%m-%d %H:%M:%S')}
+            </p>
+        </div>
+
+        <!-- Summary Table -->
+        <div class="mb-8">
+            <h2 class="text-lg font-semibold text-rose-500 mb-3">Summary</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <tbody class="divide-y divide-gray-200">
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">Topics</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['topic_count']}</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">Messages</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['total_messages']:,}</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">File Size</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['file_size_formatted']}</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">Duration</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('duration_formatted', 'N/A')}</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">Avg Rate</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('avg_rate_formatted', 'N/A')}</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">Compression</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('compression', 'N/A')}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
-    </body>
-    </html>
-    """
+
+        <!-- Topics Table -->
+        <div>
+            <h2 class="text-lg font-semibold text-rose-500 mb-3">Topics ({len(topics)})</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <thead class="bg-rose-500">
+                        <tr>
+                            <th class="px-3 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Topic</th>
+                            <th class="px-3 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
+                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Count</th>
+                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Size</th>
+                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">"""
+    
+    # Add topic rows with alternating colors
+    for i, topic in enumerate(topics):
+        row_class = "bg-white" if i % 2 == 0 else "bg-gray-50"
+        html_content += f"""
+                        <tr class="{row_class} hover:bg-rose-50 transition-colors">
+                            <td class="px-3 py-2 text-sm font-medium text-rose-600 mono">{topic['topic']}</td>
+                            <td class="px-3 py-2 text-sm text-gray-700 mono">{topic['message_type']}</td>
+                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic['count']:,}</td>
+                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic['size_formatted']}</td>
+                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic.get('frequency_formatted', 'N/A')}</td>
+                        </tr>"""
+    
+    html_content += f"""
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 pt-6 border-t border-gray-200 text-center">
+            <p class="text-xs text-gray-500">Generated by Rose ROS Bag Tool • Tailwind CSS</p>
+        </div>
+    </div>
+</body>
+</html>"""
     
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)

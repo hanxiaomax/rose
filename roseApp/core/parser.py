@@ -239,16 +239,16 @@ class RosbagsBagParser(IBagParser):
                 # Count messages for each selected topic
                 for connection in selected_connections:
                     # Use efficient message counting
-                    count = sum(1 for _ in reader.messages([connection]))
-                    selected_topic_counts[connection.topic] = count
-                    total_messages += count
-                
-                if total_messages == 0:
-                    _logger.warning(f"No messages found for selected topics in {input_bag}")
-                    if progress_callback:
-                        progress_callback(100)
-                    return "No messages found for selected topics"
-                
+                        count = sum(1 for _ in reader.messages([connection]))
+                        selected_topic_counts[connection.topic] = count
+                        total_messages += count
+            
+            if total_messages == 0:
+                _logger.warning(f"No messages found for selected topics in {input_bag}")
+                if progress_callback:
+                    progress_callback(100)
+                return "No messages found for selected topics"
+            
                 # Create output directory if needed
                 output_dir = os.path.dirname(output_bag)
                 if output_dir:
@@ -320,7 +320,7 @@ class RosbagsBagParser(IBagParser):
                 
             # Log performance statistics
             _logger.info(f"Filtered {processed_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s")
-            
+                
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
             
         except ValueError as ve:
@@ -480,7 +480,7 @@ class RosbagsBagParser(IBagParser):
         except Exception as e:
             _logger.error(f"Error getting topic stats: {e}")
             raise Exception(f"Error getting topic stats: {e}")
-
+    
     def read_messages(self, bag_path: str, topics: List[str]):
         """
         Read messages from specified topics in the bag file
@@ -522,7 +522,7 @@ class RosbagsBagParser(IBagParser):
                     except Exception as e:
                         _logger.warning(f"Could not deserialize message for {connection.topic} ({connection.msgtype}): {e}")
                         continue
-             
+                
         except Exception as e:
             _logger.error(f"Error reading messages from bag with AnyReader: {e}")
             raise Exception(f"Error reading messages from bag: {e}")

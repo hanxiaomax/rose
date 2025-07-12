@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Plotting utilities for ROS bag visualization
+Uses index.css based theme system for consistent styling
 """
 
 import os
@@ -8,7 +9,7 @@ import time
 from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 
-# Import unified theme
+# Import unified theme system
 from ..core.theme import theme
 
 try:
@@ -104,7 +105,7 @@ def create_frequency_plot(json_data: Dict[str, Any], output_path: str, plot_form
 
 
 def _create_frequency_plot_matplotlib(topics_data, summary, output_path, plot_format):
-    """Create frequency plot using matplotlib"""
+    """Create frequency plot using matplotlib with theme"""
     # Apply theme
     theme.apply_matplotlib_style()
     
@@ -115,11 +116,11 @@ def _create_frequency_plot_matplotlib(topics_data, summary, output_path, plot_fo
     display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
     
     fig, ax = plt.subplots(figsize=(12, 8))
-    bars = ax.bar(range(len(topics)), frequencies, color=theme.PLOT_COLORS[0], alpha=0.7)
+    bars = ax.bar(range(len(topics)), frequencies, color=theme.get_plot_color(0), alpha=0.8)
     
-    ax.set_xlabel('Topics')
-    ax.set_ylabel('Frequency (Hz)')
-    ax.set_title(f'Topic Message Frequencies - {summary["file_name"]}')
+    ax.set_xlabel('Topics', fontsize=12)
+    ax.set_ylabel('Frequency (Hz)', fontsize=12)
+    ax.set_title(f'Topic Message Frequencies - {summary["file_name"]}', fontsize=14, fontweight='bold')
     ax.set_xticks(range(len(topics)))
     ax.set_xticklabels(display_topics, rotation=45, ha='right')
     
@@ -127,7 +128,11 @@ def _create_frequency_plot_matplotlib(topics_data, summary, output_path, plot_fo
     for bar, freq in zip(bars, frequencies):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height + max(frequencies)*0.01,
-                f'{freq:.1f}', ha='center', va='bottom', color=theme.TEXT_PRIMARY)
+                f'{freq:.1f}', ha='center', va='bottom', color=theme.TEXT_PRIMARY, fontsize=10)
+    
+    # Customize grid
+    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
     
     plt.tight_layout()
     plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
@@ -137,7 +142,7 @@ def _create_frequency_plot_matplotlib(topics_data, summary, output_path, plot_fo
 
 
 def _create_frequency_plot_plotly(topics_data, summary, output_path):
-    """Create frequency plot using plotly"""
+    """Create frequency plot using plotly with theme"""
     topics = [t['topic'] for t in topics_data]
     frequencies = [t['frequency'] for t in topics_data]
     
@@ -148,17 +153,24 @@ def _create_frequency_plot_plotly(topics_data, summary, output_path):
         go.Bar(
             x=topics,
             y=frequencies,
-            marker_color=theme.PLOT_COLORS[0],
+            marker_color=theme.get_plot_color(0),
             text=[f'{f:.1f} Hz' for f in frequencies],
             textposition='auto',
+            hovertemplate='<b>%{x}</b><br>Frequency: %{y:.1f} Hz<extra></extra>'
         )
     ])
     
     fig.update_layout(
-        title=f'Topic Message Frequencies - {summary["file_name"]}',
+        title={
+            'text': f'Topic Message Frequencies - {summary["file_name"]}',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 18}
+        },
         xaxis_title='Topics',
         yaxis_title='Frequency (Hz)',
         xaxis_tickangle=-45,
+        showlegend=False,
         **template['layout']
     )
     
@@ -189,7 +201,7 @@ def create_size_distribution_plot(json_data: Dict[str, Any], output_path: str, p
 
 
 def _create_size_plot_matplotlib(topics_data, summary, output_path, plot_format):
-    """Create size distribution plot using matplotlib"""
+    """Create size distribution plot using matplotlib with theme"""
     # Apply theme
     theme.apply_matplotlib_style()
     
@@ -200,11 +212,11 @@ def _create_size_plot_matplotlib(topics_data, summary, output_path, plot_format)
     display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
     
     fig, ax = plt.subplots(figsize=(12, 8))
-    bars = ax.bar(range(len(topics)), sizes, color=theme.PLOT_COLORS[2], alpha=0.7)
+    bars = ax.bar(range(len(topics)), sizes, color=theme.get_plot_color(2), alpha=0.8)
     
-    ax.set_xlabel('Topics')
-    ax.set_ylabel('Total Size (Bytes)')
-    ax.set_title(f'Topic Message Sizes - {summary["file_name"]}')
+    ax.set_xlabel('Topics', fontsize=12)
+    ax.set_ylabel('Total Size (Bytes)', fontsize=12)
+    ax.set_title(f'Topic Message Sizes - {summary["file_name"]}', fontsize=14, fontweight='bold')
     ax.set_xticks(range(len(topics)))
     ax.set_xticklabels(display_topics, rotation=45, ha='right')
     
@@ -215,7 +227,11 @@ def _create_size_plot_matplotlib(topics_data, summary, output_path, plot_format)
     for bar, size in zip(bars, sizes):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height + max(sizes)*0.01,
-                _format_bytes(size), ha='center', va='bottom', fontsize=8)
+                _format_bytes(size), ha='center', va='bottom', color=theme.TEXT_PRIMARY, fontsize=10)
+    
+    # Customize grid
+    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
     
     plt.tight_layout()
     plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
@@ -225,7 +241,7 @@ def _create_size_plot_matplotlib(topics_data, summary, output_path, plot_format)
 
 
 def _create_size_plot_plotly(topics_data, summary, output_path):
-    """Create size distribution plot using plotly"""
+    """Create size distribution plot using plotly with theme"""
     topics = [t['topic'] for t in topics_data]
     sizes = [t['size'] for t in topics_data]
     size_labels = [_format_bytes(s) for s in sizes]
@@ -237,17 +253,24 @@ def _create_size_plot_plotly(topics_data, summary, output_path):
         go.Bar(
             x=topics,
             y=sizes,
-            marker_color=theme.PLOT_COLORS[2],
+            marker_color=theme.get_plot_color(2),
             text=size_labels,
             textposition='auto',
+            hovertemplate='<b>%{x}</b><br>Size: %{text}<extra></extra>'
         )
     ])
     
     fig.update_layout(
-        title=f'Topic Message Sizes - {summary["file_name"]}',
+        title={
+            'text': f'Topic Message Sizes - {summary["file_name"]}',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 18}
+        },
         xaxis_title='Topics',
         yaxis_title='Total Size (Bytes)',
         xaxis_tickangle=-45,
+        showlegend=False,
         **template['layout']
     )
     
@@ -281,7 +304,7 @@ def create_message_count_plot(json_data: Dict[str, Any], output_path: str, plot_
 
 
 def _create_count_plot_matplotlib(topics_data, summary, output_path, plot_format):
-    """Create message count plot using matplotlib"""
+    """Create message count plot using matplotlib with theme"""
     # Apply theme
     theme.apply_matplotlib_style()
     
@@ -292,11 +315,11 @@ def _create_count_plot_matplotlib(topics_data, summary, output_path, plot_format
     display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
     
     fig, ax = plt.subplots(figsize=(12, 8))
-    bars = ax.bar(range(len(topics)), counts, color=theme.PLOT_COLORS[3], alpha=0.7)
+    bars = ax.bar(range(len(topics)), counts, color=theme.get_plot_color(3), alpha=0.8)
     
-    ax.set_xlabel('Topics')
-    ax.set_ylabel('Message Count')
-    ax.set_title(f'Topic Message Counts - {summary["file_name"]}')
+    ax.set_xlabel('Topics', fontsize=12)
+    ax.set_ylabel('Message Count', fontsize=12)
+    ax.set_title(f'Topic Message Counts - {summary["file_name"]}', fontsize=14, fontweight='bold')
     ax.set_xticks(range(len(topics)))
     ax.set_xticklabels(display_topics, rotation=45, ha='right')
     
@@ -304,7 +327,11 @@ def _create_count_plot_matplotlib(topics_data, summary, output_path, plot_format
     for bar, count in zip(bars, counts):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height + max(counts)*0.01,
-                f'{count:,}', ha='center', va='bottom', color=theme.TEXT_PRIMARY)
+                f'{count:,}', ha='center', va='bottom', color=theme.TEXT_PRIMARY, fontsize=10)
+    
+    # Customize grid
+    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
     
     plt.tight_layout()
     plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
@@ -314,7 +341,7 @@ def _create_count_plot_matplotlib(topics_data, summary, output_path, plot_format
 
 
 def _create_count_plot_plotly(topics_data, summary, output_path):
-    """Create message count plot using plotly"""
+    """Create message count plot using plotly with theme"""
     topics = [t['topic'] for t in topics_data]
     counts = [t['count'] for t in topics_data]
     
@@ -325,17 +352,24 @@ def _create_count_plot_plotly(topics_data, summary, output_path):
         go.Bar(
             x=topics,
             y=counts,
-            marker_color=theme.PLOT_COLORS[3],
+            marker_color=theme.get_plot_color(3),
             text=[f'{c:,}' for c in counts],
             textposition='auto',
+            hovertemplate='<b>%{x}</b><br>Count: %{y:,}<extra></extra>'
         )
     ])
     
     fig.update_layout(
-        title=f'Topic Message Counts - {summary["file_name"]}',
+        title={
+            'text': f'Topic Message Counts - {summary["file_name"]}',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 18}
+        },
         xaxis_title='Topics',
         yaxis_title='Message Count',
         xaxis_tickangle=-45,
+        showlegend=False,
         **template['layout']
     )
     
@@ -368,7 +402,7 @@ def create_overview_plot(json_data: Dict[str, Any], output_path: str, plot_forma
 
 
 def _create_overview_plot_matplotlib(topics_data, summary, output_path, plot_format):
-    """Create overview plot using matplotlib"""
+    """Create overview plot using matplotlib with theme"""
     # Apply theme
     theme.apply_matplotlib_style()
     
@@ -383,26 +417,32 @@ def _create_overview_plot_matplotlib(topics_data, summary, output_path, plot_for
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
     
     # Message counts
-    bars1 = ax1.bar(range(len(topics)), counts, color=theme.PLOT_COLORS[3], alpha=0.7)
-    ax1.set_title('Message Counts')
-    ax1.set_ylabel('Count')
+    bars1 = ax1.bar(range(len(topics)), counts, color=theme.get_plot_color(3), alpha=0.8)
+    ax1.set_title('Message Counts', fontsize=14, fontweight='bold')
+    ax1.set_ylabel('Count', fontsize=12)
     ax1.set_xticks(range(len(topics)))
     ax1.set_xticklabels(display_topics, rotation=45, ha='right')
+    ax1.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax1.set_axisbelow(True)
     
     # Sizes
-    bars2 = ax2.bar(range(len(topics)), sizes, color=theme.PLOT_COLORS[2], alpha=0.7)
-    ax2.set_title('Total Sizes')
-    ax2.set_ylabel('Size (Bytes)')
+    bars2 = ax2.bar(range(len(topics)), sizes, color=theme.get_plot_color(2), alpha=0.8)
+    ax2.set_title('Total Sizes', fontsize=14, fontweight='bold')
+    ax2.set_ylabel('Size (Bytes)', fontsize=12)
     ax2.set_xticks(range(len(topics)))
     ax2.set_xticklabels(display_topics, rotation=45, ha='right')
     ax2.yaxis.set_major_formatter(FuncFormatter(lambda x, p: _format_bytes(x)))
+    ax2.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax2.set_axisbelow(True)
     
     # Frequencies
-    bars3 = ax3.bar(range(len(topics)), frequencies, color=theme.PLOT_COLORS[0], alpha=0.7)
-    ax3.set_title('Frequencies')
-    ax3.set_ylabel('Frequency (Hz)')
+    bars3 = ax3.bar(range(len(topics)), frequencies, color=theme.get_plot_color(0), alpha=0.8)
+    ax3.set_title('Frequencies', fontsize=14, fontweight='bold')
+    ax3.set_ylabel('Frequency (Hz)', fontsize=12)
     ax3.set_xticks(range(len(topics)))
     ax3.set_xticklabels(display_topics, rotation=45, ha='right')
+    ax3.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax3.set_axisbelow(True)
     
     # Summary stats
     ax4.axis('off')
@@ -413,13 +453,14 @@ Total Messages: {summary['total_messages']:,}
 File Size: {summary['file_size_formatted']}
 Duration: {summary['duration_formatted']}
 Avg Rate: {summary['avg_rate_formatted']}
+Theme: {'Dark' if theme.dark_mode else 'Light'} mode
     """.strip()
     ax4.text(0.1, 0.5, stats_text, transform=ax4.transAxes, fontsize=12,
              verticalalignment='center', color=theme.TEXT_PRIMARY,
              bbox=dict(boxstyle='round', facecolor=theme.SURFACE, alpha=0.8))
-    ax4.set_title('Summary Statistics')
+    ax4.set_title('Summary Statistics', fontsize=14, fontweight='bold')
     
-    plt.suptitle(f'ROS Bag Overview - {summary["file_name"]}', fontsize=16)
+    plt.suptitle(f'ROS Bag Overview - {summary["file_name"]}', fontsize=16, fontweight='bold')
     plt.tight_layout()
     plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
     plt.close()
@@ -428,7 +469,7 @@ Avg Rate: {summary['avg_rate_formatted']}
 
 
 def _create_overview_plot_plotly(topics_data, summary, output_path):
-    """Create overview plot using plotly"""
+    """Create overview plot using plotly with theme"""
     topics = [t['topic'] for t in topics_data]
     counts = [t['count'] for t in topics_data]
     sizes = [t['size'] for t in topics_data]
@@ -446,41 +487,77 @@ def _create_overview_plot_plotly(topics_data, summary, output_path):
     
     # Message counts
     fig.add_trace(
-        go.Bar(x=topics, y=counts, name='Count', marker_color=theme.PLOT_COLORS[3]),
+        go.Bar(
+            x=topics, 
+            y=counts, 
+            name='Count', 
+            marker_color=theme.get_plot_color(3),
+            hovertemplate='<b>%{x}</b><br>Count: %{y:,}<extra></extra>'
+        ),
         row=1, col=1
     )
     
     # Sizes
     fig.add_trace(
-        go.Bar(x=topics, y=sizes, name='Size', marker_color=theme.PLOT_COLORS[2]),
+        go.Bar(
+            x=topics, 
+            y=sizes, 
+            name='Size', 
+            marker_color=theme.get_plot_color(2),
+            hovertemplate='<b>%{x}</b><br>Size: %{y}<extra></extra>'
+        ),
         row=1, col=2
     )
     
     # Frequencies
     fig.add_trace(
-        go.Bar(x=topics, y=frequencies, name='Frequency', marker_color=theme.PLOT_COLORS[0]),
+        go.Bar(
+            x=topics, 
+            y=frequencies, 
+            name='Frequency', 
+            marker_color=theme.get_plot_color(0),
+            hovertemplate='<b>%{x}</b><br>Frequency: %{y:.1f} Hz<extra></extra>'
+        ),
         row=2, col=1
     )
     
     # Summary table
     fig.add_trace(
         go.Table(
-            header=dict(values=['Metric', 'Value'],
-                       fill_color=theme.SURFACE,
-                       font=dict(color=theme.TEXT_PRIMARY)),
-            cells=dict(values=[
-                ['File', 'Topics', 'Messages', 'File Size', 'Duration', 'Avg Rate'],
-                [summary['file_name'], summary['topic_count'], f"{summary['total_messages']:,}",
-                 summary['file_size_formatted'], summary['duration_formatted'], summary['avg_rate_formatted']]
-            ],
-            fill_color=theme.BACKGROUND,
-            font=dict(color=theme.TEXT_PRIMARY))
+            header=dict(
+                values=['Metric', 'Value'],
+                fill_color=theme.SURFACE,
+                font=dict(color=theme.TEXT_PRIMARY, size=14),
+                align='left'
+            ),
+            cells=dict(
+                values=[
+                    ['File', 'Topics', 'Messages', 'File Size', 'Duration', 'Avg Rate', 'Theme'],
+                    [
+                        summary['file_name'], 
+                        summary['topic_count'], 
+                        f"{summary['total_messages']:,}",
+                        summary['file_size_formatted'], 
+                        summary['duration_formatted'], 
+                        summary['avg_rate_formatted'],
+                        f"{'Dark' if theme.dark_mode else 'Light'} mode"
+                    ]
+                ],
+                fill_color=theme.BACKGROUND,
+                font=dict(color=theme.TEXT_PRIMARY, size=12),
+                align='left'
+            )
         ),
         row=2, col=2
     )
     
     fig.update_layout(
-        title_text=f"ROS Bag Overview - {summary['file_name']}",
+        title={
+            'text': f"ROS Bag Overview - {summary['file_name']}",
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 20}
+        },
         showlegend=False,
         height=800,
         **template['layout']
