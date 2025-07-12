@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rich import box
-from .theme import SUCCESS, INFO, ACCENT, PRIMARY
+from ..core.theme import theme
 from .util import LoadingAnimation
 
 
@@ -166,7 +166,7 @@ def create_responsive_topic_table(all_topics: List[str], connections: Dict[str, 
     table.add_column("Topic", justify="left", style="bold", width=topic_width, 
                     overflow="ellipsis", no_wrap=False)
     table.add_column("Count", justify="right", style="cyan", width=count_width)
-    table.add_column("Size", justify="right", style="yellow", width=size_width)
+    table.add_column("Size", justify="right", style=theme.WARNING, width=size_width)
     
     # Calculate summary statistics
     selected_count = 0
@@ -186,7 +186,7 @@ def create_responsive_topic_table(all_topics: List[str], connections: Dict[str, 
         total_size += topic_stats.get(topic, {'size': 0})['size']
         
         # Create status icon
-        status_icon = Text("✓", style="green") if is_selected else Text("○", style="yellow")
+        status_icon = Text("✓", style="green") if is_selected else Text("○", style=theme.WARNING)
         
         # Create topic text with appropriate styling and word wrapping
         topic_text = Text(topic, style="green" if is_selected else "white")
@@ -198,7 +198,7 @@ def create_responsive_topic_table(all_topics: List[str], connections: Dict[str, 
         
         # Format count and size
         count_text = Text(f"{count:,}", style="cyan")
-        size_text = Text(format_size(size), style="yellow")
+        size_text = Text(format_size(size), style=theme.WARNING)
         
         # Add row to table
         table.add_row(status_icon, topic_text, count_text, size_text)
@@ -248,7 +248,7 @@ def create_test_report_table(test_results: List[Dict[str, Any]], console: Consol
         elif status.lower() in ['fail', 'failed', 'error', 'failed']:
             status_text = Text("✗ FAIL", style="red")
         elif status.lower() in ['skip', 'skipped', 'pending']:
-            status_text = Text("○ SKIP", style="yellow")
+            status_text = Text("○ SKIP", style=theme.WARNING)
         else:
             status_text = Text(status, style="white")
         
@@ -571,7 +571,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     f"Processing: {display_path}",
                     total=100,
                     completed=0,
-                    style=f"{ACCENT}"
+                    style=f"{theme.ACCENT}"
                 )
                 tasks[bag_file] = task
                 active_files.add(bag_file)
@@ -583,7 +583,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                         thread_local.parser = create_parser(ParserType.ROSBAGS)
                 
                 # Initialize progress to 30% to indicate preparation complete
-                progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=30)
+                progress.update(task, description=f"Processing: {display_path}", style=f"{theme.ACCENT}", completed=30)
                 
                 # Define progress update callback function
                 def update_progress(percent: int):
@@ -591,7 +591,7 @@ def _process_directory_parallel(parser, bag_files: List[str], input_dir: str, ou
                     mapped_percent = 30 + (percent * 0.7)
                     progress.update(task, 
                                   description=f"Processing: {display_path} ({percent}%)", 
-                                  style=f"{ACCENT}", 
+                                  style=f"{theme.ACCENT}", 
                                   completed=mapped_percent)
                 
                 # Execute filtering

@@ -13,7 +13,7 @@ import threading
 import queue
 from ..core.parser import create_parser, ParserType, IBagParser
 from ..core.util import get_logger, get_preferred_parser_type
-from ..core.theme import theme, style, SUCCESS, WARNING, INFO, ACCENT, PRIMARY  # Import unified theme
+from ..core.theme import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -45,7 +45,7 @@ class CliTool:
                 validate=PathValidator(is_file=True, message="File does not exist"),
                 filter=lambda x: x if x.endswith('.bag') else None,
                 invalid_message="File must be a .bag file",
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if input_bag is None:  # User cancelled
@@ -68,7 +68,7 @@ class CliTool:
                 message="Enter output bag file path:",
                 default=default_path,
                 validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if not output_bag:  # User cancelled
@@ -80,14 +80,14 @@ class CliTool:
                 overwrite = inquirer.confirm(
                     message=f"Output file '{output_bag}' already exists. Do you want to overwrite it?",
                     default=False,
-                    style=style
+                    style=theme.get_inquirer_style()
                 ).execute()
                 
                 if overwrite:
                     return output_bag, True  # File path and overwrite=True
                 else:
                     # User doesn't want to overwrite, ask for different filename
-                    self.console.print("Please choose a different filename.", style=YELLOW)
+                    self.console.print("Please choose a different filename.", style=theme.WARNING)
                     continue  # Go back to filename input
             else:
                 # File doesn't exist, no need to overwrite
@@ -110,7 +110,7 @@ class CliTool:
                         Choice(value="whitelist", name="2. Whitelist - Manage topic whitelists"),
                         Choice(value="exit", name="3. Exit")
                     ],
-                    style=style
+                    style=theme.get_inquirer_style()
                 ).execute()
                 
                 if action == "exit":
@@ -121,7 +121,7 @@ class CliTool:
                     self.whitelist_manager()
                 
         except KeyboardInterrupt:
-            self.console.print("\nOperation cancelled by user", style=WARNING)
+            self.console.print("\nOperation cancelled by user", style=theme.WARNING)
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
             self.console.print(f"\nError: {str(e)}", style=theme.ERROR)
@@ -133,7 +133,7 @@ class CliTool:
             input_path = inquirer.filepath(
                 message="Load Bag file(s):\n • Please specify the bag file or a directory to search \n • Leave blank to return to main menu\nFilename/Directory:",
                 validate=lambda x: os.path.exists(x) or "Path does not exist",
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if not input_path:
@@ -143,7 +143,7 @@ class CliTool:
             if os.path.isfile(input_path):
                 # Single bag file processing
                 if not input_path.endswith('.bag'):
-                    self.console.print("File must be a .bag file", style="red")
+                    self.console.print("File must be a .bag file", style=theme.ERROR)
                     continue
                 
                 # Process single bag file
@@ -159,7 +159,7 @@ class CliTool:
                         Choice(value="continue", name="1. Process more files"),
                         Choice(value="main", name="2. Return to main menu")
                     ],
-                    style=style
+                    style=theme.get_inquirer_style()
                 ).execute()
                 
                 if continue_action == "main":
@@ -178,7 +178,7 @@ class CliTool:
                 Choice(value="manual", name="2. Select topics manually"),
                 Choice(value="back", name="3. Back")
             ],
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
     
     def handle_single_bag_interactive(self, bag_path: str):
@@ -202,7 +202,7 @@ class CliTool:
                     Choice(value="filter", name="2. Filter bag file"),
                     Choice(value="back", name="3. Back to file selection")
                 ],
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if next_action == "back":
@@ -238,7 +238,7 @@ class CliTool:
         # Find and select bag files
         bag_files = collect_bag_files(directory_path)
         if not bag_files:
-            self.console.print("No bag files found in directory", style="red")
+            self.console.print("No bag files found in directory", style=theme.ERROR)
             return  # Go back to input selection
             
         # Create file selection choices
@@ -261,7 +261,7 @@ class CliTool:
             validate=lambda result: len(result) > 0,
             invalid_message="Please select at least one file",
             transformer=bag_list_transformer,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if not selected_files:
@@ -302,7 +302,7 @@ class CliTool:
             message="Choose compression type:",
             choices=compression_choices,
             default="none",
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if compression is None:
@@ -312,7 +312,7 @@ class CliTool:
         confirm = inquirer.confirm(
             message="Are you sure you want to process these bag files?",
             default=False,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         if not confirm:
             return  # Go back to input selection
@@ -324,19 +324,19 @@ class CliTool:
     def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=YELLOW)
+            self.console.print("No whitelists found", style=theme.WARNING)
             return None
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style=YELLOW)
+            self.console.print("No whitelists found", style=theme.WARNING)
             return None
             
         # Select whitelist to use
         selected = inquirer.select(
             message="Select whitelist to use:",
             choices=whitelists,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if not selected:
@@ -367,14 +367,14 @@ class CliTool:
                     all_connections.update(connections)
                     progress.advance(task)
                 except Exception as e:
-                    self.console.print(f"Error loading {bag_file}: {str(e)}", style="red")
+                    self.console.print(f"Error loading {bag_file}: {str(e)}", style=theme.ERROR)
                     # Continue with other files
         
         if not all_topics:
-            self.console.print("No topics found in selected bag files", style="red")
+            self.console.print("No topics found in selected bag files", style=theme.ERROR)
             return None
         
-        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=SUCCESS)
+        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=theme.SUCCESS)
         
         # Use the first bag file for statistics display (as an example)
         bag_path_for_stats = selected_files[0] if selected_files else None
@@ -430,7 +430,7 @@ class CliTool:
                         f"Processing: {display_path}",
                         total=100,
                         completed=0,
-                        style=f"{ACCENT}"
+                        style=theme.ACCENT
                     )
                     tasks[bag_file] = task
                     active_files.add(bag_file)
@@ -447,14 +447,14 @@ class CliTool:
                             thread_local.parser = create_parser(ParserType.ROSBAGS)
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {display_path}", style=f"{ACCENT}", completed=0)
+                    progress.update(task, description=f"Processing: {display_path}", style=theme.ACCENT, completed=0)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         progress.update(task, 
                                        description=f"Processing: {display_path}", 
-                                       style=f"{ACCENT}", 
+                                       style=theme.ACCENT, 
                                        completed=percent)
                     
                     # Use progress callback for filtering
@@ -506,7 +506,7 @@ class CliTool:
                         active_files.remove(bag_file)
             
             max_workers = min(len(selected_files), WORKERS)
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=INFO)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=theme.INFO)
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks to the executor without creating progress tasks yet
@@ -551,19 +551,19 @@ class CliTool:
             # Get whitelist file
             whitelist_dir = "whitelists"
             if not os.path.exists(whitelist_dir):
-                self.console.print("No whitelists found", style="yellow")
+                self.console.print("No whitelists found", style=theme.WARNING)
                 return
                 
             whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
             if not whitelists:
-                self.console.print("No whitelists found", style="yellow")
+                self.console.print("No whitelists found", style=theme.WARNING)
                 return
                 
             # Select whitelist to use
             selected = inquirer.select(
                 message="Select whitelist to use:",
                 choices=whitelists,
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if not selected:
@@ -597,7 +597,7 @@ class CliTool:
             message="Choose compression type:",
             choices=compression_choices,
             default="none",
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if compression is None:
@@ -645,7 +645,7 @@ class CliTool:
                     Choice(value="delete", name="3. Delete whitelist"),
                     Choice(value="back", name="4. Back")
                 ],
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if action == "back":
@@ -681,7 +681,7 @@ class CliTool:
         use_default = inquirer.confirm(
             message=f"Use default path? ({default_path})",
             default=True,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if use_default:
@@ -691,7 +691,7 @@ class CliTool:
                 message="Enter save path:",
                 default="whitelists/my_whitelist.txt",
                 validate=lambda x: x.endswith('.txt') or "File must be a .txt file",
-                style=style
+                style=theme.get_inquirer_style()
             ).execute()
             
             if not output:
@@ -706,7 +706,7 @@ class CliTool:
             for topic in sorted(selected_topics):
                 f.write(f"{topic}\n")
         
-        self.console.print(f"\nSaved whitelist to: {output}", style=PRIMARY)
+        self.console.print(f"\nSaved whitelist to: {output}", style=theme.PRIMARY)
         
         # Ask what to do next
         next_action = inquirer.select(
@@ -715,7 +715,7 @@ class CliTool:
                 Choice(value="continue", name="1. Create another whitelist"),
                 Choice(value="back", name="2. Back")
             ],
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if next_action == "continue":
@@ -726,19 +726,19 @@ class CliTool:
         # Get all whitelist files
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style="yellow")
+            self.console.print("No whitelists found", style=theme.WARNING)
             return
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style="yellow")
+            self.console.print("No whitelists found", style=theme.WARNING)
             return
             
         # Select whitelist to view
         selected = inquirer.select(
             message="Select whitelist to view:",
             choices=whitelists,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if not selected:
@@ -749,7 +749,7 @@ class CliTool:
         with open(path) as f:
             content = f.read()
             
-        self.console.print(f"\nWhitelist: {selected}", style=f"bold {PRIMARY}")
+        self.console.print(f"\nWhitelist: {selected}", style=f"bold {theme.PRIMARY}")
         self.console.print("─" * 80)
         self.console.print(content)
     
@@ -761,19 +761,19 @@ class CliTool:
         """Delete a whitelist file"""
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=YELLOW)
+            self.console.print("No whitelists found", style=theme.WARNING)
             return
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style=YELLOW)
+            self.console.print("No whitelists found", style=theme.WARNING)
             return
             
         # Select whitelist to delete
         selected = inquirer.select(
             message="Select whitelist to delete:",
             choices=whitelists,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if not selected:
@@ -783,7 +783,7 @@ class CliTool:
         if not inquirer.confirm(
             message=f"Are you sure you want to delete '{selected}'?",
             default=False,
-            style=style
+            style=theme.get_inquirer_style()
         ).execute():
             return
             
@@ -791,9 +791,9 @@ class CliTool:
         path = os.path.join(whitelist_dir, selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style=PRIMARY)
+            self.console.print(f"\nDeleted whitelist: {selected}", style=theme.PRIMARY)
         except Exception as e:
-            self.console.print(f"\nError deleting whitelist: {str(e)}", style="red")
+            self.console.print(f"\nError deleting whitelist: {str(e)}", style=theme.ERROR)
 
 # Typer commands
 @app.command()

@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from .theme import SUCCESS, ACCENT, PRIMARY, YELLOW
+from ..core.theme import theme
 
 # Create app instance
 app = typer.Typer(name="prune", help="Manage analysis cache")
@@ -154,7 +154,7 @@ def clean(
     
     if verbose or dry_run:
         table = Table(show_header=True, header_style="bold")
-        table.add_column("File", style=PRIMARY)
+        table.add_column("File", style=theme.PRIMARY)
         table.add_column("Size", justify="right")
         table.add_column("Age", justify="right")
         
@@ -185,7 +185,7 @@ def clean(
     
     # Show results
     if cleaned_count > 0:
-        console.print(f"[{SUCCESS}]✓ Successfully cleaned {cleaned_count} files ({_format_size(total_clean_size)})[/{SUCCESS}]")
+        console.print(f"[{theme.SUCCESS}]✓ Successfully cleaned {cleaned_count} files ({_format_size(total_clean_size)})[/{theme.SUCCESS}]")
     
     if failed_count > 0:
         console.print(f"[red]✗ Failed to clean {failed_count} files[/red]")
@@ -222,13 +222,13 @@ def status(
     # Show summary
     panel_content = Text()
     panel_content.append(f"Directory: {CACHE_DIR}\n")
-    panel_content.append(f"Files: {cache_info['total_files']}\n", style=f"bold {ACCENT}")
-    panel_content.append(f"Total size: {_format_size(cache_info['total_size'])}", style=f"bold {ACCENT}")
+    panel_content.append(f"Files: {cache_info['total_files']}\n", style=f"bold {theme.ACCENT}")
+    panel_content.append(f"Total size: {_format_size(cache_info['total_size'])}", style=f"bold {theme.ACCENT}")
     
     panel = Panel(
         panel_content,
         title="Cache Status",
-        border_style=ACCENT
+        border_style=theme.ACCENT
     )
     console.print(panel)
     
@@ -243,7 +243,7 @@ def _show_cache_details(console: Console, cache_info: dict):
         return
     
     table = Table(show_header=True, header_style="bold")
-    table.add_column("File", style=PRIMARY)
+    table.add_column("File", style=theme.PRIMARY)
     table.add_column("Size", justify="right")
     table.add_column("Age", justify="right", style="dim")
     
@@ -299,7 +299,7 @@ def clear(
     try:
         shutil.rmtree(CACHE_DIR)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        console.print(f"[{SUCCESS}]✓ Successfully cleared all cache files[/{SUCCESS}]")
+        console.print(f"[{theme.SUCCESS}]✓ Successfully cleared all cache files[/{theme.SUCCESS}]")
     except Exception as e:
         console.print(f"[red]✗ Failed to clear cache: {e}[/red]")
 

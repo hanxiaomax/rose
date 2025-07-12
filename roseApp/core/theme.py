@@ -167,21 +167,6 @@ class RoseTheme:
 # Create global theme instance
 theme = RoseTheme()
 
-# Backward compatibility exports
-SUCCESS = theme.SUCCESS
-WARNING = theme.WARNING  
-INFO = theme.INFO
-ACCENT = theme.ACCENT
-PRIMARY = theme.PRIMARY
-SECONDARY = theme.SECONDARY
-ERROR = theme.ERROR
-GRAY = theme.TEXT_MUTED
-DIM_INFO = theme.TEXT_DIM
-INPUT_SECONDARY = theme.BORDER  # Use border color as input secondary
-
-# Export style for backward compatibility
-style = theme.get_inquirer_style()
-
 # Export functions for easy access
 def get_theme(dark_mode: bool = None) -> RoseTheme:
     """Get theme instance for specified mode"""

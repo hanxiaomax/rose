@@ -11,7 +11,7 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..core.theme import theme, style, DIM_INFO, WARNING, INFO, PRIMARY, ACCENT, SUCCESS
+from ..core.theme import theme
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -28,21 +28,21 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{WARNING} link https://github.com/hanxiaomax/rose")
+    subtitle.append("Github", style=f"{theme.WARNING} link https://github.com/hanxiaomax/rose")
     subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{WARNING} link https://github.com/hanxiaomax")
+    subtitle.append("Author", style=f"{theme.WARNING} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {PRIMARY}")
+    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {theme.PRIMARY}")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=WARNING,  
+        border_style=theme.WARNING,  
         highlight=True
     )
     
@@ -51,16 +51,16 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style=f"bold {ACCENT}")
+    console.print("\nUsage Instructions:",style=f"bold {theme.ACCENT}")
     if is_fuzzy:
-        console.print(f"•  [{ACCENT}]Type to search[/{ACCENT}]")
+        console.print(f"•  [{theme.ACCENT}]Type to search[/{theme.ACCENT}]")
     else:
-        console.print(f"•  [{ACCENT}]Space[/{ACCENT}] to select/unselect") 
-    console.print(f"•  [{ACCENT}]↑/↓[/{ACCENT}] to navigate options")
-    console.print(f"•  [{ACCENT}]Tab[/{ACCENT}] to select and move to next item")
-    console.print(f"•  [{ACCENT}]Shift+Tab[/{ACCENT}] to select and move to previous item")
-    console.print(f"•  [{ACCENT}]Ctrl+A[/{ACCENT}] to select all")
-    console.print(f"•  [{ACCENT}]Enter[/{ACCENT}] to confirm selection\n")
+        console.print(f"•  [{theme.ACCENT}]Space[/{theme.ACCENT}] to select/unselect") 
+    console.print(f"•  [{theme.ACCENT}]↑/↓[/{theme.ACCENT}] to navigate options")
+    console.print(f"•  [{theme.ACCENT}]Tab[/{theme.ACCENT}] to select and move to next item")
+    console.print(f"•  [{theme.ACCENT}]Shift+Tab[/{theme.ACCENT}] to select and move to previous item")
+    console.print(f"•  [{theme.ACCENT}]Ctrl+A[/{theme.ACCENT}] to select all")
+    console.print(f"•  [{theme.ACCENT}]Enter[/{theme.ACCENT}] to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -80,19 +80,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {PRIMARY}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {PRIMARY}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=ACCENT)
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {theme.ACCENT}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {theme.PRIMARY}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {theme.PRIMARY}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=theme.ACCENT)
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{PRIMARY}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {PRIMARY}")
+        bag_info.append(f"• {topic:<40}", style=f"{theme.PRIMARY}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {theme.PRIMARY}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=ACCENT,
+                  border_style=theme.ACCENT,
                   padding=(0, 1))
     
     console.print(panel)
@@ -105,7 +105,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
                 Choice(value="filter", name="1. Filter topics (fuzzy search)"),
                 Choice(value="back", name="2. Back")
             ],
-            style=style
+            style=theme.get_inquirer_style()
         ).execute()
         
         if action == "back":
@@ -115,23 +115,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=YELLOW)
+                console.print("No topics selected. Showing all topics.", style=theme.WARNING)
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {theme.ACCENT}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=PRIMARY)
+                filtered_info.append(f"• {topic:<40}", style=theme.PRIMARY)
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=PRIMARY,
+                                  border_style=theme.PRIMARY,
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -154,9 +154,9 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     
     # 添加三列，第一列较窄
-    table.add_column("", style=f"{PRIMARY}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{PRIMARY}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{PRIMARY}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    table.add_column("", style=f"{theme.PRIMARY}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{theme.PRIMARY}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{theme.PRIMARY}", justify="left", width=20)  # 增加size列宽度以适应额外信息
     
     # 添加input行
     table.add_row(
@@ -167,13 +167,13 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     
     # 添加output行，包含缩小百分比，使用ACCENT颜色
     table.add_row(
-        f"[{ACCENT}]Out[/{ACCENT}]",
-        f"[{ACCENT}]{os.path.basename(output_bag)}[/{ACCENT}]",
-        f"[{ACCENT}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{ACCENT}]"
+        f"[{theme.ACCENT}]Out[/{theme.ACCENT}]",
+        f"[{theme.ACCENT}]{os.path.basename(output_bag)}[/{theme.ACCENT}]",
+        f"[{theme.ACCENT}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{theme.ACCENT}]"
     )
     
     # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT}"))
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {theme.ACCENT}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -192,9 +192,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=f"{SUCCESS}")
+        console.print(summary, style=f"{theme.SUCCESS}")
     else:
-        console.print(summary, style=f"{ACCENT}")
+        console.print(summary, style=f"{theme.ACCENT}")
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -287,7 +287,7 @@ def ask_topics_with_fuzzy(
         marker="● ",
         border=True,
         cycle=True,
-        style=style,
+        style=theme.get_inquirer_style(),
         default=preselected
     ).execute()
     
@@ -322,7 +322,7 @@ class TimedPanelProgress(PanelProgress):
         # Display loading time after completion
         if self.start_time and self.end_time:
             elapsed = self.end_time - self.start_time
-            self._external_console.print(f"[{SUCCESS}]✓ Bag file loaded in {elapsed:.2f}s[/{SUCCESS}]")
+            self._external_console.print(f"[{theme.SUCCESS}]✓ Bag file loaded in {elapsed:.2f}s[/{theme.SUCCESS}]")
         
         return result
 
