@@ -138,6 +138,16 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
 
 def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     """Show filtering statistics in a table format with headers and three rows"""
+    # Check if files exist before trying to get their sizes
+    if not os.path.exists(input_bag):
+        console.print(f"[{theme.ERROR}]✗ Input bag file not found: {input_bag}[/{theme.ERROR}]")
+        return
+    
+    if not os.path.exists(output_bag):
+        console.print(f"[{theme.WARNING}]⚠ Output bag file not created: {output_bag}[/{theme.WARNING}]")
+        console.print(f"[{theme.WARNING}]The filtering process may have failed or been interrupted.[/{theme.WARNING}]")
+        return
+    
     input_size = os.path.getsize(input_bag)
     output_size = os.path.getsize(output_bag)
     input_size_mb:float = input_size / (1024 * 1024)

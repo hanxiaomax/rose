@@ -179,21 +179,7 @@ class RosbagsBagParser(IBagParser):
                   progress_callback: Optional[Callable] = None,
                   compression: str = 'none',
                   overwrite: bool = False) -> str:
-        """
-        Filter rosbag using enhanced rosbags AnyReader/Rosbag1Writer
-        
-        Args:
-            input_bag: Path to input bag file
-            output_bag: Path to output bag file  
-            topics: List of topics to include
-            time_range: Optional tuple of ((start_seconds, start_nanos), (end_seconds, end_nanos))
-            progress_callback: Optional callback function to report progress percentage (0-100)
-            compression: Compression type ('none', 'bz2', 'lz4')
-            overwrite: Whether to overwrite existing output file
-        
-        Returns:
-            Status message with completion time
-        """
+        """Filter bag file by topics and time range using AnyReader for performance"""
         try:
             # Validate compression type before starting
             from roseApp.core.util import validate_compression_type
@@ -239,16 +225,16 @@ class RosbagsBagParser(IBagParser):
                 # Count messages for each selected topic
                 for connection in selected_connections:
                     # Use efficient message counting
-                        count = sum(1 for _ in reader.messages([connection]))
-                        selected_topic_counts[connection.topic] = count
-                        total_messages += count
-            
-            if total_messages == 0:
-                _logger.warning(f"No messages found for selected topics in {input_bag}")
-                if progress_callback:
-                    progress_callback(100)
-                return "No messages found for selected topics"
-            
+                    count = sum(1 for _ in reader.messages([connection]))
+                    selected_topic_counts[connection.topic] = count
+                    total_messages += count
+                
+                if total_messages == 0:
+                    _logger.warning(f"No messages found for selected topics in {input_bag}")
+                    if progress_callback:
+                        progress_callback(100)
+                    return "No messages found for selected topics"
+                
                 # Create output directory if needed
                 output_dir = os.path.dirname(output_bag)
                 if output_dir:
@@ -292,7 +278,6 @@ class RosbagsBagParser(IBagParser):
                         topic_connections[connection.topic] = new_connection
                     
                     # Process messages with progress tracking
-                    
                     # Use efficient message iteration with pre-filtered connections
                     for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
                         # Check time range if specified
