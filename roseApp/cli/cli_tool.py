@@ -13,7 +13,7 @@ import threading
 import queue
 from ..core.parser import create_parser, ParserType, IBagParser
 from ..core.util import get_logger, get_preferred_parser_type
-from .theme import style, SUCCESS, YELLOW, INFO, ACCENT, PRIMARY  # Import colors and style
+from ..core.theme import theme, style, SUCCESS, WARNING, INFO, ACCENT, PRIMARY  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -121,10 +121,10 @@ class CliTool:
                     self.whitelist_manager()
                 
         except KeyboardInterrupt:
-            self.console.print("\nOperation cancelled by user", style=YELLOW)
+            self.console.print("\nOperation cancelled by user", style=WARNING)
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
-            self.console.print(f"\nError: {str(e)}", style="red")
+            self.console.print(f"\nError: {str(e)}", style=theme.ERROR)
 
     def interactive_filter(self):
         """Run interactive filter workflow"""

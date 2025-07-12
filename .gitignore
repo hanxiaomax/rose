@@ -38,3 +38,6 @@ dist/**
 *.log
 *.bag
 *.cast
+*.csv
+*.html
+*.png

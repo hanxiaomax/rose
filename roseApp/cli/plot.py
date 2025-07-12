@@ -1,398 +1,510 @@
 #!/usr/bin/env python3
 """
-Plot command for visualizing ROS bag topic data as time series graphs
+Plotting utilities for ROS bag visualization
 """
 
 import os
-import json
 import time
+from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple, Union
-import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
-import plotext as plt
 
-from ..core.parser import create_parser, ParserType
-from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
+# Import unified theme
+from ..core.theme import theme
 
-app = typer.Typer(help="Plot ROS bag topic data as time series graphs")
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.ticker import FuncFormatter
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    import plotly.offline as pyo
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
 
 
-@app.command()
-def plot(
-    input_path: str = typer.Argument(..., help="Input bag file path"),
-    topic: str = typer.Argument(..., help="Topic to plot"),
-    field: Optional[str] = typer.Option(None, "--field", "-f", help="Specific field to plot (e.g., 'x', 'position.x')"),
-    max_points: int = typer.Option(1000, "--max-points", "-n", help="Maximum number of points to plot (for performance)"),
-    width: int = typer.Option(80, "--width", "-w", help="Plot width in characters"),
-    height: int = typer.Option(20, "--height", "-h", help="Plot height in characters"),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="Custom plot title"),
-    save: Optional[str] = typer.Option(None, "--save", "-s", help="Save plot to file (HTML format)"),
-    list_fields: bool = typer.Option(False, "--list-fields", "-l", help="List available fields for the topic"),
-    plot_type: str = typer.Option("scatter", "--plot-type", "-p", help="Plot type: 'line' or 'scatter'"),
-    marker: str = typer.Option("sd", "--marker", "-m", help="Marker style for scatter plot: 'dot', 'sd', 'hd', 'braille', etc."),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output")
-):
-    """
-    Plot time series data from a ROS bag topic as scatter plot or line plot
+class PlottingError(Exception):
+    """Exception raised for plotting-related errors"""
+    pass
+
+
+def check_plotting_dependencies():
+    """Check if plotting dependencies are available"""
+    missing = []
+    if not MATPLOTLIB_AVAILABLE:
+        missing.append("matplotlib")
+    if not PLOTLY_AVAILABLE:
+        missing.append("plotly")
+    if not PANDAS_AVAILABLE:
+        missing.append("pandas")
     
-    Examples:
-        # Plot all numeric fields as scatter plot (default)
-        python -m roseApp.rose plot data.bag /odom
-        
-        # Plot specific field as scatter plot
-        python -m roseApp.rose plot data.bag /odom --field pose.pose.position.x
-        
-        # Use line plot instead of scatter plot
-        python -m roseApp.rose plot data.bag /odom --plot-type line
-        
-        # Use different marker styles for scatter plot
-        python -m roseApp.rose plot data.bag /odom --marker dot
-        
-        # List available fields
-        python -m roseApp.rose plot data.bag /odom --list-fields
-        
-        # Custom plot size and title with scatter plot
-        python -m roseApp.rose plot data.bag /odom -f x -w 100 -h 30 -t "Odometry X Position"
-        
-        # Save plot to HTML file
-        python -m roseApp.rose plot data.bag /odom --save plot.html
-    """
-    try:
-        # Initialize logging
-        set_app_mode(AppMode.CLI)
-        logger = get_logger("plot")
-        console = Console()
-        
-        # Validate input
-        if not os.path.exists(input_path):
-            typer.echo(f"Error: Input file '{input_path}' does not exist", err=True)
-            raise typer.Exit(code=1)
-        
-        if not input_path.endswith('.bag'):
-            typer.echo(f"Error: Input file '{input_path}' is not a bag file", err=True)
-            raise typer.Exit(code=1)
-        
-        # Initialize parser
-        parser = create_parser(ParserType.ROSBAGS)
-        logger.debug(f"Parsing bag file: {input_path}")
-        
-        # Load bag information with progress bar
-        from .util import LoadingAnimationWithTimer
-        with LoadingAnimationWithTimer("Loading bag file...", dismiss=True) as progress:
-            progress.add_task(description="Loading...")
-            topics, connections, time_range = parser.load_bag(input_path)
-        
-        # Check if topic exists
-        if topic not in topics:
-            available_topics = "\n".join(f"  - {t}" for t in topics[:10])
-            if len(topics) > 10:
-                available_topics += f"\n  ... and {len(topics) - 10} more"
-            
-            typer.echo(f"Error: Topic '{topic}' not found in bag file.", err=True)
-            typer.echo(f"Available topics:")
-            typer.echo(available_topics)
-            raise typer.Exit(code=1)
-        
-        # Extract messages from the topic
-        console.print(f"[dim]Extracting messages from topic: {topic}[/dim]")
-        
-        messages_data = _extract_topic_messages(parser, input_path, topic, max_points, logger)
-        
-        if not messages_data:
-            typer.echo(f"Error: No messages found for topic '{topic}'", err=True)
-            raise typer.Exit(code=1)
-        
-        # Get message structure to understand available fields
-        sample_msg = messages_data[0]['message']
-        available_fields = _get_numeric_fields(sample_msg)
-        
-        if list_fields:
-            _display_available_fields(console, topic, available_fields, sample_msg)
-            return
-        
-        if not available_fields:
-            typer.echo(f"Error: No numeric fields found in topic '{topic}'", err=True)
-            typer.echo("Use --list-fields to see the message structure")
-            raise typer.Exit(code=1)
-        
-        # Determine which field(s) to plot
-        fields_to_plot = []
-        if field:
-            if field in available_fields:
-                fields_to_plot = [field]
-            else:
-                typer.echo(f"Error: Field '{field}' not found in topic '{topic}'", err=True)
-                typer.echo(f"Available numeric fields: {', '.join(available_fields)}")
-                raise typer.Exit(code=1)
-        else:
-            # Plot all numeric fields (up to 5 for readability)
-            fields_to_plot = available_fields[:5]
-            if len(available_fields) > 5:
-                console.print(f"[yellow]Note: Only plotting first 5 fields. Use --field to specify a single field.[/yellow]")
-        
-        # Create the plot
-        _create_plot(
-            messages_data=messages_data,
-            fields_to_plot=fields_to_plot,
-            topic=topic,
-            width=width,
-            height=height,
-            title=title,
-            save=save,
-            plot_type=plot_type,
-            marker=marker,
-            verbose=verbose,
-            console=console
+    if missing:
+        missing_str = ", ".join(missing)
+        raise PlottingError(
+            f"Missing plotting dependencies: {missing_str}\n"
+            f"Install with: pip install 'rose-bag[plot]' or pip install {' '.join(missing)}"
         )
-        
-    except Exception as e:
-        log_cli_error(e)
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(code=1)
 
 
-def _extract_topic_messages(parser, bag_path: str, topic: str, max_points: int, logger) -> List[Dict]:
-    """Extract messages from a specific topic"""
-    messages = []
-    
-    try:
-        # Use the parser to get messages from the specific topic
-        message_count = 0
-        
-        # Get topic statistics to estimate total messages
-        topic_stats = parser.get_topic_stats(bag_path)
-        total_messages = topic_stats.get(topic, {}).get('count', 0)
-        
-        # Calculate step size to sample messages evenly
-        step_size = max(1, total_messages // max_points) if total_messages > max_points else 1
-        
-        # Read messages from the bag
-        for timestamp, msg in parser.read_messages(bag_path, [topic]):
-            if message_count % step_size == 0:
-                # Convert timestamp to seconds since start
-                time_seconds = timestamp[0] + timestamp[1] / 1_000_000_000
-                
-                messages.append({
-                    'timestamp': time_seconds,
-                    'message': msg
-                })
-                
-                if len(messages) >= max_points:
-                    break
-            
-            message_count += 1
-        
-        # Normalize timestamps to start from 0
-        if messages:
-            start_time = messages[0]['timestamp']
-            for msg_data in messages:
-                msg_data['timestamp'] -= start_time
-        
-        logger.debug(f"Extracted {len(messages)} messages from {total_messages} total")
-        
-    except Exception as e:
-        logger.error(f"Error extracting messages: {e}")
-        raise
-    
-    return messages
+def _format_bytes(bytes_val):
+    """Format bytes value for display"""
+    if bytes_val == 0:
+        return "0 B"
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if bytes_val < 1024:
+            return f"{bytes_val:.1f} {unit}"
+        bytes_val /= 1024
+    return f"{bytes_val:.1f} TB"
 
 
-def _get_numeric_fields(msg: Any, prefix: str = "") -> List[str]:
-    """Recursively find all numeric fields in a message"""
-    fields = []
-    
-    try:
-        if hasattr(msg, '__dict__'):
-            # ROS message object
-            for attr_name in dir(msg):
-                if not attr_name.startswith('_'):
-                    try:
-                        attr_value = getattr(msg, attr_name)
-                        field_name = f"{prefix}.{attr_name}" if prefix else attr_name
-                        
-                        if isinstance(attr_value, (int, float)):
-                            fields.append(field_name)
-                        elif hasattr(attr_value, '__dict__') and not callable(attr_value):
-                            # Nested object
-                            fields.extend(_get_numeric_fields(attr_value, field_name))
-                    except:
-                        pass
-        elif isinstance(msg, dict):
-            # Dictionary-like message
-            for key, value in msg.items():
-                field_name = f"{prefix}.{key}" if prefix else key
-                
-                if isinstance(value, (int, float)):
-                    fields.append(field_name)
-                elif isinstance(value, dict):
-                    fields.extend(_get_numeric_fields(value, field_name))
-        elif isinstance(msg, (int, float)):
-            # Single numeric value
-            if prefix:
-                fields.append(prefix)
-    except Exception:
-        # If we can't introspect the message, return empty list
-        pass
-    
-    return fields
-
-
-def _get_field_value(msg: Any, field_path: str) -> Optional[float]:
-    """Get value from a nested field path like 'pose.position.x'"""
-    try:
-        parts = field_path.split('.')
-        current = msg
-        
-        for part in parts:
-            if hasattr(current, part):
-                current = getattr(current, part)
-            elif isinstance(current, dict) and part in current:
-                current = current[part]
-            else:
-                return None
-        
-        if isinstance(current, (int, float)):
-            return float(current)
-        
-    except Exception:
-        pass
-    
-    return None
-
-
-def _display_available_fields(console: Console, topic: str, fields: List[str], sample_msg: Any):
-    """Display available fields in a nice format"""
-    console.print(f"\n[bold cyan]Available numeric fields for topic: {topic}[/bold cyan]")
-    
-    if not fields:
-        console.print("[yellow]No numeric fields found in this topic[/yellow]")
-        
-        # Try to show message structure
-        console.print(f"\n[dim]Sample message structure:[/dim]")
-        try:
-            if hasattr(sample_msg, '__str__'):
-                msg_str = str(sample_msg)[:500]
-                if len(str(sample_msg)) > 500:
-                    msg_str += "..."
-                console.print(f"[dim]{msg_str}[/dim]")
-        except:
-            console.print("[dim]Unable to display message structure[/dim]")
-        return
-    
-    # Group fields by their parent
-    field_groups = {}
-    for field in fields:
-        if '.' in field:
-            parent = field.split('.')[0]
-            field_groups.setdefault(parent, []).append(field)
-        else:
-            field_groups.setdefault('root', []).append(field)
-    
-    for group, group_fields in field_groups.items():
-        if group == 'root':
-            console.print(f"[green]Root fields:[/green]")
-        else:
-            console.print(f"[green]{group}.*:[/green]")
-        
-        for field in sorted(group_fields):
-            # Show sample value
-            sample_value = _get_field_value(sample_msg, field)
-            value_str = f" (sample: {sample_value})" if sample_value is not None else ""
-            console.print(f"  [cyan]{field}[/cyan]{value_str}")
-        
-        console.print()
-
-
-def _create_plot(
-    messages_data: List[Dict],
-    fields_to_plot: List[str],
-    topic: str,
-    width: int,
-    height: int,
-    title: Optional[str],
-    save: Optional[str],
-    plot_type: str,
-    marker: str,
-    verbose: bool,
-    console: Console
-):
-    """Create and display the plot"""
-    
-    # Set plot size
-    plt.plotsize(width, height)
-    
-    # Extract time series data
-    times = [msg['timestamp'] for msg in messages_data]
-    
-    if verbose:
-        console.print(f"[dim]Plotting {len(messages_data)} data points[/dim]")
-        console.print(f"[dim]Time range: {times[0]:.2f}s to {times[-1]:.2f}s[/dim]")
-    
-    # Plot each field
-    colors = ['red', 'blue', 'green', 'yellow', 'magenta', 'cyan']
-    
-    for i, field in enumerate(fields_to_plot):
-        values = []
-        for msg_data in messages_data:
-            value = _get_field_value(msg_data['message'], field)
-            if value is not None:
-                values.append(value)
-            else:
-                values.append(float('nan'))  # Handle missing values
-        
-        # Remove NaN values for plotting
-        clean_times = []
-        clean_values = []
-        for t, v in zip(times, values):
-            if not (isinstance(v, float) and v != v):  # Check for NaN
-                clean_times.append(t)
-                clean_values.append(v)
-        
-        if clean_values:
-            color = colors[i % len(colors)]
-            
-            if plot_type == "scatter":
-                plt.scatter(clean_times, clean_values, label=field, color=color, marker=marker)
-            else:
-                plt.plot(clean_times, clean_values, label=field, color=color)
-            
-            if verbose:
-                min_val, max_val = min(clean_values), max(clean_values)
-                console.print(f"[dim]{field}: {len(clean_values)} points, range [{min_val:.3f}, {max_val:.3f}][/dim]")
-    
-    # Set labels and title
-    plt.xlabel("Time (seconds)")
-    if len(fields_to_plot) == 1:
-        plt.ylabel(fields_to_plot[0])
+def _format_duration(seconds):
+    """Format duration in seconds to human readable format"""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{seconds/60:.1f}m"
     else:
-        plt.ylabel("Value")
-    
-    plot_title = title or f"Topic: {topic}"
-    plt.title(plot_title)
-    
-    # Note: plotext may not support legends, so we skip legend functionality
-    
-    # Save to file if requested
-    if save:
-        try:
-            plt.savefig(save)
-            console.print(f"[green]Plot saved to: {save}[/green]")
-        except Exception as e:
-            console.print(f"[red]Error saving plot: {e}[/red]")
-    
-    # Display the plot
-    plot_type_str = "Scatter Plot" if plot_type == "scatter" else "Line Plot"
-    console.print(f"\n[bold green]Time Series {plot_type_str} for {topic}[/bold green]")
-    plt.show()
+        return f"{seconds/3600:.1f}h"
 
 
-def main():
-    """Main entry point"""
-    app()
+def create_frequency_plot(json_data: Dict[str, Any], output_path: str, plot_format: str = "png"):
+    """Create frequency bar plot for topics"""
+    check_plotting_dependencies()
+    
+    topics_data = json_data['topics']
+    summary = json_data['summary']
+    
+    # Filter topics with frequency data
+    topics_with_freq = [t for t in topics_data if t['frequency'] is not None]
+    
+    if not topics_with_freq:
+        raise PlottingError("No frequency data available. Use --verbose to analyze message frequencies.")
+    
+    # Sort by frequency
+    topics_with_freq.sort(key=lambda x: x['frequency'], reverse=True)
+    
+    if plot_format == "html":
+        return _create_frequency_plot_plotly(topics_with_freq, summary, output_path)
+    else:
+        return _create_frequency_plot_matplotlib(topics_with_freq, summary, output_path, plot_format)
 
 
-if __name__ == "__main__":
-    main() 
+def _create_frequency_plot_matplotlib(topics_data, summary, output_path, plot_format):
+    """Create frequency plot using matplotlib"""
+    # Apply theme
+    theme.apply_matplotlib_style()
+    
+    topics = [t['topic'] for t in topics_data]
+    frequencies = [t['frequency'] for t in topics_data]
+    
+    # Truncate long topic names for display
+    display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.bar(range(len(topics)), frequencies, color=theme.PLOT_COLORS[0], alpha=0.7)
+    
+    ax.set_xlabel('Topics')
+    ax.set_ylabel('Frequency (Hz)')
+    ax.set_title(f'Topic Message Frequencies - {summary["file_name"]}')
+    ax.set_xticks(range(len(topics)))
+    ax.set_xticklabels(display_topics, rotation=45, ha='right')
+    
+    # Add value labels on bars
+    for bar, freq in zip(bars, frequencies):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + max(frequencies)*0.01,
+                f'{freq:.1f}', ha='center', va='bottom', color=theme.TEXT_PRIMARY)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return output_path
+
+
+def _create_frequency_plot_plotly(topics_data, summary, output_path):
+    """Create frequency plot using plotly"""
+    topics = [t['topic'] for t in topics_data]
+    frequencies = [t['frequency'] for t in topics_data]
+    
+    # Apply theme template
+    template = theme.get_plotly_template()
+    
+    fig = go.Figure(data=[
+        go.Bar(
+            x=topics,
+            y=frequencies,
+            marker_color=theme.PLOT_COLORS[0],
+            text=[f'{f:.1f} Hz' for f in frequencies],
+            textposition='auto',
+        )
+    ])
+    
+    fig.update_layout(
+        title=f'Topic Message Frequencies - {summary["file_name"]}',
+        xaxis_title='Topics',
+        yaxis_title='Frequency (Hz)',
+        xaxis_tickangle=-45,
+        **template['layout']
+    )
+    
+    pyo.plot(fig, filename=output_path, auto_open=False)
+    return output_path
+
+
+def create_size_distribution_plot(json_data: Dict[str, Any], output_path: str, plot_format: str = "png"):
+    """Create size distribution plot for topics"""
+    check_plotting_dependencies()
+    
+    topics_data = json_data['topics']
+    summary = json_data['summary']
+    
+    # Filter topics with size data
+    topics_with_size = [t for t in topics_data if t['size'] is not None and t['size'] > 0]
+    
+    if not topics_with_size:
+        raise PlottingError("No size data available. Use --verbose to analyze message sizes.")
+    
+    # Sort by size
+    topics_with_size.sort(key=lambda x: x['size'], reverse=True)
+    
+    if plot_format == "html":
+        return _create_size_plot_plotly(topics_with_size, summary, output_path)
+    else:
+        return _create_size_plot_matplotlib(topics_with_size, summary, output_path, plot_format)
+
+
+def _create_size_plot_matplotlib(topics_data, summary, output_path, plot_format):
+    """Create size distribution plot using matplotlib"""
+    # Apply theme
+    theme.apply_matplotlib_style()
+    
+    topics = [t['topic'] for t in topics_data]
+    sizes = [t['size'] for t in topics_data]
+    
+    # Truncate long topic names for display
+    display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.bar(range(len(topics)), sizes, color=theme.PLOT_COLORS[2], alpha=0.7)
+    
+    ax.set_xlabel('Topics')
+    ax.set_ylabel('Total Size (Bytes)')
+    ax.set_title(f'Topic Message Sizes - {summary["file_name"]}')
+    ax.set_xticks(range(len(topics)))
+    ax.set_xticklabels(display_topics, rotation=45, ha='right')
+    
+    # Format y-axis to show human readable sizes
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: _format_bytes(x)))
+    
+    # Add value labels on bars
+    for bar, size in zip(bars, sizes):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + max(sizes)*0.01,
+                _format_bytes(size), ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return output_path
+
+
+def _create_size_plot_plotly(topics_data, summary, output_path):
+    """Create size distribution plot using plotly"""
+    topics = [t['topic'] for t in topics_data]
+    sizes = [t['size'] for t in topics_data]
+    size_labels = [_format_bytes(s) for s in sizes]
+    
+    # Apply theme template
+    template = theme.get_plotly_template()
+    
+    fig = go.Figure(data=[
+        go.Bar(
+            x=topics,
+            y=sizes,
+            marker_color=theme.PLOT_COLORS[2],
+            text=size_labels,
+            textposition='auto',
+        )
+    ])
+    
+    fig.update_layout(
+        title=f'Topic Message Sizes - {summary["file_name"]}',
+        xaxis_title='Topics',
+        yaxis_title='Total Size (Bytes)',
+        xaxis_tickangle=-45,
+        **template['layout']
+    )
+    
+    # Format y-axis
+    fig.update_yaxis(tickformat='.2s')
+    
+    pyo.plot(fig, filename=output_path, auto_open=False)
+    return output_path
+
+
+def create_message_count_plot(json_data: Dict[str, Any], output_path: str, plot_format: str = "png"):
+    """Create message count plot for topics"""
+    check_plotting_dependencies()
+    
+    topics_data = json_data['topics']
+    summary = json_data['summary']
+    
+    # Filter topics with count data
+    topics_with_count = [t for t in topics_data if t['count'] is not None and t['count'] > 0]
+    
+    if not topics_with_count:
+        raise PlottingError("No message count data available. Use --verbose to analyze message counts.")
+    
+    # Sort by count
+    topics_with_count.sort(key=lambda x: x['count'], reverse=True)
+    
+    if plot_format == "html":
+        return _create_count_plot_plotly(topics_with_count, summary, output_path)
+    else:
+        return _create_count_plot_matplotlib(topics_with_count, summary, output_path, plot_format)
+
+
+def _create_count_plot_matplotlib(topics_data, summary, output_path, plot_format):
+    """Create message count plot using matplotlib"""
+    # Apply theme
+    theme.apply_matplotlib_style()
+    
+    topics = [t['topic'] for t in topics_data]
+    counts = [t['count'] for t in topics_data]
+    
+    # Truncate long topic names for display
+    display_topics = [t[:30] + "..." if len(t) > 30 else t for t in topics]
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.bar(range(len(topics)), counts, color=theme.PLOT_COLORS[3], alpha=0.7)
+    
+    ax.set_xlabel('Topics')
+    ax.set_ylabel('Message Count')
+    ax.set_title(f'Topic Message Counts - {summary["file_name"]}')
+    ax.set_xticks(range(len(topics)))
+    ax.set_xticklabels(display_topics, rotation=45, ha='right')
+    
+    # Add value labels on bars
+    for bar, count in zip(bars, counts):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + max(counts)*0.01,
+                f'{count:,}', ha='center', va='bottom', color=theme.TEXT_PRIMARY)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return output_path
+
+
+def _create_count_plot_plotly(topics_data, summary, output_path):
+    """Create message count plot using plotly"""
+    topics = [t['topic'] for t in topics_data]
+    counts = [t['count'] for t in topics_data]
+    
+    # Apply theme template
+    template = theme.get_plotly_template()
+    
+    fig = go.Figure(data=[
+        go.Bar(
+            x=topics,
+            y=counts,
+            marker_color=theme.PLOT_COLORS[3],
+            text=[f'{c:,}' for c in counts],
+            textposition='auto',
+        )
+    ])
+    
+    fig.update_layout(
+        title=f'Topic Message Counts - {summary["file_name"]}',
+        xaxis_title='Topics',
+        yaxis_title='Message Count',
+        xaxis_tickangle=-45,
+        **template['layout']
+    )
+    
+    pyo.plot(fig, filename=output_path, auto_open=False)
+    return output_path
+
+
+def create_overview_plot(json_data: Dict[str, Any], output_path: str, plot_format: str = "png"):
+    """Create overview plot with multiple metrics"""
+    check_plotting_dependencies()
+    
+    topics_data = json_data['topics']
+    summary = json_data['summary']
+    
+    # Filter topics with complete data
+    complete_topics = [t for t in topics_data if 
+                      t['count'] is not None and t['size'] is not None and t['frequency'] is not None
+                      and t['count'] > 0]
+    
+    if not complete_topics:
+        raise PlottingError("No complete data available. Use --verbose to analyze all metrics.")
+    
+    # Sort by total size
+    complete_topics.sort(key=lambda x: x['size'], reverse=True)
+    
+    if plot_format == "html":
+        return _create_overview_plot_plotly(complete_topics, summary, output_path)
+    else:
+        return _create_overview_plot_matplotlib(complete_topics, summary, output_path, plot_format)
+
+
+def _create_overview_plot_matplotlib(topics_data, summary, output_path, plot_format):
+    """Create overview plot using matplotlib"""
+    # Apply theme
+    theme.apply_matplotlib_style()
+    
+    topics = [t['topic'] for t in topics_data]
+    counts = [t['count'] for t in topics_data]
+    sizes = [t['size'] for t in topics_data]
+    frequencies = [t['frequency'] for t in topics_data]
+    
+    # Truncate long topic names for display
+    display_topics = [t[:25] + "..." if len(t) > 25 else t for t in topics]
+    
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # Message counts
+    bars1 = ax1.bar(range(len(topics)), counts, color=theme.PLOT_COLORS[3], alpha=0.7)
+    ax1.set_title('Message Counts')
+    ax1.set_ylabel('Count')
+    ax1.set_xticks(range(len(topics)))
+    ax1.set_xticklabels(display_topics, rotation=45, ha='right')
+    
+    # Sizes
+    bars2 = ax2.bar(range(len(topics)), sizes, color=theme.PLOT_COLORS[2], alpha=0.7)
+    ax2.set_title('Total Sizes')
+    ax2.set_ylabel('Size (Bytes)')
+    ax2.set_xticks(range(len(topics)))
+    ax2.set_xticklabels(display_topics, rotation=45, ha='right')
+    ax2.yaxis.set_major_formatter(FuncFormatter(lambda x, p: _format_bytes(x)))
+    
+    # Frequencies
+    bars3 = ax3.bar(range(len(topics)), frequencies, color=theme.PLOT_COLORS[0], alpha=0.7)
+    ax3.set_title('Frequencies')
+    ax3.set_ylabel('Frequency (Hz)')
+    ax3.set_xticks(range(len(topics)))
+    ax3.set_xticklabels(display_topics, rotation=45, ha='right')
+    
+    # Summary stats
+    ax4.axis('off')
+    stats_text = f"""
+Bag File: {summary['file_name']}
+Total Topics: {summary['topic_count']}
+Total Messages: {summary['total_messages']:,}
+File Size: {summary['file_size_formatted']}
+Duration: {summary['duration_formatted']}
+Avg Rate: {summary['avg_rate_formatted']}
+    """.strip()
+    ax4.text(0.1, 0.5, stats_text, transform=ax4.transAxes, fontsize=12,
+             verticalalignment='center', color=theme.TEXT_PRIMARY,
+             bbox=dict(boxstyle='round', facecolor=theme.SURFACE, alpha=0.8))
+    ax4.set_title('Summary Statistics')
+    
+    plt.suptitle(f'ROS Bag Overview - {summary["file_name"]}', fontsize=16)
+    plt.tight_layout()
+    plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return output_path
+
+
+def _create_overview_plot_plotly(topics_data, summary, output_path):
+    """Create overview plot using plotly"""
+    topics = [t['topic'] for t in topics_data]
+    counts = [t['count'] for t in topics_data]
+    sizes = [t['size'] for t in topics_data]
+    frequencies = [t['frequency'] for t in topics_data]
+    
+    # Apply theme template
+    template = theme.get_plotly_template()
+    
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=('Message Counts', 'Total Sizes', 'Frequencies', 'Summary'),
+        specs=[[{"type": "bar"}, {"type": "bar"}],
+               [{"type": "bar"}, {"type": "table"}]]
+    )
+    
+    # Message counts
+    fig.add_trace(
+        go.Bar(x=topics, y=counts, name='Count', marker_color=theme.PLOT_COLORS[3]),
+        row=1, col=1
+    )
+    
+    # Sizes
+    fig.add_trace(
+        go.Bar(x=topics, y=sizes, name='Size', marker_color=theme.PLOT_COLORS[2]),
+        row=1, col=2
+    )
+    
+    # Frequencies
+    fig.add_trace(
+        go.Bar(x=topics, y=frequencies, name='Frequency', marker_color=theme.PLOT_COLORS[0]),
+        row=2, col=1
+    )
+    
+    # Summary table
+    fig.add_trace(
+        go.Table(
+            header=dict(values=['Metric', 'Value'],
+                       fill_color=theme.SURFACE,
+                       font=dict(color=theme.TEXT_PRIMARY)),
+            cells=dict(values=[
+                ['File', 'Topics', 'Messages', 'File Size', 'Duration', 'Avg Rate'],
+                [summary['file_name'], summary['topic_count'], f"{summary['total_messages']:,}",
+                 summary['file_size_formatted'], summary['duration_formatted'], summary['avg_rate_formatted']]
+            ],
+            fill_color=theme.BACKGROUND,
+            font=dict(color=theme.TEXT_PRIMARY))
+        ),
+        row=2, col=2
+    )
+    
+    fig.update_layout(
+        title_text=f"ROS Bag Overview - {summary['file_name']}",
+        showlegend=False,
+        height=800,
+        **template['layout']
+    )
+    
+    # Update x-axes for better readability
+    fig.update_xaxes(tickangle=-45, row=1, col=1)
+    fig.update_xaxes(tickangle=-45, row=1, col=2)
+    fig.update_xaxes(tickangle=-45, row=2, col=1)
+    
+    pyo.plot(fig, filename=output_path, auto_open=False)
+    return output_path
+
+
+def create_plot(json_data: Dict[str, Any], plot_type: str, output_path: str, plot_format: str = "png"):
+    """Create plot based on type"""
+    plot_functions = {
+        'frequency': create_frequency_plot,
+        'size': create_size_distribution_plot,
+        'count': create_message_count_plot,
+        'overview': create_overview_plot
+    }
+    
+    if plot_type not in plot_functions:
+        raise PlottingError(f"Unknown plot type: {plot_type}. Available types: {', '.join(plot_functions.keys())}")
+    
+    return plot_functions[plot_type](json_data, output_path, plot_format) 

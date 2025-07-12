@@ -11,7 +11,7 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from .theme import DIM_INFO, style, YELLOW, INFO, PRIMARY, ACCENT, SUCCESS
+from ..core.theme import theme, style, DIM_INFO, WARNING, INFO, PRIMARY, ACCENT, SUCCESS
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -28,9 +28,9 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{YELLOW} link https://github.com/hanxiaomax/rose")
+    subtitle.append("Github", style=f"{WARNING} link https://github.com/hanxiaomax/rose")
     subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{YELLOW} link https://github.com/hanxiaomax")
+    subtitle.append("Author", style=f"{WARNING} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
@@ -42,7 +42,7 @@ def build_banner():
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=YELLOW,  
+        border_style=WARNING,  
         highlight=True
     )
     

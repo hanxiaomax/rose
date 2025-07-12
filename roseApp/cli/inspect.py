@@ -23,6 +23,14 @@ from textual.fuzzy import FuzzySearch
 
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
+from ..core.theme import theme
+
+# Import plotting module with error handling
+try:
+    from .plot import create_plot, PlottingError
+    PLOTTING_AVAILABLE = True
+except ImportError:
+    PLOTTING_AVAILABLE = False
 
 app = typer.Typer(help="Fast ROS bag inspection and analysis")
 
@@ -75,7 +83,11 @@ def inspect(
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)")
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)"),
+    plot: bool = typer.Option(False, "--plot", "-p", help="Generate visualization plots"),
+    plot_type: str = typer.Option("overview", "--plot-type", help="Plot type: frequency, size, count, overview (default: overview)"),
+    plot_format: str = typer.Option("png", "--plot-format", help="Plot format: png, svg, pdf, html (default: png)"),
+    plot_output: Optional[str] = typer.Option(None, "--plot-output", help="Plot output file path (auto-generated if not specified)")
 ):
     """
     Fast inspection of ROS bag files with flexible display options and caching
@@ -103,6 +115,12 @@ def inspect(
     
     # Export to HTML
     rose inspect demo.bag --as html --output report.html
+    
+    # Generate plots
+    rose inspect demo.bag --plot --verbose
+    
+    # Generate specific plot type
+    rose inspect demo.bag --plot --plot-type frequency --plot-format html --verbose
     """
     try:
         # Initialize logging
@@ -130,6 +148,21 @@ def inspect(
             typer.echo(f"Error: --sort-by must be one of: name, type, count, size, frequency", err=True)
             raise typer.Exit(code=1)
         
+        # Validate plot options
+        if plot:
+            if not PLOTTING_AVAILABLE:
+                typer.echo(f"Error: Plotting functionality requires additional dependencies.", err=True)
+                typer.echo(f"Install with: pip install rose-bag[plot]", err=True)
+                raise typer.Exit(code=1)
+            
+            if plot_type not in ["frequency", "size", "count", "overview"]:
+                typer.echo(f"Error: --plot-type must be one of: frequency, size, count, overview", err=True)
+                raise typer.Exit(code=1)
+            
+            if plot_format not in ["png", "svg", "pdf", "html"]:
+                typer.echo(f"Error: --plot-format must be one of: png, svg, pdf, html", err=True)
+                raise typer.Exit(code=1)
+        
         # Validate output file for export formats
         if as_format in ["csv", "html"] and not output:
             typer.echo(f"Error: --output is required for {as_format} format", err=True)
@@ -138,12 +171,12 @@ def inspect(
         # Initialize console
         console = Console()
         
-        # Determine analysis mode
-        use_full_analysis = verbose
+        # Determine analysis mode - plotting requires verbose mode for statistics
+        use_full_analysis = verbose or plot
         
         # Show top info message for lite mode
         if not use_full_analysis:
-            console.print(f"[yellow]INFO: Using lightweight analysis. Use --verbose for detailed statistics.[/yellow]")
+            console.print(f"[{theme.WARNING}]INFO: Using lightweight analysis. Use --verbose for detailed statistics.[/{theme.WARNING}]")
         
         # Try to load from cache first
         cache_path = _get_cache_path(input_path)
@@ -193,7 +226,7 @@ def inspect(
         else:
             # No detailed stats, can only sort by name
             if sort_by != "name":
-                console.print(f"[yellow]Warning: Sorting by '{sort_by}' requires --verbose mode, using name sorting instead[/yellow]")
+                console.print(f"[{theme.WARNING}]Warning: Sorting by '{sort_by}' requires --verbose mode, using name sorting instead[/{theme.WARNING}]")
                 sort_by = "name"
             json_data['topics'] = sorted(json_data['topics'], key=lambda x: x['topic'].lower(), reverse=reverse)
         
@@ -203,9 +236,13 @@ def inspect(
         else:
             _display_data(json_data, as_format, verbose, console)
         
+        # Generate plots if requested
+        if plot:
+            _generate_plots(json_data, plot_type, plot_format, plot_output, input_path, console)
+        
         # Show bottom info message for lite mode
-        if not use_full_analysis and as_format not in ["csv", "html"]:
-            console.print(f"[yellow]INFO: Use --verbose to analyze all messages and show detailed statistics.[/yellow]")
+        if not use_full_analysis and as_format not in ["csv", "html"] and not plot:
+            console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
         
     except Exception as e:
         log_cli_error(e)
@@ -555,47 +592,266 @@ def _export_to_csv(json_data: Dict[str, Any], output_path: str):
 
 
 def _export_to_html(json_data: Dict[str, Any], output_path: str):
-    """Export JSON data to HTML file"""
+    """Export topics data to HTML file with unified theme styling"""
     summary = json_data['summary']
+    topics = json_data['topics']
     
-    with open(output_path, 'w') as f:
-        f.write("<!DOCTYPE html>\n")
-        f.write("<html>\n")
-        f.write("<head>\n")
-        f.write("<title>ROS Bag Inspection Report</title>\n")
-        f.write("<style>\n")
-        f.write("body { font-family: Arial, sans-serif; margin: 20px; }\n")
-        f.write("h1 { color: #333; }\n")
-        f.write("table { border-collapse: collapse; width: 100%; margin-top: 20px; }\n")
-        f.write("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n")
-        f.write("th { background-color: #f2f2f2; }\n")
-        f.write("tr:hover { background-color: #f5f5f5; }\n")
-        f.write("</style>\n")
-        f.write("</head>\n")
-        f.write("<body>\n")
-        f.write(f"<h1>ROS Bag Inspection Report for {summary['file_name']}</h1>\n")
-        f.write(f"<p>Generated on: {json_data['metadata']['generated_at']}</p>\n")
-        f.write("<h2>Summary</h2>\n")
-        f.write(f"<p>File: {summary['absolute_path']}</p>\n")
-        f.write(f"<p>Total Topics: {summary['topic_count']}</p>\n")
-        f.write(f"<p>Total Messages: {summary['total_messages']:,}</p>\n" if summary['total_messages'] is not None else "<p>Total Messages: -</p>\n")
-        f.write(f"<p>File Size: {summary['file_size_formatted']}</p>\n")
-        f.write(f"<p>Data Size: {summary['total_data_size_formatted']}</p>\n" if summary['total_data_size_formatted'] is not None else "<p>Data Size: -</p>\n")
-        f.write(f"<p>Compression: {summary['compression']}</p>\n")
-        f.write(f"<p>Duration: {summary['duration_formatted']}</p>\n" if summary['duration_formatted'] is not None else "<p>Duration: -</p>\n")
-        f.write(f"<p>Average Rate: {summary['avg_rate_formatted']}</p>\n" if summary['avg_rate_formatted'] is not None else "<p>Average Rate: -</p>\n")
+    # CSS styles using unified theme
+    css_styles = f"""
+    <style>
+        :root {{
+            --primary: {theme.PRIMARY};
+            --secondary: {theme.SECONDARY};
+            --accent: {theme.ACCENT};
+            --warning: {theme.WARNING};
+            --success: {theme.SUCCESS};
+            --info: {theme.INFO};
+            --error: {theme.ERROR};
+            --background: {theme.BACKGROUND};
+            --foreground: {theme.FOREGROUND};
+            --surface: {theme.SURFACE};
+            --text-primary: {theme.TEXT_PRIMARY};
+            --text-secondary: {theme.TEXT_SECONDARY};
+            --text-muted: {theme.TEXT_MUTED};
+        }}
         
-        f.write("<h2>Topics</h2>\n")
-        f.write("<table>\n")
-        f.write("<tr><th>Topic</th><th>Message Type</th><th>Count</th><th>Size</th><th>Frequency</th></tr>\n")
-        for topic_data in json_data['topics']:
-            count_str = f"{topic_data['count']:,}" if topic_data['count'] is not None else "-"
-            size_str = topic_data['size_formatted'] if topic_data['size_formatted'] is not None else "-"
-            freq_str = topic_data['frequency_formatted'] if topic_data['frequency_formatted'] is not None else "-"
-            f.write(f"<tr><td>{topic_data['topic']}</td><td>{topic_data['message_type']}</td><td>{count_str}</td><td>{size_str}</td><td>{freq_str}</td></tr>\n")
-        f.write("</table>\n")
-        f.write("</body>\n")
-        f.write("</html>\n")
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--background);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }}
+        
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: var(--surface);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }}
+        
+        h1 {{
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }}
+        
+        h2 {{
+            color: var(--accent);
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }}
+        
+        .summary {{
+            background-color: var(--background);
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            border-left: 4px solid var(--primary);
+        }}
+        
+        .summary-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        
+        .summary-item {{
+            background-color: var(--surface);
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid var(--text-muted);
+        }}
+        
+        .summary-item .label {{
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }}
+        
+        .summary-item .value {{
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.1em;
+        }}
+        
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: var(--surface);
+            border-radius: 6px;
+            overflow: hidden;
+        }}
+        
+        th {{
+            background-color: var(--primary);
+            color: var(--background);
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }}
+        
+        td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--text-muted);
+        }}
+        
+        tr:nth-child(even) {{
+            background-color: var(--background);
+        }}
+        
+        tr:hover {{
+            background-color: var(--accent);
+            color: var(--background);
+        }}
+        
+        .topic-name {{
+            color: var(--info);
+            font-weight: bold;
+        }}
+        
+        .message-type {{
+            color: var(--secondary);
+            font-family: monospace;
+            font-size: 0.9em;
+        }}
+        
+        .count {{
+            color: var(--success);
+            font-weight: bold;
+        }}
+        
+        .size {{
+            color: var(--accent);
+            font-weight: bold;
+        }}
+        
+        .frequency {{
+            color: var(--warning);
+            font-weight: bold;
+        }}
+        
+        .footer {{
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--text-muted);
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            text-align: center;
+        }}
+        
+        .timestamp {{
+            color: var(--text-muted);
+            font-size: 0.8em;
+        }}
+        
+        @media (max-width: 768px) {{
+            .container {{
+                padding: 15px;
+            }}
+            
+            table {{
+                font-size: 0.9em;
+            }}
+            
+            th, td {{
+                padding: 8px;
+            }}
+        }}
+    </style>
+    """
+    
+    # HTML content
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ROS Bag Analysis Report - {summary['file_name']}</title>
+        {css_styles}
+    </head>
+    <body>
+        <div class="container">
+            <h1>ROS Bag Analysis Report</h1>
+            
+            <div class="summary">
+                <h2>Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="label">File Name</div>
+                        <div class="value">{summary['file_name']}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Topics</div>
+                        <div class="value">{summary['topic_count']}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Messages</div>
+                        <div class="value">{summary['total_messages']:,}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">File Size</div>
+                        <div class="value">{summary['file_size_formatted']}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Duration</div>
+                        <div class="value">{summary['duration_formatted']}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Average Rate</div>
+                        <div class="value">{summary['avg_rate_formatted']}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h2>Topics</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Topic</th>
+                        <th>Message Type</th>
+                        <th>Count</th>
+                        <th>Size</th>
+                        <th>Frequency</th>
+                    </tr>
+                </thead>
+                <tbody>
+    """
+    
+    # Add topic rows
+    for topic in topics:
+        html_content += f"""
+                    <tr>
+                        <td class="topic-name">{topic['topic']}</td>
+                        <td class="message-type">{topic['message_type']}</td>
+                        <td class="count">{topic['count']:,} msgs</td>
+                        <td class="size">{topic['size_formatted']}</td>
+                        <td class="frequency">{topic['frequency_formatted']}</td>
+                    </tr>
+        """
+    
+    html_content += f"""
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                <p>Generated by Rose ROS Bag Tool</p>
+                <p class="timestamp">Report generated at {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
 
 
 def _display_summary(console: Console, input_path: str, json_data: Dict[str, Any], filtered_count: int, verbose: bool, is_lite_mode: bool):
@@ -663,7 +919,7 @@ def _display_list(console: Console, input_path: str, json_data: Dict[str, Any],
     
     # Show topics header in verbose mode
     if verbose:
-        console.print(f"[bold cyan]Topics in {Path(input_path).name}[/bold cyan]")
+        console.print(f"[bold {theme.INFO}]Topics in {Path(input_path).name}[/bold {theme.INFO}]")
         console.print(f"[dim]Total: {len(filtered_topics)} topics[/dim]")
         console.print("-" * 60)
     
@@ -671,18 +927,18 @@ def _display_list(console: Console, input_path: str, json_data: Dict[str, Any],
     for topic_data in filtered_topics:
         if is_lite_mode:
             # In lite mode, only show topic name and message type
-            console.print(f"[bold]{topic_data['topic']}[/bold] | [cyan]{_format_message_type(topic_data['message_type'])}[/cyan]")
+            console.print(f"[bold]{topic_data['topic']}[/bold] | [{theme.INFO}]{_format_message_type(topic_data['message_type'])}[/{theme.INFO}]")
         else:
             # In full mode, show all statistics
             info_parts = [
                 f"[bold]{topic_data['topic']}[/bold]",
-                f"[cyan]{topic_data['count']:,} msgs[/cyan]",
-                f"[green]{topic_data['size_formatted']}[/green]"
+                f"[{theme.INFO}]{topic_data['count']:,} msgs[/{theme.INFO}]",
+                f"[{theme.SUCCESS}]{topic_data['size_formatted']}[/{theme.SUCCESS}]"
             ]
             
             # Add frequency if available
             if topic_data['frequency_formatted']:
-                info_parts.append(f"[magenta]{topic_data['frequency_formatted']}[/magenta]")
+                info_parts.append(f"[{theme.ACCENT}]{topic_data['frequency_formatted']}[/{theme.ACCENT}]")
             
             console.print(" | ".join(info_parts))
 
@@ -699,7 +955,7 @@ def _display_table(console: Console, input_path: str, json_data: Dict[str, Any],
         # Lite mode: only show topic and message type
         table = Table(title=f"Topics in {Path(input_path).name}", box=box.SIMPLE)
         table.add_column("Topic", style="bold", min_width=25)
-        table.add_column("Message Type", style="cyan", min_width=30)
+        table.add_column("Message Type", style=theme.INFO, min_width=30)
         
         for topic_data in filtered_topics:
             table.add_row(topic_data['topic'], _format_message_type(topic_data['message_type']))
@@ -709,10 +965,10 @@ def _display_table(console: Console, input_path: str, json_data: Dict[str, Any],
         # Full mode: show all statistics
         table = Table(title=f"Topics in {Path(input_path).name}", box=box.SIMPLE)
         table.add_column("Topic", style="bold", min_width=25)
-        table.add_column("Message Type", style="cyan", min_width=30)
-        table.add_column("Count", justify="right", style="green")
-        table.add_column("Size", justify="right", style="magenta")
-        table.add_column("Frequency", justify="right", style="blue")
+        table.add_column("Message Type", style=theme.INFO, min_width=30)
+        table.add_column("Count", justify="right", style=theme.SUCCESS)
+        table.add_column("Size", justify="right", style=theme.ACCENT)
+        table.add_column("Frequency", justify="right", style=theme.SECONDARY)
         
         for topic_data in filtered_topics:
             table.add_row(
@@ -788,6 +1044,35 @@ def _sort_topic_details(topic_details: List[Dict[str, Any]], sort_by: str, rever
             return topic_data['size'] if topic_data['size'] is not None else 0
     
     return sorted(topic_details, key=get_sort_key, reverse=reverse)
+
+
+def _generate_plots(json_data: Dict[str, Any], plot_type: str, plot_format: str, 
+                   plot_output: Optional[str], input_path: str, console: Console):
+    """Generate visualization plots"""
+    try:
+        # Auto-generate output path if not specified
+        if not plot_output:
+            base_name = os.path.splitext(os.path.basename(input_path))[0]
+            extension = "html" if plot_format == "html" else plot_format
+            plot_output = f"{base_name}_{plot_type}_plot.{extension}"
+        
+        console.print(f"\n[cyan]Generating {plot_type} plot...[/cyan]")
+        
+        # Create the plot
+        output_file = create_plot(json_data, plot_type, plot_output, plot_format)
+        
+        console.print(f"[green]Plot saved to: {output_file}[/green]")
+        
+        # Show additional info for HTML plots
+        if plot_format == "html":
+            console.print(f"[dim]Open the HTML file in your browser to view the interactive plot[/dim]")
+        
+    except PlottingError as e:
+        console.print(f"[red]Plot generation failed: {str(e)}[/red]")
+        # Don't exit, just continue without plotting
+    except Exception as e:
+        console.print(f"[red]Unexpected error during plot generation: {str(e)}[/red]")
+        # Don't exit, just continue without plotting
 
 
 def main():

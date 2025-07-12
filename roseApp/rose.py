@@ -14,7 +14,6 @@ import logging
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
 from roseApp.cli.filter import app as filter_app
 from roseApp.cli.inspect import app as inspect_app
-from roseApp.cli.plot import app as plot_app
 from roseApp.cli.prune import app as prune_app
 from roseApp.cli.cli_tool import app as cli_tool_app
 from roseApp.tui.tui import app as tui_app
@@ -88,7 +87,6 @@ def callback(
 # Add subcommands
 app.add_typer(filter_app)
 app.add_typer(inspect_app)
-app.add_typer(plot_app)
 app.add_typer(prune_app)
 app.add_typer(cli_tool_app)
 app.add_typer(tui_app)
