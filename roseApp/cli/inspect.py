@@ -4,7 +4,6 @@ Inspect command for fast ROS bag analysis with caching support
 """
 
 import os
-import re
 import time
 import pickle
 import hashlib
@@ -69,41 +68,32 @@ def _save_cache(cache_path: Path, data: Dict):
 @app.command()
 def inspect(
     input_path: str = typer.Argument(..., help="Input bag file path"),
-    topics: Optional[List[str]] = typer.Option(None, "--topics", "-t", help="Filter topics by name (supports fuzzy matching)"),
+    topics: List[str] = typer.Option([], "--topics", "-t", help="Filter topics by name or pattern (supports fuzzy matching). Multiple values: --topics topic1 --topics topic2 --topics pattern3"),
     show_as: str = typer.Option("table", "--show-as", "-f", help="Display format: table, list, summary (default: table)"),
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
-    search: Optional[str] = typer.Option(None, "--search", "-sz", help="Search topics by name pattern (supports fuzzy matching like 'dts' for diagnostics_toplevel_state)"),
-    show_compression: bool = typer.Option(False, "--show-compression", "-comp", help="Show compression information"),
-    max_topics: Optional[int] = typer.Option(None, "--max-topics", "-n", help="Limit number of topics shown"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache and force re-analysis (use 'prune' command to manage cache)")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics")
 ):
     """
     Fast inspection of ROS bag files with flexible display options and caching
     
     The analysis results are cached to improve performance on subsequent runs.
     The cache is automatically invalidated when the bag file is modified.
+    Use 'prune' command to manage cache files.
     
     Examples:
-        # Basic inspection (compact table with frequency)
-        python -m roseApp.rose inspect data.bag
-        
-        # List format with search
-        python -m roseApp.rose inspect data.bag --show-as list --search camera
-        
-        # Sort by frequency, show top 10
-        python -m roseApp.rose inspect data.bag --sort-by frequency --max-topics 10
-        
-        # Verbose summary with full details
-        python -m roseApp.rose inspect data.bag --show-as summary --verbose
-        
-        # Force re-analysis without cache
-        python -m roseApp.rose inspect data.bag --no-cache
-        
-        # Manage cache files
-        python -m roseApp.rose prune status
-        python -m roseApp.rose prune clean --all
+    
+    # Show all topics in table format
+    rose inspect demo.bag
+    
+    # Filter multiple topics by name or fuzzy pattern
+    rose inspect demo.bag --topics dts --topics tf --topics velodyne
+    
+    # Show summary with compression info
+    rose inspect demo.bag --show-as summary
+    
+    # Show detailed verbose output
+    rose inspect demo.bag --verbose
     """
     try:
         # Initialize logging
@@ -136,38 +126,30 @@ def inspect(
         
         # Try to load from cache first
         cache_path = _get_cache_path(input_path)
-        bag_info = None
+        bag_info = _load_cache(cache_path)
+        if bag_info:
+            logger.debug(f"Loaded analysis from cache: {cache_path}")
+            console.print(f"[dim]Using cached analysis results[/dim]")
         
-        if not no_cache:
-            bag_info = _load_cache(cache_path)
-            if bag_info:
-                logger.debug(f"Loaded analysis from cache: {cache_path}")
-                console.print(f"[dim]Using cached analysis results[/dim]")
-        
-        # If no cache or cache disabled, perform analysis
+        # If no cache, perform analysis
         if bag_info is None:
             parser = create_parser(ParserType.ROSBAGS)
             logger.debug(f"Analyzing bag file: {input_path}")
             bag_info = _analyze_bag_with_progress(parser, input_path, logger, console)
             
             # Save to cache
-            if not no_cache:
-                _save_cache(cache_path, bag_info)
-                logger.debug(f"Saved analysis to cache: {cache_path}")
+            _save_cache(cache_path, bag_info)
+            logger.debug(f"Saved analysis to cache: {cache_path}")
         
         # Record analysis time
         analysis_time = time.time() - start_time
         bag_info['analysis_time'] = analysis_time
         
         # Apply filters and sorting  
-        filtered_topics = _filter_topics(bag_info['topics'], topics, search)
+        filtered_topics = _filter_topics(bag_info['topics'], topics if topics else None)
         # Default sorting is always large to small (reverse=True by default)
         actual_reverse = not reverse if reverse else True  # If user didn't specify reverse, default to True (large first)
         sorted_topics = _sort_topics(filtered_topics, bag_info['stats'], sort_by, actual_reverse)
-        
-        # Apply max topics limit
-        if max_topics and max_topics > 0:
-            sorted_topics = sorted_topics[:max_topics]
         
         # Display results
         _display_bag_inspection(
@@ -176,7 +158,6 @@ def inspect(
             bag_info=bag_info,
             filtered_topics=sorted_topics,
             show_as=show_as,
-            show_compression=show_compression,
             verbose=verbose
         )
         
@@ -251,54 +232,41 @@ def _analyze_bag_with_progress(parser, bag_path: str, logger, console: Console) 
         raise
 
 
-def _filter_topics(topics: List[str], topic_filter: Optional[List[str]], search_pattern: Optional[str]) -> List[str]:
+def _filter_topics(topics: List[str], topic_filter: Optional[List[str]]) -> List[str]:
     """Filter topics based on exact match or fuzzy search"""
-    filtered = topics.copy()
+    if not topic_filter:
+        return topics
     
-    # Apply exact topic filter
-    if topic_filter:
-        filtered = [topic for topic in filtered if topic in topic_filter]
+    filtered = []
     
-    # Apply fuzzy search
-    if search_pattern:
-        filtered = _fuzzy_search_topics(filtered, search_pattern)
+    # For each filter pattern, find matching topics
+    for pattern in topic_filter:
+        # Try exact match first
+        exact_matches = [topic for topic in topics if topic == pattern]
+        if exact_matches:
+            filtered.extend(exact_matches)
+        else:
+            # Try fuzzy search for this pattern
+            fuzzy_matches = _fuzzy_search_topics(topics, pattern)
+            filtered.extend(fuzzy_matches)
     
-    return filtered
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_filtered = []
+    for topic in filtered:
+        if topic not in seen:
+            seen.add(topic)
+            unique_filtered.append(topic)
+    
+    return unique_filtered
 
 
 def _fuzzy_search_topics(topics: List[str], search_pattern: str) -> List[str]:
-    """Perform fuzzy search on topics using textual.fuzzy and custom acronym matching"""
-    results = []
-    pattern_lower = search_pattern.lower()
-    
-    # Step 1: Try exact substring match with quality scoring
-    exact_matches = []
-    word_start_matches = []  # Higher priority for matches at word boundaries
-    
-    for topic in topics:
-        topic_lower = topic.lower()
-        if pattern_lower in topic_lower:
-            # Check if the match is at a word boundary (higher quality)
-            match_pos = topic_lower.find(pattern_lower)
-            
-            # Check if match is at start of topic or after a separator
-            at_word_start = (match_pos == 0 or 
-                           match_pos == 1 or  # After leading '/'
-                           topic_lower[match_pos-1] in '/_-')
-            
-            if at_word_start:
-                word_start_matches.append(topic)
-            else:
-                exact_matches.append(topic)
-    
-    # Step 2: Try textual.fuzzy matching (for typos and partial matches)
+    """Perform fuzzy search on topics using textual.fuzzy only"""
     fuzzy_matches = []
     topic_scores = []
     
     for topic in topics:
-        if topic in exact_matches or topic in word_start_matches:
-            continue  # Skip topics already matched exactly
-        
         # Match against the full topic name
         score, offsets = fuzzy_search.match(search_pattern, topic)
         
@@ -306,61 +274,18 @@ def _fuzzy_search_topics(topics: List[str], search_pattern: str) -> List[str]:
         topic_name = topic.split('/')[-1]
         name_score, name_offsets = fuzzy_search.match(search_pattern, topic_name)
         
-        # Use the better score, but only if it's reasonably high
+        # Use the better score
         best_score = max(score, name_score)
         
-        # Higher threshold for better precision, and require minimum length ratio
-        min_score = max(8.0, len(search_pattern) * 2.0)  # Dynamic threshold based on pattern length
-        
-        # Also check if the match makes sense (avoid scattered character matches)
-        if best_score >= min_score:
-            # Additional validation: check if characters are somewhat clustered
-            best_offsets = offsets if score >= name_score else name_offsets
-            if len(best_offsets) >= 2:
-                # Check if characters are not too scattered
-                max_gap = max(best_offsets[i+1] - best_offsets[i] for i in range(len(best_offsets)-1))
-                if max_gap <= len(search_pattern) * 2:  # Allow reasonable gaps
-                    topic_scores.append((topic, best_score))
+        # Only include topics with reasonable scores
+        if best_score > 0:
+            topic_scores.append((topic, best_score))
     
     # Sort fuzzy matches by score (descending)
     topic_scores.sort(key=lambda x: x[1], reverse=True)
     fuzzy_matches = [topic for topic, score in topic_scores]
     
-    # Step 3: Try acronym matching (for abbreviations like "dts" -> "diagnostics_toplevel_state")
-    acronym_matches = []
-    if len(search_pattern) >= 2:  # Only try acronym matching for 2+ character patterns
-        for topic in topics:
-            if topic in exact_matches or topic in word_start_matches or topic in fuzzy_matches:
-                continue  # Skip topics already matched
-            
-            # Try acronym matching on the topic name part
-            topic_name = topic.split('/')[-1]
-            
-            # Split by underscores and other separators
-            words = re.split(r'[_\-\s]+', topic_name.lower())
-            
-            if len(words) >= len(search_pattern):
-                # Check if the first letters of consecutive words match the pattern
-                for i in range(len(words) - len(search_pattern) + 1):
-                    acronym_words = words[i:i+len(search_pattern)]
-                    if all(word for word in acronym_words):  # Ensure no empty words
-                        acronym = ''.join(word[0] for word in acronym_words)
-                        if acronym == pattern_lower:
-                            acronym_matches.append(topic)
-                            break
-    
-    # Combine results with priority: word_start > exact > fuzzy > acronym
-    results = word_start_matches + exact_matches + fuzzy_matches + acronym_matches
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_results = []
-    for topic in results:
-        if topic not in seen:
-            seen.add(topic)
-            unique_results.append(topic)
-    
-    return unique_results
+    return fuzzy_matches
 
 
 def _sort_topics(topics: List[str], stats: Dict, sort_by: str, reverse: bool) -> List[str]:
@@ -385,9 +310,62 @@ def _sort_topics(topics: List[str], stats: Dict, sort_by: str, reverse: bool) ->
     return sorted(topics, key=get_sort_key, reverse=reverse)
 
 
+def _get_compression_info(bag_path: str) -> str:
+    """Get compression information from bag file"""
+    try:
+        # Try to detect compression by reading bag file format
+        with open(bag_path, 'rb') as f:
+            # Skip bag header line
+            f.readline()
+            
+            # Read first record to check for compression
+            while True:
+                try:
+                    header_len_bytes = f.read(4)
+                    if not header_len_bytes or len(header_len_bytes) < 4:
+                        break
+                    
+                    header_len = int.from_bytes(header_len_bytes, 'little')
+                    if header_len <= 0 or header_len > 1024*1024:  # Sanity check
+                        break
+                    
+                    header_data = f.read(header_len)
+                    if not header_data or len(header_data) < header_len:
+                        break
+                    
+                    # Parse header fields
+                    header_str = header_data.decode('utf-8', errors='ignore')
+                    
+                    # Look for compression field in chunk records
+                    if 'compression=' in header_str:
+                        # Extract compression value
+                        for field in header_str.split('\x00'):
+                            if field.startswith('compression='):
+                                compression = field.split('=', 1)[1]
+                                return compression if compression != 'none' else 'none'
+                    
+                    # Skip data section
+                    data_len_bytes = f.read(4)
+                    if not data_len_bytes or len(data_len_bytes) < 4:
+                        break
+                    
+                    data_len = int.from_bytes(data_len_bytes, 'little')
+                    if data_len < 0:
+                        break
+                    
+                    f.seek(data_len, 1)  # Skip data
+                    
+                except Exception:
+                    break
+        
+        return 'none'  # Default if no compression found
+    except Exception:
+        return 'unknown'
+
+
 def _display_bag_inspection(console: Console, input_path: str, bag_info: Dict, 
                            filtered_topics: List[str], show_as: str, 
-                           show_compression: bool, verbose: bool):
+                           verbose: bool):
     """Display bag inspection results in specified format"""
     
     if show_as == "summary":
@@ -419,6 +397,11 @@ def _display_summary(console: Console, input_path: str, bag_info: Dict, filtered
         f"[bold]File Size:[/bold] {_format_size(bag_info['file_size'])}",
         f"[bold]Data Size:[/bold] {_format_size(bag_info['total_data_size'])}",
     ]
+    
+    # Add compression information
+    compression = _get_compression_info(input_path)
+    compression_display = compression.upper() if compression != 'none' else 'None'
+    summary_data.append(f"[bold]Compression:[/bold] {compression_display}")
     
     if bag_info['duration']:
         summary_data.append(f"[bold]Duration:[/bold] {_format_duration(bag_info['duration'])}")
