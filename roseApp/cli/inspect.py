@@ -7,8 +7,10 @@ import os
 import time
 import pickle
 import hashlib
+import json
+import csv
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Any
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -69,10 +71,11 @@ def _save_cache(cache_path: Path, data: Dict):
 def inspect(
     input_path: str = typer.Argument(..., help="Input bag file path"),
     topics: List[str] = typer.Option([], "--topics", "-t", help="Filter topics by name or pattern (supports fuzzy matching). Multiple values: --topics topic1 --topics topic2 --topics pattern3"),
-    show_as: str = typer.Option("table", "--show-as", "-f", help="Display format: table, list, summary (default: table)"),
+    as_format: str = typer.Option("table", "--as", "-a", help="Output format: table, list, summary, csv, html (default: table)"),
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)")
 ):
     """
     Fast inspection of ROS bag files with flexible display options and caching
@@ -81,19 +84,25 @@ def inspect(
     The cache is automatically invalidated when the bag file is modified.
     Use 'prune' command to manage cache files.
     
+    By default, only lightweight metadata is analyzed for faster performance.
+    Use --verbose to parse all messages and show detailed statistics.
+    
     Examples:
     
-    # Show all topics in table format
+    # Show basic topics information (fast)
     rose inspect demo.bag
+    
+    # Show detailed statistics with message counts and sizes
+    rose inspect demo.bag --verbose
     
     # Filter multiple topics by name or fuzzy pattern
     rose inspect demo.bag --topics dts --topics tf --topics velodyne
     
-    # Show summary with compression info
-    rose inspect demo.bag --show-as summary
+    # Export to CSV
+    rose inspect demo.bag --as csv --output topics.csv
     
-    # Show detailed verbose output
-    rose inspect demo.bag --verbose
+    # Export to HTML
+    rose inspect demo.bag --as html --output report.html
     """
     try:
         # Initialize logging
@@ -113,53 +122,90 @@ def inspect(
             raise typer.Exit(code=1)
         
         # Validate options
-        if show_as not in ["table", "list", "summary"]:
-            typer.echo(f"Error: --show-as must be one of: table, list, summary", err=True)
+        if as_format not in ["table", "list", "summary", "csv", "html"]:
+            typer.echo(f"Error: --as must be one of: table, list, summary, csv, html", err=True)
             raise typer.Exit(code=1)
         
         if sort_by not in ["name", "type", "count", "size", "frequency"]:
             typer.echo(f"Error: --sort-by must be one of: name, type, count, size, frequency", err=True)
             raise typer.Exit(code=1)
         
+        # Validate output file for export formats
+        if as_format in ["csv", "html"] and not output:
+            typer.echo(f"Error: --output is required for {as_format} format", err=True)
+            raise typer.Exit(code=1)
+        
         # Initialize console
         console = Console()
         
+        # Determine analysis mode
+        use_full_analysis = verbose
+        
+        # Show top info message for lite mode
+        if not use_full_analysis:
+            console.print(f"[yellow]INFO: Using lightweight analysis. Use --verbose for detailed statistics.[/yellow]")
+        
         # Try to load from cache first
         cache_path = _get_cache_path(input_path)
-        bag_info = _load_cache(cache_path)
-        if bag_info:
+        cached_bag_info = _load_cache(cache_path)
+        
+        if cached_bag_info:
             logger.debug(f"Loaded analysis from cache: {cache_path}")
             console.print(f"[dim]Using cached analysis results[/dim]")
-        
-        # If no cache, perform analysis
-        if bag_info is None:
+            bag_info = cached_bag_info
+            # If we have cached data, we can show full information even without --verbose
+            use_full_analysis = True
+        else:
+            # No cache available, perform analysis
             parser = create_parser(ParserType.ROSBAGS)
             logger.debug(f"Analyzing bag file: {input_path}")
-            bag_info = _analyze_bag_with_progress(parser, input_path, logger, console)
             
-            # Save to cache
-            _save_cache(cache_path, bag_info)
-            logger.debug(f"Saved analysis to cache: {cache_path}")
+            if use_full_analysis:
+                # Full analysis: get complete statistics
+                bag_info = _analyze_bag_full(parser, input_path, logger, console)
+                # Save to cache for future use
+                _save_cache(cache_path, bag_info)
+                logger.debug(f"Saved analysis to cache: {cache_path}")
+            else:
+                # Lite analysis: only metadata
+                bag_info = _analyze_bag_lite(parser, input_path, logger, console)
         
         # Record analysis time
         analysis_time = time.time() - start_time
         bag_info['analysis_time'] = analysis_time
         
-        # Apply filters and sorting  
+        # Apply filters and sorting
         filtered_topics = _filter_topics(bag_info['topics'], topics if topics else None)
-        # Default sorting is always large to small (reverse=True by default)
-        actual_reverse = not reverse if reverse else True  # If user didn't specify reverse, default to True (large first)
-        sorted_topics = _sort_topics(filtered_topics, bag_info['stats'], sort_by, actual_reverse)
         
-        # Display results
-        _display_bag_inspection(
-            console=console,
+        # Convert to JSON structure for unified processing
+        json_data = _create_json_structure(
             input_path=input_path,
             bag_info=bag_info,
-            filtered_topics=sorted_topics,
-            show_as=show_as,
-            verbose=verbose
+            filtered_topics=filtered_topics,
+            is_lite_mode=not use_full_analysis
         )
+        
+        # Apply sorting to topic details
+        if 'stats' in bag_info and bag_info['stats']:
+            # We have detailed stats, can sort properly
+            actual_reverse = not reverse if reverse else True
+            json_data['topics'] = _sort_topic_details(json_data['topics'], sort_by, actual_reverse)
+        else:
+            # No detailed stats, can only sort by name
+            if sort_by != "name":
+                console.print(f"[yellow]Warning: Sorting by '{sort_by}' requires --verbose mode, using name sorting instead[/yellow]")
+                sort_by = "name"
+            json_data['topics'] = sorted(json_data['topics'], key=lambda x: x['topic'].lower(), reverse=reverse)
+        
+        # Display or export results
+        if as_format in ["csv", "html"]:
+            _export_data(json_data, as_format, output, console)
+        else:
+            _display_data(json_data, as_format, verbose, console)
+        
+        # Show bottom info message for lite mode
+        if not use_full_analysis and as_format not in ["csv", "html"]:
+            console.print(f"[yellow]INFO: Use --verbose to analyze all messages and show detailed statistics.[/yellow]")
         
     except Exception as e:
         log_cli_error(e)
@@ -167,8 +213,52 @@ def inspect(
         raise typer.Exit(code=1)
 
 
-def _analyze_bag_with_progress(parser, bag_path: str, logger, console: Console) -> Dict:
-    """Fast analysis of bag file with progress indication"""
+def _analyze_bag_lite(parser, bag_path: str, logger, console: Console) -> Dict:
+    """Fast lite analysis of bag file - only metadata, no message iteration"""
+    try:
+        # Only load basic bag info without iterating through messages
+        from .util import LoadingAnimationWithTimer
+        with LoadingAnimationWithTimer("Loading bag metadata...", dismiss=True) as load_progress:
+            load_progress.add_task(description="Loading bag metadata...")
+            topics, connections, time_range = parser.load_bag(bag_path)
+        
+        # Get file size
+        file_size = os.path.getsize(bag_path)
+        
+        # Calculate duration
+        duration = None
+        start_time = None
+        end_time = None
+        
+        if time_range and len(time_range) == 2:
+            start_time = time_range[0]
+            end_time = time_range[1]
+            # Convert (seconds, nanoseconds) to total seconds
+            start_seconds = start_time[0] + start_time[1] / 1_000_000_000
+            end_seconds = end_time[0] + end_time[1] / 1_000_000_000
+            duration = end_seconds - start_seconds
+        
+        return {
+            'topics': topics,
+            'connections': connections,
+            'stats': {},  # Empty stats for lite mode
+            'file_size': file_size,
+            'total_messages': None,  # Unknown in lite mode
+            'total_data_size': None,  # Unknown in lite mode
+            'duration': duration,
+            'start_time': start_time,
+            'end_time': end_time,
+            'topic_count': len(topics),
+            'is_lite_mode': True
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing bag (lite mode): {e}")
+        raise
+
+
+def _analyze_bag_full(parser, bag_path: str, logger, console: Console) -> Dict:
+    """Full analysis of bag file with progress indication - includes message iteration"""
     try:
         # Step 1: Load basic bag info with timing
         from .util import LoadingAnimationWithTimer
@@ -224,11 +314,12 @@ def _analyze_bag_with_progress(parser, bag_path: str, logger, console: Console) 
                 'duration': duration,
                 'start_time': start_time,
                 'end_time': end_time,
-                'topic_count': len(topics)
+                'topic_count': len(topics),
+                'is_lite_mode': False
             }
             
     except Exception as e:
-        logger.error(f"Error analyzing bag: {e}")
+        logger.error(f"Error analyzing bag (full mode): {e}")
         raise
 
 
@@ -363,68 +454,211 @@ def _get_compression_info(bag_path: str) -> str:
         return 'unknown'
 
 
-def _display_bag_inspection(console: Console, input_path: str, bag_info: Dict, 
-                           filtered_topics: List[str], show_as: str, 
-                           verbose: bool):
+def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: List[str], is_lite_mode: bool) -> Dict[str, Any]:
+    """Create unified JSON structure for all output formats"""
+    
+    # Calculate compression info
+    compression = _get_compression_info(input_path)
+    compression_display = compression.upper() if compression != 'none' else 'None'
+    
+    # Build topic details
+    topic_details = []
+    for topic in filtered_topics:
+        stats = bag_info['stats'].get(topic, {'count': 0, 'size': 0}) if bag_info['stats'] else {}
+        msg_type = bag_info['connections'].get(topic, 'Unknown')
+        
+        # Calculate frequency
+        frequency = None
+        if bag_info['duration'] and bag_info['duration'] > 0 and stats.get('count') is not None:
+            frequency = stats['count'] / bag_info['duration']
+        
+        topic_details.append({
+            'topic': topic,
+            'message_type': msg_type,
+            'count': stats.get('count'),
+            'size': stats.get('size'),
+            'frequency': frequency,
+            'size_formatted': _format_size(stats['size']) if stats.get('size') is not None else None,
+            'frequency_formatted': f"{frequency:.1f} Hz" if frequency is not None else None
+        })
+    
+    # Build summary data
+    summary = {
+        'file_path': input_path,
+        'file_name': os.path.basename(input_path),
+        'absolute_path': os.path.abspath(input_path),
+        'topic_count': bag_info['topic_count'],
+        'total_messages': bag_info['total_messages'],
+        'file_size': bag_info['file_size'],
+        'total_data_size': bag_info['total_data_size'],
+        'compression': compression_display,
+        'duration': bag_info['duration'],
+        'start_time': bag_info['start_time'],
+        'end_time': bag_info['end_time'],
+        'analysis_time': bag_info['analysis_time'],
+        'filtered_count': len(filtered_topics),
+        'is_lite_mode': is_lite_mode,
+        # Formatted versions
+        'file_size_formatted': _format_size(bag_info['file_size']),
+        'total_data_size_formatted': _format_size(bag_info['total_data_size']) if bag_info['total_data_size'] is not None else None,
+        'duration_formatted': _format_duration(bag_info['duration']) if bag_info['duration'] is not None else None,
+        'avg_rate': bag_info['total_messages'] / bag_info['duration'] if bag_info['total_messages'] is not None and bag_info['duration'] and bag_info['duration'] > 0 else None,
+        'avg_rate_formatted': f"{bag_info['total_messages'] / bag_info['duration']:.1f} Hz" if bag_info['total_messages'] is not None and bag_info['duration'] and bag_info['duration'] > 0 else None
+    }
+    
+    return {
+        'summary': summary,
+        'topics': topic_details,
+        'metadata': {
+            'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'generator': 'rose-cli',
+            'version': '1.0'
+        }
+    }
+
+
+def _display_data(json_data: Dict[str, Any], as_format: str, verbose: bool, console: Console):
     """Display bag inspection results in specified format"""
     
-    if show_as == "summary":
-        _display_summary(console, input_path, bag_info, len(filtered_topics), verbose)
-    elif show_as == "list":
-        _display_list(console, input_path, bag_info, filtered_topics, verbose)
+    if as_format == "summary":
+        _display_summary(console, json_data['summary']['file_path'], json_data, len(json_data['topics']), verbose, json_data['summary']['is_lite_mode'])
+    elif as_format == "list":
+        _display_list(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
     else:  # table
-        _display_table(console, input_path, bag_info, filtered_topics, verbose)
+        _display_table(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
 
 
-def _display_summary(console: Console, input_path: str, bag_info: Dict, filtered_count: int, verbose: bool):
+def _export_data(json_data: Dict[str, Any], as_format: str, output: str, console: Console):
+    """Export bag inspection results to CSV or HTML"""
+    try:
+        if as_format == "csv":
+            _export_to_csv(json_data, output)
+            console.print(f"\n[green]Data exported to {output}[/green]")
+        elif as_format == "html":
+            _export_to_html(json_data, output)
+            console.print(f"\n[green]Data exported to {output}[/green]")
+    except Exception as e:
+        log_cli_error(e)
+        typer.echo(f"Error exporting data: {str(e)}", err=True)
+        raise typer.Exit(code=1)
+
+
+def _export_to_csv(json_data: Dict[str, Any], output_path: str):
+    """Export JSON data to CSV file"""
+    with open(output_path, 'w', newline='') as f:
+        fieldnames = ['topic', 'message_type', 'count', 'size', 'frequency', 'size_formatted', 'frequency_formatted']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        for topic_data in json_data['topics']:
+            writer.writerow(topic_data)
+
+
+def _export_to_html(json_data: Dict[str, Any], output_path: str):
+    """Export JSON data to HTML file"""
+    summary = json_data['summary']
+    
+    with open(output_path, 'w') as f:
+        f.write("<!DOCTYPE html>\n")
+        f.write("<html>\n")
+        f.write("<head>\n")
+        f.write("<title>ROS Bag Inspection Report</title>\n")
+        f.write("<style>\n")
+        f.write("body { font-family: Arial, sans-serif; margin: 20px; }\n")
+        f.write("h1 { color: #333; }\n")
+        f.write("table { border-collapse: collapse; width: 100%; margin-top: 20px; }\n")
+        f.write("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n")
+        f.write("th { background-color: #f2f2f2; }\n")
+        f.write("tr:hover { background-color: #f5f5f5; }\n")
+        f.write("</style>\n")
+        f.write("</head>\n")
+        f.write("<body>\n")
+        f.write(f"<h1>ROS Bag Inspection Report for {summary['file_name']}</h1>\n")
+        f.write(f"<p>Generated on: {json_data['metadata']['generated_at']}</p>\n")
+        f.write("<h2>Summary</h2>\n")
+        f.write(f"<p>File: {summary['absolute_path']}</p>\n")
+        f.write(f"<p>Total Topics: {summary['topic_count']}</p>\n")
+        f.write(f"<p>Total Messages: {summary['total_messages']:,}</p>\n" if summary['total_messages'] is not None else "<p>Total Messages: -</p>\n")
+        f.write(f"<p>File Size: {summary['file_size_formatted']}</p>\n")
+        f.write(f"<p>Data Size: {summary['total_data_size_formatted']}</p>\n" if summary['total_data_size_formatted'] is not None else "<p>Data Size: -</p>\n")
+        f.write(f"<p>Compression: {summary['compression']}</p>\n")
+        f.write(f"<p>Duration: {summary['duration_formatted']}</p>\n" if summary['duration_formatted'] is not None else "<p>Duration: -</p>\n")
+        f.write(f"<p>Average Rate: {summary['avg_rate_formatted']}</p>\n" if summary['avg_rate_formatted'] is not None else "<p>Average Rate: -</p>\n")
+        
+        f.write("<h2>Topics</h2>\n")
+        f.write("<table>\n")
+        f.write("<tr><th>Topic</th><th>Message Type</th><th>Count</th><th>Size</th><th>Frequency</th></tr>\n")
+        for topic_data in json_data['topics']:
+            count_str = f"{topic_data['count']:,}" if topic_data['count'] is not None else "-"
+            size_str = topic_data['size_formatted'] if topic_data['size_formatted'] is not None else "-"
+            freq_str = topic_data['frequency_formatted'] if topic_data['frequency_formatted'] is not None else "-"
+            f.write(f"<tr><td>{topic_data['topic']}</td><td>{topic_data['message_type']}</td><td>{count_str}</td><td>{size_str}</td><td>{freq_str}</td></tr>\n")
+        f.write("</table>\n")
+        f.write("</body>\n")
+        f.write("</html>\n")
+
+
+def _display_summary(console: Console, input_path: str, json_data: Dict[str, Any], filtered_count: int, verbose: bool, is_lite_mode: bool):
     """Display summary information"""
+    summary = json_data['summary']
+    
     console.print(f"\n[bold cyan]Bag File Summary[/bold cyan]")
     
     if verbose:
         # Verbose mode shows full details
-        console.print(f"[dim]Absolute Path:[/dim] {os.path.abspath(input_path)}")
-        console.print(f"[dim]File Name:[/dim] {os.path.basename(input_path)}")
-        console.print(f"[dim]Analysis Time:[/dim] {bag_info.get('analysis_time', 0):.3f}s")
+        console.print(f"[dim]Absolute Path:[/dim] {summary['absolute_path']}")
+        console.print(f"[dim]File Name:[/dim] {summary['file_name']}")
+        console.print(f"[dim]Analysis Time:[/dim] {summary['analysis_time']:.3f}s")
         console.print("-" * 80)
     else:
         # Non-verbose mode still shows basic file info
-        console.print(f"[dim]File:[/dim] {os.path.basename(input_path)}")
+        console.print(f"[dim]File:[/dim] {summary['file_name']}")
         console.print("-" * 60)
     
     summary_data = [
-        f"[bold]Topics:[/bold] {bag_info['topic_count']}",
-        f"[bold]Messages:[/bold] {bag_info['total_messages']:,}",
-        f"[bold]File Size:[/bold] {_format_size(bag_info['file_size'])}",
-        f"[bold]Data Size:[/bold] {_format_size(bag_info['total_data_size'])}",
+        f"[bold]Topics:[/bold] {summary['topic_count']}",
     ]
     
+    # Add message and data size info if available
+    if summary['total_messages'] is not None:
+        summary_data.append(f"[bold]Messages:[/bold] {summary['total_messages']:,}")
+    else:
+        summary_data.append(f"[bold]Messages:[/bold] -")
+    
+    summary_data.append(f"[bold]File Size:[/bold] {summary['file_size_formatted']}")
+    
+    if summary['total_data_size_formatted'] is not None:
+        summary_data.append(f"[bold]Data Size:[/bold] {summary['total_data_size_formatted']}")
+    else:
+        summary_data.append(f"[bold]Data Size:[/bold] -")
+    
     # Add compression information
-    compression = _get_compression_info(input_path)
-    compression_display = compression.upper() if compression != 'none' else 'None'
-    summary_data.append(f"[bold]Compression:[/bold] {compression_display}")
+    summary_data.append(f"[bold]Compression:[/bold] {summary['compression']}")
     
-    if bag_info['duration']:
-        summary_data.append(f"[bold]Duration:[/bold] {_format_duration(bag_info['duration'])}")
-        avg_rate = bag_info['total_messages'] / bag_info['duration']
-        summary_data.append(f"[bold]Avg Rate:[/bold] {avg_rate:.1f} Hz")
+    if summary['duration_formatted']:
+        summary_data.append(f"[bold]Duration:[/bold] {summary['duration_formatted']}")
+        if summary['avg_rate_formatted']:
+            summary_data.append(f"[bold]Avg Rate:[/bold] {summary['avg_rate_formatted']}")
+        else:
+            summary_data.append(f"[bold]Avg Rate:[/bold] -")
     
-    if filtered_count != bag_info['topic_count']:
+    if filtered_count != summary['topic_count']:
         summary_data.append(f"[bold]Filtered:[/bold] {filtered_count} topics shown")
     
     # Always show as separate lines for summary
     for item in summary_data:
         console.print(item)
     
-    if verbose and bag_info.get('start_time') and bag_info.get('end_time'):
-        console.print(f"[dim]Start Time:[/dim] {bag_info['start_time']}")
-        console.print(f"[dim]End Time:[/dim] {bag_info['end_time']}")
+    if verbose and summary['start_time'] and summary['end_time']:
+        console.print(f"[dim]Start Time:[/dim] {summary['start_time']}")
+        console.print(f"[dim]End Time:[/dim] {summary['end_time']}")
 
 
-def _display_list(console: Console, input_path: str, bag_info: Dict, 
-                  filtered_topics: List[str], verbose: bool):
+def _display_list(console: Console, input_path: str, json_data: Dict[str, Any], 
+                  filtered_topics: List[Dict[str, Any]], verbose: bool, is_lite_mode: bool):
     """Display topics in list format"""
     # Always show summary first
-    _display_summary(console, input_path, bag_info, len(filtered_topics), verbose)
+    _display_summary(console, input_path, json_data, len(filtered_topics), verbose, is_lite_mode)
     console.print()
     
     # Show topics header in verbose mode
@@ -433,89 +667,63 @@ def _display_list(console: Console, input_path: str, bag_info: Dict,
         console.print(f"[dim]Total: {len(filtered_topics)} topics[/dim]")
         console.print("-" * 60)
     
-    for topic in filtered_topics:
-        stats = bag_info['stats'].get(topic, {'count': 0, 'size': 0})
-        msg_type = bag_info['connections'].get(topic, 'Unknown')
-        
-        # Format message type
-        formatted_type = _format_message_type(msg_type)
-        
-        # Default: show frequency but not type
-        info_parts = [
-            f"[bold]{topic}[/bold]",
-            f"[cyan]{stats['count']:,} msgs[/cyan]",
-            f"[green]{_format_size(stats['size'])}[/green]"
-        ]
-        
-        # Add frequency for all modes
-        if bag_info['duration'] and bag_info['duration'] > 0:
-            frequency = stats['count'] / bag_info['duration']
-            info_parts.append(f"[magenta]{frequency:.1f} Hz[/magenta]")
-        
-        # Add type only in verbose mode
-        if verbose:
-            info_parts.insert(1, f"[yellow]{formatted_type}[/yellow]")
-        
-        console.print(" | ".join(info_parts))
+    # Show topics
+    for topic_data in filtered_topics:
+        if is_lite_mode:
+            # In lite mode, only show topic name and message type
+            console.print(f"[bold]{topic_data['topic']}[/bold] | [cyan]{_format_message_type(topic_data['message_type'])}[/cyan]")
+        else:
+            # In full mode, show all statistics
+            info_parts = [
+                f"[bold]{topic_data['topic']}[/bold]",
+                f"[cyan]{topic_data['count']:,} msgs[/cyan]",
+                f"[green]{topic_data['size_formatted']}[/green]"
+            ]
+            
+            # Add frequency if available
+            if topic_data['frequency_formatted']:
+                info_parts.append(f"[magenta]{topic_data['frequency_formatted']}[/magenta]")
+            
+            console.print(" | ".join(info_parts))
 
 
-def _display_table(console: Console, input_path: str, bag_info: Dict, 
-                   filtered_topics: List[str], verbose: bool):
+def _display_table(console: Console, input_path: str, json_data: Dict[str, Any], 
+                   filtered_topics: List[Dict[str, Any]], verbose: bool, is_lite_mode: bool):
     """Display topics in table format"""
-    # Always show summary first, detailed in verbose mode
-    _display_summary(console, input_path, bag_info, len(filtered_topics), verbose)
+    # Always show summary first
+    _display_summary(console, input_path, json_data, len(filtered_topics), verbose, is_lite_mode)
     console.print()
     
-    # Create table with appropriate styling
-    table = Table(
-        box=box.ROUNDED if verbose else box.SIMPLE, 
-        title="Topics" if verbose else None,
-        title_style="bold cyan" if verbose else None
-    )
-    
-    # Add columns based on mode
-    table.add_column("Topic", justify="left", style="bold", min_width=20)
-    
-    # Show type only in verbose mode
-    if verbose:
-        table.add_column("Type", justify="left", style="yellow", min_width=20)
-    
-    table.add_column("Count", justify="right", style="cyan", min_width=8)
-    table.add_column("Size", justify="right", style="green", min_width=8)
-    
-    # Always show frequency
-    table.add_column("Frequency", justify="right", style="magenta", min_width=10)
-    
-    # Add rows
-    for topic in filtered_topics:
-        stats = bag_info['stats'].get(topic, {'count': 0, 'size': 0})
-        msg_type = bag_info['connections'].get(topic, 'Unknown')
+    # Create table
+    if is_lite_mode:
+        # Lite mode: only show topic and message type
+        table = Table(title=f"Topics in {Path(input_path).name}", box=box.SIMPLE)
+        table.add_column("Topic", style="bold", min_width=25)
+        table.add_column("Message Type", style="cyan", min_width=30)
         
-        # Format message type
-        formatted_type = _format_message_type(msg_type)
+        for topic_data in filtered_topics:
+            table.add_row(topic_data['topic'], _format_message_type(topic_data['message_type']))
         
-        # Format frequency
-        frequency_str = "N/A"
-        if bag_info['duration'] and bag_info['duration'] > 0:
-            frequency = stats['count'] / bag_info['duration']
-            frequency_str = f"{frequency:.1f} Hz"
+        console.print(table)
+    else:
+        # Full mode: show all statistics
+        table = Table(title=f"Topics in {Path(input_path).name}", box=box.SIMPLE)
+        table.add_column("Topic", style="bold", min_width=25)
+        table.add_column("Message Type", style="cyan", min_width=30)
+        table.add_column("Count", justify="right", style="green")
+        table.add_column("Size", justify="right", style="magenta")
+        table.add_column("Frequency", justify="right", style="blue")
         
-        # Build row data
-        row_data = [topic]
+        for topic_data in filtered_topics:
+            table.add_row(
+                topic_data['topic'],
+                _format_message_type(topic_data['message_type']),
+                f"{topic_data['count']:,}" if topic_data['count'] is not None else "N/A",
+                topic_data['size_formatted'] if topic_data['size_formatted'] is not None else "N/A",
+                topic_data['frequency_formatted'] if topic_data['frequency_formatted'] is not None else "N/A"
+            )
         
-        # Add type only in verbose mode
-        if verbose:
-            row_data.append(formatted_type)
-        
-        row_data.extend([
-            f"{stats['count']:,}",
-            _format_size(stats['size']),
-            frequency_str
-        ])
-        
-        table.add_row(*row_data)
-    
-    console.print(table)
+        console.print(table)
 
 
 def _format_size(size_bytes: int) -> str:
@@ -561,6 +769,25 @@ def _format_message_type(msg_type: str) -> str:
         msg_type = msg_type[:22] + "..."
     
     return msg_type
+
+
+def _sort_topic_details(topic_details: List[Dict[str, Any]], sort_by: str, reverse: bool) -> List[Dict[str, Any]]:
+    """Sort topic details based on specified criteria"""
+    def get_sort_key(topic_data: Dict[str, Any]):
+        if sort_by == "name":
+            return topic_data['topic'].lower()
+        elif sort_by == "type":
+            return topic_data['topic'].split('/')[-1].lower()  # Sort by topic name part
+        elif sort_by == "count":
+            return topic_data['count'] if topic_data['count'] is not None else 0
+        elif sort_by == "size":
+            return topic_data['size'] if topic_data['size'] is not None else 0
+        elif sort_by == "frequency":
+            return topic_data['frequency'] if topic_data['frequency'] is not None else 0
+        else:
+            return topic_data['size'] if topic_data['size'] is not None else 0
+    
+    return sorted(topic_details, key=get_sort_key, reverse=reverse)
 
 
 def main():
