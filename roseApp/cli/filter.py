@@ -361,14 +361,14 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
             progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
         
         # Execute filtering
-            result = parser.filter_bag(
-                input_bag, 
-                output_bag, 
-                list(whitelist_topics),
-                progress_callback=update_progress,
-                compression=compression,
+        result = parser.filter_bag(
+        input_bag, 
+            output_bag, 
+            list(whitelist_topics),
+            progress_callback=update_progress,
+            compression=compression,
             overwrite=overwrite
-            )
+        )
         
         # Update final status
         progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -475,7 +475,7 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
                     progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
                 
                 # Execute filtering
-                    result = parser.filter_bag(
+                result = parser.filter_bag(
                         bag_file, 
                         output_path, 
                         whitelist,

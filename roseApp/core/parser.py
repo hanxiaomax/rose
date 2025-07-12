@@ -214,6 +214,10 @@ class RosbagsBagParser(IBagParser):
             # Convert compression format for rosbags
             rosbags_compression = self._get_compression_format(compression)
             
+            # Initialize progress tracking variables
+            last_progress = -1
+            processed_messages = 0
+            
             # Count total messages first for progress tracking
             total_messages = 0
             selected_topic_counts = {}
@@ -235,16 +239,16 @@ class RosbagsBagParser(IBagParser):
                 # Count messages for each selected topic
                 for connection in selected_connections:
                     # Use efficient message counting
-                        count = sum(1 for _ in reader.messages([connection]))
-                        selected_topic_counts[connection.topic] = count
-                        total_messages += count
-            
-            if total_messages == 0:
-                _logger.warning(f"No messages found for selected topics in {input_bag}")
-                if progress_callback:
-                    progress_callback(100)
-                return "No messages found for selected topics"
-            
+                    count = sum(1 for _ in reader.messages([connection]))
+                    selected_topic_counts[connection.topic] = count
+                    total_messages += count
+                
+                if total_messages == 0:
+                    _logger.warning(f"No messages found for selected topics in {input_bag}")
+                    if progress_callback:
+                        progress_callback(100)
+                    return "No messages found for selected topics"
+                
                 # Create output directory if needed
                 output_dir = os.path.dirname(output_bag)
                 if output_dir:
@@ -288,8 +292,6 @@ class RosbagsBagParser(IBagParser):
                         topic_connections[connection.topic] = new_connection
                     
                     # Process messages with progress tracking
-                    processed_messages = 0
-                    last_progress = -1
                     
                     # Use efficient message iteration with pre-filtered connections
                     for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
