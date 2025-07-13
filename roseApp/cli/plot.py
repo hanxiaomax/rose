@@ -144,11 +144,17 @@ def plot_cmd(
         
         console.print("[cyan]Analyzing bag file and extracting time series data...[/cyan]")
         
-        # For now, show a placeholder message
-        console.print(f"[yellow]Plot functionality is being developed...[/yellow]")
-        console.print(f"Would plot series: {series}")
-        console.print(f"Output: {output}")
-        console.print(f"Type: {plot_type}, Format: {as_format}")
+        # Create parser and analyze bag
+        parser = create_parser(ParserType.ROSBAGS)
+        
+        # Extract time series data
+        time_series_data = _extract_time_series_data(parser, bag_path, parsed_series, console)
+        
+        # Create the plot
+        console.print(f"[cyan]Creating {plot_type} plot...[/cyan]")
+        _create_time_series_plot(time_series_data, output, plot_type, as_format, console)
+        
+        console.print(f"[green]✓ Plot saved to: {output}[/green]")
             
     except typer.Exit:
         # Re-raise typer.Exit cleanly without additional error messages
@@ -668,6 +674,286 @@ def _create_overview_plot_plotly(topics_data, summary, output_path):
     
     pyo.plot(fig, filename=output_path, auto_open=False)
     return output_path
+
+
+def _extract_time_series_data(parser, bag_path: str, parsed_series: List[Dict], console: Console) -> Dict[str, Any]:
+    """Extract time series data from bag file based on specified series"""
+    import time
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+    
+    time_series_data = {}
+    
+    # Load bag file
+    topics, connections, time_range = parser.load_bag(bag_path)
+    
+    # Check if requested topics exist
+    available_topics = set(topics)
+    requested_topics = {series['topic'] for series in parsed_series}
+    missing_topics = requested_topics - available_topics
+    
+    if missing_topics:
+        console.print(f"[yellow]Warning: The following topics were not found in the bag file:[/yellow]")
+        for topic in missing_topics:
+            console.print(f"  • {topic}")
+        console.print(f"[dim]Available topics: {', '.join(sorted(available_topics))}[/dim]")
+    
+    # Extract data for each series
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console
+    ) as progress:
+        
+        for series in parsed_series:
+            topic = series['topic']
+            fields = series['fields']
+            
+            if topic not in available_topics:
+                continue
+                
+            task = progress.add_task(f"Extracting {topic}", total=100)
+            
+            # Get messages for this topic
+            messages = parser.read_messages(bag_path, [topic])
+            
+            topic_data = {
+                'topic': topic,
+                'fields': fields,
+                'timestamps': [],
+                'data': {}
+            }
+            
+            # Initialize field data containers
+            if fields:
+                for field in fields:
+                    topic_data['data'][field] = []
+            
+            message_count = 0
+            processed_count = 0
+            
+            # Process messages directly (we can't easily count them first)
+            for msg_timestamp, msg_data in messages:
+                processed_count += 1
+                
+                # Update progress (use processed count as approximation)
+                if processed_count % 10 == 0:  # Update every 10 messages
+                    progress.update(task, completed=min(processed_count, 100))
+                
+                # Extract timestamp - convert from (seconds, nanoseconds) to float
+                if isinstance(msg_timestamp, tuple):
+                    timestamp = msg_timestamp[0] + msg_timestamp[1] / 1_000_000_000
+                else:
+                    timestamp = float(msg_timestamp)
+                
+                topic_data['timestamps'].append(timestamp)
+                
+                # Extract field data
+                if fields:
+                    for field in fields:
+                        value = _extract_field_value(msg_data, field)
+                        topic_data['data'][field].append(value)
+                else:
+                    # If no fields specified, try to extract all numeric fields
+                    numeric_fields = _extract_numeric_fields(msg_data)
+                    for field_name, value in numeric_fields.items():
+                        if field_name not in topic_data['data']:
+                            topic_data['data'][field_name] = []
+                        topic_data['data'][field_name].append(value)
+            
+            progress.update(task, completed=100)
+            time_series_data[topic] = topic_data
+    
+    return time_series_data
+
+
+def _extract_field_value(msg_data: Any, field_path: str) -> float:
+    """Extract a numeric value from a message using dot notation field path"""
+    try:
+        # Handle nested field access like "pose.pose.position.x"
+        value = msg_data
+        for field_name in field_path.split('.'):
+            if hasattr(value, field_name):
+                value = getattr(value, field_name)
+            elif isinstance(value, dict) and field_name in value:
+                value = value[field_name]
+            else:
+                return 0.0
+        
+        # Convert to float if possible
+        if isinstance(value, (int, float)):
+            return float(value)
+        else:
+            return 0.0
+    except Exception:
+        return 0.0
+
+
+def _extract_numeric_fields(msg_data: Any, prefix: str = "", max_depth: int = 3) -> Dict[str, float]:
+    """Extract all numeric fields from a message"""
+    numeric_fields = {}
+    
+    if max_depth <= 0:
+        return numeric_fields
+    
+    try:
+        # Handle different message types
+        if hasattr(msg_data, '__dict__'):
+            # ROS message object
+            for field_name in dir(msg_data):
+                if field_name.startswith('_'):
+                    continue
+                    
+                field_value = getattr(msg_data, field_name)
+                full_name = f"{prefix}.{field_name}" if prefix else field_name
+                
+                if isinstance(field_value, (int, float)):
+                    numeric_fields[full_name] = float(field_value)
+                elif hasattr(field_value, '__dict__'):
+                    # Nested object
+                    nested_fields = _extract_numeric_fields(field_value, full_name, max_depth - 1)
+                    numeric_fields.update(nested_fields)
+        
+        elif isinstance(msg_data, dict):
+            # Dictionary
+            for field_name, field_value in msg_data.items():
+                full_name = f"{prefix}.{field_name}" if prefix else field_name
+                
+                if isinstance(field_value, (int, float)):
+                    numeric_fields[full_name] = float(field_value)
+                elif isinstance(field_value, dict):
+                    nested_fields = _extract_numeric_fields(field_value, full_name, max_depth - 1)
+                    numeric_fields.update(nested_fields)
+    
+    except Exception:
+        pass
+    
+    return numeric_fields
+
+
+def _create_time_series_plot(time_series_data: Dict[str, Any], output_path: str, plot_type: str, plot_format: str, console: Console):
+    """Create time series plot using matplotlib or plotly"""
+    import datetime
+    
+    if plot_format == "html":
+        _create_time_series_plot_plotly(time_series_data, output_path, plot_type, console)
+    else:
+        _create_time_series_plot_matplotlib(time_series_data, output_path, plot_type, plot_format, console)
+
+
+def _create_time_series_plot_matplotlib(time_series_data: Dict[str, Any], output_path: str, plot_type: str, plot_format: str, console: Console):
+    """Create time series plot using matplotlib"""
+    if not MATPLOTLIB_AVAILABLE:
+        FriendlyErrorHandler.dependency_missing(
+            "matplotlib", "pip install matplotlib", "time series plotting"
+        )
+    
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import datetime, timezone
+    
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Plot each topic's data
+    for topic, data in time_series_data.items():
+        timestamps = data['timestamps']
+        
+        # Convert timestamps to datetime objects
+        datetime_stamps = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in timestamps]
+        
+        # Plot each field
+        for field_name, field_data in data['data'].items():
+            if len(field_data) != len(datetime_stamps):
+                continue
+                
+            label = f"{topic}:{field_name}"
+            
+            if plot_type == "scatter":
+                ax.scatter(datetime_stamps, field_data, label=label, alpha=0.6)
+            else:  # line plot
+                ax.plot(datetime_stamps, field_data, label=label, linewidth=1.5)
+    
+    # Customize plot
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Value')
+    ax.set_title('Time Series Plot')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    # Format x-axis
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+    ax.xaxis.set_major_locator(mdates.SecondLocator(interval=60))
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save plot
+    plt.savefig(output_path, format=plot_format, dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def _create_time_series_plot_plotly(time_series_data: Dict[str, Any], output_path: str, plot_type: str, console: Console):
+    """Create time series plot using plotly"""
+    if not PLOTLY_AVAILABLE:
+        FriendlyErrorHandler.dependency_missing(
+            "plotly", "pip install plotly", "interactive time series plotting"
+        )
+    
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    from datetime import datetime, timezone
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Plot each topic's data
+    for topic, data in time_series_data.items():
+        timestamps = data['timestamps']
+        
+        # Convert timestamps to datetime objects
+        datetime_stamps = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in timestamps]
+        
+        # Plot each field
+        for field_name, field_data in data['data'].items():
+            if len(field_data) != len(datetime_stamps):
+                continue
+                
+            name = f"{topic}:{field_name}"
+            
+            if plot_type == "scatter":
+                fig.add_trace(go.Scatter(
+                    x=datetime_stamps,
+                    y=field_data,
+                    mode='markers',
+                    name=name,
+                    opacity=0.6
+                ))
+            else:  # line plot
+                fig.add_trace(go.Scatter(
+                    x=datetime_stamps,
+                    y=field_data,
+                    mode='lines',
+                    name=name,
+                    line=dict(width=2)
+                ))
+    
+    # Customize layout
+    fig.update_layout(
+        title='Time Series Plot',
+        xaxis_title='Time',
+        yaxis_title='Value',
+        hovermode='x unified',
+        showlegend=True,
+        width=1200,
+        height=600
+    )
+    
+    # Save plot
+    fig.write_html(output_path)
 
 
 def create_plot(json_data: Dict[str, Any], plot_type: str, output_path: str, plot_format: str = "png"):

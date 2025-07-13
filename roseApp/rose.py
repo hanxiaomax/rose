@@ -46,27 +46,6 @@ def configure_logging(verbosity: int):
                 '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
             ))
 
-def parse_time_range(time_range: str) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
-    """Parse time range string in 'start_time,end_time' format
-    
-    Args:
-        time_range: String in 'YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS' format
-    
-    Returns:
-        Tuple ((start_seconds, start_nanos), (end_seconds, end_nanos))
-    """
-    if not time_range:
-        return None
-        
-    try:
-        start_str, end_str = time_range.split(',')
-        return TimeUtil.convert_time_range_to_tuple(start_str.strip(), end_str.strip())
-    except Exception as e:
-        logger.error(f"Error parsing time range: {str(e)}")
-        raise typer.BadParameter(
-            "Time range must be in 'YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS' format"
-        )
-
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
