@@ -394,17 +394,17 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
     
     # Calculate size reduction if output file exists
     if os.path.exists(output_bag):
-    input_size = os.path.getsize(input_bag)
-    output_size = os.path.getsize(output_bag)
-    size_reduction = (1 - output_size/input_size) * 100
-    
-    typer.secho("\nFiltering result:", fg=typer.colors.GREEN, bold=True)
-    typer.echo("─" * 80)
-    typer.echo(f"Time: {int(elapsed//60)} minutes {elapsed%60:.2f} seconds")
-    typer.echo(f"Input size:  {typer.style(f'{input_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
-    typer.echo(f"Output size: {typer.style(f'{output_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
-    typer.echo(f"Size reduction:   {typer.style(f'{size_reduction:.1f}%', fg=typer.colors.GREEN)}")
-    typer.echo(result)
+        input_size = os.path.getsize(input_bag)
+        output_size = os.path.getsize(output_bag)
+        size_reduction = (1 - output_size/input_size) * 100
+        
+        typer.secho("\nFiltering result:", fg=typer.colors.GREEN, bold=True)
+        typer.echo("─" * 80)
+        typer.echo(f"Time: {int(elapsed//60)} minutes {elapsed%60:.2f} seconds")
+        typer.echo(f"Input size:  {typer.style(f'{input_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
+        typer.echo(f"Output size: {typer.style(f'{output_size/1024/1024:.2f} MB', fg=typer.colors.YELLOW)}")
+        typer.echo(f"Size reduction:   {typer.style(f'{size_reduction:.1f}%', fg=typer.colors.GREEN)}")
+        typer.echo(result)
     else:
         typer.secho("\nFiltering failed:", fg=typer.colors.RED, bold=True)
         typer.echo("─" * 80)
