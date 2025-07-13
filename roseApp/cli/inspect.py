@@ -75,6 +75,7 @@ def inspect(
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
+    show_fields: bool = typer.Option(False, "--show-fields", "-f", help="Show detailed field information for specified topics"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)")
 ):
     """
@@ -97,6 +98,9 @@ def inspect(
     
     # Filter multiple topics by name or fuzzy pattern
     rose inspect demo.bag --topics dts --topics tf --topics velodyne
+    
+    # Show field information for specific topics
+    rose inspect demo.bag --topics /odom --topics /tf --show-fields
     
     # Export to CSV
     rose inspect demo.bag --as csv --output topics.csv
@@ -168,14 +172,25 @@ def inspect(
                 sort_by = "name"
             json_data['topics'] = sorted(json_data['topics'], key=lambda x: x['topic'].lower(), reverse=reverse)
         
-        # Display or export results
-        if as_format in ["csv", "html"]:
-            _export_data(json_data, as_format, output, console)
+        # Handle field analysis for specific topics
+        if show_fields:
+            if not topics:
+                console.print(f"[{theme.WARNING}]Please specify topics using --topics when using --show-fields[/{theme.WARNING}]")
+                raise typer.Exit(code=1)
+            
+            # Analyze fields for filtered topics
+            parser = create_parser(ParserType.ROSBAGS)
+            field_data = _analyze_topic_fields(parser, input_path, filtered_topics, console)
+            _display_topic_fields(field_data, console)
         else:
-            _display_data(json_data, as_format, verbose, console)
+            # Display or export results
+            if as_format in ["csv", "html"]:
+                _export_data(json_data, as_format, output, console)
+            else:
+                _display_data(json_data, as_format, verbose, console)
         
         # Show bottom info message for lite mode
-        if not use_full_analysis and as_format not in ["csv", "html"]:
+        if not use_full_analysis and as_format not in ["csv", "html"] and not show_fields:
             console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
         
     except typer.Exit:
@@ -184,6 +199,163 @@ def inspect(
     except Exception as e:
         # Handle runtime errors without stack trace
         handle_runtime_error(e, "Bag inspection operation")
+
+
+def _analyze_topic_fields(parser, bag_path: str, topics: List[str], console: Console) -> Dict[str, Any]:
+    """Analyze field information for specific topics"""
+    console.print(f"[cyan]Analyzing field information for {len(topics)} topics...[/cyan]")
+    
+    field_data = {}
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True
+    ) as progress:
+        task = progress.add_task("Processing topics...", total=len(topics))
+        
+        for topic in topics:
+            progress.update(task, description=f"Processing {topic}...")
+            
+            try:
+                # Read a few messages from the topic to analyze structure
+                messages = []
+                message_count = 0
+                max_samples = 5  # Analyze first 5 messages to get field structure
+                
+                for timestamp, msg_data in parser.read_messages(bag_path, [topic]):
+                    if message_count >= max_samples:
+                        break
+                    messages.append(msg_data)
+                    message_count += 1
+                
+                if messages:
+                    # Analyze the structure of the first message (they should be similar)
+                    fields = _extract_message_fields(messages[0])
+                    field_data[topic] = {
+                        'fields': fields,
+                        'samples_analyzed': len(messages),
+                        'message_type': type(messages[0]).__name__ if messages else "Unknown"
+                    }
+                else:
+                    field_data[topic] = {
+                        'fields': {},
+                        'samples_analyzed': 0,
+                        'message_type': "No messages found"
+                    }
+                    
+            except Exception as e:
+                field_data[topic] = {
+                    'fields': {},
+                    'samples_analyzed': 0,
+                    'message_type': f"Error: {str(e)}"
+                }
+            
+            progress.update(task, advance=1)
+    
+    return field_data
+
+
+def _extract_message_fields(msg_data: Any, prefix: str = "", max_depth: int = 3, current_depth: int = 0) -> Dict[str, Any]:
+    """Extract field information from a message recursively"""
+    fields = {}
+    
+    if current_depth >= max_depth:
+        return {'...': f'(max depth {max_depth} reached)'}
+    
+    if hasattr(msg_data, '__dict__'):
+        # ROS message object
+        for attr_name in dir(msg_data):
+            if not attr_name.startswith('_'):
+                try:
+                    attr_value = getattr(msg_data, attr_name)
+                    if not callable(attr_value):
+                        field_name = f"{prefix}.{attr_name}" if prefix else attr_name
+                        field_info = _get_field_info(attr_value, field_name, max_depth, current_depth + 1)
+                        fields[attr_name] = field_info
+                except Exception:
+                    continue
+    elif isinstance(msg_data, dict):
+        # Dictionary
+        for key, value in msg_data.items():
+            field_name = f"{prefix}.{key}" if prefix else key
+            field_info = _get_field_info(value, field_name, max_depth, current_depth + 1)
+            fields[key] = field_info
+    else:
+        # Primitive type
+        fields['value'] = _get_field_info(msg_data, prefix, max_depth, current_depth)
+    
+    return fields
+
+
+def _get_field_info(value: Any, field_name: str, max_depth: int, current_depth: int) -> Dict[str, Any]:
+    """Get information about a specific field"""
+    field_info = {
+        'type': type(value).__name__,
+        'full_path': field_name
+    }
+    
+    if isinstance(value, (int, float, bool)):
+        field_info['value'] = value
+    elif isinstance(value, str):
+        field_info['value'] = f'"{value}"' if len(value) <= 50 else f'"{value[:47]}..."'
+    elif isinstance(value, (list, tuple)):
+        field_info['length'] = len(value)
+        if len(value) > 0 and current_depth < max_depth:
+            field_info['element_type'] = type(value[0]).__name__
+            if hasattr(value[0], '__dict__') or isinstance(value[0], dict):
+                field_info['element_structure'] = _extract_message_fields(value[0], f"{field_name}[0]", max_depth, current_depth + 1)
+    elif hasattr(value, '__dict__') or isinstance(value, dict):
+        if current_depth < max_depth:
+            field_info['fields'] = _extract_message_fields(value, field_name, max_depth, current_depth + 1)
+    
+    return field_info
+
+
+def _display_topic_fields(field_data: Dict[str, Any], console: Console):
+    """Display field information for topics"""
+    for topic, data in field_data.items():
+        console.print(f"\n[bold cyan]Topic: {topic}[/bold cyan]")
+        console.print(f"[dim]Message Type: {data['message_type']}[/dim]")
+        console.print(f"[dim]Samples Analyzed: {data['samples_analyzed']}[/dim]")
+        
+        if data['fields']:
+            console.print("\n[bold]Fields:[/bold]")
+            _display_field_tree(data['fields'], console, indent=0)
+        else:
+            console.print("[yellow]No fields found[/yellow]")
+
+
+def _display_field_tree(fields: Dict[str, Any], console: Console, indent: int = 0):
+    """Display field tree structure"""
+    prefix = "  " * indent
+    
+    for field_name, field_info in fields.items():
+        if isinstance(field_info, dict) and 'type' in field_info:
+            # This is a field info object
+            type_str = f"[green]{field_info['type']}[/green]"
+            
+            if 'value' in field_info:
+                console.print(f"{prefix}├── {field_name}: {type_str} = {field_info['value']}")
+            elif 'length' in field_info:
+                length_str = f"[yellow][{field_info['length']}][/yellow]"
+                element_type = field_info.get('element_type', 'unknown')
+                console.print(f"{prefix}├── {field_name}: {type_str}{length_str} of [green]{element_type}[/green]")
+                
+                if 'element_structure' in field_info:
+                    _display_field_tree(field_info['element_structure'], console, indent + 1)
+            elif 'fields' in field_info:
+                console.print(f"{prefix}├── {field_name}: {type_str}")
+                _display_field_tree(field_info['fields'], console, indent + 1)
+            else:
+                console.print(f"{prefix}├── {field_name}: {type_str}")
+        else:
+            # This is a nested field structure
+            console.print(f"{prefix}├── {field_name}:")
+            _display_field_tree(field_info, console, indent + 1)
 
 
 def _analyze_bag_lite(parser, bag_path: str, logger, console: Console) -> Dict:
