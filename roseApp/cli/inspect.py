@@ -24,13 +24,7 @@ from textual.fuzzy import FuzzySearch
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
 from ..core.theme import theme
-
-# Import plotting module with error handling
-try:
-    from .plot import create_plot, PlottingError
-    PLOTTING_AVAILABLE = True
-except ImportError:
-    PLOTTING_AVAILABLE = False
+from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
 
 app = typer.Typer(help="Fast ROS bag inspection and analysis")
 
@@ -53,16 +47,14 @@ def _get_cache_path(bag_path: str) -> Path:
 
 def _load_cache(cache_path: Path) -> Optional[Dict]:
     """Load cached analysis results"""
-    if not cache_path.exists():
-        return None
-    
     try:
-        with open(cache_path, 'rb') as f:
-            return pickle.load(f)
+        if cache_path.exists():
+            with open(cache_path, 'rb') as f:
+                return pickle.load(f)
     except Exception:
-        # If cache is corrupted, remove it
-        cache_path.unlink(missing_ok=True)
-        return None
+        # If cache is corrupted or incompatible, ignore it
+        pass
+    return None
 
 
 def _save_cache(cache_path: Path, data: Dict):
@@ -71,7 +63,7 @@ def _save_cache(cache_path: Path, data: Dict):
         with open(cache_path, 'wb') as f:
             pickle.dump(data, f)
     except Exception:
-        # If we can't save cache, just continue without it
+        # If caching fails, continue without caching
         pass
 
 
@@ -83,11 +75,7 @@ def inspect(
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)"),
-    plot: bool = typer.Option(False, "--plot", "-p", help="Generate visualization plots"),
-    plot_type: str = typer.Option("overview", "--plot-type", help="Plot type: frequency, size, count, overview (default: overview)"),
-    plot_format: str = typer.Option("png", "--plot-format", help="Plot format: png, svg, pdf, html (default: png)"),
-    plot_output: Optional[str] = typer.Option(None, "--plot-output", help="Plot output file path (auto-generated if not specified)")
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)")
 ):
     """
     Fast inspection of ROS bag files with flexible display options and caching
@@ -115,118 +103,64 @@ def inspect(
     
     # Export to HTML
     rose inspect demo.bag --as html --output report.html
-    
-    # Generate plots
-    rose inspect demo.bag --plot --verbose
-    
-    # Generate specific plot type
-    rose inspect demo.bag --plot --plot-type frequency --plot-format html --verbose
     """
+    # Set application mode for proper logging
+    set_app_mode(AppMode.CLI)
+    logger = get_logger()
+    console = Console()
+
     try:
-        # Initialize logging
-        set_app_mode(AppMode.CLI)
-        logger = get_logger("inspect")
-        
-        # Record start time for performance measurement
-        start_time = time.time()
-        
-        # Validate input
-        if not os.path.exists(input_path):
-            typer.echo(f"Error: Input file '{input_path}' does not exist", err=True)
-            raise typer.Exit(code=1)
-        
-        if not input_path.endswith('.bag'):
-            typer.echo(f"Error: Input file '{input_path}' is not a bag file", err=True)
-            raise typer.Exit(code=1)
-        
-        # Validate options
-        if as_format not in ["table", "list", "summary", "csv", "html"]:
-            typer.echo(f"Error: --as must be one of: table, list, summary, csv, html", err=True)
-            raise typer.Exit(code=1)
-        
-        if sort_by not in ["name", "type", "count", "size", "frequency"]:
-            typer.echo(f"Error: --sort-by must be one of: name, type, count, size, frequency", err=True)
-            raise typer.Exit(code=1)
-        
-        # Validate plot options
-        if plot:
-            if not PLOTTING_AVAILABLE:
-                typer.echo(f"Error: Plotting functionality requires additional dependencies.", err=True)
-                typer.echo(f"Install with: pip install rose-bag[plot]", err=True)
-                raise typer.Exit(code=1)
-            
-            if plot_type not in ["frequency", "size", "count", "overview"]:
-                typer.echo(f"Error: --plot-type must be one of: frequency, size, count, overview", err=True)
-                raise typer.Exit(code=1)
-            
-            if plot_format not in ["png", "svg", "pdf", "html"]:
-                typer.echo(f"Error: --plot-format must be one of: png, svg, pdf, html", err=True)
-                raise typer.Exit(code=1)
-        
-        # Validate output file for export formats
-        if as_format in ["csv", "html"] and not output:
-            typer.echo(f"Error: --output is required for {as_format} format", err=True)
-            raise typer.Exit(code=1)
-        
-        # Initialize console
-        console = Console()
-        
-        # Determine analysis mode - plotting requires verbose mode for statistics
-        use_full_analysis = verbose or plot
-        
-        # Show top info message for lite mode
-        if not use_full_analysis:
-            console.print(f"[{theme.WARNING}]INFO: Using lightweight analysis. Use --verbose for detailed statistics.[/{theme.WARNING}]")
+        # Use friendly error handling for validation
+        CommandErrorHandlers.inspect_command_errors(
+            input_path, as_format, sort_by, output
+        )
+
+        # Determine analysis mode based on verbose flag
+        use_full_analysis = verbose
         
         # Try to load from cache first
         cache_path = _get_cache_path(input_path)
-        cached_bag_info = _load_cache(cache_path)
+        cached_data = _load_cache(cache_path)
         
-        if cached_bag_info:
-            logger.debug(f"Loaded analysis from cache: {cache_path}")
-            console.print(f"[dim]Using cached analysis results[/dim]")
-            bag_info = cached_bag_info
-            # If we have cached data, we can show full information even without --verbose
-            use_full_analysis = True
-        else:
-            # No cache available, perform analysis
+        # Check if we need to reanalyze (cache miss or mode mismatch)
+        reanalyze = (cached_data is None or 
+                    cached_data.get('is_full_analysis', False) != use_full_analysis)
+        
+        if reanalyze:
+            # Create parser
             parser = create_parser(ParserType.ROSBAGS)
-            logger.debug(f"Analyzing bag file: {input_path}")
             
+            # Perform analysis based on mode
             if use_full_analysis:
-                # Full analysis: get complete statistics
-                bag_info = _analyze_bag_full(parser, input_path, logger, console)
-                # Save to cache for future use
-                _save_cache(cache_path, bag_info)
-                logger.debug(f"Saved analysis to cache: {cache_path}")
+                console.print("[cyan]Performing detailed analysis (parsing all messages)...[/cyan]")
+                analysis_data = _analyze_bag_full(parser, input_path, logger, console)
             else:
-                # Lite analysis: only metadata
-                bag_info = _analyze_bag_lite(parser, input_path, logger, console)
-        
-        # Record analysis time
-        analysis_time = time.time() - start_time
-        bag_info['analysis_time'] = analysis_time
-        
-        # Apply filters and sorting
-        filtered_topics = _filter_topics(bag_info['topics'], topics if topics else None)
-        
-        # Convert to JSON structure for unified processing
-        json_data = _create_json_structure(
-            input_path=input_path,
-            bag_info=bag_info,
-            filtered_topics=filtered_topics,
-            is_lite_mode=not use_full_analysis
-        )
-        
-        # Apply sorting to topic details
-        if 'stats' in bag_info and bag_info['stats']:
-            # We have detailed stats, can sort properly
-            actual_reverse = not reverse if reverse else True
-            json_data['topics'] = _sort_topic_details(json_data['topics'], sort_by, actual_reverse)
+                console.print("[cyan]Performing fast analysis (metadata only)...[/cyan]")
+                analysis_data = _analyze_bag_lite(parser, input_path, logger, console)
+            
+            # Save to cache
+            _save_cache(cache_path, analysis_data)
         else:
-            # No detailed stats, can only sort by name
-            if sort_by != "name":
-                console.print(f"[{theme.WARNING}]Warning: Sorting by '{sort_by}' requires --verbose mode, using name sorting instead[/{theme.WARNING}]")
+            console.print(f"[dim]Using cached analysis results[/dim]")
+            analysis_data = cached_data
+
+        # Filter topics if specified
+        all_topics = analysis_data['topics']  # topics is already a list of topic names
+        if topics:
+            filtered_topics = _filter_topics(all_topics, topics)
+            if not filtered_topics:
+                console.print(f"[{theme.WARNING}]No topics matched the specified filters[/{theme.WARNING}]")
+                console.print(f"Available topics: {', '.join(all_topics[:5])}{'...' if len(all_topics) > 5 else ''}")
+                raise typer.Exit(code=1)
+        else:
+            filtered_topics = all_topics
+
+        # Create JSON structure for export/display
+        json_data = _create_json_structure(input_path, analysis_data, filtered_topics, not use_full_analysis)
+        
+        # Sort topics
+        if sort_by in ["name", "topic"]:
+            if reverse:
                 sort_by = "name"
             json_data['topics'] = sorted(json_data['topics'], key=lambda x: x['topic'].lower(), reverse=reverse)
         
@@ -236,14 +170,13 @@ def inspect(
         else:
             _display_data(json_data, as_format, verbose, console)
         
-        # Generate plots if requested
-        if plot:
-            _generate_plots(json_data, plot_type, plot_format, plot_output, input_path, console)
-        
         # Show bottom info message for lite mode
-        if not use_full_analysis and as_format not in ["csv", "html"] and not plot:
+        if not use_full_analysis and as_format not in ["csv", "html"]:
             console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
         
+    except typer.Exit:
+        # Re-raise typer.Exit cleanly without additional error messages
+        raise
     except Exception as e:
         log_cli_error(e)
         typer.echo(f"Error: {str(e)}", err=True)
@@ -501,7 +434,7 @@ def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: Lis
     # Build topic details
     topic_details = []
     for topic in filtered_topics:
-        stats = bag_info['stats'].get(topic, {'count': 0, 'size': 0}) if bag_info['stats'] else {}
+        stats = bag_info.get('stats', {}).get(topic, {'count': 0, 'size': 0})
         msg_type = bag_info['connections'].get(topic, 'Unknown')
         
         # Calculate frequency
@@ -532,7 +465,7 @@ def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: Lis
         'duration': bag_info['duration'],
         'start_time': bag_info['start_time'],
         'end_time': bag_info['end_time'],
-        'analysis_time': bag_info['analysis_time'],
+        'analysis_time': bag_info.get('analysis_time', 0.0),
         'filtered_count': len(filtered_topics),
         'is_lite_mode': is_lite_mode,
         # Formatted versions
@@ -914,35 +847,6 @@ def _sort_topic_details(topic_details: List[Dict[str, Any]], sort_by: str, rever
             return topic_data['size'] if topic_data['size'] is not None else 0
     
     return sorted(topic_details, key=get_sort_key, reverse=reverse)
-
-
-def _generate_plots(json_data: Dict[str, Any], plot_type: str, plot_format: str, 
-                   plot_output: Optional[str], input_path: str, console: Console):
-    """Generate visualization plots"""
-    try:
-        # Auto-generate output path if not specified
-        if not plot_output:
-            base_name = os.path.splitext(os.path.basename(input_path))[0]
-            extension = "html" if plot_format == "html" else plot_format
-            plot_output = f"{base_name}_{plot_type}_plot.{extension}"
-        
-        console.print(f"\n[cyan]Generating {plot_type} plot...[/cyan]")
-        
-        # Create the plot
-        output_file = create_plot(json_data, plot_type, plot_output, plot_format)
-        
-        console.print(f"[green]Plot saved to: {output_file}[/green]")
-        
-        # Show additional info for HTML plots
-        if plot_format == "html":
-            console.print(f"[dim]Open the HTML file in your browser to view the interactive plot[/dim]")
-        
-    except PlottingError as e:
-        console.print(f"[red]Plot generation failed: {str(e)}[/red]")
-        # Don't exit, just continue without plotting
-    except Exception as e:
-        console.print(f"[red]Unexpected error during plot generation: {str(e)}[/red]")
-        # Don't exit, just continue without plotting
 
 
 def main():

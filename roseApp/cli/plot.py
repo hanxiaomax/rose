@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-Plotting utilities for ROS bag visualization
-Uses index.css based theme system for consistent styling
+Plot command for ROS bag data visualization
 """
 
 import os
 import time
 from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
+import typer
+from rich.console import Console
 
 # Import unified theme system
 from ..core.theme import theme
+from ..core.parser import create_parser, ParserType
+from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
+from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
 
 try:
     import matplotlib
@@ -37,6 +41,15 @@ try:
 except ImportError:
     PANDAS_AVAILABLE = False
 
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+
+
+app = typer.Typer(help="Generate data visualization plots from ROS bag files")
+
 
 class PlottingError(Exception):
     """Exception raised for plotting-related errors"""
@@ -55,10 +68,95 @@ def check_plotting_dependencies():
     
     if missing:
         missing_str = ", ".join(missing)
-        raise PlottingError(
-            f"Missing plotting dependencies: {missing_str}\n"
-            f"Install with: pip install 'rose-bag[plot]' or pip install {' '.join(missing)}"
+        install_cmd = f"pip install {' '.join(missing)}"
+        FriendlyErrorHandler.dependency_missing(
+            missing_str, install_cmd, "plotting functionality"
         )
+
+
+@app.command("plot")
+def plot_cmd(
+    bag_path: str = typer.Argument(..., help="Input bag file path"),
+    series: List[str] = typer.Option([], "--series", "-s", help="Plot series in format topic:field1,field2 (can be repeated)"),
+    output: str = typer.Option(..., "--output", "-o", help="Output file path (required)"),
+    plot_type: str = typer.Option("line", "--type", "-t", help="Plot type: line, scatter (default: line)"),
+    as_format: str = typer.Option("png", "--as", "-a", help="Output format: png, svg, pdf, html (default: png)")
+):
+    """
+    Generate data visualization plots from ROS bag files
+    
+    The --series parameter specifies what data to plot in the format:
+    topic:field1,field2,...
+    
+    Examples:
+    
+    # Plot single field from one topic
+    rose plot demo.bag --series /odom:pose.pose.position.x --output pos_x.png
+    
+    # Plot multiple fields from one topic  
+    rose plot demo.bag --series /odom:pose.pose.position.x,pose.pose.position.y --output pos_xy.png
+    
+    # Plot all numeric fields from a topic
+    rose plot demo.bag --series /odom: --output odom_all.png
+    
+    # Compare multiple topics
+    rose plot demo.bag --series /odom:pose.pose.position.x --series /tf:transform.translation.x --output comparison.png
+    
+    # Generate scatter plot
+    rose plot demo.bag --series /odom:pose.pose.position.x,pose.pose.position.y --type scatter --output scatter.png
+    
+    # Generate interactive HTML plot
+    rose plot demo.bag --series /odom:pose.pose.position.x --as html --output interactive.html
+    """
+    # Set application mode for proper logging
+    set_app_mode(AppMode.CLI)
+    logger = get_logger()
+    console = Console()
+    
+    try:
+        # Check dependencies
+        check_plotting_dependencies()
+        
+        # Use friendly error handling for validation
+        CommandErrorHandlers.plot_command_errors(
+            bag_path, series, output, plot_type, as_format
+        )
+        
+        # Parse series specifications (validation done by error handler)
+        parsed_series = []
+        for s in series:
+            topic, fields_str = s.split(':', 1)
+            
+            # Parse fields - empty string means all numeric fields
+            if fields_str.strip():
+                fields = [f.strip() for f in fields_str.split(',')]
+            else:
+                fields = []  # Empty means all numeric fields
+            
+            parsed_series.append({
+                'topic': topic,
+                'fields': fields
+            })
+        
+        # Create output directory if it doesn't exist
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        console.print("[cyan]Analyzing bag file and extracting time series data...[/cyan]")
+        
+        # For now, show a placeholder message
+        console.print(f"[yellow]Plot functionality is being developed...[/yellow]")
+        console.print(f"Would plot series: {series}")
+        console.print(f"Output: {output}")
+        console.print(f"Type: {plot_type}, Format: {as_format}")
+            
+    except typer.Exit:
+        # Re-raise typer.Exit cleanly without additional error messages
+        raise
+    except Exception as e:
+        log_cli_error(e)
+        typer.echo(f"Error: {str(e)}", err=True)
+        raise typer.Exit(code=1)
 
 
 def _format_bytes(bytes_val):
@@ -584,4 +682,13 @@ def create_plot(json_data: Dict[str, Any], plot_type: str, output_path: str, plo
     if plot_type not in plot_functions:
         raise PlottingError(f"Unknown plot type: {plot_type}. Available types: {', '.join(plot_functions.keys())}")
     
-    return plot_functions[plot_type](json_data, output_path, plot_format) 
+    return plot_functions[plot_type](json_data, output_path, plot_format)
+
+
+def main():
+    """Main entry point"""
+    app()
+
+
+if __name__ == "__main__":
+    main() 

@@ -11,6 +11,7 @@ from rich.text import Text
 from rich import box
 from ..core.theme import theme
 from .util import LoadingAnimation
+from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
 
 
 # Set to CLI mode
@@ -46,17 +47,16 @@ def filter_bag(
         # Show parser info only when explicitly requested or in debug mode
         logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
         
-        # Validate compression type
+        # Use friendly error handling for validation
+        CommandErrorHandlers.filter_command_errors(
+            input_path, output_dir, whitelist, topics, compression, sort_by
+        )
+        
+        # Validate compression type (still needed for technical validation)
         from roseApp.core.util import validate_compression_type
         is_valid, error_message = validate_compression_type(compression)
         if not is_valid:
             typer.echo(f"Error: {error_message}", err=True)
-            raise typer.Exit(code=1)
-        
-        # Validate sort_by parameter
-        valid_sort_options = ["topic", "count", "size"]
-        if sort_by not in valid_sort_options:
-            typer.echo(f"Error: Invalid sort option '{sort_by}'. Valid options: {', '.join(valid_sort_options)}", err=True)
             raise typer.Exit(code=1)
         
         # Check if input is a file or directory

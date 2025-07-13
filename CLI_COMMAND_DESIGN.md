@@ -16,13 +16,13 @@ Rose是一个强大的ROS bag文件处理工具，遵循现代CLI工具设计最
 
 ### 核心设计原则
 
-#### 1. 子命令结构与语义化 (类似Git/tmux)
+#### 1. 简洁的命令结构
 ```
-rose <verb> <noun> [options]
+rose <command> [options] [args]
 ```
-- **动词+名词结构**: `filter bag`, `inspect bag`, `prune cache`
-- **逻辑分层**: 主命令 → 动词 → 名词 → 参数
-- **易于记忆和理解**: 操作意图清晰
+- **直接命令**: `extract`, `inspect`, `plot`, `prune`, `launch`
+- **简洁明了**: 避免冗余的动词+名词结构
+- **易于记忆**: 命令名称直接表达功能
 
 #### 2. 帮助优先与示例驱动 (类似ImageMagick)
 - 每个命令都有丰富的 `--help` 信息
@@ -39,16 +39,16 @@ rose <verb> <noun> [options]
 - 交互式TUI界面
 - 脚本友好的非交互模式
 
-#### 5. 输出格式标准化 (类似kubectl/terraform)
-- **参数统一**: `--as` 指定格式, `--output` 指定路径
-- **强制路径**: `csv`/`html` 格式强制要求 `--output`
-- **便于管道处理**: `table`/`list` 格式直接输出到终端
+#### 5. 统一的输出格式处理
+- **`--as`**: 指定输出格式 (table|list|csv|html|json)
+- **`--output`**: 指定输出文件路径
+- **自动处理**: 根据格式自动决定输出目标
 
 ## 总体架构
 
 ### 主命令入口
 ```bash
-python -m roseApp.rose [GLOBAL_OPTIONS] COMMAND [NOUN] [ARGS]...
+python -m roseApp.rose [GLOBAL_OPTIONS] COMMAND [ARGS]...
 ```
 
 ### 命令层级结构
@@ -58,306 +58,297 @@ python -m roseApp.rose [GLOBAL_OPTIONS] COMMAND [NOUN] [ARGS]...
   - `--install-completion`
   - `--show-completion`
   - `--help`
-- **`extract`**
-  - `bag`
-- **`inspect`**
-  - `bag`
-  - `topic`
-- **`plot`**
-  - `bag`
-  - `topic`
-- **`prune`**
-  - `cache`
-- **`launch`**
-  - `cli`
-  - `tui`
+- **核心命令**
+  - `extract` - 提取指定topics到新的bag文件
+  - `inspect` - 检查bag文件或topic详情
+  - `plot` - 生成数据可视化图表
+  - `prune` - 清理分析缓存
+  - `launch` - 启动交互式界面
 
 ## 核心命令设计
 
 ### 1. 全局选项
 
-- `--verbose, -v INTEGER`: 增加详细程度 (例如: -v, -vv, -vvv)。
-- `--install-completion`: 为当前shell安装自动补全。
-- `--show-completion`: 显示当前shell的自动补全配置。
-- `--help`: 显示帮助信息并退出。
+- `--verbose, -v INTEGER`: 增加详细程度 (例如: -v, -vv, -vvv)
+- `--install-completion`: 为当前shell安装自动补全
+- `--show-completion`: 显示当前shell的自动补全配置
+- `--help`: 显示帮助信息并退出
 
 ---
 
-### 2. `extract` - 主题提取命令
+### 2. `extract` - 提取Topics到新Bag文件
 
-#### `extract bag` - 提取ROS Bag中的指定主题
-
-**设计参考**: 类似grep的过滤逻辑，但重点是"提取"而非"过滤"。
+**设计参考**: 类似tar的提取功能，支持正选和反选模式
 
 **语法**:
 ```bash
-rose extract bag [OPTIONS] INPUT_PATH [OUTPUT_DIR]
+rose extract [OPTIONS] INPUT_PATH
 ```
 
-**参数设计哲学**:
-- **位置参数逻辑**: 输入→输出，符合Unix管道思维
-- **选项一致性**: 短选项遵循常见约定 (`-w`, `-tp`, `-c`, `-p`)
-- **语义化命名**: `--whitelist` 比 `--wl` 更清晰
+**参数**:
+- `INPUT_PATH`: 输入bag文件路径或包含bag文件的目录
 
-#### 核心选项
+**核心选项**:
 ```bash
---whitelist, -w TEXT      # 白名单文件 (类似grep -f)
---topics, -tp TEXT        # 要提取的主题列表 (可重复，类似rsync --include)
---reverse, -r             # 反选模式，提取除指定主题外的所有主题
---compression, -c TEXT    # 压缩类型 (none|bz2|lz4)
---parallel, -p            # 并行处理开关
---workers INTEGER         # 工作进程数 (类似make -j)
---sort-by, -s TEXT        # 排序方式 (topic|count|size)
---dry-run                 # 预览模式 (类似rsync --dry-run)
+--topics, -t TEXT        # 要提取的主题列表 (可重复指定)
+--whitelist, -w TEXT     # 主题白名单文件路径
+--reverse, -r            # 反选模式：提取除指定topics外的所有topics
+--as, -a TEXT           # 压缩算法: none|bz2|lz4 (默认: none)
+--output, -o TEXT       # 输出文件路径 (可选，默认: 时间戳+filtered后缀)
+--parallel, -p           # 并行处理 (目录输入时)
+--workers INTEGER        # 并行工作进程数 (默认: CPU数-2)
+--dry-run                # 预览模式，显示将要执行的操作
 ```
 
-#### 使用示例 (按复杂度递增)
+**输出文件命名规则**:
+- **指定输出**: `--output result.bag` → `result.bag`
+- **默认输出**: `demo.bag` → `demo_20240101_123456_filtered.bag`
+- **目录输入**: 每个文件都会在相同目录生成对应的filtered文件
+
+**使用示例**:
 ```bash
-# 基础提取 - 提取指定主题
-rose extract bag demo.bag output/ --topics /tf
+# 提取指定topics (使用默认输出文件名)
+rose extract demo.bag --topics /tf --topics /cmd_vel
 
-# 反选提取 - 提取除指定主题外的所有主题
-rose extract bag demo.bag output/ --topics /tf --reverse
+# 指定输出文件
+rose extract demo.bag --topics /tf --output result.bag
 
-# 高级用法 - 压缩+并行
-rose extract bag input_dir/ output_dir/ --topics /tf --compression lz4 --parallel
+# 使用压缩算法
+rose extract demo.bag --topics /tf --as lz4
 
-# 安全预览 - 避免意外操作
-rose extract bag demo.bag output/ --topics /tf --dry-run
+# 反选模式：提取除了/tf外的所有topics
+rose extract demo.bag --topics /tf --reverse
+
+# 批量处理目录
+rose extract input_dir/ --topics /tf --parallel
+
+# 预览模式
+rose extract demo.bag --topics /tf --dry-run
 ```
 
 ---
 
-### 3. `inspect` - 文件/主题检查命令
+### 3. `inspect` - 检查Bag文件和Topic详情
 
-#### `inspect bag` - 检查Bag文件概览
+**设计参考**: 类似`ls`命令的多格式输出，专注于文本信息展示
 
-**功能**: 快速检查ROS bag文件概览信息。
+**功能定位**: 纯文本信息查看和分析，不涉及图表生成
 
 **语法**:
 ```bash
-rose inspect bag [OPTIONS] INPUT_PATH
+# 检查bag文件概览
+rose inspect [OPTIONS] INPUT_PATH
+
+# 检查特定topic详情
+rose inspect [OPTIONS] INPUT_PATH --topic TOPIC_NAME
 ```
 
 **核心选项**:
 ```bash
-# 内容过滤
---topics, -t TEXT         # 主题过滤 (支持模糊匹配)
+# 目标选择
+--topic, -t TEXT         # 检查特定topic的详细信息
+--topics TEXT            # 过滤显示的topics (支持模糊匹配)
 
-# 输出格式
---format, -f TEXT         # 输出格式: table|list|summary|csv|html (默认: table)
---output, -o TEXT         # 输出文件路径 (仅在 --format=csv/html 时生效)
+# 输出控制 (仅文本格式)
+--as, -a TEXT           # 输出格式: table|list|summary|csv|html|json
+--output, -o TEXT       # 输出文件路径 (csv/html/json格式时必需)
+--sort-by, -s TEXT      # 排序字段: name|type|count|size|frequency
+--reverse               # 反向排序
+--verbose, -v           # 显示详细信息
 
-# 排序控制 (类似ls排序选项)
---sort-by, -s TEXT        # 排序字段: name|type|count|size|frequency
---reverse, -r             # 反向排序
---verbose, -v             # 详细统计信息
+# topic详情选项
+--fields                # 显示消息字段结构 (与--topic配合使用)
 ```
 
 **使用示例**:
 ```bash
-# 快速查看 - 默认体验
-rose inspect bag demo.bag
+# 快速查看bag概览 (默认table格式)
+rose inspect demo.bag
 
-# 详细分析 - 深入了解
-rose inspect bag demo.bag --verbose
+# 详细分析
+rose inspect demo.bag --verbose
 
-# 数据导出 - 结构化输出
-rose inspect bag demo.bag --format csv --output analysis.csv
+# 检查特定topic
+rose inspect demo.bag --topic /tf
 
-# 报告生成 - 专业输出
-rose inspect bag demo.bag --format html --output report.html --verbose
+# 查看topic字段结构
+rose inspect demo.bag --topic /tf --fields
+
+# 导出为CSV进行进一步分析
+rose inspect demo.bag --as csv --output analysis.csv
+
+# 生成HTML报告
+rose inspect demo.bag --as html --output report.html
+
+# 检查多个topic的详细信息
+rose inspect demo.bag --topics "tf,odom" --verbose
 ```
 
 ---
 
-#### `inspect topic` - 检查Topic详情
+### 4. `plot` - 数据可视化
 
-**功能**: 检查指定topic的详细信息，如消息定义和字段结构。
+**设计参考**: 专业的时间序列可视化工具，专注于图表生成
 
-**语法**:
-```bash
-rose inspect topic [OPTIONS] INPUT_PATH TOPIC_NAME
-```
-
-**核心选项**:
-```bash
---fields                # 显示消息类型的字段结构
---verbose               # 显示更详细的信息
---format, -f TEXT       # 输出格式: table|list|json (默认: table)
---output, -o TEXT       # 输出文件路径 (可选)
-```
-
-**使用示例**:
-```bash
-# 查看topic基本信息
-rose inspect topic demo.bag /tf
-
-# 查看topic的字段结构
-rose inspect topic demo.bag /tf --fields
-
-# 导出topic信息为JSON
-rose inspect topic demo.bag /tf --format json --output tf_info.json
-```
-
----
-
-### 4. `plot` - 数据可视化命令
-
-**设计参考**: 从`inspect`中解耦，形成独立的可视化命令。
-
-#### `plot bag` - 可视化Bag统计信息
-
-**功能**: 生成整个bag文件的统计可视化图表，包括主题分布、消息数量、文件大小等统计信息。
+**功能定位**: 纯图表生成，将topic数据转换为可视化图表
 
 **语法**:
 ```bash
-rose plot bag [OPTIONS] INPUT_PATH
+rose plot <bag_path> --series <topic>:<field1,field2,...> [--series ...] --output/-o <file> [OPTIONS]
 ```
+
+**参数**:
+- `bag_path`: 输入bag文件路径
 
 **核心选项**:
 ```bash
---type TEXT           # 图表类型: frequency|size|count|overview|timeline (默认: overview)
---format, -f TEXT     # 输出格式: png|svg|pdf|html (默认: png)
---output, -o TEXT     # 图表输出路径 (必需)
---verbose, -v         # 显示详细统计信息
+--series, -s TEXT       # 绘制序列 (必填，可重复)
+                        # 格式: <topic>:<field1,field2> 
+                        # 字段留空表示绘制该topic全部数值字段
+--output, -o TEXT       # 输出文件路径 (必填)
+--type, -t TEXT         # 图表类型: line|scatter (默认: line)
+--as, -a TEXT          # 图表格式: png|svg|pdf|html (默认: png)
 ```
 
-**使用示例**:
-```bash
-# 生成bag概览图表
-rose plot bag demo.bag --type overview --format png --output overview.png
-
-# 生成时间线图表
-rose plot bag demo.bag --type timeline --format html --output timeline.html
-
-# 生成详细统计图表
-rose plot bag demo.bag --type frequency --format svg --output stats.svg --verbose
-```
-
----
-
-#### `plot topic` - 可视化Topic字段数据
-
-**功能**: 对指定topic的某个或多个字段进行可视化，支持多个topic的组合绘制。
-
-**语法**:
-```bash
-rose plot topic [OPTIONS] INPUT_PATH TOPIC_NAME [TOPIC_NAME...]
-```
-
-**核心选项**:
-```bash
---field, -fd TEXT     # 要可视化的消息字段 (可重复指定多个字段)
-                      # 例如: 'pose.position.x' 或 'twist.linear.x'
---format, -f TEXT     # 输出格式: png|svg|pdf|html (默认: png)
---output, -o TEXT     # 图表输出路径 (必需)
---type TEXT           # 图表类型: line|scatter|histogram (默认: line)
---time-range TEXT     # 时间范围过滤 (格式: start:end 或 duration)
-```
+**--series 参数详解**:
+- `--series /odom:pose.pose.position.x` - 绘制单个字段
+- `--series /odom:pose.pose.position.x,pose.pose.position.y` - 绘制多个字段
+- `--series /odom:` - 绘制该topic的所有数值字段 (字段留空)
+- 可重复使用 `--series` 来绘制多个topic
 
 **使用示例**:
 ```bash
 # 绘制单个topic的单个字段
-rose plot topic demo.bag /odom --field 'pose.pose.position.x' --output pos_x.png
+rose plot demo.bag --series /odom:pose.pose.position.x --output pos_x.png
 
 # 绘制单个topic的多个字段
-rose plot topic demo.bag /odom --field 'pose.pose.position.x' --field 'pose.pose.position.y' --output pos_xy.png
+rose plot demo.bag --series /odom:pose.pose.position.x,pose.pose.position.y --output pos_xy.png
 
-# 绘制多个topic的对比图
-rose plot topic demo.bag /odom /cmd_vel --field 'pose.pose.position.x' --field 'linear.x' --output comparison.png
+# 绘制topic的所有数值字段
+rose plot demo.bag --series /odom: --output odom_all.png
+
+# 多topic对比
+rose plot demo.bag --series /odom:pose.pose.position.x --series /tf:transform.translation.x --output multi_pos.png
+
+# 散点图
+rose plot demo.bag --series /odom:pose.pose.position.x,pose.pose.position.y --type scatter --output scatter.png
 
 # 生成HTML交互图表
-rose plot topic demo.bag /odom --field 'pose.pose.position.x' --format html --output interactive.html
+rose plot demo.bag --series /odom:pose.pose.position.x --as html --output interactive.html
 ```
+
+**与inspect命令的功能区分**:
+- **inspect**: 查看文本信息 → 使用 `rose inspect demo.bag --topic /odom --fields`
+- **plot**: 生成图表 → 使用 `rose plot demo.bag --series /odom:pose.pose.position.x --output chart.png`
 
 ---
 
-### 5. `prune` - 缓存管理命令
+### 5. `prune` - 缓存管理
 
-#### `prune cache` - 管理分析缓存
-
-**设计参考**: 简化`prune`命令，聚焦核心功能。
+**设计参考**: 简洁的缓存清理工具
 
 **语法**:
 ```bash
-rose prune cache [OPTIONS]
+rose prune [OPTIONS]
 ```
 
 **核心选项**:
 ```bash
---all, -a                # 清理所有缓存
---older-than, -o INTEGER # 时间条件清理 (类似find -mtime)
---dry-run                # 预览模式
---status                 # 显示缓存状态
+--all, -a               # 清理所有缓存
+--older-than, -o INTEGER # 清理N天前的缓存
+--status, -s            # 显示缓存状态
+--dry-run               # 预览模式
 ```
 
 **使用示例**:
 ```bash
 # 查看缓存状态
-rose prune cache --status
+rose prune --status
 
-# 安全清理 - 预览模式
-rose prune cache --all --dry-run
+# 清理所有缓存
+rose prune --all
 
-# 条件清理 - 时间过滤
-rose prune cache --older-than 7
+# 清理7天前的缓存
+rose prune --older-than 7
 
-# 完全清理 - 一键清空
-rose prune cache --all
+# 预览清理操作
+rose prune --all --dry-run
 ```
 
 ---
 
-### 6. `launch` - 交互模式启动命令
+### 6. `launch` - 启动交互式界面
 
-**设计参考**: 统一启动入口，语义更清晰。
-
-#### `launch cli/tui` - 启动交互式模式
+**设计参考**: 统一的交互模式入口
 
 **语法**:
+```bash
+rose launch [MODE]
+```
+
+**参数**:
+- `MODE`: `cli` 或 `tui` (默认: `cli`)
+
+**使用示例**:
 ```bash
 # 启动命令行交互模式
 rose launch cli
 
 # 启动终端UI模式
 rose launch tui
+
+# 默认启动CLI模式
+rose launch
 ```
 
 ## 设计特点与UX模式
 
-### 1. 统一的命令结构 (类似Git生态系统)
+### 1. 简化的命令结构
 
-**动词+名词命令组织**:
+**直接命令组织**:
 ```
-rose <动词> <名词> [选项]
-extract  bag      = 提取 + bag文件中的主题
-inspect  bag/topic= 检查 + bag文件/topic
-plot     bag/topic= 绘制 + bag/topic的可视化
-prune    cache    = 清理 + 缓存
-launch   cli/tui  = 启动 + 交互模式
+rose <command> [options] [args]
+extract  = 提取topics
+inspect  = 检查文件/topic
+plot     = 数据可视化
+prune    = 缓存管理
+launch   = 交互界面
 ```
 
-### 2. 友好的错误处理 (类似现代CLI最佳实践)
+### 2. 统一的输出格式处理
+
+**输出格式策略**:
+- **`--as`**: 指定输出格式，支持 table|list|csv|html|json|png|svg|pdf
+- **`--output`**: 指定输出文件路径
+- **智能处理**: 
+  - `table`/`list` 格式直接输出到终端
+  - `csv`/`html`/`json` 格式要求指定 `--output`
+  - 图表格式 (`png`/`svg`/`pdf`/`html`) 始终要求 `--output`
+
+### 3. 友好的错误处理
 
 **错误消息示例**:
 ```bash
-# 强制输出路径
-Error: --format=csv requires --output to be specified.
-Suggestion: rose inspect bag demo.bag --format csv --output report.csv
+# 缺少输出路径
+Error: --as=csv requires --output to be specified
+Suggestion: rose inspect demo.bag --as csv --output report.csv
 
-# 多字段要求
-Error: plot topic requires at least one --field to be specified.
-Suggestion: rose plot topic demo.bag /odom --field 'pose.pose.position.x' --output chart.png
+# 反选模式提示
+Error: --reverse requires --topics or --whitelist to be specified
+Suggestion: rose extract demo.bag output.bag --topics /tf --reverse
 ```
 
-### 3. 统一的输出参数设计
+### 4. 功能增强设计
 
-**输出格式统一**:
-- `--format, -f`: 指定输出格式
-- `--output, -o`: 指定输出文件路径
-- 文件格式(`csv`, `html`, `png`等)强制要求输出路径
-- 终端格式(`table`, `list`)忽略输出路径
+**extract命令特色**:
+- **正选模式**: 提取指定的topics
+- **反选模式**: 提取除指定topics外的所有topics
+- **批量处理**: 支持目录级别的并行处理
+
+**plot命令特色**:
+- **bag概览**: 显示整个bag的统计信息图表
+- **topic字段**: 绘制特定topic字段的时间序列图
+- **多topic支持**: 同时绘制多个topic的相同字段进行对比
 
 ## 与优秀CLI工具的对比分析
 
@@ -365,26 +356,27 @@ Suggestion: rose plot topic demo.bag /odom --field 'pose.pose.position.x' --outp
 
 | 工具 | 结构模式 | Rose采用 | 优势 |
 |------|----------|----------|------|
-| Git | `git <verb> <object>` | `rose <verb> <noun>` | 语义化，易记忆 |
-| Docker | `docker <object> <verb>` | 未采用 | 动词优先更符合操作习惯 |
+| Git | `git <verb>` | `rose <command>` | 直接简洁 |
+| Docker | `docker <command>` | `rose <command>` | 功能明确 |
+| kubectl | `kubectl <verb> <noun>` | 未采用 | 避免冗余结构 |
 
 ## 设计决策总结
 
 ### 选择的设计模式
 
-| 设计决策 | 选择 | 理由 | 参考工具 |
-|----------|------|------|----------|
-| 命令结构 | 动词 + 名词 | 语义清晰，可扩展性强 | Git, kubectl |
-| 参数位置 | 输入→输出 | 符合Unix管道思维 | cp, rsync |
-| 输出参数 | `--format` 和 `--output` | 简洁且功能分离 | kubectl |
-| 默认行为 | 自动覆盖 | 减少用户决策负担 | 现代CLI趋势 |
+| 设计决策 | 选择 | 理由 |
+|----------|------|------|
+| 命令结构 | 直接命令 | 简洁明了，易于记忆 |
+| 输出处理 | `--as` + `--output` | 统一且灵活 |
+| 默认行为 | 直接覆盖 | 减少用户操作步骤 |
+| 反选功能 | `--reverse` | 提供更灵活的过滤选项 |
 
 ### 不采用的设计模式
 
 | 设计模式 | 为什么不采用 | 替代方案 |
 |----------|--------------|----------|
-| 选项式子功能 | 功能混杂 (如--plot) | 独立子命令 (`plot bag`) |
-| 多层级子命令 | 结构过深 (如prune clean)| 简化为一级命令+选项 |
-| 覆盖确认 | 增加操作复杂度 | 默认覆盖，提供--dry-run预览 |
+| 动词+名词结构 | 过于冗长 | 直接功能命令 |
+| 覆盖确认 | 增加操作复杂度 | 默认覆盖 |
+| 单一输出格式 | 限制使用场景 | 多格式统一处理 |
 
-这个设计文档体现了现代CLI工具的最佳实践，融合了多个优秀工具的设计理念，确保Rose既强大又易用，既适合新手也适合专家，既支持交互使用也支持脚本化自动化。 
+这个设计文档体现了现代CLI工具的最佳实践，通过简化命令结构、统一输出处理、增强功能特性，确保Rose既强大又易用，适合各种使用场景。 
