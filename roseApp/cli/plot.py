@@ -14,7 +14,7 @@ from rich.console import Console
 from ..core.theme import theme
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
-from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
+from .error_handling import ValidationError, validate_file_exists, validate_choice, validate_series_format, handle_runtime_error
 
 try:
     import matplotlib
@@ -69,15 +69,14 @@ def check_plotting_dependencies():
     if missing:
         missing_str = ", ".join(missing)
         install_cmd = f"pip install {' '.join(missing)}"
-        FriendlyErrorHandler.dependency_missing(
-            missing_str, install_cmd, "plotting functionality"
-        )
+        error_msg = f"Missing plotting dependencies: {missing_str}. Install with: {install_cmd}"
+        raise ValidationError(error_msg)
 
 
 @app.command("plot")
 def plot_cmd(
     bag_path: str = typer.Argument(..., help="Input bag file path"),
-    series: List[str] = typer.Option([], "--series", "-s", help="Plot series in format topic:field1,field2 (can be repeated)"),
+    series: List[str] = typer.Option(..., "--series", "-s", help="Plot series in format topic:field1,field2 (can be repeated)"),
     output: str = typer.Option(..., "--output", "-o", help="Output file path (required)"),
     plot_type: str = typer.Option("line", "--type", "-t", help="Plot type: line, scatter (default: line)"),
     as_format: str = typer.Option("png", "--as", "-a", help="Output format: png, svg, pdf, html (default: png)")
@@ -114,13 +113,17 @@ def plot_cmd(
     console = Console()
     
     try:
-        # Check dependencies
+        # Check dependencies first
         check_plotting_dependencies()
         
-        # Use friendly error handling for validation
-        CommandErrorHandlers.plot_command_errors(
-            bag_path, series, output, plot_type, as_format
-        )
+        # Validate parameter values
+        try:
+            validate_file_exists(bag_path, "bag file")
+            validate_choice(plot_type, ["line", "scatter"], "--type")
+            validate_choice(as_format, ["png", "svg", "pdf", "html"], "--as")
+            validate_series_format(series)
+        except ValidationError as e:
+            handle_runtime_error(e, "Parameter validation")
         
         # Parse series specifications (validation done by error handler)
         parsed_series = []
@@ -157,12 +160,11 @@ def plot_cmd(
         console.print(f"[green]✓ Plot saved to: {output}[/green]")
             
     except typer.Exit:
-        # Re-raise typer.Exit cleanly without additional error messages
+        # Re-raise typer.Exit cleanly
         raise
     except Exception as e:
-        log_cli_error(e)
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(code=1)
+        # Handle runtime errors without stack trace
+        handle_runtime_error(e, "Plot generation")
 
 
 def _format_bytes(bytes_val):
@@ -846,9 +848,7 @@ def _create_time_series_plot(time_series_data: Dict[str, Any], output_path: str,
 def _create_time_series_plot_matplotlib(time_series_data: Dict[str, Any], output_path: str, plot_type: str, plot_format: str, console: Console):
     """Create time series plot using matplotlib"""
     if not MATPLOTLIB_AVAILABLE:
-        FriendlyErrorHandler.dependency_missing(
-            "matplotlib", "pip install matplotlib", "time series plotting"
-        )
+        raise ValidationError("Missing matplotlib. Install with: pip install matplotlib")
     
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
@@ -899,9 +899,7 @@ def _create_time_series_plot_matplotlib(time_series_data: Dict[str, Any], output
 def _create_time_series_plot_plotly(time_series_data: Dict[str, Any], output_path: str, plot_type: str, console: Console):
     """Create time series plot using plotly"""
     if not PLOTLY_AVAILABLE:
-        FriendlyErrorHandler.dependency_missing(
-            "plotly", "pip install plotly", "interactive time series plotting"
-        )
+        raise ValidationError("Missing plotly. Install with: pip install plotly")
     
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots

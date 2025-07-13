@@ -11,7 +11,7 @@ from rich.text import Text
 from rich import box
 from ..core.theme import theme
 from .util import LoadingAnimation
-from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
+from .error_handling import ValidationError, validate_file_exists, validate_choice, handle_runtime_error
 
 
 # Set to CLI mode
@@ -47,17 +47,13 @@ def filter_bag(
         # Show parser info only when explicitly requested or in debug mode
         logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
         
-        # Use friendly error handling for validation
-        CommandErrorHandlers.filter_command_errors(
-            input_path, output_dir, whitelist, topics, compression, sort_by
-        )
-        
-        # Validate compression type (still needed for technical validation)
-        from roseApp.core.util import validate_compression_type
-        is_valid, error_message = validate_compression_type(compression)
-        if not is_valid:
-            typer.echo(f"Error: {error_message}", err=True)
-            raise typer.Exit(code=1)
+        # Validate parameter values
+        try:
+            validate_file_exists(input_path, "bag file")
+            validate_choice(compression, ["none", "bz2", "lz4"], "--compression")
+            validate_choice(sort_by, ["topic", "count", "size"], "--sort-by")
+        except ValidationError as e:
+            handle_runtime_error(e, "Parameter validation")
         
         # Check if input is a file or directory
         if os.path.isfile(input_path):
@@ -116,12 +112,11 @@ def filter_bag(
             _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, sort_by, overwrite, dry_run)
             
     except typer.Exit:
-        # Re-raise typer.Exit cleanly without additional error messages
+        # Re-raise typer.Exit cleanly
         raise
     except Exception as e:
-        # Handle genuine errors with user-friendly messages
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(code=1)
+        # Handle runtime errors without stack trace
+        handle_runtime_error(e, "Bag filtering operation")
 
 
 def create_responsive_topic_table(all_topics: List[str], connections: Dict[str, str], topic_stats: Dict[str, Dict[str, Any]], 

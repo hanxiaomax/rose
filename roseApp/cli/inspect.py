@@ -24,7 +24,7 @@ from textual.fuzzy import FuzzySearch
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
 from ..core.theme import theme
-from .error_handling import FriendlyErrorHandler, CommandErrorHandlers
+from .error_handling import ValidationError, validate_file_exists, validate_choice, validate_output_requirement, handle_runtime_error
 
 app = typer.Typer(help="Fast ROS bag inspection and analysis")
 
@@ -110,10 +110,14 @@ def inspect(
     console = Console()
 
     try:
-        # Use friendly error handling for validation
-        CommandErrorHandlers.inspect_command_errors(
-            input_path, as_format, sort_by, output
-        )
+        # Validate parameter values
+        try:
+            validate_file_exists(input_path, "bag file")
+            validate_choice(as_format, ["table", "list", "summary", "csv", "html"], "--as")
+            validate_choice(sort_by, ["name", "type", "count", "size", "frequency"], "--sort-by")
+            validate_output_requirement(as_format, output)
+        except ValidationError as e:
+            handle_runtime_error(e, "Parameter validation")
 
         # Determine analysis mode based on verbose flag
         use_full_analysis = verbose
@@ -175,12 +179,11 @@ def inspect(
             console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
         
     except typer.Exit:
-        # Re-raise typer.Exit cleanly without additional error messages
+        # Re-raise typer.Exit cleanly
         raise
     except Exception as e:
-        log_cli_error(e)
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(code=1)
+        # Handle runtime errors without stack trace
+        handle_runtime_error(e, "Bag inspection operation")
 
 
 def _analyze_bag_lite(parser, bag_path: str, logger, console: Console) -> Dict:

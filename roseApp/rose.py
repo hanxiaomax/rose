@@ -61,8 +61,8 @@ def callback(
     configure_logging(verbose)
     
     if ctx.invoked_subcommand is None:
-        from .cli.error_handling import FriendlyErrorHandler
-        FriendlyErrorHandler.show_available_commands()
+        from .cli.error_handling import show_available_commands
+        show_available_commands()
 
 
 # Add subcommands
