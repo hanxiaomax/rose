@@ -361,14 +361,14 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
             progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
         
         # Execute filtering
-            result = parser.filter_bag(
-                input_bag, 
-                output_bag, 
-                list(whitelist_topics),
-                progress_callback=update_progress,
-                compression=compression,
+        result = parser.filter_bag(
+            input_bag, 
+            output_bag, 
+            list(whitelist_topics),
+            progress_callback=update_progress,
+            compression=compression,
             overwrite=overwrite
-            )
+        )
         
         # Update final status
         progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
@@ -379,6 +379,15 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
     # Show filtering result
     end_time = time.time()
     elapsed = end_time - start_time
+    
+    # Check if no messages were found
+    if "No messages found" in result:
+        typer.secho("\nFiltering failed:", fg=typer.colors.RED, bold=True)
+        typer.echo("─" * 80)
+        typer.echo(f"Time: {int(elapsed//60)} minutes {elapsed%60:.2f} seconds")
+        typer.echo(result)
+        typer.echo("No matching topics found in the bag file.")
+        raise typer.Exit(code=1)
     
     # Calculate size reduction if output file exists
     if os.path.exists(output_bag):
@@ -399,6 +408,7 @@ def _process_single_bag(parser, input_bag: str, output_bag: str, whitelist_file:
         typer.echo(f"Time: {int(elapsed//60)} minutes {elapsed%60:.2f} seconds")
         typer.echo(f"Output file was not created: {output_bag}")
         typer.echo("The filtering process may have failed or been interrupted.")
+        raise typer.Exit(code=1)
 
 
 def _process_directory(parser, input_dir: str, output_dir: str, whitelist_file: Optional[str], topics: Optional[List[str]], 
@@ -482,14 +492,14 @@ def _process_directory_sequential(parser, bag_files: List[str], input_dir: str, 
                     progress.update(task_id, description=f"Filtering: {display_name} ({percent}%)", completed=percent)
                 
                 # Execute filtering
-                    result = parser.filter_bag(
-                        bag_file, 
-                        output_path, 
-                        whitelist,
-                        progress_callback=update_progress,
-                        compression=compression,
+                result = parser.filter_bag(
+                    bag_file, 
+                    output_path, 
+                    whitelist,
+                    progress_callback=update_progress,
+                    compression=compression,
                     overwrite=overwrite
-                    )
+                )
                 
                 # Update final status
                 progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
