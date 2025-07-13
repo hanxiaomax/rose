@@ -115,8 +115,11 @@ def filter_bag(
             # Process directory
             _process_directory(parser, input_path, output_dir, whitelist, topics, compression, parallel, workers, sort_by, overwrite, dry_run)
             
+    except typer.Exit:
+        # Re-raise typer.Exit cleanly without additional error messages
+        raise
     except Exception as e:
-        log_cli_error(e)
+        # Handle genuine errors with user-friendly messages
         typer.echo(f"Error: {str(e)}", err=True)
         raise typer.Exit(code=1)
 
