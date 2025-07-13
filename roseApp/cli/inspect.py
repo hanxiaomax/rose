@@ -71,7 +71,7 @@ def _save_cache(cache_path: Path, data: Dict):
 def inspect(
     input_path: str = typer.Argument(..., help="Input bag file path"),
     topics: List[str] = typer.Option([], "--topics", "-t", help="Filter topics by name or pattern (supports fuzzy matching). Multiple values: --topics topic1 --topics topic2 --topics pattern3"),
-    as_format: str = typer.Option("table", "--as", "-a", help="Output format: table, list, summary, csv, html (default: table)"),
+    as_format: str = typer.Option("table", "--as", "-a", help="Output format: table, list, summary, csv, html, json (default: table)"),
     sort_by: str = typer.Option("size", "--sort-by", "-s", help="Sort by: name, type, count, size, frequency (default: size)"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
@@ -117,7 +117,7 @@ def inspect(
         # Validate parameter values
         try:
             validate_file_exists(input_path, "bag file")
-            validate_choice(as_format, ["table", "list", "summary", "csv", "html"], "--as")
+            validate_choice(as_format, ["table", "list", "summary", "csv", "html", "json"], "--as")
             validate_choice(sort_by, ["name", "type", "count", "size", "frequency"], "--sort-by")
             validate_output_requirement(as_format, output)
         except ValidationError as e:
@@ -181,16 +181,18 @@ def inspect(
             # Analyze fields for filtered topics
             parser = create_parser(ParserType.ROSBAGS)
             field_data = _analyze_topic_fields(parser, input_path, filtered_topics, console)
-            _display_topic_fields(field_data, console)
+            
+            # Integrate field data into JSON structure
+            json_data = _integrate_field_data(json_data, field_data)
+        
+        # Display or export results
+        if as_format in ["csv", "html", "json"]:
+            _export_data(json_data, as_format, output, console)
         else:
-            # Display or export results
-            if as_format in ["csv", "html"]:
-                _export_data(json_data, as_format, output, console)
-            else:
-                _display_data(json_data, as_format, verbose, console)
+            _display_data(json_data, as_format, verbose, console, show_fields)
         
         # Show bottom info message for lite mode
-        if not use_full_analysis and as_format not in ["csv", "html"] and not show_fields:
+        if not use_full_analysis and as_format not in ["csv", "html", "json"] and not show_fields:
             console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
         
     except typer.Exit:
@@ -199,6 +201,22 @@ def inspect(
     except Exception as e:
         # Handle runtime errors without stack trace
         handle_runtime_error(e, "Bag inspection operation")
+
+
+def _integrate_field_data(json_data: Dict[str, Any], field_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Integrate field data into the JSON structure"""
+    # Add field data to each topic
+    for topic_info in json_data['topics']:
+        topic_name = topic_info['topic']
+        if topic_name in field_data:
+            topic_info['fields'] = field_data[topic_name]
+    
+    # Add field analysis metadata
+    json_data['metadata']['has_field_analysis'] = True
+    json_data['metadata']['field_analysis_max_depth'] = 3
+    json_data['metadata']['field_analysis_samples'] = 5
+    
+    return json_data
 
 
 def _analyze_topic_fields(parser, bag_path: str, topics: List[str], console: Console) -> Dict[str, Any]:
@@ -315,8 +333,33 @@ def _get_field_info(value: Any, field_name: str, max_depth: int, current_depth: 
     return field_info
 
 
+def _display_fields_from_json(json_data: Dict[str, Any], console: Console):
+    """Display field information from JSON structure"""
+    has_fields = json_data['metadata'].get('has_field_analysis', False)
+    
+    if not has_fields:
+        console.print("[yellow]No field analysis data available[/yellow]")
+        return
+    
+    # Display field information for each topic
+    for topic_info in json_data['topics']:
+        if 'fields' in topic_info:
+            topic_name = topic_info['topic']
+            field_data = topic_info['fields']
+            
+            console.print(f"\n[bold cyan]Topic: {topic_name}[/bold cyan]")
+            console.print(f"[dim]Message Type: {field_data['message_type']}[/dim]")
+            console.print(f"[dim]Samples Analyzed: {field_data['samples_analyzed']}[/dim]")
+            
+            if field_data['fields']:
+                console.print("\n[bold]Fields:[/bold]")
+                _display_field_tree(field_data['fields'], console, indent=0)
+            else:
+                console.print("[yellow]No fields found[/yellow]")
+
+
 def _display_topic_fields(field_data: Dict[str, Any], console: Console):
-    """Display field information for topics"""
+    """Display field information for topics (legacy function)"""
     for topic, data in field_data.items():
         console.print(f"\n[bold cyan]Topic: {topic}[/bold cyan]")
         console.print(f"[dim]Message Type: {data['message_type']}[/dim]")
@@ -662,19 +705,22 @@ def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: Lis
     }
 
 
-def _display_data(json_data: Dict[str, Any], as_format: str, verbose: bool, console: Console):
+def _display_data(json_data: Dict[str, Any], as_format: str, verbose: bool, console: Console, show_fields: bool = False):
     """Display bag inspection results in specified format"""
     
-    if as_format == "summary":
-        _display_summary(console, json_data['summary']['file_path'], json_data, len(json_data['topics']), verbose, json_data['summary']['is_lite_mode'])
-    elif as_format == "list":
-        _display_list(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
-    else:  # table
-        _display_table(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
+    if show_fields:
+        _display_fields_from_json(json_data, console)
+    else:
+        if as_format == "summary":
+            _display_summary(console, json_data['summary']['file_path'], json_data, len(json_data['topics']), verbose, json_data['summary']['is_lite_mode'])
+        elif as_format == "list":
+            _display_list(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
+        else:  # table
+            _display_table(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
 
 
 def _export_data(json_data: Dict[str, Any], as_format: str, output: str, console: Console):
-    """Export bag inspection results to CSV or HTML"""
+    """Export bag inspection results to CSV, HTML, or JSON"""
     try:
         if as_format == "csv":
             _export_to_csv(json_data, output)
@@ -682,10 +728,19 @@ def _export_data(json_data: Dict[str, Any], as_format: str, output: str, console
         elif as_format == "html":
             _export_to_html(json_data, output)
             console.print(f"\n[green]Data exported to {output}[/green]")
+        elif as_format == "json":
+            _export_to_json(json_data, output)
+            console.print(f"\n[green]Data exported to {output}[/green]")
     except Exception as e:
         log_cli_error(e)
         typer.echo(f"Error exporting data: {str(e)}", err=True)
         raise typer.Exit(code=1)
+
+
+def _export_to_json(json_data: Dict[str, Any], output_path: str):
+    """Export JSON data to JSON file"""
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(json_data, f, indent=2, ensure_ascii=False, default=str)
 
 
 def _export_to_csv(json_data: Dict[str, Any], output_path: str):
@@ -700,17 +755,34 @@ def _export_to_csv(json_data: Dict[str, Any], output_path: str):
 
 
 def _export_to_html(json_data: Dict[str, Any], output_path: str):
-    """Export topics data to HTML file with Tailwind CSS CDN - minimal, clean, compact design"""
+    """Export topics data to HTML file with field information support"""
     import time
     
     summary = json_data['summary']
     topics = json_data['topics']
+    has_fields = json_data['metadata'].get('has_field_analysis', False)
     
     # Get theme colors for custom properties
     from roseApp.core.theme_parser import get_html_colors
     html_colors = get_html_colors()
     
-    # Minimal HTML with Tailwind CSS CDN
+    # Build JavaScript for field expansion
+    js_code = """
+    function toggleFields(topicId) {
+        const fieldsDiv = document.getElementById('fields-' + topicId);
+        const toggleBtn = document.getElementById('toggle-' + topicId);
+        
+        if (fieldsDiv.style.display === 'none' || fieldsDiv.style.display === '') {
+            fieldsDiv.style.display = 'block';
+            toggleBtn.textContent = '▼';
+        } else {
+            fieldsDiv.style.display = 'none';
+            toggleBtn.textContent = '▶';
+        }
+    }
+    """
+    
+    # HTML with Tailwind CSS CDN and field support
     html_content = f"""<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -733,11 +805,19 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
                 }}
             }}
         }}
+        
+        {js_code}
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         body {{ font-family: 'Inter', sans-serif; }}
         .mono {{ font-family: 'JetBrains Mono', monospace; }}
+        .field-tree {{ margin-left: 1rem; }}
+        .field-item {{ margin: 0.25rem 0; }}
+        .field-name {{ color: #374151; font-weight: 500; }}
+        .field-type {{ color: #059669; }}
+        .field-value {{ color: #1f2937; }}
+        .field-meta {{ color: #6b7280; font-size: 0.875rem; }}
     </style>
 </head>
 <body class="min-h-full bg-rose-50 text-rose-900">
@@ -748,6 +828,7 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
             <p class="text-sm text-gray-600 mt-1">
                 <span class="font-medium">{summary['file_name']}</span> • 
                 Generated {time.strftime('%Y-%m-%d %H:%M:%S')}
+                {' • Field analysis included' if has_fields else ''}
             </p>
         </div>
 
@@ -786,38 +867,50 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
             </div>
         </div>
 
-        <!-- Topics Table -->
+        <!-- Topics -->
         <div>
-            <h2 class="text-lg font-semibold text-rose-500 mb-3">Topics ({len(topics)})</h2>
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
-                    <thead class="bg-rose-500">
-                        <tr>
-                            <th class="px-3 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Topic</th>
-                            <th class="px-3 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
-                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Count</th>
-                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Size</th>
-                            <th class="px-3 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Rate</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">"""
+            <h2 class="text-lg font-semibold text-rose-500 mb-3">Topics ({len(topics)})</h2>"""
     
-    # Add topic rows with alternating colors
+    # Add each topic with field support
     for i, topic in enumerate(topics):
-        row_class = "bg-white" if i % 2 == 0 else "bg-gray-50"
+        topic_id = f"topic_{i}"
+        has_topic_fields = 'fields' in topic
+        
         html_content += f"""
-                        <tr class="{row_class} hover:bg-rose-50 transition-colors">
-                            <td class="px-3 py-2 text-sm font-medium text-rose-600 mono">{topic['topic']}</td>
-                            <td class="px-3 py-2 text-sm text-gray-700 mono">{topic['message_type']}</td>
-                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic['count']:,}</td>
-                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic['size_formatted']}</td>
-                            <td class="px-3 py-2 text-sm text-right font-semibold text-gray-900">{topic.get('frequency_formatted', 'N/A')}</td>
-                        </tr>"""
+            <div class="mb-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <h3 class="text-sm font-medium text-rose-600 mono">{topic['topic']}</h3>
+                            <span class="text-sm text-gray-700 mono">{topic['message_type']}</span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-sm font-semibold text-gray-900">{topic['count']:,} msgs</span>
+                            <span class="text-sm font-semibold text-gray-900">{topic['size_formatted']}</span>
+                            <span class="text-sm font-semibold text-gray-900">{topic.get('frequency_formatted', 'N/A')}</span>
+                            {f'<button id="toggle-{topic_id}" onclick="toggleFields("{topic_id}")" class="text-rose-500 hover:text-rose-700 font-mono">▶</button>' if has_topic_fields else ''}
+                        </div>
+                    </div>
+                </div>"""
+        
+        # Add field information if available
+        if has_topic_fields:
+            field_data = topic['fields']
+            html_content += f"""
+                <div id="fields-{topic_id}" style="display: none;" class="px-4 py-3">
+                    <div class="field-meta mb-2">
+                        <span class="font-medium">Message Type:</span> {field_data['message_type']} • 
+                        <span class="font-medium">Samples:</span> {field_data['samples_analyzed']}
+                    </div>
+                    <div class="field-tree">
+                        {_generate_field_html(field_data['fields'])}
+                    </div>
+                </div>"""
+        
+        html_content += """
+            </div>"""
     
     html_content += f"""
-                    </tbody>
-                </table>
-            </div>
         </div>
 
         <!-- Footer -->
@@ -830,6 +923,42 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
     
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
+
+
+def _generate_field_html(fields: Dict[str, Any], indent: int = 0) -> str:
+    """Generate HTML for field tree structure"""
+    html = ""
+    
+    for field_name, field_info in fields.items():
+        if isinstance(field_info, dict) and 'type' in field_info:
+            # This is a field info object
+            type_str = field_info['type']
+            
+            html += f"""<div class="field-item" style="margin-left: {indent * 1.5}rem;">"""
+            html += f"""<span class="field-name">├── {field_name}:</span> """
+            html += f"""<span class="field-type">{type_str}</span>"""
+            
+            if 'value' in field_info:
+                html += f""" = <span class="field-value">{field_info['value']}</span>"""
+            elif 'length' in field_info:
+                length = field_info['length']
+                element_type = field_info.get('element_type', 'unknown')
+                html += f"""<span class="field-value">[{length}] of {element_type}</span>"""
+                
+                if 'element_structure' in field_info:
+                    html += f"""<div>{_generate_field_html(field_info['element_structure'], indent + 1)}</div>"""
+            elif 'fields' in field_info:
+                html += f"""<div>{_generate_field_html(field_info['fields'], indent + 1)}</div>"""
+            
+            html += """</div>"""
+        else:
+            # This is a nested field structure
+            html += f"""<div class="field-item" style="margin-left: {indent * 1.5}rem;">"""
+            html += f"""<span class="field-name">├── {field_name}:</span>"""
+            html += f"""<div>{_generate_field_html(field_info, indent + 1)}</div>"""
+            html += """</div>"""
+    
+    return html
 
 
 def _display_summary(console: Console, input_path: str, json_data: Dict[str, Any], filtered_count: int, verbose: bool, is_lite_mode: bool):

@@ -46,7 +46,7 @@ def validate_series_format(series: List[str]) -> None:
 
 def validate_output_requirement(as_format: str, output: Optional[str]) -> None:
     """Validate that output is provided when required by format"""
-    if as_format in ["csv", "html"] and not output:
+    if as_format in ["csv", "html", "json"] and not output:
         raise ValidationError(f"--as={as_format} requires --output to be specified")
 
 def show_available_commands() -> None:
