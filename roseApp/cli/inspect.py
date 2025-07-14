@@ -9,6 +9,7 @@ import pickle
 import hashlib
 import json
 import csv
+import asyncio
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 import typer
@@ -24,6 +25,7 @@ from textual.fuzzy import FuzzySearch
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
 from ..core.theme import theme
+from ..core.async_analyzer import analyze_bag_async, CacheLevel, ComprehensiveCache
 from .error_handling import ValidationError, validate_file_exists, validate_choice, validate_output_requirement, handle_runtime_error
 
 app = typer.Typer(help="Fast ROS bag inspection and analysis")
@@ -76,131 +78,130 @@ def inspect(
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output with detailed statistics"),
     show_fields: bool = typer.Option(False, "--show-fields", "-f", help="Show detailed field information for specified topics"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)")
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (for csv/html formats)"),
+    async_analysis: bool = typer.Option(True, "--async/--sync", help="Use async analysis for better performance (default: async)"),
+    force_sync: bool = typer.Option(False, "--force-sync", help="Force synchronous analysis (legacy mode)")
 ):
     """
-    Fast inspection of ROS bag files with flexible display options and caching
+    Inspect ROS bag files with intelligent caching and async analysis
     
-    The analysis results are cached to improve performance on subsequent runs.
-    The cache is automatically invalidated when the bag file is modified.
-    Use 'prune' command to manage cache files.
-    
-    By default, only lightweight metadata is analyzed for faster performance.
-    Use --verbose to parse all messages and show detailed statistics.
+    The async analysis provides better performance through intelligent caching
+    and background processing. Use --force-sync for legacy synchronous mode.
     
     Examples:
-    
-    # Show basic topics information (fast)
-    rose inspect demo.bag
-    
-    # Show detailed statistics with message counts and sizes
-    rose inspect demo.bag --verbose
-    
-    # Filter multiple topics by name or fuzzy pattern
-    rose inspect demo.bag --topics dts --topics tf --topics velodyne
-    
-    # Show field information for specific topics
-    rose inspect demo.bag --topics /odom --topics /tf --show-fields
-    
-    # Export to CSV
-    rose inspect demo.bag --as csv --output topics.csv
-    
-    # Export to HTML
-    rose inspect demo.bag --as html --output report.html
+        # Fast async analysis (default)
+        rose inspect mybag.bag
+        
+        # Force legacy sync analysis  
+        rose inspect mybag.bag --force-sync
+        
+        # Detailed async analysis with field information
+        rose inspect mybag.bag --verbose --show-fields --topics /camera/image
     """
-    # Set application mode for proper logging
-    set_app_mode(AppMode.CLI)
-    logger = get_logger()
-    console = Console()
+    
+    async def _async_main():
+        # Set application mode for proper logging
+        set_app_mode(AppMode.CLI)
+        logger = get_logger()
+        console = Console()
 
-    try:
-        # Validate parameter values
         try:
-            validate_file_exists(input_path, "bag file")
-            validate_choice(as_format, ["table", "list", "summary", "csv", "html", "json"], "--as")
-            validate_choice(sort_by, ["name", "type", "count", "size", "frequency"], "--sort-by")
-            validate_output_requirement(as_format, output)
-        except ValidationError as e:
-            handle_runtime_error(e, "Parameter validation")
+            # Validate parameter values
+            try:
+                validate_file_exists(input_path, "bag file")
+                validate_choice(as_format, ["table", "list", "summary", "csv", "html", "json"], "--as")
+                validate_choice(sort_by, ["name", "type", "count", "size", "frequency"], "--sort-by")
+                validate_output_requirement(as_format, output)
+            except ValidationError as e:
+                handle_runtime_error(e, "Parameter validation")
 
-        # Determine analysis mode based on verbose flag
-        use_full_analysis = verbose
-        
-        # Try to load from cache first
-        cache_path = _get_cache_path(input_path)
-        cached_data = _load_cache(cache_path)
-        
-        # Check if we need to reanalyze (cache miss or mode mismatch)
-        reanalyze = (cached_data is None or 
-                    cached_data.get('is_full_analysis', False) != use_full_analysis)
-        
-        if reanalyze:
-            # Create parser
-            parser = create_parser(ParserType.ROSBAGS)
+            # Determine analysis mode
+            use_full_analysis = verbose
+            use_async = async_analysis and not force_sync
             
-            # Perform analysis based on mode
-            if use_full_analysis:
-                console.print("[cyan]Performing detailed analysis (parsing all messages)...[/cyan]")
-                analysis_data = _analyze_bag_full(parser, input_path, logger, console)
+            # Try to load from cache first (for compatibility with existing cache)
+            cache_path = _get_cache_path(input_path)
+            cached_data = _load_cache(cache_path)
+            
+            # Check if we need to reanalyze
+            reanalyze = (cached_data is None or 
+                        cached_data.get('is_full_analysis', False) != use_full_analysis)
+            
+            if reanalyze:
+                # Perform analysis with async or sync mode
+                if use_async:
+                    console.print("[cyan]Performing intelligent async analysis...[/cyan]")
+                    analysis_data = await _analyze_bag_async(input_path, console, use_full_analysis)
+                else:
+                    # Legacy sync analysis
+                    if use_full_analysis:
+                        console.print("[cyan]Performing detailed analysis (parsing all messages)...[/cyan]")
+                        analysis_data = _analyze_bag_full_sync(input_path, console)
+                    else:
+                        console.print("[cyan]Performing fast analysis (metadata only)...[/cyan]")
+                        analysis_data = _analyze_bag_lite_sync(input_path, console)
+                
+                # Save to cache (only for legacy format compatibility)
+                if not analysis_data.get('is_async_analysis', False):
+                    _save_cache(cache_path, analysis_data)
+                    
             else:
-                console.print("[cyan]Performing fast analysis (metadata only)...[/cyan]")
-                analysis_data = _analyze_bag_lite(parser, input_path, logger, console)
-            
-            # Save to cache
-            _save_cache(cache_path, analysis_data)
-        else:
-            console.print(f"[dim]Using cached analysis results[/dim]")
-            analysis_data = cached_data
+                console.print(f"[dim]Using cached analysis results[/dim]")
+                analysis_data = cached_data
 
-        # Filter topics if specified
-        all_topics = analysis_data['topics']  # topics is already a list of topic names
-        if topics:
+            # Filter topics if specified
+            all_topics = analysis_data['topics']
             filtered_topics = _filter_topics(all_topics, topics)
+            
             if not filtered_topics:
-                console.print(f"[{theme.WARNING}]No topics matched the specified filters[/{theme.WARNING}]")
-                console.print(f"Available topics: {', '.join(all_topics[:5])}{'...' if len(all_topics) > 5 else ''}")
-                raise typer.Exit(code=1)
-        else:
-            filtered_topics = all_topics
+                console.print("[yellow]No topics matched the specified filters[/yellow]")
+                if topics:
+                    available_topics = ", ".join(all_topics[:5])
+                    if len(all_topics) > 5:
+                        available_topics += f", ... ({len(all_topics)} total)"
+                    console.print(f"Available topics: {available_topics}")
+                return
 
-        # Create JSON structure for export/display
-        json_data = _create_json_structure(input_path, analysis_data, filtered_topics, not use_full_analysis)
-        
-        # Sort topics
-        if sort_by in ["name", "topic"]:
-            if reverse:
-                sort_by = "name"
-            json_data['topics'] = sorted(json_data['topics'], key=lambda x: x['topic'].lower(), reverse=reverse)
-        
-        # Handle field analysis for specific topics
-        if show_fields:
-            if not topics:
-                console.print(f"[{theme.WARNING}]Please specify topics using --topics when using --show-fields[/{theme.WARNING}]")
-                raise typer.Exit(code=1)
-            
-            # Analyze fields for filtered topics
-            parser = create_parser(ParserType.ROSBAGS)
-            field_data = _analyze_topic_fields(parser, input_path, filtered_topics, console)
-            
-            # Integrate field data into JSON structure
-            json_data = _integrate_field_data(json_data, field_data)
-        
-        # Display or export results
-        if as_format in ["csv", "html", "json"]:
-            _export_data(json_data, as_format, output, console)
-        else:
-            _display_data(json_data, as_format, verbose, console, show_fields)
-        
-        # Show bottom info message for lite mode
-        if not use_full_analysis and as_format not in ["csv", "html", "json"] and not show_fields:
-            console.print(f"[{theme.WARNING}]INFO: Use --verbose to analyze all messages and show detailed statistics.[/{theme.WARNING}]")
-        
-    except typer.Exit:
-        # Re-raise typer.Exit cleanly
-        raise
+            # Show performance info for async analysis
+            if analysis_data.get('is_async_analysis', False):
+                cache_level = analysis_data.get('cache_level', 1)
+                level_names = {1: "metadata", 2: "statistics", 3: "messages", 4: "fields"}
+                console.print(f"[dim]Analysis level: {level_names.get(cache_level, 'unknown')} (cache level {cache_level})[/dim]")
+
+            # Field analysis if requested
+            if show_fields:
+                if not topics:
+                    console.print("[red]Error: --show-fields requires --topics to be specified[/red]")
+                    return
+                
+                console.print("Analyzing field information for specified topics...")
+                field_data = _analyze_topic_fields(create_parser(ParserType.ROSBAGS), input_path, filtered_topics, console)
+                
+                # Integrate field data
+                analysis_data = _integrate_field_data(analysis_data, field_data)
+
+            # Sort topics if needed
+            if analysis_data.get('stats'):
+                filtered_topics = _sort_topics(filtered_topics, analysis_data['stats'], sort_by, reverse)
+
+            # Create JSON structure for unified processing
+            json_data = _create_json_structure(input_path, analysis_data, filtered_topics, analysis_data.get('is_lite_mode', False))
+
+            # Display or export data
+            if output and as_format in ['csv', 'html', 'json']:
+                _export_data(json_data, as_format, output, console)
+            else:
+                _display_data(json_data, as_format, verbose, console, show_fields)
+
+        except Exception as e:
+            handle_runtime_error(e, "bag analysis")
+    
+    # Run async main function
+    try:
+        asyncio.run(_async_main())
     except Exception as e:
-        # Handle runtime errors without stack trace
-        handle_runtime_error(e, "Bag inspection operation")
+        console = Console()
+        handle_runtime_error(e, "async execution")
 
 
 def _integrate_field_data(json_data: Dict[str, Any], field_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1182,6 +1183,80 @@ def _sort_topic_details(topic_details: List[Dict[str, Any]], sort_by: str, rever
             return topic_data['size'] if topic_data['size'] is not None else 0
     
     return sorted(topic_details, key=get_sort_key, reverse=reverse)
+
+
+def _convert_comprehensive_cache_to_legacy(cache: ComprehensiveCache) -> Dict:
+    """Convert ComprehensiveCache to legacy format for compatibility"""
+    
+    # Convert statistics back to legacy format
+    legacy_stats = {}
+    for topic, stats in cache.statistics.items():
+        legacy_stats[topic] = {
+            'count': stats.count,
+            'size': stats.size,
+            'avg_size': stats.avg_size
+        }
+    
+    return {
+        'topics': cache.metadata.topics,
+        'connections': cache.metadata.connections,
+        'stats': legacy_stats,
+        'file_size': cache.metadata.file_size,
+        'total_messages': cache.total_messages,
+        'total_data_size': cache.total_data_size,
+        'duration': cache.duration,
+        'start_time': cache.metadata.time_range[0] if cache.metadata.time_range else None,
+        'end_time': cache.metadata.time_range[1] if cache.metadata.time_range else None,
+        'topic_count': len(cache.metadata.topics),
+        'is_lite_mode': cache.cache_level == CacheLevel.METADATA,
+        'original_bag_path': cache.metadata.original_bag_path,
+        'cache_level': cache.cache_level,
+        'is_async_analysis': True,
+        'analysis_timestamp': cache.analysis_timestamp
+    }
+
+
+async def _analyze_bag_async(bag_path: str, console: Console, use_full_analysis: bool = False) -> Dict:
+    """Async bag analysis with intelligent caching"""
+    
+    # Determine required cache level
+    required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
+    
+    # Enable background full analysis for better future performance
+    background_analysis = not use_full_analysis  # Only if not already doing full analysis
+    
+    try:
+        # Use async analyzer with intelligent caching
+        cache = await analyze_bag_async(
+            bag_path=bag_path,
+            console=console,
+            required_level=required_level,
+            background_full_analysis=background_analysis
+        )
+        
+        # Convert to legacy format for compatibility
+        return _convert_comprehensive_cache_to_legacy(cache)
+        
+    except Exception as e:
+        console.print(f"[red]Async analysis failed, falling back to sync analysis: {e}[/red]")
+        
+        # Fallback to original sync analysis
+        if use_full_analysis:
+            return _analyze_bag_full_sync(bag_path, console)
+        else:
+            return _analyze_bag_lite_sync(bag_path, console)
+
+
+def _analyze_bag_full_sync(bag_path: str, console: Console) -> Dict:
+    """Original synchronous full analysis (fallback)"""
+    parser = create_parser(ParserType.ROSBAGS)
+    return _analyze_bag_full(parser, bag_path, get_logger(), console)
+
+
+def _analyze_bag_lite_sync(bag_path: str, console: Console) -> Dict:
+    """Original synchronous lite analysis (fallback)"""
+    parser = create_parser(ParserType.ROSBAGS)
+    return _analyze_bag_lite(parser, bag_path, get_logger(), console)
 
 
 def main():

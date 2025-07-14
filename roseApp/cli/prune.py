@@ -1,6 +1,6 @@
 """
 Cache management command for ROS bag analysis results.
-This module provides cache cleaning functionality.
+This module provides cache cleaning functionality for both legacy and async caches.
 """
 
 import os
@@ -13,6 +13,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from ..core.theme import theme
+
+# Import async analyzer for cache management
+try:
+    from ..core.async_analyzer import get_async_analyzer
+    ASYNC_AVAILABLE = True
+except ImportError:
+    ASYNC_AVAILABLE = False
 
 # Create app instance
 app = typer.Typer(name="prune", help="Manage analysis cache")
@@ -326,6 +333,89 @@ def clear(
         console.print(f"[{theme.SUCCESS}]✓ Successfully cleared all cache files[/{theme.SUCCESS}]")
     except Exception as e:
         console.print(f"[red]✗ Failed to clear cache: {e}[/red]")
+
+
+@app.command("async-status")
+def async_status():
+    """
+    Show async cache status and performance information
+    
+    Examples:
+        # Show async cache status
+        python -m roseApp.rose prune async-status
+    """
+    console = Console()
+    
+    if not ASYNC_AVAILABLE:
+        console.print("[red]Async analyzer not available[/red]")
+        return
+    
+    try:
+        analyzer = get_async_analyzer()
+        cache_info = analyzer.get_cache_info()
+        
+        if cache_info["cached_bags"] == 0:
+            console.print("[yellow]No async cache data found[/yellow]")
+            return
+        
+        # Show summary
+        panel_content = Text()
+        panel_content.append(f"Cached Bags: {cache_info['cached_bags']}\n", style=f"bold {theme.ACCENT}")
+        panel_content.append("Memory-based intelligent caching active", style=f"bold {theme.SUCCESS}")
+        
+        panel = Panel(
+            panel_content,
+            title="Async Cache Status",
+            border_style=theme.ACCENT
+        )
+        console.print(panel)
+        
+        # Show detailed information
+        console.print()
+        for i, (key, details) in enumerate(cache_info['cache_details'].items(), 1):
+            console.print(f"[{theme.ACCENT}]{i}.[/{theme.ACCENT}] [bold]{details['bag_path']}[/bold]")
+            console.print(f"   Cache Level: {details['cache_level']} ({'complete' if details['is_complete'] else 'partial'})")
+            console.print(f"   Topics: {details['topics']}")
+            console.print(f"   Messages: {details['total_messages']:,}")
+            console.print(f"   Cache Key: {key[:16]}...")
+            console.print()
+            
+        console.print(f"[dim]Async cache uses intelligent memory-based storage for optimal performance[/dim]")
+        
+    except Exception as e:
+        console.print(f"[red]Error getting async cache status: {e}[/red]")
+
+
+@app.command("clear-async")
+def clear_async():
+    """
+    Clear async cache (memory-based cache)
+    
+    Examples:
+        # Clear async cache
+        python -m roseApp.rose prune clear-async
+    """
+    console = Console()
+    
+    if not ASYNC_AVAILABLE:
+        console.print("[red]Async analyzer not available[/red]")
+        return
+    
+    try:
+        analyzer = get_async_analyzer()
+        cache_info = analyzer.get_cache_info()
+        
+        if cache_info["cached_bags"] == 0:
+            console.print("[yellow]No async cache to clear[/yellow]")
+            return
+        
+        cached_count = cache_info["cached_bags"]
+        analyzer.clear_cache()
+        
+        console.print(f"[{theme.SUCCESS}]✓ Cleared async cache for {cached_count} bags[/{theme.SUCCESS}]")
+        
+    except Exception as e:
+        console.print(f"[red]Error clearing async cache: {e}[/red]")
 
 
 def main():
