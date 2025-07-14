@@ -193,6 +193,15 @@ def inspect(
             else:
                 _display_data(json_data, as_format, verbose, console, show_fields)
 
+            # Show performance profile if enabled
+            try:
+                from ..core.unified_cache import get_unified_cache_manager
+                cache_manager = get_unified_cache_manager()
+                if cache_manager.profiler.enabled:
+                    cache_manager.print_profile_summary(console)
+            except ImportError:
+                pass  # Unified cache not available
+
         except Exception as e:
             handle_runtime_error(e, "bag analysis")
     
@@ -1217,28 +1226,60 @@ def _convert_comprehensive_cache_to_legacy(cache: ComprehensiveCache) -> Dict:
 
 
 async def _analyze_bag_async(bag_path: str, console: Console, use_full_analysis: bool = False) -> Dict:
-    """Async bag analysis with intelligent caching"""
-    
-    # Determine required cache level
-    required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
-    
-    # Enable background full analysis for better future performance
-    background_analysis = not use_full_analysis  # Only if not already doing full analysis
+    """Async bag analysis with unified caching system"""
     
     try:
-        # Use async analyzer with intelligent caching
-        cache = await analyze_bag_async(
+        # Try to use unified cache system
+        from ..core.unified_analyzer import get_unified_analyzer
+        from ..core.unified_cache import CacheLevel
+        
+        # Determine required cache level
+        required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
+        
+        # Use unified analyzer
+        analyzer = get_unified_analyzer()
+        unified_cache = await analyzer.analyze_async(
             bag_path=bag_path,
             console=console,
-            required_level=required_level,
-            background_full_analysis=background_analysis
+            required_level=required_level
         )
         
         # Convert to legacy format for compatibility
-        return _convert_comprehensive_cache_to_legacy(cache)
+        return analyzer.convert_to_legacy_format(unified_cache)
         
+    except ImportError:
+        # Fallback to original async analyzer if unified cache not available
+        console.print("[yellow]Using legacy async analyzer...[/yellow]")
+        
+        # Determine required cache level
+        required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
+        
+        # Enable background full analysis for better future performance
+        background_analysis = not use_full_analysis  # Only if not already doing full analysis
+        
+        try:
+            # Use async analyzer with intelligent caching
+            cache = await analyze_bag_async(
+                bag_path=bag_path,
+                console=console,
+                required_level=required_level,
+                background_full_analysis=background_analysis
+            )
+            
+            # Convert to legacy format for compatibility
+            return _convert_comprehensive_cache_to_legacy(cache)
+            
+        except Exception as e:
+            console.print(f"[red]Async analysis failed, falling back to sync analysis: {e}[/red]")
+            
+            # Fallback to original sync analysis
+            if use_full_analysis:
+                return _analyze_bag_full_sync(bag_path, console)
+            else:
+                return _analyze_bag_lite_sync(bag_path, console)
+                
     except Exception as e:
-        console.print(f"[red]Async analysis failed, falling back to sync analysis: {e}[/red]")
+        console.print(f"[red]Unified async analysis failed, falling back to sync analysis: {e}[/red]")
         
         # Fallback to original sync analysis
         if use_full_analysis:
@@ -1248,15 +1289,55 @@ async def _analyze_bag_async(bag_path: str, console: Console, use_full_analysis:
 
 
 def _analyze_bag_full_sync(bag_path: str, console: Console) -> Dict:
-    """Original synchronous full analysis (fallback)"""
-    parser = create_parser(ParserType.ROSBAGS)
-    return _analyze_bag_full(parser, bag_path, get_logger(), console)
+    """Synchronous full analysis using unified cache system"""
+    try:
+        # Try to use unified cache system
+        from ..core.unified_analyzer import get_unified_analyzer
+        from ..core.unified_cache import CacheLevel
+        
+        # Use unified analyzer in sync mode
+        analyzer = get_unified_analyzer()
+        unified_cache = analyzer.analyze_sync(
+            bag_path=bag_path,
+            console=console,
+            required_level=CacheLevel.STATISTICS
+        )
+        
+        # Convert to legacy format for compatibility
+        return analyzer.convert_to_legacy_format(unified_cache)
+        
+    except Exception as e:
+        console.print(f"[red]Unified sync analysis failed, falling back to legacy analysis: {e}[/red]")
+        
+        # Fallback to original sync analysis
+        parser = create_parser(ParserType.ROSBAGS)
+        return _analyze_bag_full(parser, bag_path, get_logger(), console)
 
 
 def _analyze_bag_lite_sync(bag_path: str, console: Console) -> Dict:
-    """Original synchronous lite analysis (fallback)"""
-    parser = create_parser(ParserType.ROSBAGS)
-    return _analyze_bag_lite(parser, bag_path, get_logger(), console)
+    """Synchronous lite analysis using unified cache system"""
+    try:
+        # Try to use unified cache system
+        from ..core.unified_analyzer import get_unified_analyzer
+        from ..core.unified_cache import CacheLevel
+        
+        # Use unified analyzer in sync mode
+        analyzer = get_unified_analyzer()
+        unified_cache = analyzer.analyze_sync(
+            bag_path=bag_path,
+            console=console,
+            required_level=CacheLevel.METADATA
+        )
+        
+        # Convert to legacy format for compatibility
+        return analyzer.convert_to_legacy_format(unified_cache)
+        
+    except Exception as e:
+        console.print(f"[red]Unified sync analysis failed, falling back to legacy analysis: {e}[/red]")
+        
+        # Fallback to original sync analysis
+        parser = create_parser(ParserType.ROSBAGS)
+        return _analyze_bag_lite(parser, bag_path, get_logger(), console)
 
 
 def main():

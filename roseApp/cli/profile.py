@@ -112,7 +112,7 @@ async def _run_benchmark_async(
             "• Cache hit rate measurement\n"
             "• Performance improvement calculations\n"
             "• JSON results export",
-            title="🚀 Performance Benchmark"
+            title="Performance Benchmark"
         ))
     
     # Get bag files
@@ -126,23 +126,23 @@ async def _run_benchmark_async(
                 test_bags.append(bag_path)
                 if not quiet:
                     size_mb = os.path.getsize(bag_path) / (1024 * 1024)
-                    console.print(f"[green]✓ Added: {bag_path} ({size_mb:.1f} MB)[/green]")
+                    console.print(f"[green]OK Added: {bag_path} ({size_mb:.1f} MB)[/green]")
             except ValidationError as e:
-                console.print(f"[red]✗ {e}[/red]")
+                console.print(f"[red]ERROR {e}[/red]")
         
         if not test_bags:
-            console.print("[red]✗ No valid bag files found. Exiting.[/red]")
+            console.print("[red]ERROR No valid bag files found. Exiting.[/red]")
             raise typer.Exit(code=1)
     else:
         # Interactive mode
         test_bags = _get_test_bags_interactive(console)
         
         if not test_bags:
-            console.print("[red]✗ No valid bag files provided. Exiting.[/red]")
+            console.print("[red]ERROR No valid bag files provided. Exiting.[/red]")
             raise typer.Exit(code=1)
     
     if not quiet:
-        console.print(f"[green]✓ Found {len(test_bags)} bag files to test[/green]")
+        console.print(f"[green]OK Found {len(test_bags)} bag files to test[/green]")
         for i, bag in enumerate(test_bags, 1):
             size_mb = os.path.getsize(bag) / (1024 * 1024)
             console.print(f"  {i}. {bag} ({size_mb:.1f} MB)")
@@ -167,13 +167,13 @@ async def _run_benchmark_async(
         benchmark.save_results(summary, output)
         
         if not quiet:
-            console.print(f"\n[green]✓ Benchmark completed successfully![/green]")
+            console.print(f"\n[green]OK Benchmark completed successfully![/green]")
             console.print(f"Results saved to: {output}")
         else:
             console.print(f"Benchmark completed. Results saved to: {output}")
             
     except Exception as e:
-        console.print(f"[red]✗ Benchmark failed: {e}[/red]")
+        console.print(f"[red]ERROR Benchmark failed: {e}[/red]")
         if not quiet:
             import traceback
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
@@ -198,7 +198,7 @@ def _get_test_bags_interactive(console: Console) -> List[str]:
     for path in common_paths:
         if os.path.exists(path):
             found_bags.append(path)
-            console.print(f"  [green]✓ Found: {path}[/green]")
+            console.print(f"  [green]OK Found: {path}[/green]")
     
     if found_bags:
         console.print(f"\n[cyan]Found {len(found_bags)} bag files. Do you want to use them?[/cyan]")
@@ -230,11 +230,11 @@ def _get_test_bags_interactive(console: Console) -> List[str]:
                 if bag_path not in test_bags:
                     test_bags.append(bag_path)
                     size_mb = os.path.getsize(bag_path) / (1024 * 1024)
-                    console.print(f"  [green]✓ Added: {bag_path} ({size_mb:.1f} MB)[/green]")
+                    console.print(f"  [green]OK Added: {bag_path} ({size_mb:.1f} MB)[/green]")
                 else:
                     console.print(f"  [yellow]Already added: {bag_path}[/yellow]")
             else:
-                console.print(f"  [red]✗ File not found: {bag_path}[/red]")
+                console.print(f"  [red]ERROR File not found: {bag_path}[/red]")
         except (KeyboardInterrupt, EOFError):
             console.print("\n[yellow]Interrupted by user[/yellow]")
             break

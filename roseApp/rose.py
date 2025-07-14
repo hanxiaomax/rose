@@ -50,7 +50,8 @@ def configure_logging(verbosity: int):
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)")
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)"),
+    profile: bool = typer.Option(False, "--profile", help="Enable performance profiling for analysis operations")
 ):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
     # Set application mode based on command
@@ -60,6 +61,13 @@ def callback(
         set_app_mode(AppMode.CLI)
         
     configure_logging(verbose)
+    
+    # Set up profiling if requested
+    if profile:
+        from .core.unified_cache import get_unified_cache_manager
+        cache_manager = get_unified_cache_manager()
+        cache_manager.enable_profiling()
+        logger.info("Performance profiling enabled")
     
     if ctx.invoked_subcommand is None:
         from .cli.error_handling import show_available_commands
