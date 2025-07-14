@@ -708,15 +708,18 @@ def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: Lis
 def _display_data(json_data: Dict[str, Any], as_format: str, verbose: bool, console: Console, show_fields: bool = False):
     """Display bag inspection results in specified format"""
     
-    if show_fields:
-        _display_fields_from_json(json_data, console)
-    else:
-        if as_format == "summary":
-            _display_summary(console, json_data['summary']['file_path'], json_data, len(json_data['topics']), verbose, json_data['summary']['is_lite_mode'])
-        elif as_format == "list":
-            _display_list(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
-        else:  # table
-            _display_table(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
+    # Display the main format (table, list, or summary)
+    if as_format == "summary":
+        _display_summary(console, json_data['summary']['file_path'], json_data, len(json_data['topics']), verbose, json_data['summary']['is_lite_mode'])
+        if show_fields:
+            _display_fields_from_json(json_data, console)
+    elif as_format == "list":
+        _display_list(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
+        if show_fields:
+            _display_fields_from_json(json_data, console)
+    else:  # table
+        _display_table(console, json_data['summary']['file_path'], json_data, json_data['topics'], verbose, json_data['summary']['is_lite_mode'])
+        # table format already includes field display logic internally
 
 
 def _export_data(json_data: Dict[str, Any], as_format: str, output: str, console: Console):
@@ -782,6 +785,14 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
     }
     """
     
+    # Safe format function for None values
+    def safe_format(value, format_spec=""):
+        if value is None:
+            return "N/A"
+        if format_spec:
+            return f"{value:{format_spec}}"
+        return str(value)
+    
     # HTML with Tailwind CSS CDN and field support
     html_content = f"""<!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -804,7 +815,7 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
                     }}
                 }}
             }}
-        }}
+        }};
         
         {js_code}
     </script>
@@ -840,27 +851,27 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
                     <tbody class="divide-y divide-gray-200">
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">Topics</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['topic_count']}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary['topic_count'])}</td>
                         </tr>
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">Messages</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['total_messages']:,}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary['total_messages'], ',')}</td>
                         </tr>
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">File Size</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary['file_size_formatted']}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary['file_size_formatted'])}</td>
                         </tr>
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">Duration</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('duration_formatted', 'N/A')}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary.get('duration_formatted'))}</td>
                         </tr>
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">Avg Rate</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('avg_rate_formatted', 'N/A')}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary.get('avg_rate_formatted'))}</td>
                         </tr>
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">Compression</td>
-                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{summary.get('compression', 'N/A')}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-rose-500">{safe_format(summary.get('compression'))}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -876,6 +887,11 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
         topic_id = f"topic_{i}"
         has_topic_fields = 'fields' in topic
         
+        # Create toggle button HTML
+        toggle_button = ""
+        if has_topic_fields:
+            toggle_button = f'<button id="toggle-{topic_id}" onclick="toggleFields(\'{topic_id}\')" class="text-rose-500 hover:text-rose-700 font-mono">▶</button>'
+        
         html_content += f"""
             <div class="mb-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
@@ -885,10 +901,10 @@ def _export_to_html(json_data: Dict[str, Any], output_path: str):
                             <span class="text-sm text-gray-700 mono">{topic['message_type']}</span>
                         </div>
                         <div class="flex items-center space-x-4">
-                            <span class="text-sm font-semibold text-gray-900">{topic['count']:,} msgs</span>
-                            <span class="text-sm font-semibold text-gray-900">{topic['size_formatted']}</span>
-                            <span class="text-sm font-semibold text-gray-900">{topic.get('frequency_formatted', 'N/A')}</span>
-                            {f'<button id="toggle-{topic_id}" onclick="toggleFields("{topic_id}")" class="text-rose-500 hover:text-rose-700 font-mono">▶</button>' if has_topic_fields else ''}
+                            <span class="text-sm font-semibold text-gray-900">{safe_format(topic['count'], ',') if topic['count'] is not None else 'N/A'} msgs</span>
+                            <span class="text-sm font-semibold text-gray-900">{safe_format(topic['size_formatted'])}</span>
+                            <span class="text-sm font-semibold text-gray-900">{safe_format(topic.get('frequency_formatted'))}</span>
+                            {toggle_button}
                         </div>
                     </div>
                 </div>"""
@@ -1087,6 +1103,19 @@ def _display_table(console: Console, input_path: str, json_data: Dict[str, Any],
             )
         
         console.print(table)
+    
+    # Show field information if available
+    if json_data['metadata'].get('has_field_analysis', False):
+        console.print()
+        for topic_data in filtered_topics:
+            if 'fields' in topic_data:
+                console.print(f"\n[bold cyan]Field Details for {topic_data['topic']}[/bold cyan]")
+                console.print(f"[dim]Message Type:[/dim] {topic_data['fields']['message_type']}")
+                console.print(f"[dim]Samples Analyzed:[/dim] {topic_data['fields']['samples_analyzed']}")
+                console.print("\n[dim]Fields:[/dim]")
+                
+                # Display field tree
+                _display_field_tree(topic_data['fields']['fields'], console, indent=0)
 
 
 def _format_size(size_bytes: int) -> str:
