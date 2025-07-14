@@ -37,11 +37,24 @@ def _get_cache_info():
     for cache_file in CACHE_DIR.glob("*.pkl"):
         try:
             stat = cache_file.stat()
+            
+            # Try to read original bag path from cache file
+            original_bag_path = "Unknown"
+            try:
+                import pickle
+                with open(cache_file, 'rb') as f:
+                    cache_data = pickle.load(f)
+                    original_bag_path = cache_data.get('original_bag_path', 'Unknown')
+            except Exception:
+                # If can't read cache file, use "Unknown"
+                pass
+            
             files.append({
                 'path': cache_file,
                 'name': cache_file.name,
                 'size': stat.st_size,
-                'modified': stat.st_mtime
+                'modified': stat.st_mtime,
+                'original_bag_path': original_bag_path
             })
             total_size += stat.st_size
         except OSError:
@@ -50,6 +63,10 @@ def _get_cache_info():
     
     # Sort by modification time (newest first)
     files.sort(key=lambda x: x['modified'], reverse=True)
+    
+    # Add index numbers to each file
+    for i, file_info in enumerate(files, 1):
+        file_info['index'] = i
     
     return {
         'exists': True,
@@ -87,21 +104,24 @@ def _format_age(timestamp: float) -> str:
 def clean(
     all: bool = typer.Option(False, "--all", "-a", help="Clean all cache files"),
     older_than: Optional[int] = typer.Option(None, "--older-than", "-o", help="Clean cache files older than N days"),
+    ids: Optional[str] = typer.Option(None, "--ids", "-i", help="Clean cache files by ID numbers (comma-separated, e.g., 1,3,5)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be cleaned without actually doing it"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
 ):
     """
     Clean analysis cache files
     
+    You must specify either --ids or --all option.
+    
     Examples:
-        # Show cache status
-        python -m roseApp.rose prune clean
-        
         # Clean all cache files
         python -m roseApp.rose prune clean --all
         
         # Clean cache files older than 7 days
         python -m roseApp.rose prune clean --older-than 7
+        
+        # Clean specific cache files by ID
+        python -m roseApp.rose prune clean --ids 1,3,5
         
         # Dry run to see what would be cleaned
         python -m roseApp.rose prune clean --all --dry-run
@@ -132,12 +152,29 @@ def clean(
         import time
         cutoff_time = time.time() - (older_than * 24 * 3600)  # Convert days to seconds
         files_to_clean = [f for f in cache_info['files'] if f['modified'] < cutoff_time]
+    elif ids is not None:
+        # Parse IDs and find matching files
+        try:
+            id_list = [int(x.strip()) for x in ids.split(',') if x.strip()]
+            id_set = set(id_list)
+            files_to_clean = [f for f in cache_info['files'] if f['index'] in id_set]
+            
+            # Check for invalid IDs
+            found_ids = {f['index'] for f in files_to_clean}
+            invalid_ids = id_set - found_ids
+            if invalid_ids:
+                console.print(f"[red]Warning: Invalid cache IDs: {', '.join(map(str, sorted(invalid_ids)))}[/red]")
+                console.print(f"[dim]Valid IDs are: 1-{cache_info['total_files']}[/dim]")
+                
+        except ValueError:
+            console.print("[red]Error: Invalid ID format. Use comma-separated numbers (e.g., 1,3,5)[/red]")
+            return
     else:
-        # Just show status, don't clean anything
-        if verbose:
-            _show_cache_details(console, cache_info)
-        else:
-            console.print("Use --all to clean all files or --older-than N to clean files older than N days")
+        # Must specify --ids or --all
+        console.print("[red]Error: Must specify --ids or --all to clean cache files[/red]")
+        console.print("\nAvailable cache files:")
+        _show_cache_details(console, cache_info)
+        console.print(f"[dim]Use 'clean --ids 1,2,3' to clean specific files or 'clean --all' to clean all files[/dim]")
         return
     
     if not files_to_clean:
@@ -153,19 +190,13 @@ def clean(
         console.print(f"[bold]Cleaning {len(files_to_clean)} files ({_format_size(total_clean_size)})[/bold]")
     
     if verbose or dry_run:
-        table = Table(show_header=True, header_style="bold")
-        table.add_column("File", style=theme.PRIMARY)
-        table.add_column("Size", justify="right")
-        table.add_column("Age", justify="right")
-        
+        console.print("\nFiles to clean:")
         for file_info in files_to_clean:
-            table.add_row(
-                file_info['name'][:50] + ("..." if len(file_info['name']) > 50 else ""),
-                _format_size(file_info['size']),
-                _format_age(file_info['modified'])
-            )
-        
-        console.print(table)
+            console.print(f"[{theme.ACCENT}]{file_info['index']}.[/{theme.ACCENT}] [bold]{file_info['original_bag_path']}[/bold]")
+            console.print(f"   Size: {_format_size(file_info['size'])}")
+            console.print(f"   Modified: {_format_age(file_info['modified'])}")
+            console.print(f"   Cache: {file_info['name']}")
+            console.print()
     
     if dry_run:
         return
@@ -178,9 +209,11 @@ def clean(
         try:
             file_info['path'].unlink()
             cleaned_count += 1
+            if verbose:
+                console.print(f"[{theme.SUCCESS}]✓ Removed cache file #{file_info['index']}: {file_info['name']}[/{theme.SUCCESS}]")
         except OSError as e:
             if verbose:
-                console.print(f"[red]Failed to remove {file_info['name']}: {e}[/red]")
+                console.print(f"[red]✗ Failed to remove {file_info['name']}: {e}[/red]")
             failed_count += 1
     
     # Show results
@@ -232,34 +265,25 @@ def status(
     )
     console.print(panel)
     
-    if verbose:
-        console.print()
-        _show_cache_details(console, cache_info)
+    # Always show cache details with ID numbers
+    console.print()
+    _show_cache_details(console, cache_info)
+    
+    if not verbose:
+        console.print(f"\n[dim]Use 'clean --ids 1,2,3' to clean specific files or 'clean --all' to clean all files[/dim]")
 
 
 def _show_cache_details(console: Console, cache_info: dict):
-    """Show detailed information about cache files"""
+    """Show detailed information about cache files in list format"""
     if not cache_info['files']:
         return
     
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("File", style=theme.PRIMARY)
-    table.add_column("Size", justify="right")
-    table.add_column("Age", justify="right", style="dim")
-    
     for file_info in cache_info['files']:
-        # Truncate long filenames
-        display_name = file_info['name']
-        if len(display_name) > 60:
-            display_name = display_name[:30] + "..." + display_name[-27:]
-        
-        table.add_row(
-            display_name,
-            _format_size(file_info['size']),
-            _format_age(file_info['modified'])
-        )
-    
-    console.print(table)
+        console.print(f"[{theme.ACCENT}]{file_info['index']}.[/{theme.ACCENT}] [bold]{file_info['original_bag_path']}[/bold]")
+        console.print(f"   Size: {_format_size(file_info['size'])}")
+        console.print(f"   Modified: {_format_age(file_info['modified'])}")
+        console.print(f"   Cache: {file_info['name']}")
+        console.print()  # Empty line between entries
 
 
 @app.command()

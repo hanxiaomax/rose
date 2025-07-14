@@ -437,7 +437,8 @@ def _analyze_bag_lite(parser, bag_path: str, logger, console: Console) -> Dict:
             'start_time': start_time,
             'end_time': end_time,
             'topic_count': len(topics),
-            'is_lite_mode': True
+            'is_lite_mode': True,
+            'original_bag_path': os.path.abspath(bag_path)  # Store original bag path
         }
         
     except Exception as e:
@@ -503,7 +504,8 @@ def _analyze_bag_full(parser, bag_path: str, logger, console: Console) -> Dict:
                 'start_time': start_time,
                 'end_time': end_time,
                 'topic_count': len(topics),
-                'is_lite_mode': False
+                'is_lite_mode': False,
+                'original_bag_path': os.path.abspath(bag_path)  # Store original bag path
             }
             
     except Exception as e:
