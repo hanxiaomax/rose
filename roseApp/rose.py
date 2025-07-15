@@ -18,6 +18,7 @@ from roseApp.cli.plot import app as plot_app
 from roseApp.cli.prune import app as prune_app
 from roseApp.cli.cli_tool import app as cli_tool_app
 from roseApp.cli.profile import app as profile_app
+from roseApp.cli.diagnose import app as diagnose_app
 from roseApp.tui.tui import app as tui_app
 
 # Initialize logger
@@ -81,6 +82,7 @@ app.add_typer(plot_app)
 app.add_typer(prune_app)
 app.add_typer(cli_tool_app)
 app.add_typer(profile_app)
+app.add_typer(diagnose_app)
 app.add_typer(tui_app)
 
 if __name__ == '__main__':
