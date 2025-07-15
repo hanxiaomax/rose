@@ -41,3 +41,6 @@ dist/**
 *.csv
 *.html
 *.png
+
+# Planning folder
+.plan/

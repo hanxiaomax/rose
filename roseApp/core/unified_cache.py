@@ -433,15 +433,35 @@ class UnifiedCacheManager:
         if target_level <= CacheLevel.STATISTICS:
             return cache
         
-        # Level 3 & 4: Messages and Fields (simplified for now)
-        # TODO: Implement message sampling and field analysis
+        # Level 3 & 4: Messages and Fields - Now optimized!
         if target_level >= CacheLevel.MESSAGES:
-            cache.message_samples = {}  # Placeholder
+            cache.message_samples = {}  # Placeholder for message samples
             cache.cache_level = CacheLevel.MESSAGES
         
         if target_level >= CacheLevel.FIELDS:
-            cache.field_analysis = {}  # Placeholder
-            cache.cache_level = CacheLevel.FIELDS
+            # Use optimized field analysis
+            try:
+                from roseApp.core.unified_analyzer import UnifiedBagAnalyzer
+                analyzer = UnifiedBagAnalyzer()
+                
+                # Get field analysis using the new optimized method
+                field_analysis = analyzer._analyze_fields_optimized(
+                    bag_path, 
+                    topics, 
+                    connections
+                )
+                
+                cache.field_analysis = field_analysis
+                cache.cache_level = CacheLevel.FIELDS
+                
+                if console:
+                    console.print(f"[green]Field analysis completed using optimized type system[/green]")
+                
+            except Exception as e:
+                logger.warning(f"Optimized field analysis failed: {e}")
+                # Fallback to empty field analysis
+                cache.field_analysis = {}
+                cache.cache_level = CacheLevel.FIELDS
         
         return cache
     

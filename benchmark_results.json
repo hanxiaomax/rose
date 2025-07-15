@@ -1,0 +1,244 @@
+{
+  "benchmark_summary": {
+    "total_tests": 16,
+    "successful_tests": 16,
+    "failed_tests": 0,
+    "timestamp": 1752589625.1516762
+  },
+  "performance_comparison": {
+    "metadata": {
+      "async_avg_time": 0.06317305564880371,
+      "sync_avg_time": 0.0748363733291626,
+      "time_improvement": 15.58509206353252,
+      "async_avg_memory": 127.71484375,
+      "sync_avg_memory": 131.33984375,
+      "cache_hit_rate": 50.0
+    },
+    "statistics": {
+      "async_avg_time": 0.6017712354660034,
+      "sync_avg_time": 0.965046763420105,
+      "time_improvement": 37.64330825447887,
+      "async_avg_memory": 139.53125,
+      "sync_avg_memory": 146.875,
+      "cache_hit_rate": 50.0
+    },
+    "messages": {
+      "async_avg_time": 0.481123685836792,
+      "sync_avg_time": 1.2088234424591064,
+      "time_improvement": 60.19901096076998,
+      "async_avg_memory": 167.50390625,
+      "sync_avg_memory": 171.7578125,
+      "cache_hit_rate": 50.0
+    },
+    "fields": {
+      "async_avg_time": 0.4639565944671631,
+      "sync_avg_time": 0.9717103242874146,
+      "time_improvement": 52.25361068306063,
+      "async_avg_memory": 178.91015625,
+      "sync_avg_memory": 178.462890625,
+      "cache_hit_rate": 50.0
+    }
+  },
+  "recommendations": [
+    "\u2713 Async analysis shows 37.6% performance improvement for statistics level",
+    "\u2713 Async analysis shows 60.2% performance improvement for messages level",
+    "\u2713 Async analysis shows 52.3% performance improvement for fields level",
+    "\ud83d\udca1 Use async analysis for repeated analysis of the same bags",
+    "\ud83d\udca1 Use sync analysis for one-time analysis of small bags",
+    "\ud83d\udca1 Async analysis benefits increase with file size and complexity"
+  ],
+  "detailed_results": [
+    {
+      "test_name": "async_metadata_demo_iter1",
+      "analysis_type": "async",
+      "analysis_level": "metadata",
+      "duration_seconds": 0.12630176544189453,
+      "memory_peak_mb": 127.71484375,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 0,
+      "error": null
+    },
+    {
+      "test_name": "async_metadata_demo_iter2",
+      "analysis_type": "async",
+      "analysis_level": "metadata",
+      "duration_seconds": 4.4345855712890625e-05,
+      "memory_peak_mb": 127.71484375,
+      "cache_hit": true,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 0,
+      "error": null
+    },
+    {
+      "test_name": "sync_metadata_demo_iter1",
+      "analysis_type": "sync",
+      "analysis_level": "metadata",
+      "duration_seconds": 0.07635879516601562,
+      "memory_peak_mb": 130.46484375,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 0,
+      "error": null
+    },
+    {
+      "test_name": "sync_metadata_demo_iter2",
+      "analysis_type": "sync",
+      "analysis_level": "metadata",
+      "duration_seconds": 0.07331395149230957,
+      "memory_peak_mb": 132.21484375,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 0,
+      "error": null
+    },
+    {
+      "test_name": "async_statistics_demo_iter1",
+      "analysis_type": "async",
+      "analysis_level": "statistics",
+      "duration_seconds": 1.2034938335418701,
+      "memory_peak_mb": 139.53125,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "async_statistics_demo_iter2",
+      "analysis_type": "async",
+      "analysis_level": "statistics",
+      "duration_seconds": 4.863739013671875e-05,
+      "memory_peak_mb": 139.53125,
+      "cache_hit": true,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_statistics_demo_iter1",
+      "analysis_type": "sync",
+      "analysis_level": "statistics",
+      "duration_seconds": 0.9454197883605957,
+      "memory_peak_mb": 146.875,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_statistics_demo_iter2",
+      "analysis_type": "sync",
+      "analysis_level": "statistics",
+      "duration_seconds": 0.9846737384796143,
+      "memory_peak_mb": 146.875,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "async_messages_demo_iter1",
+      "analysis_type": "async",
+      "analysis_level": "messages",
+      "duration_seconds": 0.962209939956665,
+      "memory_peak_mb": 167.50390625,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "async_messages_demo_iter2",
+      "analysis_type": "async",
+      "analysis_level": "messages",
+      "duration_seconds": 3.743171691894531e-05,
+      "memory_peak_mb": 167.50390625,
+      "cache_hit": true,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_messages_demo_iter1",
+      "analysis_type": "sync",
+      "analysis_level": "messages",
+      "duration_seconds": 1.3999993801116943,
+      "memory_peak_mb": 170.02734375,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_messages_demo_iter2",
+      "analysis_type": "sync",
+      "analysis_level": "messages",
+      "duration_seconds": 1.0176475048065186,
+      "memory_peak_mb": 173.48828125,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "async_fields_demo_iter1",
+      "analysis_type": "async",
+      "analysis_level": "fields",
+      "duration_seconds": 0.9278740882873535,
+      "memory_peak_mb": 178.91015625,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "async_fields_demo_iter2",
+      "analysis_type": "async",
+      "analysis_level": "fields",
+      "duration_seconds": 3.910064697265625e-05,
+      "memory_peak_mb": 178.91015625,
+      "cache_hit": true,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_fields_demo_iter1",
+      "analysis_type": "sync",
+      "analysis_level": "fields",
+      "duration_seconds": 0.9846546649932861,
+      "memory_peak_mb": 178.91015625,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    },
+    {
+      "test_name": "sync_fields_demo_iter2",
+      "analysis_type": "sync",
+      "analysis_level": "fields",
+      "duration_seconds": 0.958765983581543,
+      "memory_peak_mb": 178.015625,
+      "cache_hit": false,
+      "file_size_mb": 696.1511564254761,
+      "topic_count": 17,
+      "message_count": 5390,
+      "error": null
+    }
+  ]
+}

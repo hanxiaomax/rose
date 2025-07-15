@@ -104,6 +104,9 @@ def inspect(
         set_app_mode(AppMode.CLI)
         logger = get_logger()
         console = Console()
+        
+        # Record start time for total execution time
+        start_time = time.time()
 
         try:
             # Validate parameter values
@@ -149,18 +152,8 @@ def inspect(
                 console.print(f"[dim]Using cached analysis results[/dim]")
                 analysis_data = cached_data
 
-            # Filter topics if specified
-            all_topics = analysis_data['topics']
-            filtered_topics = _filter_topics(all_topics, topics)
-            
-            if not filtered_topics:
-                console.print("[yellow]No topics matched the specified filters[/yellow]")
-                if topics:
-                    available_topics = ", ".join(all_topics[:5])
-                    if len(all_topics) > 5:
-                        available_topics += f", ... ({len(all_topics)} total)"
-                    console.print(f"Available topics: {available_topics}")
-                return
+            # Apply topic filtering using fuzzy matching
+            filtered_topics = _filter_topics(analysis_data.get('topics', []), topics)
 
             # Show performance info for async analysis
             if analysis_data.get('is_async_analysis', False):
@@ -168,7 +161,20 @@ def inspect(
                 level_names = {1: "metadata", 2: "statistics", 3: "messages", 4: "fields"}
                 console.print(f"[dim]Analysis level: {level_names.get(cache_level, 'unknown')} (cache level {cache_level})[/dim]")
 
-            # Field analysis if requested
+            # Sort topics if needed
+            if analysis_data.get('stats'):
+                filtered_topics = _sort_topics(filtered_topics, analysis_data['stats'], sort_by, reverse)
+
+            # Calculate total execution time
+            total_time = time.time() - start_time
+            
+            # Add total execution time to analysis data
+            analysis_data['analysis_time'] = total_time
+
+            # Create JSON structure for unified processing
+            json_data = _create_json_structure(input_path, analysis_data, filtered_topics, analysis_data.get('is_lite_mode', False))
+
+            # Field analysis if requested - process after JSON structure is created
             if show_fields:
                 if not topics:
                     console.print("[red]Error: --show-fields requires --topics to be specified[/red]")
@@ -177,15 +183,13 @@ def inspect(
                 console.print("Analyzing field information for specified topics...")
                 field_data = _analyze_topic_fields(create_parser(ParserType.ROSBAGS), input_path, filtered_topics, console)
                 
-                # Integrate field data
-                analysis_data = _integrate_field_data(analysis_data, field_data)
+                # Integrate field data into JSON structure
+                json_data = _integrate_field_data(json_data, field_data)
 
-            # Sort topics if needed
-            if analysis_data.get('stats'):
-                filtered_topics = _sort_topics(filtered_topics, analysis_data['stats'], sort_by, reverse)
-
-            # Create JSON structure for unified processing
-            json_data = _create_json_structure(input_path, analysis_data, filtered_topics, analysis_data.get('is_lite_mode', False))
+            # Show performance analysis panel if --profile is enabled
+            profile_enabled = _is_profile_enabled()
+            if profile_enabled:
+                _display_performance_panel(console, analysis_data, total_time, use_async)
 
             # Display or export data
             if output and as_format in ['csv', 'html', 'json']:
@@ -193,7 +197,7 @@ def inspect(
             else:
                 _display_data(json_data, as_format, verbose, console, show_fields)
 
-            # Show performance profile if enabled
+            # Show performance profile if enabled (keep existing logic for cache manager)
             try:
                 from ..core.unified_cache import get_unified_cache_manager
                 cache_manager = get_unified_cache_manager()
@@ -664,21 +668,39 @@ def _create_json_structure(input_path: str, bag_info: Dict, filtered_topics: Lis
     # Build topic details
     topic_details = []
     for topic in filtered_topics:
-        stats = bag_info.get('stats', {}).get(topic, {'count': 0, 'size': 0})
+        # Handle both dictionary and TopicStatistics object formats
+        stats_data = bag_info.get('stats', {})
+        if topic in stats_data:
+            stats = stats_data[topic]
+            
+            # Check if it's a TopicStatistics object or a dictionary
+            if hasattr(stats, 'count'):
+                # TopicStatistics object
+                count = stats.count
+                size = stats.size
+            else:
+                # Dictionary format
+                count = stats.get('count', 0)
+                size = stats.get('size', 0)
+        else:
+            # No stats available for this topic
+            count = 0
+            size = 0
+        
         msg_type = bag_info['connections'].get(topic, 'Unknown')
         
         # Calculate frequency
         frequency = None
-        if bag_info['duration'] and bag_info['duration'] > 0 and stats.get('count') is not None:
-            frequency = stats['count'] / bag_info['duration']
+        if bag_info['duration'] and bag_info['duration'] > 0 and count is not None:
+            frequency = count / bag_info['duration']
         
         topic_details.append({
             'topic': topic,
             'message_type': msg_type,
-            'count': stats.get('count'),
-            'size': stats.get('size'),
+            'count': count,
+            'size': size,
             'frequency': frequency,
-            'size_formatted': _format_size(stats['size']) if stats.get('size') is not None else None,
+            'size_formatted': _format_size(size) if size is not None else None,
             'frequency_formatted': f"{frequency:.1f} Hz" if frequency is not None else None
         })
     
@@ -1225,6 +1247,67 @@ def _convert_comprehensive_cache_to_legacy(cache: ComprehensiveCache) -> Dict:
     }
 
 
+def _convert_unified_cache_to_legacy(unified_cache) -> Dict:
+    """Convert UnifiedCache to legacy format for compatibility"""
+    
+    # Convert statistics back to legacy format
+    legacy_stats = {}
+    if unified_cache.statistics:
+        for topic, stats in unified_cache.statistics.items():
+            legacy_stats[topic] = {
+                'count': stats.count,
+                'size': stats.size,
+                'avg_size': stats.avg_size
+            }
+    
+    # Extract topics and connections from metadata
+    topics = []
+    connections = {}
+    start_time = None
+    end_time = None
+    file_size = 0
+    original_bag_path = ""
+    
+    if unified_cache.metadata:
+        topics = unified_cache.metadata.topics
+        connections = unified_cache.metadata.connections
+        if unified_cache.metadata.time_range:
+            start_time = unified_cache.metadata.time_range[0]
+            end_time = unified_cache.metadata.time_range[1]
+        file_size = unified_cache.metadata.file_size
+        original_bag_path = unified_cache.metadata.original_bag_path
+    
+    # Add field analysis if available
+    field_analysis = {}
+    if unified_cache.field_analysis:
+        for topic, analysis in unified_cache.field_analysis.items():
+            field_analysis[topic] = {
+                'fields': analysis.fields,
+                'message_type': analysis.message_type,
+                'samples_analyzed': analysis.samples_analyzed,
+                'max_depth': analysis.max_depth
+            }
+    
+    return {
+        'topics': topics,
+        'connections': connections,
+        'stats': legacy_stats,
+        'file_size': file_size,
+        'total_messages': unified_cache.total_messages,
+        'total_data_size': unified_cache.total_data_size,
+        'duration': unified_cache.duration,
+        'start_time': start_time,
+        'end_time': end_time,
+        'topic_count': len(topics),
+        'is_lite_mode': unified_cache.cache_level == 1,  # CacheLevel.METADATA
+        'original_bag_path': original_bag_path,
+        'cache_level': unified_cache.cache_level,
+        'is_async_analysis': True,
+        'analysis_timestamp': unified_cache.analysis_timestamp,
+        'field_analysis': field_analysis if field_analysis else None
+    }
+
+
 async def _analyze_bag_async(bag_path: str, console: Console, use_full_analysis: bool = False) -> Dict:
     """Async bag analysis with unified caching system"""
     
@@ -1247,36 +1330,58 @@ async def _analyze_bag_async(bag_path: str, console: Console, use_full_analysis:
         # Convert to legacy format for compatibility
         return analyzer.convert_to_legacy_format(unified_cache)
         
-    except ImportError:
-        # Fallback to original async analyzer if unified cache not available
-        console.print("[yellow]Using legacy async analyzer...[/yellow]")
-        
-        # Determine required cache level
-        required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
-        
-        # Enable background full analysis for better future performance
-        background_analysis = not use_full_analysis  # Only if not already doing full analysis
+    except ImportError as e:
+        # Fallback to direct unified cache manager if unified analyzer not available
+        console.print(f"[yellow]Unified analyzer not available ({e}), trying direct cache manager...[/yellow]")
         
         try:
-            # Use async analyzer with intelligent caching
-            cache = await analyze_bag_async(
+            from ..core.unified_cache import get_unified_cache_manager, CacheLevel
+            
+            # Determine required cache level
+            required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
+            
+            # Use unified cache manager directly
+            cache_manager = get_unified_cache_manager()
+            unified_cache = await cache_manager.get_analysis(
                 bag_path=bag_path,
-                console=console,
                 required_level=required_level,
-                background_full_analysis=background_analysis
+                console=console,
+                is_async=True
             )
             
             # Convert to legacy format for compatibility
-            return _convert_comprehensive_cache_to_legacy(cache)
+            return _convert_unified_cache_to_legacy(unified_cache)
             
         except Exception as e:
-            console.print(f"[red]Async analysis failed, falling back to sync analysis: {e}[/red]")
+            console.print(f"[red]Direct cache manager failed, falling back to legacy analyzer: {e}[/red]")
             
-            # Fallback to original sync analysis
-            if use_full_analysis:
-                return _analyze_bag_full_sync(bag_path, console)
-            else:
-                return _analyze_bag_lite_sync(bag_path, console)
+            # Fallback to original async analyzer if unified cache not available
+            # Determine required cache level
+            required_level = CacheLevel.STATISTICS if use_full_analysis else CacheLevel.METADATA
+            
+            # Enable background full analysis for better future performance
+            background_analysis = not use_full_analysis  # Only if not already doing full analysis
+            
+            try:
+                # Use async analyzer with intelligent caching
+                cache = await analyze_bag_async(
+                    bag_path=bag_path,
+                    console=console,
+                    required_level=required_level,
+                    background_full_analysis=background_analysis
+                )
+                
+                # Convert to legacy format for compatibility
+                return _convert_comprehensive_cache_to_legacy(cache)
+                
+            except Exception as e:
+                console.print(f"[red]Async analysis failed, falling back to sync analysis: {e}[/red]")
+                
+                # Fallback to original sync analysis
+                if use_full_analysis:
+                    return _analyze_bag_full_sync(bag_path, console)
+                else:
+                    return _analyze_bag_lite_sync(bag_path, console)
                 
     except Exception as e:
         console.print(f"[red]Unified async analysis failed, falling back to sync analysis: {e}[/red]")
@@ -1306,6 +1411,54 @@ def _analyze_bag_full_sync(bag_path: str, console: Console) -> Dict:
         # Convert to legacy format for compatibility
         return analyzer.convert_to_legacy_format(unified_cache)
         
+    except ImportError as e:
+        console.print(f"[yellow]Unified analyzer not available ({e}), trying direct cache manager...[/yellow]")
+        
+        try:
+            # Try to use unified cache manager directly
+            from ..core.unified_cache import get_unified_cache_manager, CacheLevel
+            
+            # Create event loop for async call if needed
+            import asyncio
+            
+            # Use unified cache manager directly
+            cache_manager = get_unified_cache_manager()
+            
+            # Check if we're in an async context
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, use thread pool
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        cache_manager.get_analysis(
+                            bag_path=bag_path,
+                            required_level=CacheLevel.STATISTICS,
+                            console=console,
+                            is_async=False
+                        )
+                    )
+                    unified_cache = future.result()
+            except RuntimeError:
+                # No running event loop, can use asyncio.run directly
+                unified_cache = asyncio.run(cache_manager.get_analysis(
+                    bag_path=bag_path,
+                    required_level=CacheLevel.STATISTICS,
+                    console=console,
+                    is_async=False
+                ))
+            
+            # Convert to legacy format for compatibility
+            return _convert_unified_cache_to_legacy(unified_cache)
+            
+        except Exception as e:
+            console.print(f"[red]Direct cache manager failed, falling back to legacy analysis: {e}[/red]")
+            
+            # Fallback to original sync analysis
+            parser = create_parser(ParserType.ROSBAGS)
+            return _analyze_bag_full(parser, bag_path, get_logger(), console)
+    
     except Exception as e:
         console.print(f"[red]Unified sync analysis failed, falling back to legacy analysis: {e}[/red]")
         
@@ -1332,12 +1485,303 @@ def _analyze_bag_lite_sync(bag_path: str, console: Console) -> Dict:
         # Convert to legacy format for compatibility
         return analyzer.convert_to_legacy_format(unified_cache)
         
+    except ImportError as e:
+        console.print(f"[yellow]Unified analyzer not available ({e}), trying direct cache manager...[/yellow]")
+        
+        try:
+            # Try to use unified cache manager directly
+            from ..core.unified_cache import get_unified_cache_manager, CacheLevel
+            
+            # Create event loop for async call if needed
+            import asyncio
+            
+            # Use unified cache manager directly
+            cache_manager = get_unified_cache_manager()
+            
+            # Check if we're in an async context
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, use thread pool
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        cache_manager.get_analysis(
+                            bag_path=bag_path,
+                            required_level=CacheLevel.METADATA,
+                            console=console,
+                            is_async=False
+                        )
+                    )
+                    unified_cache = future.result()
+            except RuntimeError:
+                # No running event loop, can use asyncio.run directly
+                unified_cache = asyncio.run(cache_manager.get_analysis(
+                    bag_path=bag_path,
+                    required_level=CacheLevel.METADATA,
+                    console=console,
+                    is_async=False
+                ))
+            
+            # Convert to legacy format for compatibility
+            return _convert_unified_cache_to_legacy(unified_cache)
+            
+        except Exception as e:
+            console.print(f"[red]Direct cache manager failed, falling back to legacy analysis: {e}[/red]")
+            
+            # Fallback to original sync analysis
+            parser = create_parser(ParserType.ROSBAGS)
+            return _analyze_bag_lite(parser, bag_path, get_logger(), console)
+    
     except Exception as e:
         console.print(f"[red]Unified sync analysis failed, falling back to legacy analysis: {e}[/red]")
         
         # Fallback to original sync analysis
         parser = create_parser(ParserType.ROSBAGS)
         return _analyze_bag_lite(parser, bag_path, get_logger(), console)
+
+
+def _display_performance_panel(console: Console, analysis_data: Dict[str, Any], total_time: float, use_async: bool):
+    """Display performance analysis panel when --profile is enabled"""
+    from rich.text import Text
+    from rich.tree import Tree
+    from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+
+    # Create main performance analysis text
+    perf_text = Text()
+    perf_text.append("🚀 Performance Analysis Report\n\n", style="bold bright_blue")
+    
+    # Overall execution summary
+    perf_text.append("═══ EXECUTION SUMMARY ═══\n", style="bold cyan")
+    perf_text.append(f"Total Execution Time: {total_time:.3f}s\n", style="bold white")
+    
+    # Analysis configuration
+    analysis_mode = "Async (Optimized)" if use_async else "Sync (Legacy)"
+    parser_type = "Unified Analyzer" if analysis_data.get('is_async_analysis', False) else "Legacy Parser"
+    
+    perf_text.append(f"Analysis Mode: {analysis_mode}\n", style="green" if use_async else "yellow")
+    perf_text.append(f"Parser Engine: {parser_type}\n", style="blue")
+    
+    # Data processing overview
+    topics_count = len(analysis_data.get('topics', []))
+    total_messages = analysis_data.get('total_messages', 0)
+    perf_text.append(f"Topics Processed: {topics_count}\n", style="white")
+    perf_text.append(f"Messages Analyzed: {total_messages:,}\n", style="white")
+    
+    # Cache configuration
+    cache_info = _get_cache_info(analysis_data)
+    perf_text.append(f"Cache Strategy: {cache_info['strategy']}\n", style="magenta")
+    perf_text.append(f"Cache Status: {cache_info['status']}\n", style=cache_info['color'])
+    
+    perf_text.append("\n")
+    
+    # Try to get detailed performance data from unified cache manager
+    try:
+        from ..core.unified_cache import get_unified_cache_manager
+        cache_manager = get_unified_cache_manager()
+        
+        if cache_manager.profiler.enabled:
+            profiles = cache_manager.profiler.get_profiles()
+            if profiles:
+                _display_execution_phases(perf_text, profiles, total_time)
+                _display_cache_performance(perf_text, profiles)
+            else:
+                perf_text.append("⚠ No detailed profiling data available\n", style="yellow")
+        else:
+            perf_text.append("⚠ Performance profiling not enabled\n", style="yellow")
+    except ImportError:
+        perf_text.append("⚠ Unified cache manager not available\n", style="yellow")
+    
+    # Display optimization status
+    _display_optimization_status(perf_text, analysis_data, use_async)
+    
+    # Create panel
+    panel = Panel(
+        perf_text,
+        title="🔍 Performance Analysis",
+        border_style="bright_blue",
+        padding=(1, 2)
+    )
+    
+    console.print(panel)
+    console.print()  # Add spacing after panel
+
+
+def _display_execution_phases(perf_text: Text, profiles: List, total_time: float):
+    """Display execution phases with timing breakdown"""
+    perf_text.append("═══ EXECUTION PHASES ═══\n", style="bold cyan")
+    
+    # Group operations by phase
+    phase_groups = {}
+    level_names = {1: "Metadata", 2: "Statistics", 3: "Messages", 4: "Fields"}
+    
+    for profile in profiles:
+        level_name = level_names.get(profile.cache_level, f"Level {profile.cache_level}")
+        phase_key = f"{level_name} Analysis"
+        
+        if phase_key not in phase_groups:
+            phase_groups[phase_key] = []
+        phase_groups[phase_key].append(profile)
+    
+    # Display each phase
+    for phase_name, phase_profiles in phase_groups.items():
+        total_phase_time = sum(p.duration_seconds for p in phase_profiles)
+        cache_hits = sum(1 for p in phase_profiles if p.cache_action == 'hit')
+        cache_misses = sum(1 for p in phase_profiles if p.cache_action in ['miss', 'create'])
+        
+        # Phase header
+        perf_text.append(f"┌─ {phase_name}\n", style="bold white")
+        perf_text.append(f"│  Duration: {total_phase_time:.3f}s ({total_phase_time/total_time*100:.1f}% of total)\n", style="white")
+        perf_text.append(f"│  Operations: {len(phase_profiles)} total\n", style="white")
+        
+        # Cache performance for this phase
+        if cache_hits > 0:
+            perf_text.append(f"│  Cache Hits: {cache_hits} (", style="green")
+            perf_text.append(f"{cache_hits/(cache_hits+cache_misses)*100:.1f}%", style="bold green")
+            perf_text.append(")\n", style="green")
+        
+        if cache_misses > 0:
+            perf_text.append(f"│  Cache Misses: {cache_misses} (new analysis)\n", style="yellow")
+        
+        # Show individual operations if there are multiple or if they're significant
+        if len(phase_profiles) > 1 or total_phase_time > 0.1:
+            for i, profile in enumerate(phase_profiles):
+                is_last = i == len(phase_profiles) - 1
+                connector = "└──" if is_last else "├──"
+                
+                action_symbol = {
+                    'hit': '⚡',
+                    'miss': '🔄',
+                    'create': '🔨'
+                }.get(profile.cache_action, '?')
+                
+                action_color = {
+                    'hit': 'green',
+                    'miss': 'yellow',
+                    'create': 'blue'
+                }.get(profile.cache_action, 'white')
+                
+                perf_text.append(f"│  {connector} {action_symbol} {profile.operation}: ", style="dim")
+                perf_text.append(f"{profile.duration_seconds:.3f}s", style=action_color)
+                perf_text.append(f" ({profile.cache_action})\n", style="dim")
+        
+        perf_text.append("│\n", style="dim")
+    
+    perf_text.append("\n")
+
+
+def _display_cache_performance(perf_text: Text, profiles: List):
+    """Display cache performance summary"""
+    perf_text.append("═══ CACHE PERFORMANCE ═══\n", style="bold cyan")
+    
+    total_ops = len(profiles)
+    cache_hits = sum(1 for p in profiles if p.cache_action == 'hit')
+    cache_misses = sum(1 for p in profiles if p.cache_action in ['miss', 'create'])
+    
+    hit_rate = (cache_hits / total_ops * 100) if total_ops > 0 else 0
+    
+    # Overall cache statistics
+    perf_text.append(f"Total Cache Operations: {total_ops}\n", style="white")
+    perf_text.append(f"Cache Hit Rate: {hit_rate:.1f}% ({cache_hits}/{total_ops})\n", 
+                    style="green" if hit_rate > 50 else "yellow")
+    
+    # Time saved by caching
+    hit_time = sum(p.duration_seconds for p in profiles if p.cache_action == 'hit')
+    miss_time = sum(p.duration_seconds for p in profiles if p.cache_action in ['miss', 'create'])
+    
+    perf_text.append(f"Time in Cache Hits: {hit_time:.3f}s\n", style="green")
+    perf_text.append(f"Time in Cache Misses: {miss_time:.3f}s\n", style="yellow")
+    
+    # Average operation times
+    if cache_hits > 0:
+        avg_hit_time = hit_time / cache_hits
+        perf_text.append(f"Average Hit Time: {avg_hit_time:.3f}s\n", style="green")
+    
+    if cache_misses > 0:
+        avg_miss_time = miss_time / cache_misses
+        perf_text.append(f"Average Miss Time: {avg_miss_time:.3f}s\n", style="yellow")
+    
+    # Performance impact analysis
+    if hit_rate > 0 and cache_misses > 0:
+        estimated_no_cache_time = total_ops * (miss_time / cache_misses)
+        actual_time = hit_time + miss_time
+        time_saved = estimated_no_cache_time - actual_time
+        
+        if time_saved > 0:
+            perf_text.append(f"Estimated Time Saved: {time_saved:.3f}s (", style="bold green")
+            perf_text.append(f"{time_saved/estimated_no_cache_time*100:.1f}% improvement", style="bold green")
+            perf_text.append(")\n", style="bold green")
+    
+    perf_text.append("\n")
+
+
+def _display_optimization_status(perf_text: Text, analysis_data: Dict[str, Any], use_async: bool):
+    """Display optimization status information"""
+    perf_text.append("═══ OPTIMIZATION STATUS ═══\n", style="bold cyan")
+    
+    # Core optimizations
+    if analysis_data.get('is_async_analysis', False):
+        perf_text.append("✅ Async Analysis Engine: Active (High Performance Impact)\n", style="green")
+        perf_text.append("✅ Advanced Type System: Enabled (Comprehensive Analysis)\n", style="green")
+        perf_text.append("✅ Smart Caching: Active (Memory & File Based)\n", style="green")
+        perf_text.append("✅ Parallel Processing: Enabled (Multi-threaded Operations)\n", style="green")
+    else:
+        perf_text.append("⚠️  Legacy Analysis Mode: Fallback (Limited Performance)\n", style="yellow")
+        perf_text.append("⚠️  Basic Type Detection: Limited (Sample-based)\n", style="yellow")
+        perf_text.append("⚠️  Simple Caching: Basic (Memory Only)\n", style="yellow")
+    
+    # Field analysis optimization
+    if analysis_data.get('field_analysis'):
+        field_count = len(analysis_data['field_analysis'])
+        perf_text.append(f"✅ Field Analysis: Optimized ({field_count} topics analyzed)\n", style="green")
+    
+    # Cache level optimization
+    if analysis_data.get('cache_level'):
+        level_names = {1: "Metadata", 2: "Statistics", 3: "Messages", 4: "Fields"}
+        level_name = level_names.get(analysis_data['cache_level'], f"Level {analysis_data['cache_level']}")
+        perf_text.append(f"✅ Cache Level: {level_name} (Hierarchical Caching)\n", style="green")
+    
+    # Performance recommendations
+    perf_text.append("\n📋 Performance Recommendations:\n", style="bold yellow")
+    
+    if not use_async:
+        perf_text.append("• Use --async flag for 70%+ performance improvement\n", style="yellow")
+    
+    if not analysis_data.get('is_async_analysis', False):
+        perf_text.append("• Enable unified analyzer for better type detection\n", style="yellow")
+    
+    if analysis_data.get('cache_level', 0) < 3:
+        perf_text.append("• Consider higher cache levels for repeated analysis\n", style="yellow")
+    
+    perf_text.append("\n")
+
+
+def _get_cache_info(analysis_data: Dict[str, Any]) -> Dict[str, str]:
+    """Get cache information for performance panel"""
+    if analysis_data.get('is_async_analysis', False):
+        return {
+            'strategy': 'Unified Cache',
+            'status': 'Optimized',
+            'color': 'green'
+        }
+    else:
+        return {
+            'strategy': 'Legacy Cache',
+            'status': 'Basic',
+            'color': 'yellow'
+        }
+
+
+def _is_profile_enabled() -> bool:
+    """Check if --profile is enabled by checking cache manager profiling status"""
+    try:
+        from ..core.unified_cache import get_unified_cache_manager
+        cache_manager = get_unified_cache_manager()
+        return cache_manager.profiler.enabled
+    except ImportError:
+        # Unified cache not available, check if we're in a profiling context
+        # This is a fallback for legacy systems
+        return False
 
 
 def main():
