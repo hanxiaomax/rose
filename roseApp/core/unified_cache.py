@@ -88,37 +88,18 @@ class PerformanceProfiler:
         if not self.enabled or not self.profiles:
             return
         
-        console.print("\n[bold cyan]Performance Profile Summary[/bold cyan]")
-        
-        from rich.table import Table
-        table = Table(title="Analysis Performance")
-        table.add_column("Operation", style="cyan")
-        table.add_column("Duration", style="yellow")
-        table.add_column("Cache Action", style="green")
-        table.add_column("Cache Level", style="blue")
+        console.print("\nPerformance Profile Summary")
+        console.print("Operations:")
         
         for profile in self.profiles:
-            cache_action_color = {
-                'hit': 'green',
-                'miss': 'yellow', 
-                'create': 'blue'
-            }.get(profile.cache_action, 'white')
-            
-            table.add_row(
-                profile.operation,
-                f"{profile.duration_seconds:.3f}s",
-                f"[{cache_action_color}]{profile.cache_action}[/{cache_action_color}]",
-                str(profile.cache_level)
-            )
-        
-        console.print(table)
+            console.print(f"  {profile.operation}: {profile.duration_seconds:.3f}s ({profile.cache_action}, level {profile.cache_level})")
         
         # Summary statistics
         total_time = sum(p.duration_seconds for p in self.profiles)
         cache_hits = sum(1 for p in self.profiles if p.cache_action == 'hit')
         total_ops = len(self.profiles)
         
-        console.print(f"\n[bold]Summary:[/bold]")
+        console.print(f"\nSummary:")
         console.print(f"  Total time: {total_time:.3f}s")
         console.print(f"  Cache hit rate: {cache_hits}/{total_ops} ({cache_hits/total_ops*100:.1f}%)")
 

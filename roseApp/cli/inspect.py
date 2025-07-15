@@ -1549,29 +1549,29 @@ def _display_performance_panel(console: Console, analysis_data: Dict[str, Any], 
 
     # Create main performance analysis text
     perf_text = Text()
-    perf_text.append("🚀 Performance Analysis Report\n\n", style="bold bright_blue")
+    perf_text.append("Performance Analysis Report\n\n", style="bold")
     
     # Overall execution summary
-    perf_text.append("═══ EXECUTION SUMMARY ═══\n", style="bold cyan")
-    perf_text.append(f"Total Execution Time: {total_time:.3f}s\n", style="bold white")
+    perf_text.append("Execution Summary:\n", style="bold")
+    perf_text.append(f"  Total Time: {total_time:.3f}s\n")
     
     # Analysis configuration
     analysis_mode = "Async (Optimized)" if use_async else "Sync (Legacy)"
     parser_type = "Unified Analyzer" if analysis_data.get('is_async_analysis', False) else "Legacy Parser"
     
-    perf_text.append(f"Analysis Mode: {analysis_mode}\n", style="green" if use_async else "yellow")
-    perf_text.append(f"Parser Engine: {parser_type}\n", style="blue")
+    perf_text.append(f"  Analysis Mode: {analysis_mode}\n")
+    perf_text.append(f"  Parser Engine: {parser_type}\n")
     
     # Data processing overview
     topics_count = len(analysis_data.get('topics', []))
     total_messages = analysis_data.get('total_messages', 0)
-    perf_text.append(f"Topics Processed: {topics_count}\n", style="white")
-    perf_text.append(f"Messages Analyzed: {total_messages:,}\n", style="white")
+    perf_text.append(f"  Topics Processed: {topics_count}\n")
+    perf_text.append(f"  Messages Analyzed: {total_messages:,}\n")
     
     # Cache configuration
     cache_info = _get_cache_info(analysis_data)
-    perf_text.append(f"Cache Strategy: {cache_info['strategy']}\n", style="magenta")
-    perf_text.append(f"Cache Status: {cache_info['status']}\n", style=cache_info['color'])
+    perf_text.append(f"  Cache Strategy: {cache_info['strategy']}\n")
+    perf_text.append(f"  Cache Status: {cache_info['status']}\n")
     
     perf_text.append("\n")
     
@@ -1609,7 +1609,7 @@ def _display_performance_panel(console: Console, analysis_data: Dict[str, Any], 
 
 def _display_execution_phases(perf_text: Text, profiles: List, total_time: float):
     """Display execution phases with timing breakdown"""
-    perf_text.append("═══ EXECUTION PHASES ═══\n", style="bold cyan")
+    perf_text.append("Execution Phases:\n", style="bold")
     
     # Group operations by phase
     phase_groups = {}
@@ -1629,50 +1629,19 @@ def _display_execution_phases(perf_text: Text, profiles: List, total_time: float
         cache_hits = sum(1 for p in phase_profiles if p.cache_action == 'hit')
         cache_misses = sum(1 for p in phase_profiles if p.cache_action in ['miss', 'create'])
         
-        # Phase header
-        perf_text.append(f"┌─ {phase_name}\n", style="bold white")
-        perf_text.append(f"│  Duration: {total_phase_time:.3f}s ({total_phase_time/total_time*100:.1f}% of total)\n", style="white")
-        perf_text.append(f"│  Operations: {len(phase_profiles)} total\n", style="white")
+        perf_text.append(f"  {phase_name}: {total_phase_time:.3f}s ({total_phase_time/total_time*100:.1f}%)\n")
         
         # Cache performance for this phase
-        if cache_hits > 0:
-            perf_text.append(f"│  Cache Hits: {cache_hits} (", style="green")
-            perf_text.append(f"{cache_hits/(cache_hits+cache_misses)*100:.1f}%", style="bold green")
-            perf_text.append(")\n", style="green")
-        
-        if cache_misses > 0:
-            perf_text.append(f"│  Cache Misses: {cache_misses} (new analysis)\n", style="yellow")
-        
-        # Show individual operations if there are multiple or if they're significant
-        if len(phase_profiles) > 1 or total_phase_time > 0.1:
-            for i, profile in enumerate(phase_profiles):
-                is_last = i == len(phase_profiles) - 1
-                connector = "└──" if is_last else "├──"
-                
-                action_symbol = {
-                    'hit': '⚡',
-                    'miss': '🔄',
-                    'create': '🔨'
-                }.get(profile.cache_action, '?')
-                
-                action_color = {
-                    'hit': 'green',
-                    'miss': 'yellow',
-                    'create': 'blue'
-                }.get(profile.cache_action, 'white')
-                
-                perf_text.append(f"│  {connector} {action_symbol} {profile.operation}: ", style="dim")
-                perf_text.append(f"{profile.duration_seconds:.3f}s", style=action_color)
-                perf_text.append(f" ({profile.cache_action})\n", style="dim")
-        
-        perf_text.append("│\n", style="dim")
+        if cache_hits > 0 or cache_misses > 0:
+            hit_rate = cache_hits / (cache_hits + cache_misses) * 100
+            perf_text.append(f"    Cache: {cache_hits} hits, {cache_misses} misses ({hit_rate:.1f}%)\n")
     
     perf_text.append("\n")
 
 
 def _display_cache_performance(perf_text: Text, profiles: List):
     """Display cache performance summary"""
-    perf_text.append("═══ CACHE PERFORMANCE ═══\n", style="bold cyan")
+    perf_text.append("Cache Performance:\n", style="bold")
     
     total_ops = len(profiles)
     cache_hits = sum(1 for p in profiles if p.cache_action == 'hit')
@@ -1681,25 +1650,24 @@ def _display_cache_performance(perf_text: Text, profiles: List):
     hit_rate = (cache_hits / total_ops * 100) if total_ops > 0 else 0
     
     # Overall cache statistics
-    perf_text.append(f"Total Cache Operations: {total_ops}\n", style="white")
-    perf_text.append(f"Cache Hit Rate: {hit_rate:.1f}% ({cache_hits}/{total_ops})\n", 
-                    style="green" if hit_rate > 50 else "yellow")
+    perf_text.append(f"  Total Operations: {total_ops}\n")
+    perf_text.append(f"  Hit Rate: {hit_rate:.1f}% ({cache_hits}/{total_ops})\n")
     
     # Time saved by caching
     hit_time = sum(p.duration_seconds for p in profiles if p.cache_action == 'hit')
     miss_time = sum(p.duration_seconds for p in profiles if p.cache_action in ['miss', 'create'])
     
-    perf_text.append(f"Time in Cache Hits: {hit_time:.3f}s\n", style="green")
-    perf_text.append(f"Time in Cache Misses: {miss_time:.3f}s\n", style="yellow")
+    perf_text.append(f"  Cache Hit Time: {hit_time:.3f}s\n")
+    perf_text.append(f"  Cache Miss Time: {miss_time:.3f}s\n")
     
     # Average operation times
     if cache_hits > 0:
         avg_hit_time = hit_time / cache_hits
-        perf_text.append(f"Average Hit Time: {avg_hit_time:.3f}s\n", style="green")
+        perf_text.append(f"  Average Hit Time: {avg_hit_time:.3f}s\n")
     
     if cache_misses > 0:
         avg_miss_time = miss_time / cache_misses
-        perf_text.append(f"Average Miss Time: {avg_miss_time:.3f}s\n", style="yellow")
+        perf_text.append(f"  Average Miss Time: {avg_miss_time:.3f}s\n")
     
     # Performance impact analysis
     if hit_rate > 0 and cache_misses > 0:
@@ -1708,50 +1676,49 @@ def _display_cache_performance(perf_text: Text, profiles: List):
         time_saved = estimated_no_cache_time - actual_time
         
         if time_saved > 0:
-            perf_text.append(f"Estimated Time Saved: {time_saved:.3f}s (", style="bold green")
-            perf_text.append(f"{time_saved/estimated_no_cache_time*100:.1f}% improvement", style="bold green")
-            perf_text.append(")\n", style="bold green")
+            perf_text.append(f"  Time Saved: {time_saved:.3f}s ({time_saved/estimated_no_cache_time*100:.1f}% improvement)\n")
     
     perf_text.append("\n")
 
 
 def _display_optimization_status(perf_text: Text, analysis_data: Dict[str, Any], use_async: bool):
     """Display optimization status information"""
-    perf_text.append("═══ OPTIMIZATION STATUS ═══\n", style="bold cyan")
+    perf_text.append("Optimization Status:\n", style="bold")
     
     # Core optimizations
     if analysis_data.get('is_async_analysis', False):
-        perf_text.append("✅ Async Analysis Engine: Active (High Performance Impact)\n", style="green")
-        perf_text.append("✅ Advanced Type System: Enabled (Comprehensive Analysis)\n", style="green")
-        perf_text.append("✅ Smart Caching: Active (Memory & File Based)\n", style="green")
-        perf_text.append("✅ Parallel Processing: Enabled (Multi-threaded Operations)\n", style="green")
+        perf_text.append("  Analysis Engine: Async (High Performance)\n")
+        perf_text.append("  Type System: Advanced (Comprehensive)\n")
+        perf_text.append("  Caching: Smart (Memory & File Based)\n")
+        perf_text.append("  Processing: Parallel (Multi-threaded)\n")
     else:
-        perf_text.append("⚠️  Legacy Analysis Mode: Fallback (Limited Performance)\n", style="yellow")
-        perf_text.append("⚠️  Basic Type Detection: Limited (Sample-based)\n", style="yellow")
-        perf_text.append("⚠️  Simple Caching: Basic (Memory Only)\n", style="yellow")
+        perf_text.append("  Analysis Engine: Legacy (Limited Performance)\n")
+        perf_text.append("  Type Detection: Basic (Sample-based)\n")
+        perf_text.append("  Caching: Simple (Memory Only)\n")
     
     # Field analysis optimization
     if analysis_data.get('field_analysis'):
         field_count = len(analysis_data['field_analysis'])
-        perf_text.append(f"✅ Field Analysis: Optimized ({field_count} topics analyzed)\n", style="green")
+        perf_text.append(f"  Field Analysis: {field_count} topics analyzed\n")
     
     # Cache level optimization
     if analysis_data.get('cache_level'):
         level_names = {1: "Metadata", 2: "Statistics", 3: "Messages", 4: "Fields"}
         level_name = level_names.get(analysis_data['cache_level'], f"Level {analysis_data['cache_level']}")
-        perf_text.append(f"✅ Cache Level: {level_name} (Hierarchical Caching)\n", style="green")
+        perf_text.append(f"  Cache Level: {level_name}\n")
     
     # Performance recommendations
-    perf_text.append("\n📋 Performance Recommendations:\n", style="bold yellow")
-    
-    if not use_async:
-        perf_text.append("• Use --async flag for 70%+ performance improvement\n", style="yellow")
-    
-    if not analysis_data.get('is_async_analysis', False):
-        perf_text.append("• Enable unified analyzer for better type detection\n", style="yellow")
-    
-    if analysis_data.get('cache_level', 0) < 3:
-        perf_text.append("• Consider higher cache levels for repeated analysis\n", style="yellow")
+    if not use_async or not analysis_data.get('is_async_analysis', False) or analysis_data.get('cache_level', 0) < 3:
+        perf_text.append("\nRecommendations:\n", style="bold")
+        
+        if not use_async:
+            perf_text.append("  - Use --async flag for 70%+ performance improvement\n")
+        
+        if not analysis_data.get('is_async_analysis', False):
+            perf_text.append("  - Enable unified analyzer for better type detection\n")
+        
+        if analysis_data.get('cache_level', 0) < 3:
+            perf_text.append("  - Consider higher cache levels for repeated analysis\n")
     
     perf_text.append("\n")
 

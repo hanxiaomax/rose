@@ -28,7 +28,7 @@ class UnifiedBagAnalyzer:
     """
     
     def __init__(self):
-        self.cache_manager = UnifiedCacheManager()
+        self.cache_manager = get_unified_cache_manager()
         self.type_analyzer = get_message_type_analyzer()
         self.executor = ThreadPoolExecutor(max_workers=4)
     
@@ -285,7 +285,7 @@ class UnifiedBagAnalyzer:
             'is_lite_mode': cache.cache_level < CacheLevel.FIELDS,
             'original_bag_path': cache.metadata.original_bag_path if cache.metadata else "",
             'analysis_time': 0.0,  # This would be set by the caller
-            'is_async_analysis': False,  # This would be set by the caller
+            'is_async_analysis': True,  # Unified analyzer always uses async analysis
             'cache_level': cache.cache_level
         }
         
