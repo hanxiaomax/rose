@@ -302,11 +302,12 @@ class RosbagsBagParser(IBagParser):
             # Helper function to format size
             def format_size(size_bytes: int) -> str:
                 """Format size in bytes to human readable format"""
+                size = float(size_bytes)
                 for unit in ['B', 'KB', 'MB', 'GB']:
-                    if size_bytes < 1024:
-                        return f"{size_bytes:.1f}{unit}"
-                    size_bytes /= 1024
-                return f"{size_bytes:.1f}TB"
+                    if size < 1024:
+                        return f"{size:.1f}{unit}"
+                    size /= 1024
+                return f"{size:.1f}TB"
             
             from roseApp.core.util import TimeUtil
             
@@ -599,11 +600,12 @@ class LegacyBagParser(IBagParser):
             from roseApp.core.util import TimeUtil
             
             def format_size(size_bytes: int) -> str:
+                size = float(size_bytes)
                 for unit in ['B', 'KB', 'MB', 'GB']:
-                    if size_bytes < 1024:
-                        return f"{size_bytes:.1f}{unit}"
-                    size_bytes /= 1024
-                return f"{size_bytes:.1f}TB"
+                    if size < 1024:
+                        return f"{size:.1f}{unit}"
+                    size /= 1024
+                return f"{size:.1f}TB"
             
             result = [f"\nTopics in {bag_path} (Legacy Parser):"]
             result.append("{:<35} {:<35} {:<10} {:<10}".format("Topic", "Message Type", "Count", "Size"))
@@ -834,7 +836,7 @@ class ParserHealthChecker:
 _health_checker = ParserHealthChecker()
 
 
-def create_parser(parser_type: ParserType = None) -> IBagParser:
+def create_parser(parser_type: Optional[ParserType] = None) -> IBagParser:
     """Create parser instance with automatic type selection"""
     if parser_type is None:
         parser_type = _health_checker.get_best_parser()
@@ -857,7 +859,7 @@ def create_best_parser() -> IBagParser:
     return create_parser(best_type)
 
 
-def get_parser_health(parser_type: ParserType = None) -> ParserHealth:
+def get_parser_health(parser_type: Optional[ParserType] = None) -> ParserHealth:
     """Get health status for a parser type"""
     if parser_type is None:
         parser_type = _health_checker.get_best_parser()

@@ -1,8 +1,16 @@
-# Rose 核心模块 API 使用指南
+# Rose Core Module API Usage Guide
 
-## 概述
+## Overview
 
-Rose 核心模块经过重构，现在提供了6个主要模块，每个模块都有清晰的API接口和功能边界。本文档介绍如何使用这些核心模块。
+Rose core modules have been refactored to provide 6 main modules, each with clear API interfaces and functional boundaries. This document describes how to use these core modules.
+
+> **Note**: This guide provides an API overview. For detailed usage, please refer to the dedicated module documentation:
+> - [Analyzer Module Guide](modules/ANALYZER.md) - Asynchronous analysis engine
+> - [Cache Module Guide](modules/CACHE.md) - Unified caching system
+> - [Engine Module Guide](modules/ENGINE.md) - Core processing engine
+> - [Parser Module Guide](modules/PARSER.md) - Intelligent parser management
+> - [Theme Module Guide](modules/THEME.md) - Theme system
+> - [Util Module Guide](modules/UTIL.md) - Utility functions collection
 
 ## 模块架构
 
