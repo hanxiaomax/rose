@@ -356,14 +356,21 @@ class BagManager:
     def _get_cache_stats(self) -> Dict[str, Any]:
         """Get cache performance statistics"""
         try:
-            stats = self.cache.get_stats() if hasattr(self.cache, 'get_stats') else {}
-            return {
-                'hit_rate': stats.get('hit_rate', 0.0),
-                'total_requests': stats.get('total_requests', 0),
-                'cache_hits': stats.get('cache_hits', 0),
-                'cache_misses': stats.get('cache_misses', 0)
-            }
-        except Exception:
+            if hasattr(self.cache, 'get_stats'):
+                stats = self.cache.get_stats()
+                # Extract unified stats from the complex structure
+                unified_stats = stats.get('unified', {})
+                return {
+                    'hit_rate': unified_stats.get('hit_rate', 0.0),
+                    'total_requests': unified_stats.get('hits', 0) + unified_stats.get('misses', 0),
+                    'cache_hits': unified_stats.get('hits', 0),
+                    'cache_misses': unified_stats.get('misses', 0)
+                }
+            else:
+                return {'hit_rate': 0.0, 'total_requests': 0, 'cache_hits': 0, 'cache_misses': 0}
+        except Exception as e:
+            # Log the error for debugging but don't crash
+            self.logger.warning(f"Error getting cache stats: {e}")
             return {'hit_rate': 0.0, 'total_requests': 0, 'cache_hits': 0, 'cache_misses': 0}
     
     def _get_cache_hit_rate(self) -> float:

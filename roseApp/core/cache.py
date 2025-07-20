@@ -492,8 +492,7 @@ class UnifiedCache:
                 'size_bytes': self.file_cache.size(),
                 'entry_count': len(self.file_cache.keys()),
                 'max_size': self.file_cache.max_size
-            },
-            'performance': self._analyzer.get_analysis()
+            }
         }
     
     def optimize(self) -> Dict[str, Any]:
