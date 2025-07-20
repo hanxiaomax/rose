@@ -5,7 +5,6 @@ import sys
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 # Import logging module first
 import logging

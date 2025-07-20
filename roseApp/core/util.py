@@ -16,6 +16,8 @@ import platform
 from datetime import datetime, timezone
 from enum import Enum
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, BarColumn, TaskProgressColumn
+from contextlib import contextmanager
 
 class AppMode:
     TUI = "tui"
@@ -263,5 +265,120 @@ def get_preferred_parser_type():
     Returns:
         str: Parser type ('rosbags')
     """
-    _logger.debug("Using enhanced RosbagsBagParser with AnyReader/Rosbag1Writer for optimal performance")
-    return 'rosbags'
+    return "rosbags"
+
+
+class ProgressManager:
+    """Unified progress bar manager for all CLI commands
+    
+    Provides consistent progress bars with different styles for different operations:
+    - Analysis operations: Spinner with blue text
+    - Extraction operations: Progress bar with green text
+    - General operations: Customizable style
+    """
+    
+    @staticmethod
+    @contextmanager
+    def analysis_progress(description: str, console: Optional[Console] = None):
+        """Create a progress bar for analysis operations
+        
+        Args:
+            description: Description text to display
+            console: Optional console instance
+            
+        Yields:
+            Progress instance
+        """
+        if console is None:
+            console = Console()
+            
+        with Progress(
+            SpinnerColumn("dots", style="cyan"),
+            TextColumn("[bold blue]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task(description, total=None)
+            yield progress, task
+    
+    @staticmethod
+    @contextmanager
+    def extraction_progress(description: str, total: Optional[int] = None, console: Optional[Console] = None):
+        """Create a progress bar for extraction operations
+        
+        Args:
+            description: Description text to display
+            total: Total number of items to process (None for indeterminate)
+            console: Optional console instance
+            
+        Yields:
+            Progress instance and task ID
+        """
+        if console is None:
+            console = Console()
+            
+        columns = [
+            SpinnerColumn("dots", style="green"),
+            TextColumn("[bold green]{task.description}"),
+        ]
+        
+        # Add progress bar columns only if total is specified
+        if total is not None:
+            columns.extend([
+                BarColumn(bar_width=40, style="green", complete_style="bright_green"),
+                TaskProgressColumn(style="green"),
+            ])
+        
+        columns.append(TimeElapsedColumn())
+        
+        with Progress(
+            *columns,
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task(description, total=total)
+            yield progress, task
+    
+    @staticmethod
+    @contextmanager
+    def custom_progress(description: str, total: Optional[int] = None, 
+                       spinner_style: str = "cyan", text_style: str = "bold cyan",
+                       bar_style: str = "cyan", console: Optional[Console] = None):
+        """Create a custom progress bar
+        
+        Args:
+            description: Description text to display
+            total: Total number of items to process (None for indeterminate)
+            spinner_style: Style for spinner column
+            text_style: Style for text column
+            bar_style: Style for progress bar
+            console: Optional console instance
+            
+        Yields:
+            Progress instance and task ID
+        """
+        if console is None:
+            console = Console()
+            
+        columns = [
+            SpinnerColumn("dots", style=spinner_style),
+            TextColumn(f"[{text_style}]{{task.description}}"),
+        ]
+        
+        # Add progress bar columns only if total is specified
+        if total is not None:
+            columns.extend([
+                BarColumn(bar_width=40, style=bar_style, complete_style=f"bright_{bar_style}"),
+                TaskProgressColumn(style=bar_style),
+            ])
+        
+        columns.append(TimeElapsedColumn())
+        
+        with Progress(
+            *columns,
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task(description, total=total)
+            yield progress, task

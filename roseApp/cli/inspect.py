@@ -8,10 +8,9 @@ from typing import Optional, List
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
-
 from ..core.bag_manager import BagManager, InspectOptions
 from ..core.result_handler import OutputFormat, RenderOptions, ExportOptions
+from ..core.util import ProgressManager
 
 app = typer.Typer(help="Inspect ROS bag files")
 console = Console()
@@ -73,20 +72,11 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
     
     try:
         # Show progress during analysis
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True
-        ) as progress:
-            
-            # Analysis phase
-            progress.add_task("Analyzing bag file...", total=None)
+        with ProgressManager.analysis_progress(
+            f"Analyzing bag file: {bag_path.name}...",
+            console
+        ) as (progress, task):
             result = await manager.inspect_bag(bag_path, options)
-            
-            # Field analysis phase (if requested)
-            if options.show_fields:
-                progress.add_task("Analyzing field information...", total=None)
         
         # Get result handler
         handler = manager.get_result_handler()

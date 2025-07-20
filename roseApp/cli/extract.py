@@ -14,10 +14,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.align import Align
-
 from ..core.bag_manager import BagManager, ExtractOptions
 from ..core.result_handler import OutputFormat, RenderOptions, ExportOptions, ResultHandler
-from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.util import set_app_mode, AppMode, get_logger, ProgressManager
 
 
 # Set to CLI mode
@@ -114,7 +113,11 @@ def _extract_topics_impl(
         # Create BagManager and get available topics
         manager = BagManager()
         
-        with console.status("Analyzing bag file..."):
+        # Show progress during bag analysis
+        with ProgressManager.analysis_progress(
+            f"Analyzing bag file: {input_path.name}...", 
+            console
+        ) as (progress, task):
             topics_result = await_sync(manager.get_topics(input_path))
         
         all_topics = [t['name'] for t in topics_result['topics']]
@@ -208,8 +211,15 @@ def _extract_topics_impl(
         # Track extraction timing
         extraction_start_time = time.time()
         
-        with console.status("Extracting topics..."):
+        # Show progress during extraction
+        total_messages = extraction_result['statistics']['selected_messages']
+        with ProgressManager.extraction_progress(
+            f"Extracting {len(topics_to_extract)} topics ({total_messages:,} messages)...",
+            total=total_messages,
+            console=console
+        ) as (progress, task):
             result = await_sync(manager.extract_bag(input_path, options))
+            progress.update(task, completed=total_messages)
         
         extraction_end_time = time.time()
         extraction_time = extraction_end_time - extraction_start_time
