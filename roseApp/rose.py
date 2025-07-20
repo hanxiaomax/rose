@@ -12,7 +12,7 @@ import logging
 
 # Import necessary functions from utility modules
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
-from roseApp.cli.filter import app as filter_app
+from roseApp.cli.extract import app as extract_app
 from roseApp.cli.inspect import app as inspect_app
 from roseApp.cli.plot import app as plot_app
 from roseApp.cli.tools import app as tools_app
@@ -75,7 +75,7 @@ def callback(
 
 
 # Add subcommands
-app.add_typer(filter_app)
+app.add_typer(extract_app)
 app.add_typer(inspect_app)
 app.add_typer(plot_app)
 app.add_typer(tools_app)

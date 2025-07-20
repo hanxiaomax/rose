@@ -29,15 +29,13 @@ class InspectOptions:
 
 
 @dataclass
-class FilterOptions:
-    """Options for bag filtering"""
+class ExtractOptions:
+    """Options for bag extraction"""
     topics: Optional[List[str]] = None
     topic_filter: Optional[str] = None
-    time_start: Optional[float] = None
-    time_end: Optional[float] = None
-    message_types: Optional[List[str]] = None
     output_path: Optional[Path] = None
-    compression: Optional[str] = None
+    compression: str = "none"
+    overwrite: bool = True
     dry_run: bool = False
 
 
@@ -176,6 +174,210 @@ class BagManager:
             inspection_result['topics'].append(topic_info)
         
         return inspection_result
+    
+    async def get_topics(
+        self,
+        bag_path: Union[str, Path],
+        patterns: Optional[List[str]] = None,
+        exact_match: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Get available topics from a ROS bag file with optional filtering
+        
+        Args:
+            bag_path: Path to the bag file
+            patterns: Optional list of patterns to match against topic names
+            exact_match: If True, use exact matching; if False, use fuzzy matching
+            
+        Returns:
+            Dictionary containing topic information
+        """
+        bag_path = Path(bag_path)
+        
+        if not bag_path.exists():
+            raise FileNotFoundError(f"Bag file not found: {bag_path}")
+        
+        # Analyze the bag to get available topics
+        result = await self.analyzer.analyze_bag_async(bag_path, AnalysisType.METADATA)
+        
+        all_topics = list(result.bag_info.topics)
+        
+        # Apply filtering if patterns are provided
+        if patterns:
+            if exact_match:
+                filtered_topics = [topic for topic in all_topics if topic in patterns]
+            else:
+                # Use the same fuzzy matching logic as _filter_topics
+                filtered_topics = self._filter_topics(all_topics, patterns, None)
+        else:
+            filtered_topics = all_topics
+        
+        # Build topic information
+        topics_info = []
+        for topic in filtered_topics:
+            message_type = result.bag_info.connections.get(topic, 'Unknown')
+            message_count = result.bag_info.message_counts.get(topic, 0)
+            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+            
+            topics_info.append({
+                'name': topic,
+                'message_type': message_type,
+                'message_count': message_count,
+                'frequency': frequency
+            })
+        
+        # Sort topics by name
+        topics_info.sort(key=lambda x: x['name'])
+        
+        return {
+            'bag_info': {
+                'file_name': bag_path.name,
+                'file_path': str(bag_path),
+                'total_topics': len(all_topics),
+                'filtered_topics': len(filtered_topics),
+                'duration_seconds': result.bag_info.duration_seconds,
+                'analysis_time': result.analysis_time,
+                'cached': result.cached
+            },
+            'topics': topics_info,
+            'patterns': patterns or [],
+            'exact_match': exact_match,
+            'cache_stats': self._get_cache_stats()
+        }
+    
+    async def extract_bag(
+        self,
+        bag_path: Union[str, Path],
+        options: ExtractOptions
+    ) -> Dict[str, Any]:
+        """
+        Extract specific topics from a ROS bag file
+        
+        Args:
+            bag_path: Path to the input bag file
+            options: Extraction options including topics, output path, etc.
+            
+        Returns:
+            Dictionary containing extraction results
+        """
+        bag_path = Path(bag_path)
+        
+        if not bag_path.exists():
+            raise FileNotFoundError(f"Bag file not found: {bag_path}")
+        
+        if not options.output_path:
+            raise ValueError("Output path is required for extraction")
+        
+        # Analyze the bag to get available topics
+        result = await self.analyzer.analyze_bag_async(bag_path, AnalysisType.METADATA)
+        
+        # Apply topic filtering using the same logic as inspect
+        topics_to_extract = self._filter_topics(
+            list(result.bag_info.topics),
+            options.topics,
+            options.topic_filter
+        )
+        
+        if not topics_to_extract:
+            return {
+                'success': False,
+                'error': 'No matching topics found',
+                'available_topics': list(result.bag_info.topics),
+                'requested_patterns': options.topics or [],
+                'filter': options.topic_filter
+            }
+        
+        # Calculate extraction statistics
+        total_messages = sum(result.bag_info.message_counts.values())
+        extract_messages = sum(result.bag_info.message_counts.get(topic, 0) for topic in topics_to_extract)
+        
+        extraction_result = {
+            'bag_info': {
+                'input_file': str(bag_path),
+                'output_file': str(options.output_path),
+                'total_topics': len(result.bag_info.topics),
+                'extracted_topics': len(topics_to_extract),
+                'total_messages': total_messages,
+                'extracted_messages': extract_messages,
+                'extraction_percentage': (extract_messages / total_messages * 100) if total_messages > 0 else 0,
+                'duration_seconds': result.bag_info.duration_seconds,
+                'compression': options.compression
+            },
+            'topics': [],
+            'success': True,
+            'dry_run': options.dry_run
+        }
+        
+        # Build topic information
+        for topic in topics_to_extract:
+            message_type = result.bag_info.connections.get(topic, 'Unknown')
+            message_count = result.bag_info.message_counts.get(topic, 0)
+            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+            
+            topic_info = {
+                'name': topic,
+                'message_type': message_type,
+                'message_count': message_count,
+                'frequency': frequency,
+                'size_percentage': (message_count / extract_messages * 100) if extract_messages > 0 else 0
+            }
+            extraction_result['topics'].append(topic_info)
+        
+        # If dry run, return without actual extraction
+        if options.dry_run:
+            extraction_result['message'] = 'Dry run completed - no files were created'
+            return extraction_result
+        
+        # Perform the actual extraction using the analyzer
+        try:
+            from .parser import create_parser, ParserType
+            parser = create_parser(ParserType.ROSBAGS)
+            
+            # Create output directory if needed
+            options.output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Check if output file exists and handle overwrite
+            if options.output_path.exists() and not options.overwrite:
+                raise FileExistsError(f"Output file already exists: {options.output_path}")
+            
+            # Use parser to filter/extract the bag
+            filter_result = parser.filter_bag(
+                str(bag_path),
+                str(options.output_path),
+                topics_to_extract,
+                compression=options.compression,
+                overwrite=options.overwrite
+            )
+            
+            # Calculate output file size and statistics
+            if options.output_path.exists():
+                input_size = bag_path.stat().st_size
+                output_size = options.output_path.stat().st_size
+                size_reduction = (1 - output_size / input_size) * 100 if input_size > 0 else 0
+                
+                extraction_result.update({
+                    'file_stats': {
+                        'input_size_bytes': input_size,
+                        'output_size_bytes': output_size,
+                        'size_reduction_percent': size_reduction
+                    },
+                    'message': f'Successfully extracted {len(topics_to_extract)} topics to {options.output_path}'
+                })
+            else:
+                extraction_result.update({
+                    'success': False,
+                    'error': 'Output file was not created',
+                    'message': 'Extraction may have failed'
+                })
+            
+        except Exception as e:
+            extraction_result.update({
+                'success': False,
+                'error': str(e),
+                'message': f'Extraction failed: {e}'
+            })
+            
+        return extraction_result
     
     async def profile_bag(
         self,
