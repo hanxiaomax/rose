@@ -558,4 +558,62 @@ def get_current_spacing() -> ThemeSpacing:
 
 def load_theme_from_css(css_path: Path, theme_name: Optional[str] = None) -> bool:
     """Load theme from CSS file globally"""
-    return get_theme().load_theme_from_css(css_path, theme_name) 
+    return get_theme().load_theme_from_css(css_path, theme_name)
+
+
+# Backward compatibility layer for CLI modules
+class CompatibilityTheme:
+    """Compatibility layer for legacy theme usage in CLI modules"""
+    
+    def __init__(self):
+        self._colors = None
+    
+    @property
+    def colors(self) -> ThemeColors:
+        if self._colors is None:
+            self._colors = get_current_colors()
+        return self._colors
+    
+    @property
+    def PRIMARY(self) -> str:
+        return self.colors.primary
+    
+    @property
+    def SECONDARY(self) -> str:
+        return self.colors.secondary
+    
+    @property
+    def ACCENT(self) -> str:
+        return self.colors.accent
+    
+    @property
+    def SUCCESS(self) -> str:
+        return self.colors.success
+    
+    @property
+    def WARNING(self) -> str:
+        return self.colors.warning
+    
+    @property
+    def ERROR(self) -> str:
+        return self.colors.error
+    
+    def get_inquirer_style(self) -> Dict[str, str]:
+        """Get InquirerPy style configuration"""
+        colors = self.colors
+        return {
+            "questionmark": f"fg:{colors.accent} bold",
+            "question": "bold",
+            "answer": f"fg:{colors.primary} bold",
+            "pointer": f"fg:{colors.accent} bold",
+            "highlighted": f"fg:{colors.accent} bold",
+            "selected": f"fg:{colors.success}",
+            "separator": f"fg:{colors.muted}",
+            "instruction": f"fg:{colors.muted}",
+            "text": "",
+            "disabled": f"fg:{colors.muted} italic"
+        }
+
+
+# Create global theme instance for backward compatibility
+theme = CompatibilityTheme() 

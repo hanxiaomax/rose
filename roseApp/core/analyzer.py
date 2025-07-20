@@ -130,7 +130,8 @@ class BagAnalyzer:
             # Perform message type analysis if requested
             if analysis_type == AnalysisType.FULL_ANALYSIS:
                 result.message_types = await self._analyze_message_types_async(
-                    bag_info.connections
+                    bag_info.connections,
+                    bag_path
                 )
             
             if progress_callback:
@@ -178,7 +179,21 @@ class BagAnalyzer:
         # Calculate duration
         duration = 0.0
         if time_range and len(time_range) >= 2:
-            duration = time_range[1] - time_range[0]
+            # time_range contains tuples of (seconds, nanoseconds)
+            start_time = time_range[0]
+            end_time = time_range[1]
+            
+            if isinstance(start_time, tuple) and isinstance(end_time, tuple):
+                # Convert to seconds with nanosecond precision
+                start_seconds = start_time[0] + start_time[1] / 1e9
+                end_seconds = end_time[0] + end_time[1] / 1e9
+                duration = end_seconds - start_seconds
+            else:
+                # Fallback for simple numeric timestamps
+                try:
+                    duration = float(end_time) - float(start_time)
+                except (TypeError, ValueError):
+                    duration = 0.0
         
         return BagInfo(
             path=bag_path,
@@ -192,28 +207,138 @@ class BagAnalyzer:
     
     async def _analyze_message_types_async(
         self,
-        connections: Dict[str, str]
+        connections: Dict[str, str],
+        bag_path: Path
     ) -> Dict[str, MessageTypeInfo]:
-        """Analyze message types asynchronously"""
+        """Analyze message types by sampling messages"""
         message_types = {}
         
-        # Get unique message types
-        unique_types = set(connections.values())
+        # Get unique message types and their topics
+        type_to_topics = {}
+        for topic, msg_type in connections.items():
+            if msg_type not in type_to_topics:
+                type_to_topics[msg_type] = []
+            type_to_topics[msg_type].append(topic)
         
-        for msg_type in unique_types:
+        loop = asyncio.get_event_loop()
+        parser = create_best_parser()
+        
+        for msg_type, topics in type_to_topics.items():
             try:
-                # For now, create basic message type info
-                # In a full implementation, this would parse message definitions
+                # Sample messages from the first topic of this type
+                sample_topic = topics[0]
+                
+                # Read a few sample messages to analyze structure
+                def _sample_messages():
+                    try:
+                        fields = {}
+                        sample_count = 0
+                        max_samples = 3  # Limit samples for performance
+                        
+                        message_generator = parser.read_messages(str(bag_path), [sample_topic])
+                        if message_generator is not None:
+                            for timestamp, message in message_generator:
+                                 if sample_count >= max_samples:
+                                     break
+                                 
+                                 # Analyze message structure
+                                 message_fields = self._extract_message_fields(message)
+                                 fields = self._merge_fields(fields, message_fields)
+                                 sample_count += 1
+                        
+                        return fields
+                    except Exception as e:
+                        self.logger.debug(f"Could not sample messages for {msg_type}: {e}")
+                        return {}
+                
+                # Run in executor to avoid blocking
+                fields = await loop.run_in_executor(self.executor, _sample_messages)
+                
                 message_types[msg_type] = MessageTypeInfo(
                     type_name=msg_type,
-                    fields={},  # Would be populated from message definition
-                    definition="",  # Would be populated from message definition
-                    md5sum=""  # Would be calculated from definition
+                    fields=fields,
+                    definition="",  # Could be populated from message definition
+                    md5sum=""  # Could be calculated from definition
                 )
+                
             except Exception as e:
                 self.logger.warning(f"Failed to analyze message type {msg_type}: {e}")
+                # Create empty message type info as fallback
+                message_types[msg_type] = MessageTypeInfo(
+                    type_name=msg_type,
+                    fields={},
+                    definition="",
+                    md5sum=""
+                )
         
         return message_types
+    
+    def _extract_message_fields(self, message) -> Dict[str, Any]:
+        """Extract field structure from a ROS message"""
+        fields = {}
+        
+        if hasattr(message, '__slots__'):
+            # ROS message with __slots__
+            for field_name in message.__slots__:
+                if hasattr(message, field_name):
+                    field_value = getattr(message, field_name)
+                    fields[field_name] = self._analyze_field_value(field_value)
+        elif hasattr(message, '__dict__'):
+            # Regular object with __dict__
+            for field_name, field_value in message.__dict__.items():
+                if not field_name.startswith('_'):
+                    fields[field_name] = self._analyze_field_value(field_value)
+        else:
+            # Try to get common ROS message fields
+            common_fields = ['header', 'data', 'pose', 'twist', 'position', 'orientation']
+            for field_name in common_fields:
+                if hasattr(message, field_name):
+                    field_value = getattr(message, field_name)
+                    fields[field_name] = self._analyze_field_value(field_value)
+        
+        return fields
+    
+    def _analyze_field_value(self, value) -> Dict[str, Any]:
+        """Analyze the type and structure of a field value"""
+        field_info = {
+            'type': type(value).__name__,
+            'value_sample': None
+        }
+        
+        # Handle different value types
+        if hasattr(value, '__slots__') or hasattr(value, '__dict__'):
+            # Nested message
+            field_info['fields'] = self._extract_message_fields(value)
+        elif isinstance(value, (list, tuple)) and len(value) > 0:
+            # Array/list
+            field_info['array'] = True
+            field_info['length'] = len(value)
+            field_info['element_type'] = type(value[0]).__name__
+            # Analyze first element if it's a complex type
+            if hasattr(value[0], '__slots__') or hasattr(value[0], '__dict__'):
+                field_info['element_fields'] = self._extract_message_fields(value[0])
+        elif isinstance(value, (int, float, str, bool)):
+            # Primitive type
+            field_info['value_sample'] = str(value)[:50]  # Limit sample length
+        
+        return field_info
+    
+    def _merge_fields(self, existing_fields: Dict[str, Any], new_fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge field structures from multiple message samples"""
+        merged = existing_fields.copy()
+        
+        for field_name, field_info in new_fields.items():
+            if field_name not in merged:
+                merged[field_name] = field_info
+            else:
+                # Merge nested fields if present
+                if 'fields' in field_info and 'fields' in merged[field_name]:
+                    merged[field_name]['fields'] = self._merge_fields(
+                        merged[field_name]['fields'], 
+                        field_info['fields']
+                    )
+        
+        return merged
     
     def cleanup(self):
         """Clean up resources"""
