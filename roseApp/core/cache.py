@@ -448,15 +448,34 @@ class UnifiedCache:
             tags=tags or set()
         )
         
-        # Always try to store in memory first
-        if self.memory_cache.put(entry):
-            _logger.debug(f"Cached in memory: {key}")
-        else:
-            # Fall back to file cache for large items
+        # Calculate entry size
+        import pickle
+        entry_size = len(pickle.dumps(value))
+        
+        # Strategy: Store large items (>1MB) or analysis results directly in file cache for persistence
+        # Store small, frequently accessed items in memory cache for speed
+        if (entry_size > 1024 * 1024 or  # Large items > 1MB
+            key.startswith('analysis_')):   # Analysis results for cross-process persistence
+            
+            # Store in file cache for persistence
             if self.file_cache.put(entry):
-                _logger.debug(f"Cached in file: {key}")
+                _logger.debug(f"Cached in file: {key} ({entry_size/1024:.1f}KB)")
+                
+                # Also store in memory if it's not too large (for speed)
+                if entry_size < 10 * 1024 * 1024:  # < 10MB
+                    self.memory_cache.put(entry)
             else:
-                _logger.warning(f"Failed to cache: {key}")
+                _logger.warning(f"Failed to cache in file: {key}")
+        else:
+            # Store small items in memory first
+            if self.memory_cache.put(entry):
+                _logger.debug(f"Cached in memory: {key} ({entry_size/1024:.1f}KB)")
+            else:
+                # Fall back to file cache
+                if self.file_cache.put(entry):
+                    _logger.debug(f"Cached in file (fallback): {key}")
+                else:
+                    _logger.warning(f"Failed to cache: {key}")
         
         self._record_access_pattern(key)
         self._update_stats()
