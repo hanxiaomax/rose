@@ -1,179 +1,561 @@
-#!/usr/bin/env python3
 """
-Unified theme system for the Rose application
-Uses index.css as base theme and provides conversions for different platforms
+Unified theme system for Rose.
+
+This module provides comprehensive theme management with CSS parsing,
+multi-platform support, and dynamic theme switching capabilities.
 """
 
-from typing import Dict, List, Any, Optional
-import os
+import re
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Union, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
 
-# Import the new simplified theme parser
-from .theme_parser import (
-    theme_parser,
-    get_cli_colors,
-    get_plot_colors,
-    get_html_colors,
-    get_inquirer_style,
-    apply_matplotlib_style,
-    generate_html_css
-)
+from roseApp.core.util import get_logger
 
-# Detect theme preference from environment
-def get_theme_mode() -> bool:
-    """Detect if dark mode should be used (legacy compatibility)"""
-    # Check environment variables
-    theme_env = os.environ.get('ROSE_THEME', '').lower()
-    if theme_env in ['dark', 'true', '1']:
-        return True
-    elif theme_env in ['light', 'false', '0']:
-        return False
+_logger = get_logger("theme")
+
+
+class ThemeMode(Enum):
+    """Theme mode options"""
+    LIGHT = "light"
+    DARK = "dark"
+    AUTO = "auto"
+
+
+@dataclass
+class ThemeColors:
+    """Theme color definitions"""
+    # Core colors
+    background: str = "#ffffff"
+    foreground: str = "#000000"
+    primary: str = "#4f46e5"
+    secondary: str = "#14b8a6"
+    accent: str = "#f59e0b"
     
-    # Default to dark mode for better terminal experience
-    return True
+    # Status colors
+    success: str = "#22c55e"
+    warning: str = "#f59e0b"
+    error: str = "#ef4444"
+    info: str = "#3b82f6"
+    
+    # UI colors
+    border: str = "#e5e7eb"
+    input: str = "#f3f4f6"
+    muted: str = "#6b7280"
+    
+    # Chart colors
+    chart_colors: List[str] = field(default_factory=lambda: [
+        "#4f46e5", "#14b8a6", "#f59e0b", "#ec4899", "#22c55e"
+    ])
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            'background': self.background,
+            'foreground': self.foreground,
+            'primary': self.primary,
+            'secondary': self.secondary,
+            'accent': self.accent,
+            'success': self.success,
+            'warning': self.warning,
+            'error': self.error,
+            'info': self.info,
+            'border': self.border,
+            'input': self.input,
+            'muted': self.muted,
+            'chart_colors': self.chart_colors
+        }
 
-# Global theme mode (kept for compatibility)
-DARK_MODE = get_theme_mode()
+
+@dataclass
+class ThemeTypography:
+    """Typography settings"""
+    font_family: str = "system-ui, sans-serif"
+    font_size_base: str = "14px"
+    font_size_small: str = "12px"
+    font_size_large: str = "16px"
+    font_weight_normal: str = "400"
+    font_weight_bold: str = "600"
+    line_height: str = "1.5"
+    
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dictionary"""
+        return {
+            'font_family': self.font_family,
+            'font_size_base': self.font_size_base,
+            'font_size_small': self.font_size_small,
+            'font_size_large': self.font_size_large,
+            'font_weight_normal': self.font_weight_normal,
+            'font_weight_bold': self.font_weight_bold,
+            'line_height': self.line_height
+        }
+
+
+@dataclass
+class ThemeSpacing:
+    """Spacing and layout settings"""
+    base_unit: str = "4px"
+    small: str = "8px"
+    medium: str = "16px"
+    large: str = "24px"
+    xlarge: str = "32px"
+    
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dictionary"""
+        return {
+            'base_unit': self.base_unit,
+            'small': self.small,
+            'medium': self.medium,
+            'large': self.large,
+            'xlarge': self.xlarge
+        }
+
+
+class CSSThemeParser:
+    """Parser for CSS-based theme definitions"""
+    
+    def __init__(self):
+        self._variable_pattern = re.compile(r'--([^:]+):\s*([^;]+);')
+        self._root_pattern = re.compile(r':root\s*{([^}]+)}', re.DOTALL)
+        self._class_pattern = re.compile(r'\.([^{]+)\s*{([^}]+)}', re.DOTALL)
+    
+    def parse_css_file(self, css_path: Path) -> Dict[str, Dict[str, str]]:
+        """Parse CSS file and extract theme variables"""
+        try:
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css_content = f.read()
+            return self.parse_css_content(css_content)
+        except Exception as e:
+            _logger.error(f"Error parsing CSS file {css_path}: {e}")
+            return {}
+    
+    def parse_css_content(self, css_content: str) -> Dict[str, Dict[str, str]]:
+        """Parse CSS content and extract theme variables"""
+        themes = {}
+        
+        # Parse :root variables (default theme)
+        root_matches = self._root_pattern.findall(css_content)
+        if root_matches:
+            root_vars = self._parse_css_variables(root_matches[0])
+            if root_vars:
+                themes['default'] = root_vars
+        
+        # Parse class-based themes (.dark, .light, etc.)
+        class_matches = self._class_pattern.findall(css_content)
+        for class_name, class_content in class_matches:
+            class_name = class_name.strip()
+            if class_name in ['dark', 'light'] or class_name.endswith('-theme'):
+                class_vars = self._parse_css_variables(class_content)
+                if class_vars:
+                    themes[class_name] = class_vars
+        
+        return themes
+    
+    def _parse_css_variables(self, css_block: str) -> Dict[str, str]:
+        """Parse CSS variables from a CSS block"""
+        variables = {}
+        
+        matches = self._variable_pattern.findall(css_block)
+        for var_name, var_value in matches:
+            var_name = var_name.strip()
+            var_value = var_value.strip()
+            
+            # Clean up variable value
+            var_value = self._clean_css_value(var_value)
+            variables[var_name] = var_value
+        
+        return variables
+    
+    def _clean_css_value(self, value: str) -> str:
+        """Clean CSS value by removing comments and extra whitespace"""
+        # Remove comments
+        value = re.sub(r'/\*.*?\*/', '', value, flags=re.DOTALL)
+        
+        # Remove extra whitespace
+        value = ' '.join(value.split())
+        
+        return value.strip()
+    
+    def convert_to_theme_colors(self, css_vars: Dict[str, str]) -> ThemeColors:
+        """Convert CSS variables to ThemeColors"""
+        colors = ThemeColors()
+        
+        # Map CSS variables to theme colors
+        color_mapping = {
+            'background': ['background', 'bg', 'bg-color'],
+            'foreground': ['foreground', 'fg', 'text', 'text-color'],
+            'primary': ['primary', 'primary-color'],
+            'secondary': ['secondary', 'secondary-color'],
+            'accent': ['accent', 'accent-color'],
+            'success': ['success', 'success-color', 'green'],
+            'warning': ['warning', 'warning-color', 'yellow', 'orange'],
+            'error': ['error', 'error-color', 'danger', 'red'],
+            'info': ['info', 'info-color', 'blue'],
+            'border': ['border', 'border-color'],
+            'input': ['input', 'input-color'],
+            'muted': ['muted', 'muted-color', 'gray', 'grey']
+        }
+        
+        for color_attr, css_names in color_mapping.items():
+            for css_name in css_names:
+                if css_name in css_vars:
+                    setattr(colors, color_attr, css_vars[css_name])
+                    break
+        
+        # Handle chart colors
+        chart_colors = []
+        for i in range(1, 6):  # chart-1 through chart-5
+            chart_var = f'chart-{i}'
+            if chart_var in css_vars:
+                chart_colors.append(css_vars[chart_var])
+        
+        if chart_colors:
+            colors.chart_colors = chart_colors
+        
+        return colors
+
 
 class RoseTheme:
-    """Unified theme class for Rose application"""
+    """Main theme manager for Rose application"""
     
-    def __init__(self, dark_mode: bool = None):
-        """Initialize theme with specified mode (mode parameter kept for compatibility)"""
-        if dark_mode is None:
-            dark_mode = DARK_MODE
+    def __init__(self):
+        self.current_mode = ThemeMode.LIGHT
+        self.themes: Dict[str, Dict[str, Any]] = {}
+        self.css_parser = CSSThemeParser()
         
-        self.dark_mode = dark_mode
-        # Use CLI colors for theme properties (since CLI uses dark theme)
-        self._cli_colors = get_cli_colors()
-        self._plot_colors = get_plot_colors()
-        self._html_colors = get_html_colors()
+        # Load default themes
+        self._load_default_themes()
+        
+        _logger.info("Initialized RoseTheme manager")
     
-    # Core color properties
-    @property
-    def PRIMARY(self) -> str:
-        return self._cli_colors['primary']
-    
-    @property
-    def SECONDARY(self) -> str:
-        return self._cli_colors['secondary']
-    
-    @property
-    def ACCENT(self) -> str:
-        return self._cli_colors['accent']
-    
-    @property
-    def WARNING(self) -> str:
-        return self._cli_colors['warning']
-    
-    @property
-    def ERROR(self) -> str:
-        return self._cli_colors['error']
-    
-    @property
-    def SUCCESS(self) -> str:
-        return self._cli_colors['success']
-    
-    @property
-    def INFO(self) -> str:
-        return self._cli_colors['info']
-    
-    @property
-    def BACKGROUND(self) -> str:
-        return self._cli_colors['background']
-    
-    @property
-    def FOREGROUND(self) -> str:
-        return self._cli_colors['text_primary']
-    
-    @property
-    def SURFACE(self) -> str:
-        return self._cli_colors['background']
-    
-    @property
-    def PANEL(self) -> str:
-        return self._cli_colors['background']
-    
-    @property
-    def TEXT_PRIMARY(self) -> str:
-        return self._cli_colors['text_primary']
-    
-    @property
-    def TEXT_SECONDARY(self) -> str:
-        return self._cli_colors['text_secondary']
-    
-    @property
-    def TEXT_DIM(self) -> str:
-        return self._cli_colors['text_secondary']
-    
-    @property
-    def TEXT_MUTED(self) -> str:
-        return self._cli_colors['text_secondary']
-    
-    @property
-    def BORDER(self) -> str:
-        return self._cli_colors['border']
-    
-    # Data visualization colors (for plots)
-    @property
-    def PLOT_COLORS(self) -> List[str]:
-        return self._plot_colors
-    
-    def get_rich_color(self, color_name: str) -> str:
-        """Get a Rich console color by name"""
-        return self._cli_colors.get(color_name, self.TEXT_PRIMARY)
-    
-    def get_plot_color(self, index: int) -> str:
-        """Get a plot color by index (cycles through available colors)"""
-        return self.PLOT_COLORS[index % len(self.PLOT_COLORS)]
-    
-    def get_inquirer_style(self):
-        """Get InquirerPy style configuration"""
-        return get_inquirer_style()
-    
-    def get_textual_theme(self):
-        """Get Textual theme configuration (legacy compatibility)"""
-        # Return basic theme dict for compatibility
-        return {
-            'primary': self.PRIMARY,
-            'secondary': self.SECONDARY,
-            'accent': self.ACCENT,
-            'background': self.BACKGROUND,
-            'foreground': self.FOREGROUND,
-            'success': self.SUCCESS,
-            'warning': self.WARNING,
-            'error': self.ERROR,
+    def _load_default_themes(self):
+        """Load default light and dark themes"""
+        # Light theme
+        light_colors = ThemeColors(
+            background="#ffffff",
+            foreground="#000000",
+            primary="#4f46e5",
+            secondary="#14b8a6",
+            accent="#f59e0b",
+            success="#22c55e",
+            warning="#f59e0b",
+            error="#ef4444",
+            info="#3b82f6",
+            border="#e5e7eb",
+            input="#f3f4f6",
+            muted="#6b7280"
+        )
+        
+        # Dark theme
+        dark_colors = ThemeColors(
+            background="#1a1a1a",
+            foreground="#ffffff",
+            primary="#818cf8",
+            secondary="#2dd4bf",
+            accent="#fcd34d",
+            success="#4ade80",
+            warning="#fcd34d",
+            error="#f87171",
+            info="#60a5fa",
+            border="#374151",
+            input="#374151",
+            muted="#9ca3af"
+        )
+        
+        # Default typography
+        typography = ThemeTypography()
+        
+        # Default spacing
+        spacing = ThemeSpacing()
+        
+        self.themes['light'] = {
+            'colors': light_colors,
+            'typography': typography,
+            'spacing': spacing,
+            'mode': ThemeMode.LIGHT
+        }
+        
+        self.themes['dark'] = {
+            'colors': dark_colors,
+            'typography': typography,
+            'spacing': spacing,
+            'mode': ThemeMode.DARK
         }
     
-    def apply_matplotlib_style(self):
-        """Apply matplotlib style configuration"""
-        apply_matplotlib_style()
+    def load_theme_from_css(self, css_path: Path, theme_name: Optional[str] = None) -> bool:
+        """Load theme from CSS file"""
+        try:
+            css_themes = self.css_parser.parse_css_file(css_path)
+            
+            if not css_themes:
+                _logger.warning(f"No theme variables found in {css_path}")
+                return False
+            
+            # Use provided theme name or derive from filename
+            if not theme_name:
+                theme_name = css_path.stem
+            
+            # Process each theme found in CSS
+            for css_theme_name, css_vars in css_themes.items():
+                full_theme_name = f"{theme_name}_{css_theme_name}" if css_theme_name != 'default' else theme_name
+                
+                # Convert CSS variables to theme components
+                colors = self.css_parser.convert_to_theme_colors(css_vars)
+                
+                # Determine theme mode based on background color
+                mode = self._detect_theme_mode(colors.background)
+                
+                self.themes[full_theme_name] = {
+                    'colors': colors,
+                    'typography': ThemeTypography(),
+                    'spacing': ThemeSpacing(),
+                    'mode': mode,
+                    'source': str(css_path)
+                }
+            
+            _logger.info(f"Loaded {len(css_themes)} theme(s) from {css_path}")
+            return True
+            
+        except Exception as e:
+            _logger.error(f"Error loading theme from {css_path}: {e}")
+            return False
     
-    def get_plotly_template(self) -> Dict[str, Any]:
-        """Get Plotly template configuration (legacy compatibility)"""
-        # Return basic template for compatibility
+    def _detect_theme_mode(self, background_color: str) -> ThemeMode:
+        """Detect theme mode based on background color"""
+        # Simple heuristic: if background is dark, it's a dark theme
+        bg = background_color.lower()
+        
+        # Handle hex colors
+        if bg.startswith('#'):
+            # Convert hex to RGB and calculate brightness
+            try:
+                hex_color = bg[1:]
+                if len(hex_color) == 3:
+                    hex_color = ''.join([c*2 for c in hex_color])
+                
+                r = int(hex_color[0:2], 16)
+                g = int(hex_color[2:4], 16)
+                b = int(hex_color[4:6], 16)
+                
+                # Calculate perceived brightness
+                brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255
+                
+                return ThemeMode.DARK if brightness < 0.5 else ThemeMode.LIGHT
+                
+            except ValueError:
+                pass
+        
+        # Handle named colors and keywords
+        dark_indicators = ['dark', 'black', 'night', 'midnight']
+        if any(indicator in bg for indicator in dark_indicators):
+            return ThemeMode.DARK
+        
+        return ThemeMode.LIGHT
+    
+    def set_theme(self, theme_name: str) -> bool:
+        """Set active theme"""
+        if theme_name not in self.themes:
+            _logger.warning(f"Theme '{theme_name}' not found")
+            return False
+        
+        theme = self.themes[theme_name]
+        self.current_mode = theme['mode']
+        
+        _logger.info(f"Switched to theme: {theme_name}")
+        return True
+    
+    def get_current_theme(self) -> Dict[str, Any]:
+        """Get current active theme"""
+        theme_name = 'dark' if self.current_mode == ThemeMode.DARK else 'light'
+        return self.themes.get(theme_name, self.themes['light'])
+    
+    def get_theme(self, theme_name: str) -> Optional[Dict[str, Any]]:
+        """Get specific theme by name"""
+        return self.themes.get(theme_name)
+    
+    def list_themes(self) -> List[str]:
+        """List all available themes"""
+        return list(self.themes.keys())
+    
+    def get_colors(self, theme_name: Optional[str] = None) -> ThemeColors:
+        """Get colors for specified theme or current theme"""
+        if theme_name:
+            theme = self.get_theme(theme_name)
+        else:
+            theme = self.get_current_theme()
+        
+        return theme['colors'] if theme else ThemeColors()
+    
+    def get_typography(self, theme_name: Optional[str] = None) -> ThemeTypography:
+        """Get typography for specified theme or current theme"""
+        if theme_name:
+            theme = self.get_theme(theme_name)
+        else:
+            theme = self.get_current_theme()
+        
+        return theme['typography'] if theme else ThemeTypography()
+    
+    def get_spacing(self, theme_name: Optional[str] = None) -> ThemeSpacing:
+        """Get spacing for specified theme or current theme"""
+        if theme_name:
+            theme = self.get_theme(theme_name)
+        else:
+            theme = self.get_current_theme()
+        
+        return theme['spacing'] if theme else ThemeSpacing()
+    
+    def export_theme_to_css(self, theme_name: str, output_path: Path) -> bool:
+        """Export theme to CSS file"""
+        try:
+            theme = self.get_theme(theme_name)
+            if not theme:
+                _logger.error(f"Theme '{theme_name}' not found")
+                return False
+            
+            colors = theme['colors']
+            typography = theme['typography']
+            spacing = theme['spacing']
+            
+            css_content = self._generate_css_content(colors, typography, spacing, theme_name)
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(css_content)
+            
+            _logger.info(f"Exported theme '{theme_name}' to {output_path}")
+            return True
+            
+        except Exception as e:
+            _logger.error(f"Error exporting theme to {output_path}: {e}")
+            return False
+    
+    def _generate_css_content(self, colors: ThemeColors, typography: ThemeTypography, 
+                             spacing: ThemeSpacing, theme_name: str) -> str:
+        """Generate CSS content from theme components"""
+        css_lines = [
+            f"/* Rose Theme: {theme_name} */",
+            f".{theme_name} {{",
+            "  /* Colors */",
+            f"  --background: {colors.background};",
+            f"  --foreground: {colors.foreground};",
+            f"  --primary: {colors.primary};",
+            f"  --secondary: {colors.secondary};",
+            f"  --accent: {colors.accent};",
+            f"  --success: {colors.success};",
+            f"  --warning: {colors.warning};",
+            f"  --error: {colors.error};",
+            f"  --info: {colors.info};",
+            f"  --border: {colors.border};",
+            f"  --input: {colors.input};",
+            f"  --muted: {colors.muted};",
+            "",
+            "  /* Chart Colors */",
+        ]
+        
+        for i, color in enumerate(colors.chart_colors, 1):
+            css_lines.append(f"  --chart-{i}: {color};")
+        
+        css_lines.extend([
+            "",
+            "  /* Typography */",
+            f"  --font-family: {typography.font_family};",
+            f"  --font-size-base: {typography.font_size_base};",
+            f"  --font-size-small: {typography.font_size_small};",
+            f"  --font-size-large: {typography.font_size_large};",
+            f"  --font-weight-normal: {typography.font_weight_normal};",
+            f"  --font-weight-bold: {typography.font_weight_bold};",
+            f"  --line-height: {typography.line_height};",
+            "",
+            "  /* Spacing */",
+            f"  --spacing-base: {spacing.base_unit};",
+            f"  --spacing-small: {spacing.small};",
+            f"  --spacing-medium: {spacing.medium};",
+            f"  --spacing-large: {spacing.large};",
+            f"  --spacing-xlarge: {spacing.xlarge};",
+            "}",
+            ""
+        ])
+        
+        return "\n".join(css_lines)
+    
+    def get_matplotlib_style(self, theme_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get matplotlib style configuration for the theme"""
+        colors = self.get_colors(theme_name)
+        
+        return {
+            'figure.facecolor': colors.background,
+            'axes.facecolor': colors.background,
+            'axes.edgecolor': colors.border,
+            'axes.labelcolor': colors.foreground,
+            'text.color': colors.foreground,
+            'xtick.color': colors.foreground,
+            'ytick.color': colors.foreground,
+            'grid.color': colors.border,
+            'axes.prop_cycle': f"cycler('color', {colors.chart_colors})"
+        }
+    
+    def get_plotly_theme(self, theme_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get plotly theme configuration"""
+        colors = self.get_colors(theme_name)
+        
         return {
             'layout': {
-                'paper_bgcolor': self._html_colors['background'],
-                'plot_bgcolor': self._html_colors['background'],
-                'font': {'color': self._html_colors['foreground']},
-                'colorway': self._plot_colors,
+                'paper_bgcolor': colors.background,
+                'plot_bgcolor': colors.background,
+                'font': {'color': colors.foreground},
+                'colorway': colors.chart_colors
             }
         }
     
-    def generate_html_css(self) -> str:
-        """Generate CSS for HTML export"""
-        return generate_html_css()
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert theme manager state to dictionary"""
+        return {
+            'current_mode': self.current_mode.value,
+            'themes': {
+                name: {
+                    'colors': theme['colors'].to_dict(),
+                    'typography': theme['typography'].to_dict(),
+                    'spacing': theme['spacing'].to_dict(),
+                    'mode': theme['mode'].value
+                }
+                for name, theme in self.themes.items()
+            }
+        }
 
-# Create global theme instance
-theme = RoseTheme()
 
-# Export functions for easy access
-def get_theme(dark_mode: bool = None) -> RoseTheme:
-    """Get theme instance for specified mode"""
-    return RoseTheme(dark_mode)
+# Global theme manager instance
+_global_theme: Optional[RoseTheme] = None
 
-def set_theme_mode(dark_mode: bool):
-    """Set global theme mode"""
-    global DARK_MODE, theme
-    DARK_MODE = dark_mode
-    theme = RoseTheme(dark_mode) 
+
+def get_theme() -> RoseTheme:
+    """Get or create global theme manager instance"""
+    global _global_theme
+    if _global_theme is None:
+        _global_theme = RoseTheme()
+    return _global_theme
+
+
+def set_theme(theme_name: str) -> bool:
+    """Set active theme globally"""
+    return get_theme().set_theme(theme_name)
+
+
+def get_current_colors() -> ThemeColors:
+    """Get colors for current theme"""
+    return get_theme().get_colors()
+
+
+def get_current_typography() -> ThemeTypography:
+    """Get typography for current theme"""
+    return get_theme().get_typography()
+
+
+def get_current_spacing() -> ThemeSpacing:
+    """Get spacing for current theme"""
+    return get_theme().get_spacing()
+
+
+def load_theme_from_css(css_path: Path, theme_name: Optional[str] = None) -> bool:
+    """Load theme from CSS file globally"""
+    return get_theme().load_theme_from_css(css_path, theme_name) 
