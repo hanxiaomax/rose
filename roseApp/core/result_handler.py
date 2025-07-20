@@ -87,7 +87,7 @@ class ResultHandler:
         Render result in specified format
         
         Args:
-            result: Analysis result from BagManager
+            result: Analysis result from BagManager or extraction result
             options: Rendering options
             
         Returns:
@@ -96,7 +96,11 @@ class ResultHandler:
         if options is None:
             options = RenderOptions()
         
-        # Route to appropriate renderer
+        # Check if this is an extraction result
+        if result.get('operation') == 'extract_topics':
+            return self._render_extraction_result(result, options)
+        
+        # Route to appropriate renderer for inspection results
         if options.format == OutputFormat.TABLE:
             return self._render_table(result, options)
         elif options.format == OutputFormat.LIST:
@@ -311,6 +315,236 @@ class ResultHandler:
                 for field in analysis.get('field_paths', []):
                     md_content += f"- `{field}`\n"
                 md_content += "\n"
+        
+        markdown = Markdown(md_content)
+        self.console.print(markdown)
+        
+        return md_content
+    
+    def _render_extraction_result(self, result: Dict[str, Any], options: RenderOptions) -> str:
+        """Render extraction result in specified format"""
+        if options.format == OutputFormat.SUMMARY:
+            return self._render_extraction_summary(result, options)
+        elif options.format == OutputFormat.TABLE:
+            return self._render_extraction_table(result, options)
+        elif options.format == OutputFormat.LIST:
+            return self._render_extraction_list(result, options)
+        elif options.format == OutputFormat.JSON:
+            return self._render_json(result, options)
+        elif options.format == OutputFormat.YAML:
+            return self._render_yaml(result, options)
+        elif options.format == OutputFormat.MARKDOWN:
+            return self._render_extraction_markdown(result, options)
+        else:
+            return self._render_extraction_summary(result, options)  # Fallback
+    
+    def _render_extraction_summary(self, result: Dict[str, Any], options: RenderOptions) -> str:
+        """Render extraction result as summary panel"""
+        
+        # Create summary text
+        summary_text = Text()
+        
+        # File information
+        summary_text.append("File Information:\n", style="bold cyan")
+        summary_text.append(f"  Input:  {result.get('input_file', 'Unknown')}\n", style="green")
+        summary_text.append(f"  Output: {result.get('output_file', 'Unknown')}\n", style="blue")
+        summary_text.append(f"  Compression: {result.get('compression', 'none')}\n")
+        
+        # Statistics
+        stats = result.get('statistics', {})
+        bag_info = result.get('bag_info', {})
+        
+        summary_text.append("\nStatistics:\n", style="bold cyan")
+        
+        if result.get('success') and not result.get('dry_run'):
+            # Show actual results with before → after format
+            summary_text.append(f"  Topics: {stats.get('total_topics', 0)} → {stats.get('selected_topics', 0)} ({stats.get('selection_percentage', 0):.1f}%)\n")
+            summary_text.append(f"  Messages: {stats.get('total_messages', 0):,} → {stats.get('selected_messages', 0):,} ({stats.get('message_percentage', 0):.1f}%)\n")
+            
+            # Add file size info if available
+            file_stats = result.get('file_stats', {})
+            if file_stats:
+                input_size = file_stats.get('input_size_bytes', 0) / 1024 / 1024
+                output_size = file_stats.get('output_size_bytes', 0) / 1024 / 1024
+                size_reduction = file_stats.get('size_reduction_percent', 0)
+                summary_text.append(f"  Size: {input_size:.1f} MB → {output_size:.1f} MB ({100 - size_reduction:.1f}%)\n")
+        else:
+            # Show preview/estimation format
+            summary_text.append(f"  Topics: {stats.get('total_topics', 0)} total, {stats.get('selected_topics', 0)} selected ({stats.get('selection_percentage', 0):.1f}%)\n")
+            summary_text.append(f"  Messages: {stats.get('total_messages', 0):,} total, {stats.get('selected_messages', 0):,} selected ({stats.get('message_percentage', 0):.1f}%)\n")
+        
+        duration = bag_info.get('duration_seconds', 0)
+        if duration > 0:
+            summary_text.append(f"  Duration: {duration:.1f}s\n")
+        
+        # Performance information
+        if result.get('performance'):
+            perf = result['performance']
+            summary_text.append("\nPerformance:\n", style="bold cyan")
+            summary_text.append(f"  Extraction Time: {perf.get('extraction_time', 0):.3f}s\n")
+            if perf.get('messages_per_sec', 0) > 0:
+                summary_text.append(f"  Processing Rate: {perf.get('messages_per_sec', 0):.0f} messages/sec\n")
+        
+        # Add verbose information if requested
+        if options.verbose:
+            cache_stats = result.get('cache_stats', {})
+            analysis_time = bag_info.get('analysis_time', 0)
+            cached = bag_info.get('cached', False)
+            
+            summary_text.append("\nDetailed Information:\n", style="bold cyan")
+            summary_text.append(f"  Analysis Time: {analysis_time:.3f}s\n")
+            summary_text.append(f"  Cached Result: {'Yes' if cached else 'No'}\n")
+            summary_text.append(f"  Parser: rosbags (high-performance)\n")
+            
+            if cache_stats:
+                hit_rate = cache_stats.get('hit_rate', 0) * 100
+                summary_text.append(f"  Cache Hit Rate: {hit_rate:.1f}%\n")
+            
+            if result.get('performance'):
+                perf = result['performance']
+                if perf.get('total_time', 0) > 0:
+                    efficiency = (analysis_time / perf['total_time']) * 100
+                    summary_text.append(f"  Total Time: {perf.get('total_time', 0):.3f}s\n")
+                    summary_text.append(f"  Analysis Efficiency: {efficiency:.1f}%\n")
+        
+        # Add topics overview
+        summary_text.append("\nTopics Overview:\n", style="bold cyan")
+        summary_text.append(f"  Keeping {stats.get('selected_topics', 0)}, Excluding {stats.get('excluded_topics', 0)}\n")
+        
+        # Add topics table
+        summary_text.append("\n")
+        
+        # Create topics table with full width
+        table = Table(show_header=True, header_style="bold magenta", box=None, expand=True)
+        table.add_column("Status", style="bold", width=8, justify="center")
+        table.add_column("Topic", style="cyan")  # Remove width constraints to allow expansion
+        table.add_column("Count", style="yellow", justify="right", width=10)
+        table.add_column("Size Est.", style="green", justify="right", width=12)
+        
+        topics_to_extract = result.get('topics_to_extract', [])
+        
+        for topic in result.get('all_topics', []):
+            topic_name = topic['name']
+            message_count = topic['message_count']
+            size_estimate = topic.get('estimated_size_bytes', 0)
+            
+            should_keep = topic_name in topics_to_extract
+            
+            if should_keep:
+                status = "●"
+                status_style = "green"
+            else:
+                status = "○"
+                status_style = "red dim"
+                topic_name = f"[dim]{topic_name}[/dim]"
+            
+            # Format size
+            if size_estimate > 1024 * 1024:
+                size_str = f"{size_estimate / 1024 / 1024:.1f}MB"
+            elif size_estimate > 1024:
+                size_str = f"{size_estimate / 1024:.1f}KB"
+            else:
+                size_str = f"{size_estimate}B"
+            
+            table.add_row(
+                f"[{status_style}]{status}[/{status_style}]",
+                topic_name,
+                f"{message_count:,}",
+                size_str
+            )
+        
+        # Create legend
+        legend_text = Text()
+        legend_text.append("● = Keep (included in output)  ", style="green")
+        legend_text.append("○ = Drop (excluded from output)", style="red dim")
+        
+        # Create combined content
+        from rich.align import Align
+        from rich.console import Group
+        
+        combined_content = Group(
+            summary_text,
+            table,  # Remove center alignment to use full width
+            "",
+            Align.center(legend_text)
+        )
+        
+        # Create panel
+        panel_title = "Summary"
+        if options.verbose:
+            panel_title += " (Verbose)"
+        
+        panel = Panel(
+            combined_content,
+            title=panel_title,
+            border_style="cyan"
+        )
+        self.console.print(panel)
+        
+        return ""
+    
+    def _render_extraction_table(self, result: Dict[str, Any], options: RenderOptions) -> str:
+        """Render extraction result as table format"""
+        # Show summary first
+        self._render_extraction_summary(result, options)
+        return ""
+    
+    def _render_extraction_list(self, result: Dict[str, Any], options: RenderOptions) -> str:
+        """Render extraction result as list format"""
+        stats = result.get('statistics', {})
+        
+        self.console.print(f"\n[bold]Extraction Operation[/bold]")
+        self.console.print(f"Topics: {stats.get('selected_topics', 0)}/{stats.get('total_topics', 0)} selected")
+        self.console.print(f"Messages: {stats.get('selected_messages', 0):,}/{stats.get('total_messages', 0):,} selected")
+        
+        if result.get('topics_to_extract'):
+            self.console.print(f"\n[bold]Selected Topics:[/bold]")
+            for topic_name in result['topics_to_extract']:
+                self.console.print(f"  • [green]{topic_name}[/green]")
+        
+        return ""
+    
+    def _render_extraction_markdown(self, result: Dict[str, Any], options: RenderOptions) -> str:
+        """Render extraction result as Markdown"""
+        stats = result.get('statistics', {})
+        bag_info = result.get('bag_info', {})
+        
+        md_content = f"""# ROS Bag Extraction Report
+
+## Operation Summary
+- **Input File**: {result.get('input_file', 'Unknown')}
+- **Output File**: {result.get('output_file', 'Unknown')}
+- **Compression**: {result.get('compression', 'none')}
+- **Operation**: {'Dry Run' if result.get('dry_run') else 'Extraction'}
+- **Status**: {'Success' if result.get('success') else 'Failed'}
+
+## Statistics
+- **Topics**: {stats.get('selected_topics', 0)} / {stats.get('total_topics', 0)} ({stats.get('selection_percentage', 0):.1f}%)
+- **Messages**: {stats.get('selected_messages', 0):,} / {stats.get('total_messages', 0):,} ({stats.get('message_percentage', 0):.1f}%)
+- **Duration**: {bag_info.get('duration_seconds', 0):.1f}s
+
+## Selected Topics
+
+| Topic | Message Count | Status |
+|-------|---------------|--------|
+"""
+        
+        topics_to_extract = result.get('topics_to_extract', [])
+        for topic in result.get('all_topics', []):
+            topic_name = topic['name']
+            count = topic['message_count']
+            status = "✓ Keep" if topic_name in topics_to_extract else "✗ Drop"
+            md_content += f"| `{topic_name}` | {count:,} | {status} |\n"
+        
+        if result.get('performance'):
+            perf = result['performance']
+            md_content += f"""
+## Performance
+- **Extraction Time**: {perf.get('extraction_time', 0):.3f}s
+- **Processing Rate**: {perf.get('messages_per_sec', 0):.0f} messages/sec
+- **Analysis Time**: {perf.get('analysis_time', 0):.3f}s
+- **Total Time**: {perf.get('total_time', 0):.3f}s
+"""
         
         markdown = Markdown(md_content)
         self.console.print(markdown)

@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(python -m pytest test_bag_manager.py::TestBagManager::test_load_bag -v)",
+      "Bash(python -m pytest test_bag_manager.py::TestBagManager::test_real_bag_analysis -v)",
+      "Bash(python -m pytest test_bag_manager.py::TestBagManager::test_topic_selection -v)",
+      "Bash(python -m pytest test_bag_manager.py::TestBagManager -v)",
+      "Bash(python -m pytest test_bag_manager.py::TestBagInfo test_bag_manager.py::TestBag -v)",
+      "Bash(python -m pytest test_bag_manager.py -v --tb=short)",
+      "Bash(python -m pytest test_bag_manager.py -v)"
     ],
     "deny": []
   }

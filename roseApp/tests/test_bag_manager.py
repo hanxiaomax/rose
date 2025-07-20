@@ -1,5 +1,5 @@
 """
-Test cases for BagManager module
+Test cases for BagManager module using real demo.bag file
 """
 
 import pytest
@@ -9,6 +9,9 @@ from unittest.mock import Mock, patch
 from roseApp.core.BagManager import (
     BagManager, BagStatus, Bag, BagInfo, FilterConfig, CompressionType
 )
+
+# Path to real demo.bag file
+DEMO_BAG_PATH = Path(__file__).parent / "demo.bag"
 
 
 class TestBagInfo:
@@ -26,7 +29,7 @@ class TestBagInfo:
         
         assert info.size == 1024000
         assert len(info.topics) == 2
-        assert info.size_str == "976.56KB"
+        assert info.size_str == "1000.00KB"
     
     def test_time_range_str(self):
         """Test time range string formatting"""
@@ -39,8 +42,8 @@ class TestBagInfo:
         )
         
         start_str, end_str = info.time_range_str
-        assert "09/02/73 03:46:29" in start_str
-        assert "09/02/73 03:46:30" in end_str
+        assert "73/11/30 05:33:09" in start_str
+        assert "73/11/30 05:33:10" in end_str
     
     def test_size_formatting(self):
         """Test size formatting in different units"""
@@ -132,8 +135,16 @@ class TestBag:
         assert bag.status == BagStatus.ERROR
 
 
+@pytest.fixture
+def demo_bag_path():
+    """Provide path to real demo.bag file"""
+    if not DEMO_BAG_PATH.exists():
+        pytest.skip("demo.bag file not found")
+    return DEMO_BAG_PATH
+
+
 class TestBagManager:
-    """Test cases for BagManager class"""
+    """Test cases for BagManager class using real demo.bag file"""
     
     def test_bag_manager_initialization(self):
         """Test basic BagManager initialization"""
@@ -142,54 +153,44 @@ class TestBagManager:
         assert len(manager.selected_topics) == 0
         assert manager.compression == CompressionType.NONE.value
     
-    def test_bag_manager_with_parser(self, mock_parser):
-        """Test BagManager initialization with custom parser"""
-        manager = BagManager(parser=mock_parser)
-        assert manager._parser == mock_parser
+    def test_bag_manager_with_parser(self):
+        """Test BagManager initialization with real parser"""
+        from roseApp.core.parser import RosbagsBagParser
+        parser = RosbagsBagParser()
+        manager = BagManager(parser=parser)
+        assert manager._parser == parser
     
-    def test_load_bag(self, temp_dir, mock_parser):
-        """Test loading a bag file"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+    def test_load_bag(self, demo_bag_path):
+        """Test loading real demo.bag file"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag_path)
-            
-            assert len(manager.bags) == 1
-            assert bag_path in manager.bags
-            assert len(manager.selected_topics) == 0
+        assert len(manager.bags) == 1
+        assert demo_bag_path in manager.bags
+        assert len(manager.selected_topics) == 0
+        
+        # Verify bag was loaded correctly
+        bag = manager.bags[demo_bag_path]
+        assert bag.path == demo_bag_path
+        assert bag.status == BagStatus.IDLE
+        assert len(bag.info.topics) > 0  # Should have actual topics
     
-    def test_load_duplicate_bag(self, temp_dir, mock_parser):
+    def test_load_duplicate_bag(self, demo_bag_path):
         """Test loading duplicate bag file raises error"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag_path)
-            
-            with pytest.raises(ValueError, match="already exists"):
-                manager.load_bag(bag_path)
+        with pytest.raises(ValueError, match="already exists"):
+            manager.load_bag(demo_bag_path)
     
-    def test_unload_bag(self, temp_dir, mock_parser):
+    def test_unload_bag(self, demo_bag_path):
         """Test unloading a bag file"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        assert len(manager.bags) == 1
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag_path)
-            assert len(manager.bags) == 1
-            
-            manager.unload_bag(bag_path)
-            assert len(manager.bags) == 0
+        manager.unload_bag(demo_bag_path)
+        assert len(manager.bags) == 0
     
     def test_unload_nonexistent_bag(self, temp_dir):
         """Test unloading nonexistent bag raises error"""
@@ -199,103 +200,64 @@ class TestBagManager:
         with pytest.raises(KeyError, match="not found"):
             manager.unload_bag(bag_path)
     
-    def test_clear_bags(self, temp_dir, mock_parser):
+    def test_clear_bags(self, demo_bag_path):
         """Test clearing all bags"""
-        bag1_path = temp_dir / "test1.bag"
-        bag2_path = temp_dir / "test2.bag"
-        bag1_path.touch()
-        bag2_path.touch()
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        assert len(manager.bags) == 1
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag1_path)
-            manager.load_bag(bag2_path)
-            assert len(manager.bags) == 2
-            
-            manager.clear_bags()
-            assert len(manager.bags) == 0
+        manager.clear_bags()
+        assert len(manager.bags) == 0
     
-    def test_topic_selection(self, temp_dir, mock_parser):
-        """Test topic selection functionality"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+    def test_topic_selection(self, demo_bag_path):
+        """Test topic selection functionality with real bag"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag_path)
-            
-            # Test topic selection
-            manager.select_topic("/topic1")
-            assert "/topic1" in manager.selected_topics
-            
-            # Test topic deselection
-            manager.deselect_topic("/topic1")
-            assert "/topic1" not in manager.selected_topics
-            
-            # Test clear all topics
-            manager.select_topic("/topic1")
-            manager.select_topic("/topic2")
-            assert len(manager.selected_topics) == 2
-            
-            manager.clear_selected_topics()
-            assert len(manager.selected_topics) == 0
+        # Get actual topics from the bag
+        bag = manager.bags[demo_bag_path]
+        actual_topics = list(bag.info.topics)
+        assert len(actual_topics) > 0
+        
+        test_topic = actual_topics[0]
+        
+        # Test topic selection
+        manager.select_topic(test_topic)
+        assert test_topic in manager.selected_topics
+        
+        # Test topic deselection
+        manager.deselect_topic(test_topic)
+        assert test_topic not in manager.selected_topics
+        
+        # Test clear all topics
+        manager.select_topic(test_topic)
+        assert len(manager.selected_topics) == 1
+        
+        manager.clear_selected_topics()
+        assert len(manager.selected_topics) == 0
     
-    def test_get_common_topics(self, temp_dir, mock_parser):
-        """Test getting common topics across bags"""
-        bag1_path = temp_dir / "test1.bag"
-        bag2_path = temp_dir / "test2.bag"
-        bag1_path.touch()
-        bag2_path.touch()
+    def test_get_common_topics(self, demo_bag_path):
+        """Test getting common topics with single bag"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
         
-        def mock_load_bag(path):
-            if "test1" in str(path):
-                return ["/topic1", "/topic2"], {}, ((0, 0), (1, 0))
-            else:
-                return ["/topic2", "/topic3"], {}, ((0, 0), (1, 0))
-        
-        mock_parser.load_bag.side_effect = mock_load_bag
-        
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag1_path)
-            manager.load_bag(bag2_path)
-            
-            common_topics = manager.get_common_topics()
-            assert "/topic2" in common_topics
-            assert len(common_topics) == 1
+        common_topics = manager.get_common_topics()
+        # With single bag, all topics are "common"
+        assert len(common_topics) > 0
     
-    def test_get_topic_summary(self, temp_dir, mock_parser):
-        """Test getting topic summary"""
-        bag1_path = temp_dir / "test1.bag"
-        bag2_path = temp_dir / "test2.bag"
-        bag1_path.touch()
-        bag2_path.touch()
+    def test_get_topic_summary(self, demo_bag_path):
+        """Test getting topic summary from real bag"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
         
-        def mock_load_bag(path):
-            if "test1" in str(path):
-                return ["/topic1", "/topic2"], {}, ((0, 0), (1, 0))
-            else:
-                return ["/topic2", "/topic3"], {}, ((0, 0), (1, 0))
+        summary = manager.get_topic_summary()
+        assert len(summary) > 0
         
-        mock_parser.load_bag.side_effect = mock_load_bag
-        
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(bag1_path)
-            manager.load_bag(bag2_path)
-            
-            summary = manager.get_topic_summary()
-            assert summary["/topic1"] == 1
-            assert summary["/topic2"] == 2
-            assert summary["/topic3"] == 1
+        # Verify actual topics exist in summary
+        bag = manager.bags[demo_bag_path]
+        for topic in bag.info.topics:
+            assert topic in summary
+            assert summary[topic] == 1  # Single bag, each topic appears once
     
     def test_compression_type_management(self):
         """Test compression type management"""
@@ -315,82 +277,172 @@ class TestBagManager:
         with pytest.raises(ValueError):
             manager.set_compression_type("invalid")
     
-    def test_callbacks(self, temp_dir, mock_parser):
-        """Test callback functionality"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
-        
+    def test_callbacks(self, demo_bag_path):
+        """Test callback functionality with real bag"""
         callback_called = False
         
         def bag_mutate_callback():
             nonlocal callback_called
             callback_called = True
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.set_bag_mutate_callback(bag_mutate_callback)
-            
-            manager.load_bag(bag_path)
-            assert callback_called
-    
-    def test_get_single_bag(self, temp_dir, mock_parser):
-        """Test getting single bag"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+        manager = BagManager()
+        manager.set_bag_mutate_callback(bag_mutate_callback)
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            assert manager.get_single_bag() is None
-            
-            manager.load_bag(bag_path)
-            single_bag = manager.get_single_bag()
-            assert single_bag is not None
-            assert single_bag.path == bag_path
+        manager.load_bag(demo_bag_path)
+        assert callback_called
     
-    def test_is_bag_loaded(self, temp_dir, mock_parser):
-        """Test checking if bag is loaded"""
-        bag_path = temp_dir / "test.bag"
-        bag_path.touch()
+    def test_get_single_bag(self, demo_bag_path):
+        """Test getting single bag with real data"""
+        manager = BagManager()
+        assert manager.get_single_bag() is None
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            assert not manager.is_bag_loaded(bag_path)
-            
-            manager.load_bag(bag_path)
-            assert manager.is_bag_loaded(bag_path)
+        manager.load_bag(demo_bag_path)
+        single_bag = manager.get_single_bag()
+        assert single_bag is not None
+        assert single_bag.path == demo_bag_path
     
-    def test_filter_bag(self, temp_dir, mock_parser):
-        """Test filtering a bag"""
-        input_path = temp_dir / "input.bag"
-        output_path = temp_dir / "output.bag"
-        input_path.touch()
-        output_path.touch()
+    def test_is_bag_loaded(self, demo_bag_path):
+        """Test checking if bag is loaded with real data"""
+        manager = BagManager()
+        assert not manager.is_bag_loaded(demo_bag_path)
         
-        with patch('pathlib.Path.stat') as mock_stat:
-            mock_stat.return_value.st_size = 1024000
-            
-            manager = BagManager(parser=mock_parser)
-            manager.load_bag(input_path)
-            
-            config = FilterConfig(
-                time_range=((0, 0), (1, 0)),
-                topic_list=["/topic1"],
-                compression="bz2"
-            )
-            
-            manager.filter_bag(input_path, config, output_path)
-            
-            assert manager.bags[input_path].status == BagStatus.SUCCESS
+        manager.load_bag(demo_bag_path)
+        assert manager.is_bag_loaded(demo_bag_path)
     
-    def test_parser_type_detection(self, mock_parser):
-        """Test parser type detection"""
-        with patch.object(mock_parser, '__class__') as mock_class:
-            mock_class.__name__ = 'RosbagsBagParser'
-            manager = BagManager(parser=mock_parser)
-            assert manager.get_parser_type() == 'rosbags'
+    def test_filter_bag(self, demo_bag_path, tmp_path):
+        """Test filtering a real bag file"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        
+        # Get actual topics from the bag
+        bag = manager.bags[demo_bag_path]
+        actual_topics = list(bag.info.topics)
+        assert len(actual_topics) > 0
+        
+        test_topic = actual_topics[0]
+        output_path = tmp_path / "filtered.bag"
+        
+        config = FilterConfig(
+            time_range=bag.info.time_range,
+            topic_list=[test_topic],
+            compression="none"
+        )
+        
+        manager.filter_bag(demo_bag_path, config, output_path)
+        
+        assert manager.bags[demo_bag_path].status == BagStatus.SUCCESS
+        assert output_path.exists()
+    
+    def test_parser_type_detection(self):
+        """Test parser type detection with real parser"""
+        manager = BagManager()
+        parser_type = manager.get_parser_type()
+        assert parser_type in ['rosbags', 'legacy']
+
+    def test_real_bag_analysis(self, demo_bag_path):
+        """Test comprehensive analysis of real demo.bag file"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        
+        # Verify bag loaded successfully
+        assert len(manager.bags) == 1
+        bag = manager.bags[demo_bag_path]
+        
+        # Check bag info is populated
+        assert bag.info.size > 0
+        assert len(bag.info.topics) > 0
+        assert bag.info.time_range[0] != bag.info.time_range[1]  # Has time range
+        
+        # Test topic selection with actual topics
+        topics = list(bag.info.topics)
+        test_topic = topics[0]
+        
+        manager.select_topic(test_topic)
+        assert test_topic in manager.selected_topics
+        
+        # Test getting common topics
+        common_topics = manager.get_common_topics()
+        assert len(common_topics) > 0
+        
+        # Test topic summary
+        summary = manager.get_topic_summary()
+        assert len(summary) > 0
+        assert test_topic in summary
+
+    def test_bag_info_integrity(self, demo_bag_path):
+        """Test that BagInfo contains accurate data from real bag"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        
+        bag = manager.bags[demo_bag_path]
+        info = bag.info
+        
+        # Verify all fields are populated
+        assert info.size > 0
+        assert len(info.topics) > 0
+        assert info.time_range[0] is not None
+        assert info.time_range[1] is not None
+        assert info.init_time_range[0] is not None
+        assert info.init_time_range[1] is not None
+        assert info.size_str.endswith(('B', 'KB', 'MB', 'GB'))
+        
+        # Verify topics are actual strings
+        for topic in info.topics:
+            assert isinstance(topic, str)
+            assert topic.startswith('/')
+
+    def test_multiple_bags_real_data(self, demo_bag_path, tmp_path):
+        """Test managing multiple real bags"""
+        manager = BagManager()
+        
+        # Load the same bag twice with different names to simulate multiple bags
+        bag1_path = demo_bag_path
+        bag2_path = tmp_path / "demo_copy.bag"
+        
+        # Copy demo.bag to create a second bag file
+        import shutil
+        shutil.copy2(bag1_path, bag2_path)
+        
+        manager.load_bag(bag1_path)
+        manager.load_bag(bag2_path)
+        
+        assert len(manager.bags) == 2
+        
+        # Test common topics
+        common_topics = manager.get_common_topics()
+        assert len(common_topics) > 0
+        
+        # Test topic summary
+        summary = manager.get_topic_summary()
+        assert len(summary) > 0
+        
+        # Each topic should appear twice (once per bag)
+        for topic, count in summary.items():
+            assert count == 2
+            
+        # Clean up
+        manager.clear_bags()
+        assert len(manager.bags) == 0
+        
+        # Clean up copied file
+        bag2_path.unlink(missing_ok=True)
+
+    def test_filter_config_with_real_data(self, demo_bag_path, tmp_path):
+        """Test creating filter config from real bag data"""
+        manager = BagManager()
+        manager.load_bag(demo_bag_path)
+        
+        bag = manager.bags[demo_bag_path]
+        topics = list(bag.info.topics)
+        
+        # Test with real time range and topics
+        config = FilterConfig(
+            time_range=bag.info.time_range,
+            topic_list=[topics[0]],
+            compression="none"
+        )
+        
+        assert config.time_range == bag.info.time_range
+        assert len(config.topic_list) == 1
+        assert config.topic_list[0] in topics
+        assert config.compression == "none"

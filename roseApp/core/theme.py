@@ -317,10 +317,10 @@ class RoseTheme:
             
             _logger.info(f"Loaded {len(css_themes)} theme(s) from {css_path}")
             return True
-            
+                
         except Exception as e:
             _logger.error(f"Error loading theme from {css_path}: {e}")
-            return False
+        return False
     
     def _detect_theme_mode(self, background_color: str) -> ThemeMode:
         """Detect theme mode based on background color"""

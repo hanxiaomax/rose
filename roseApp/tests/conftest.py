@@ -38,17 +38,12 @@ def mock_bag_file(temp_dir):
 
 
 @pytest.fixture
-def mock_parser():
-    """Create a mock parser for testing"""
-    mock = Mock()
-    mock.load_bag.return_value = (
-        ["/topic1", "/topic2"],
-        {"topic1": "std_msgs/String", "topic2": "geometry_msgs/Twist"},
-        ((123456789, 0), (123456790, 0))
-    )
-    mock.get_message_counts.return_value = {"/topic1": 100, "/topic2": 50}
-    mock.filter_bag.return_value = "Filtering completed"
-    return mock
+def demo_bag_path():
+    """Provide path to real demo.bag file for integration tests"""
+    demo_path = Path(__file__).parent / "demo.bag"
+    if not demo_path.exists():
+        pytest.skip("demo.bag file not found - integration tests require demo.bag")
+    return demo_path
 
 
 @pytest.fixture
