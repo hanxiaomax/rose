@@ -419,6 +419,402 @@ class UIControl:
             yield progress, task, callback, update_desc
     
     # ========================================================================
+    # Advanced Progress Display Methods
+    # ========================================================================
+    
+    @classmethod
+    @contextmanager
+    def dynamic_table_progress(cls, topics_info: List[Dict[str, Any]], 
+                              title: str = "Topic Processing Progress",
+                              console: Optional[Console] = None):
+        """
+        Create a dynamic table that shows topic processing progress in real-time
+        
+        Args:
+            topics_info: List of topic info dicts with 'name', 'message_count', etc.
+            title: Table title
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update topic status
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        # Topic status tracking
+        topic_status = {}
+        for topic in topics_info:
+            topic_name = topic['name']
+            topic_status[topic_name] = {
+                'status': 'pending',  # pending, processing, completed, skipped
+                'processed': 0,
+                'total': topic.get('message_count', 0),
+                'phase': 'waiting'
+            }
+        
+        # Create initial table
+        def create_table():
+            table = Table(
+                title=title,
+                show_header=True,
+                header_style="bold magenta",
+                expand=True,
+                box=None
+            )
+            
+            table.add_column("Status", style="bold", width=8, justify="center")
+            table.add_column("Topic", style="cyan", no_wrap=False)
+            table.add_column("Progress", width=30)
+            table.add_column("Messages", justify="right", width=12)
+            table.add_column("Phase", style="yellow", width=15)
+            
+            return table
+        
+        def update_table():
+            """Update and display the current table"""
+            table = create_table()
+            
+            for topic in topics_info:
+                topic_name = topic['name']
+                status_info = topic_status[topic_name]
+                
+                # Status icon and style
+                if status_info['status'] == 'pending':
+                    status_icon = "⏳"
+                    status_style = "dim"
+                    row_style = "dim"
+                elif status_info['status'] == 'processing':
+                    status_icon = "🔄"
+                    status_style = "yellow bold"
+                    row_style = "yellow"
+                elif status_info['status'] == 'completed':
+                    status_icon = "✅"
+                    status_style = "green bold"
+                    row_style = "green"
+                elif status_info['status'] == 'skipped':
+                    status_icon = "⏭️"
+                    status_style = "blue"
+                    row_style = "dim blue"
+                else:
+                    status_icon = "❓"
+                    status_style = "red"
+                    row_style = "red"
+                
+                # Progress bar
+                total = status_info['total']
+                processed = status_info['processed']
+                if total > 0:
+                    progress_percent = (processed / total) * 100
+                    bar_width = 20
+                    filled = int((progress_percent / 100) * bar_width)
+                    bar = "█" * filled + "░" * (bar_width - filled)
+                    progress_text = f"{bar} {progress_percent:.1f}%"
+                else:
+                    progress_text = "N/A"
+                
+                # Messages count
+                if total > 0:
+                    messages_text = f"{processed:,}/{total:,}"
+                else:
+                    messages_text = "0"
+                
+                # Phase description
+                phase_text = status_info['phase']
+                
+                # Topic name with styling
+                if status_info['status'] == 'processing':
+                    topic_display = f"[bold yellow]{topic_name}[/bold yellow]"
+                elif status_info['status'] == 'completed':
+                    topic_display = f"[green]{topic_name}[/green]"
+                elif status_info['status'] == 'skipped':
+                    topic_display = f"[dim blue]{topic_name}[/dim blue]"
+                else:
+                    topic_display = f"[dim]{topic_name}[/dim]"
+                
+                table.add_row(
+                    f"[{status_style}]{status_icon}[/{status_style}]",
+                    topic_display,
+                    progress_text,
+                    messages_text,
+                    phase_text
+                )
+            
+            # Clear screen and display table
+            console.clear()
+            console.print(table)
+            console.print()  # Add some spacing
+        
+        def update_topic_status(topic_name: str, status: str = None, 
+                               processed: int = None, phase: str = None):
+            """Update topic status and refresh display"""
+            if topic_name in topic_status:
+                if status is not None:
+                    topic_status[topic_name]['status'] = status
+                if processed is not None:
+                    topic_status[topic_name]['processed'] = processed
+                if phase is not None:
+                    topic_status[topic_name]['phase'] = phase
+                
+                # Update display
+                update_table()
+        
+        # Show initial table
+        update_table()
+        
+        try:
+            yield update_topic_status
+        finally:
+            # Show final summary
+            completed_count = sum(1 for s in topic_status.values() if s['status'] == 'completed')
+            skipped_count = sum(1 for s in topic_status.values() if s['status'] == 'skipped')
+            total_count = len(topic_status)
+            
+            console.print()
+            console.print(f"[bold green]✅ Processing Complete![/bold green]")
+            console.print(f"Topics: {completed_count} completed, {skipped_count} skipped, {total_count} total")
+    
+    @classmethod
+    @contextmanager  
+    def minimal_table_progress(cls, topics_info: List[Dict[str, Any]], 
+                              title: str = "Processing Topics",
+                              console: Optional[Console] = None):
+        """
+        Create a minimal table that shows topic processing progress with loading animation
+        
+        Args:
+            topics_info: List of topic info dicts with 'name', 'message_count', etc.
+            title: Table title
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update topic status
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        # Topic status tracking
+        topic_status = {}
+        for topic in topics_info:
+            topic_name = topic['name']
+            topic_status[topic_name] = {
+                'status': 'pending',  # pending, processing, completed
+                'processed': 0,
+                'total': topic.get('message_count', 0),
+            }
+        
+        # Loading animation frames
+        loading_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        frame_index = 0
+        
+        def create_table():
+            nonlocal frame_index
+            table = Table(
+                title=title,
+                show_header=True,
+                header_style="bold white",
+                expand=True,
+                box=None,
+                padding=(0, 1)
+            )
+            
+            table.add_column("", style="bold", width=3, justify="center")
+            table.add_column("Topic", style="white", no_wrap=False)
+            table.add_column("Messages", justify="right", width=15)
+            table.add_column("Status", width=12)
+            
+            return table
+        
+        def update_table():
+            """Update and display the current table"""
+            nonlocal frame_index
+            table = create_table()
+            
+            for topic in topics_info:
+                topic_name = topic['name']
+                status_info = topic_status[topic_name]
+                
+                # Status marker and style
+                if status_info['status'] == 'pending':
+                    marker = "○"
+                    topic_style = "dim white"
+                    messages_style = "dim white"
+                    status_text = "waiting"
+                    status_style = "dim white"
+                elif status_info['status'] == 'processing':
+                    marker = loading_frames[frame_index % len(loading_frames)]
+                    topic_style = "bold yellow"
+                    messages_style = "yellow"
+                    status_text = "processing"
+                    status_style = "yellow"
+                elif status_info['status'] == 'completed':
+                    marker = "✓"
+                    topic_style = "green"
+                    messages_style = "green"
+                    status_text = "done"
+                    status_style = "green"
+                else:
+                    marker = "○"
+                    topic_style = "dim white"
+                    messages_style = "dim white"
+                    status_text = "unknown"
+                    status_style = "dim white"
+                
+                # Messages count
+                total = status_info['total']
+                processed = status_info['processed']
+                if total > 0:
+                    messages_text = f"{processed:,}/{total:,}"
+                else:
+                    messages_text = "0"
+                
+                table.add_row(
+                    f"[{topic_style}]{marker}[/{topic_style}]",
+                    f"[{topic_style}]{topic_name}[/{topic_style}]",
+                    f"[{messages_style}]{messages_text}[/{messages_style}]",
+                    f"[{status_style}]{status_text}[/{status_style}]"
+                )
+            
+            # Increment frame for loading animation
+            frame_index += 1
+            
+            # Clear screen and display table
+            console.clear()
+            console.print(table)
+            console.print()  # Add some spacing
+        
+        def update_topic_status(topic_name: str, status: str = None, 
+                               processed: int = None):
+            """Update topic status and refresh display"""
+            if topic_name in topic_status:
+                if status is not None:
+                    topic_status[topic_name]['status'] = status
+                if processed is not None:
+                    topic_status[topic_name]['processed'] = processed
+                
+                # Update display
+                update_table()
+        
+        # Show initial table
+        update_table()
+        
+        try:
+            yield update_topic_status
+        finally:
+            # Clear the screen completely when done - no final summary
+            console.clear()
+            
+            # Show a simple completion message
+            completed_count = sum(1 for s in topic_status.values() if s['status'] == 'completed')
+            total_count = len(topic_status)
+            
+            if completed_count == total_count:
+                console.print(f"[bold green]✓ Successfully processed all {total_count} topics[/bold green]")
+            else:
+                console.print(f"[yellow]Processed {completed_count}/{total_count} topics[/yellow]")
+    
+    @classmethod
+    @contextmanager  
+    def minimal_extraction_progress(cls, topics_info: List[Dict[str, Any]], 
+                                   operation_title: str = "Extracting Topics",
+                                   console: Optional[Console] = None):
+        """
+        Create a minimal extraction progress display with clean table
+        
+        Args:
+            topics_info: List of topic info dicts
+            operation_title: Title for the operation
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update topic status
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        with cls.minimal_table_progress(topics_info, operation_title, console) as update_topic:
+            
+            def update_topic_status(topic_name: str, status: str = None, 
+                                   processed: int = None, phase: str = None):
+                """Update individual topic status"""
+                # Map phase to status if needed
+                if phase == "analyzing":
+                    status = "processing"
+                elif phase == "processing":
+                    status = "processing"
+                elif phase == "completed":
+                    status = "completed"
+                
+                # Update the table
+                update_topic(topic_name, status, processed)
+            
+            yield update_topic_status
+    
+    @classmethod
+    @contextmanager  
+    def minimal_inspection_progress(cls, title: str = "Analyzing ROS Bag",
+                                   console: Optional[Console] = None):
+        """
+        Create a minimal inspection progress display with clean loading animation
+        
+        Args:
+            title: Title for the operation
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update progress and description
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        # Loading animation frames
+        loading_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        frame_index = 0
+        current_description = "Initializing..."
+        
+        def create_display():
+            nonlocal frame_index
+            
+            # Simple loading display
+            spinner = loading_frames[frame_index % len(loading_frames)]
+            frame_index += 1
+            
+            # Clear and show current status
+            console.clear()
+            console.print(f"[bold white]{title}[/bold white]")
+            console.print()
+            console.print(f"[yellow]{spinner}[/yellow] {current_description}")
+            console.print()
+        
+        def update_progress(percent: float = None, description: str = None):
+            """Update progress display"""
+            nonlocal current_description
+            
+            if description:
+                current_description = description
+            elif percent is not None:
+                if percent < 30:
+                    current_description = "Reading bag structure..."
+                elif percent < 60:
+                    current_description = "Analyzing topics..."
+                elif percent < 90:
+                    current_description = "Processing metadata..."
+                else:
+                    current_description = "Finalizing analysis..."
+            
+            # Update display
+            create_display()
+        
+        # Show initial display
+        update_progress(0, "Starting analysis...")
+        
+        try:
+            yield update_progress
+        finally:
+            # Clear the screen completely when done
+            console.clear()
+            console.print(f"[bold green]✓ Analysis complete[/bold green]")
+    
+    # ========================================================================
     # Result Display Methods
     # ========================================================================
     
@@ -938,7 +1334,7 @@ class UIControl:
         table.add_column("Frequency", justify="right", style="blue")
         
         if options.show_fields:
-            table.add_column("Fields", style="yellow")
+            table.add_column("Fields", style="yellow", no_wrap=False)
         
         # Add topic rows
         for topic_info in topics:
@@ -950,15 +1346,46 @@ class UIControl:
                 frequency_str
             ]
             
-            if options.show_fields and 'field_paths' in topic_info:
-                fields_count = len(topic_info['field_paths'])
-                row.append(f"{fields_count} fields")
-            elif options.show_fields:
-                row.append("N/A")
+            if options.show_fields:
+                if 'field_paths' in topic_info and topic_info['field_paths']:
+                    # Show first few field paths with "..." if there are more
+                    field_paths = topic_info['field_paths']
+                    if len(field_paths) <= 3:
+                        fields_display = ', '.join(field_paths)
+                    else:
+                        fields_display = ', '.join(field_paths[:3]) + f', ... ({len(field_paths)} total)'
+                    row.append(fields_display)
+                else:
+                    row.append("N/A")
             
             table.add_row(*row)
         
         console.print(table)
+        
+        # If show_fields is enabled, show detailed field analysis
+        if options.show_fields:
+            field_analysis = result.get('field_analysis', {})
+            if field_analysis:
+                console.print()
+                console.print("[bold magenta]Field Analysis Details[/bold magenta]")
+                console.print()
+                
+                for topic, analysis in field_analysis.items():
+                    field_paths = analysis.get('field_paths', [])
+                    if field_paths:
+                        console.print(f"[bold cyan]{topic}[/bold cyan] ({analysis.get('message_type', 'Unknown')})")
+                        
+                        # Display fields as simple list with dot notation
+                        for field_path in sorted(field_paths):
+                            if '.' in field_path:
+                                # Nested field - show with yellow color
+                                console.print(f"  • [yellow]{field_path}[/yellow]")
+                            else:
+                                # Top-level field - show with green color
+                                console.print(f"  • [green]{field_path}[/green]")
+                        
+                        console.print()
+        
         return ""  # Console output, no string return
     
     @classmethod

@@ -39,15 +39,17 @@ def await_sync(coro):
     return loop.run_until_complete(coro)
 
 
-def main(
+@app.command()
+def extract(
     input_bag: str = typer.Argument(..., help="Path to input bag file"),
     topics: Optional[List[str]] = typer.Option(None, "--topics", help="Topics to keep (supports fuzzy matching, can be used multiple times)"),
-    output: Optional[str] = typer.Option(None, "-o", "--output", help="Output bag file path (default: input_filtered_timestamp.bag)"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output bag file path (default: input_filtered_timestamp.bag)"),
     reverse: bool = typer.Option(False, "--reverse", help="Reverse selection - exclude specified topics instead of including them"),
-    compression: str = typer.Option("none", "-c", "--compression", help="Compression type: none, bz2, lz4"),
+    compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be extracted without doing it"),
-    yes: bool = typer.Option(False, "-y", "--yes", help="Answer yes to all questions (overwrite, etc.)"),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Show detailed extraction information")
+    yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache and reparse the bag file")
 ):
     """
     Extract specific topics from a ROS bag file
@@ -59,7 +61,7 @@ def main(
         rose extract input.bag --topics gps --compression lz4      # Use LZ4 compression
         rose extract input.bag --topics gps --dry-run              # Preview without extraction
     """
-    _extract_topics_impl(input_bag, topics, output, reverse, compression, dry_run, yes, verbose)
+    _extract_topics_impl(input_bag, topics, output, reverse, compression, dry_run, yes, verbose, no_cache)
 
 
 def _extract_topics_impl(
@@ -70,7 +72,8 @@ def _extract_topics_impl(
     compression: str,
     dry_run: bool,
     yes: bool,
-    verbose: bool
+    verbose: bool,
+    no_cache: bool
 ):
     """
     Extract specific topics from a ROS bag file using ResultHandler for unified output
@@ -214,27 +217,42 @@ def _extract_topics_impl(
             topics=topics_to_extract,
             output_path=output_path,
             compression=compression,
-            overwrite=True,  # We already handled overwrite confirmation above
-            dry_run=False
+            overwrite=yes,
+            dry_run=dry_run,
+            reverse=reverse,
+            no_cache=no_cache
         )
+        
+        # Prepare topics info for fancy progress display
+        topics_for_display = []
+        for topic in extraction_result.get('all_topics', []):
+            if topic['name'] in topics_to_extract:
+                topics_for_display.append({
+                    'name': topic['name'],
+                    'message_count': topic['message_count'],
+                    'message_type': topic.get('message_type', 'Unknown'),
+                    'estimated_size_bytes': topic.get('estimated_size_bytes', 0)
+                })
         
         # Track extraction timing
         extraction_start_time = time.time()
         
-        # Show progress during extraction with topic-level detail
-        with UIControl.topic_progress(
-            f"Extracting {len(topics_to_extract)} topics",
-            topics_to_extract,
-            theme=UITheme.EXTRACTION,
-            console=console
-        ) as (progress, task, topic_callback):
+        # Show minimal extraction progress with clean table
+        with UIControl.minimal_extraction_progress(
+            topics_for_display, 
+            f"Extracting from {input_path.name}",
+            console
+        ) as update_topic:
+            
             # Create enhanced topic progress callback
-            def enhanced_topic_callback(topic_index: int, topic: str, messages_processed: int, 
+            def enhanced_topic_callback(topic_index: int, topic: str, messages_processed: int,
                                        total_messages: int, phase: str):
-                topic_callback(topic_index, topic, messages_processed, total_messages, phase)
+                # Update the minimal display
+                update_topic(topic, phase, messages_processed)
             
             result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_topic_callback))
         
+        # Calculate extraction timing
         extraction_end_time = time.time()
         extraction_time = extraction_end_time - extraction_start_time
         
@@ -269,8 +287,8 @@ def _extract_topics_impl(
 
 
 
-# Register main as the default command with empty name
-app.command(name="")(main)
+# Register extract as the default command with empty name
+app.command(name="")(extract)
 
 if __name__ == "__main__":
-    typer.run(main) 
+    app() 

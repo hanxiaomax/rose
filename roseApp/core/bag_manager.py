@@ -26,6 +26,7 @@ class InspectOptions:
     output_format: OutputFormat = OutputFormat.TABLE
     output_file: Optional[Path] = None
     verbose: bool = False
+    no_cache: bool = False
 
 
 @dataclass
@@ -35,8 +36,10 @@ class ExtractOptions:
     topic_filter: Optional[str] = None
     output_path: Optional[Path] = None
     compression: str = "none"
-    overwrite: bool = True
+    overwrite: bool = False
     dry_run: bool = False
+    reverse: bool = False
+    no_cache: bool = False
 
 
 @dataclass
@@ -121,7 +124,8 @@ class BagManager:
         result = await self.analyzer.analyze_bag_async(
             bag_path, 
             analysis_type,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            no_cache=options.no_cache
         )
         
         # Apply topic filtering if specified
@@ -185,7 +189,8 @@ class BagManager:
         bag_path: Union[str, Path],
         patterns: Optional[List[str]] = None,
         exact_match: bool = False,
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Callable[[float], None]] = None,
+        no_cache: bool = False
     ) -> Dict[str, Any]:
         """
         Get available topics from a ROS bag file with optional filtering
@@ -194,6 +199,7 @@ class BagManager:
             bag_path: Path to the bag file
             patterns: Optional list of patterns to match against topic names
             exact_match: If True, use exact matching; if False, use fuzzy matching
+            no_cache: If True, skip cache and reparse the bag file
             
         Returns:
             Dictionary containing topic information
@@ -207,7 +213,8 @@ class BagManager:
         result = await self.analyzer.analyze_bag_async(
             bag_path, 
             AnalysisType.METADATA,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            no_cache=no_cache
         )
         
         all_topics = list(result.bag_info.topics)
@@ -280,7 +287,11 @@ class BagManager:
             raise ValueError("Output path is required for extraction")
         
         # Analyze the bag to get available topics
-        result = await self.analyzer.analyze_bag_async(bag_path, AnalysisType.METADATA)
+        result = await self.analyzer.analyze_bag_async(
+            bag_path, 
+            AnalysisType.METADATA,
+            no_cache=options.no_cache
+        )
         
         # Apply topic filtering using the same logic as inspect
         topics_to_extract = self._filter_topics(

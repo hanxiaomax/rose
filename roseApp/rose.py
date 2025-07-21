@@ -11,7 +11,7 @@ import logging
 
 # Import necessary functions from utility modules
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
-from roseApp.cli.extract import main as extract_main
+from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.inspect import app as inspect_app
 from roseApp.cli.plot import app as plot_app
 from roseApp.cli.tools import app as tools_app

@@ -27,7 +27,8 @@ def inspect(
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of topics shown"),
     as_format: str = typer.Option("table", "--as", help="Output format (table, list, summary, json, yaml, csv, xml, html, markdown)"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache and reparse the bag file")
 ):
     """
     Inspect a ROS bag file and display comprehensive analysis
@@ -57,7 +58,8 @@ def inspect(
         limit=limit,
         output_format=output_format,
         output_file=output,
-        verbose=verbose
+        verbose=verbose,
+        no_cache=no_cache
     )
     
     # Run the async inspection
@@ -71,22 +73,15 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
     manager = BagManager()
     
     try:
-        # Show progress during analysis
-        with UIControl.responsive_progress(
-            f"Analyzing bag file: {bag_path.name}...",
-            show_speed=False,
-            theme=UITheme.ANALYSIS,
-            console=console
-        ) as (progress, task, progress_callback, update_description):
+        # Show minimal progress during analysis
+        with UIControl.minimal_inspection_progress(
+            f"Analyzing {bag_path.name}",
+            console
+        ) as update_progress:
+            
             # Create enhanced callback for analysis
             def analysis_callback(percent: float):
-                progress_callback(percent)
-                if percent > 30:
-                    update_description(f"Analyzing bag file: {bag_path.name}... (reading topics)")
-                elif percent > 70:
-                    update_description(f"Analyzing bag file: {bag_path.name}... (processing metadata)")
-                elif percent > 90:
-                    update_description(f"Analyzing bag file: {bag_path.name}... (finalizing)")
+                update_progress(percent)
 
             result = await manager.inspect_bag(bag_path, options, progress_callback=analysis_callback)
         

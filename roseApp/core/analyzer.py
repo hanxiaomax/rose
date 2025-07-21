@@ -88,7 +88,8 @@ class BagAnalyzer:
         self,
         bag_path: Path,
         analysis_type: AnalysisType = AnalysisType.METADATA,
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Callable[[float], None]] = None,
+        no_cache: bool = False
     ) -> AnalysisResult:
         """Analyze bag file asynchronously"""
         start_time = time.time()
@@ -96,12 +97,16 @@ class BagAnalyzer:
         # Generate cache key
         cache_key = f"analysis_{bag_path}_{analysis_type.value}_{bag_path.stat().st_mtime}"
         
-        # Check cache first
-        cached_result = self.cache.get(cache_key)
-        if cached_result:
-            self.logger.info(f"Using cached analysis for {bag_path}")
-            cached_result.cached = True
-            return cached_result
+        # Check cache first (unless no_cache is specified)
+        cached_result = None
+        if not no_cache:
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                self.logger.info(f"Using cached analysis for {bag_path}")
+                cached_result.cached = True
+                return cached_result
+        else:
+            self.logger.info(f"Skipping cache for {bag_path} (--no-cache specified)")
         
         try:
             if progress_callback:
@@ -137,8 +142,9 @@ class BagAnalyzer:
             if progress_callback:
                 progress_callback(100.0)
             
-            # Cache the result
-            self.cache.put(cache_key, result, ttl=3600)  # Cache for 1 hour
+            # Cache the result (unless no_cache is specified)
+            if not no_cache:
+                self.cache.put(cache_key, result, ttl=3600)  # Cache for 1 hour
             
             self.logger.info(f"Analysis completed in {result.analysis_time:.2f}s")
             return result
@@ -352,7 +358,8 @@ _analyzer = None
 async def analyze_bag_async(
     bag_path: Path,
     analysis_type: AnalysisType = AnalysisType.METADATA,
-    progress_callback: Optional[Callable[[float], None]] = None
+    progress_callback: Optional[Callable[[float], None]] = None,
+    no_cache: bool = False
 ) -> AnalysisResult:
     """Analyze bag file asynchronously - main public interface"""
     global _analyzer
@@ -363,7 +370,8 @@ async def analyze_bag_async(
     return await _analyzer.analyze_bag_async(
         bag_path=bag_path,
         analysis_type=analysis_type,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        no_cache=no_cache
     )
 
 
