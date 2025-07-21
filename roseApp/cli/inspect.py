@@ -75,7 +75,8 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
         with ProgressManager.analysis_progress(
             f"Analyzing bag file: {bag_path.name}...",
             console
-        ) as (progress, task):
+        ) as (progress, task, progress_callback):
+            # Note: inspect_bag doesn't support progress callback yet, but we prepare for it
             result = await manager.inspect_bag(bag_path, options)
         
         # Get result handler

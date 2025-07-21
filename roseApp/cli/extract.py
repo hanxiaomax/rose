@@ -114,11 +114,21 @@ def _extract_topics_impl(
         manager = BagManager()
         
         # Show progress during bag analysis
-        with ProgressManager.analysis_progress(
-            f"Analyzing bag file: {input_path.name}...", 
-            console
-        ) as (progress, task):
-            topics_result = await_sync(manager.get_topics(input_path))
+        with ProgressManager.responsive_progress(
+            f"Analyzing bag file: {input_path.name}...",
+            show_speed=False,
+            style="cyan",
+            console=console
+        ) as (progress, task, progress_callback, update_description):
+            # Create enhanced callback for analysis
+            def analysis_callback(percent: float):
+                progress_callback(percent)
+                if percent > 50:
+                    update_description(f"Analyzing bag file: {input_path.name}... (reading topics)")
+                elif percent > 80:
+                    update_description(f"Analyzing bag file: {input_path.name}... (finalizing)")
+            
+            topics_result = await_sync(manager.get_topics(input_path, progress_callback=analysis_callback))
         
         all_topics = [t['name'] for t in topics_result['topics']]
         
@@ -213,13 +223,23 @@ def _extract_topics_impl(
         
         # Show progress during extraction
         total_messages = extraction_result['statistics']['selected_messages']
-        with ProgressManager.extraction_progress(
+        with ProgressManager.responsive_progress(
             f"Extracting {len(topics_to_extract)} topics ({total_messages:,} messages)...",
-            total=total_messages,
+            show_speed=True,
+            style="green",
             console=console
-        ) as (progress, task):
-            result = await_sync(manager.extract_bag(input_path, options))
-            progress.update(task, completed=total_messages)
+        ) as (progress, task, progress_callback, update_description):
+            # Create a wrapper callback that provides more detailed updates
+            def enhanced_callback(percent: float):
+                messages_processed = int((percent / 100) * total_messages)
+                progress_callback(percent, current=messages_processed, total_items=total_messages)
+                
+                # Update description with current status
+                if percent > 0:
+                    rate = messages_processed / ((time.time() - extraction_start_time) or 1)
+                    update_description(f"Extracting {len(topics_to_extract)} topics... ({messages_processed:,}/{total_messages:,} messages, {rate:.0f} msg/s)")
+            
+            result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_callback))
         
         extraction_end_time = time.time()
         extraction_time = extraction_end_time - extraction_start_time

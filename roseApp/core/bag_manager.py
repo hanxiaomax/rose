@@ -4,7 +4,7 @@ Provides a single entry point for CLI commands to interact with ROS bags
 """
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any, Callable
 from dataclasses import dataclass
 from enum import Enum
 import logging
@@ -179,7 +179,8 @@ class BagManager:
         self,
         bag_path: Union[str, Path],
         patterns: Optional[List[str]] = None,
-        exact_match: bool = False
+        exact_match: bool = False,
+        progress_callback: Optional[Callable[[float], None]] = None
     ) -> Dict[str, Any]:
         """
         Get available topics from a ROS bag file with optional filtering
@@ -198,7 +199,11 @@ class BagManager:
             raise FileNotFoundError(f"Bag file not found: {bag_path}")
         
         # Analyze the bag to get available topics
-        result = await self.analyzer.analyze_bag_async(bag_path, AnalysisType.METADATA)
+        result = await self.analyzer.analyze_bag_async(
+            bag_path, 
+            AnalysisType.METADATA,
+            progress_callback=progress_callback
+        )
         
         all_topics = list(result.bag_info.topics)
         
@@ -248,7 +253,8 @@ class BagManager:
     async def extract_bag(
         self,
         bag_path: Union[str, Path],
-        options: ExtractOptions
+        options: ExtractOptions,
+        progress_callback: Optional[Callable[[float], None]] = None
     ) -> Dict[str, Any]:
         """
         Extract specific topics from a ROS bag file
@@ -346,7 +352,8 @@ class BagManager:
                 str(options.output_path),
                 topics_to_extract,
                 compression=options.compression,
-                overwrite=options.overwrite
+                overwrite=options.overwrite,
+                progress_callback=progress_callback
             )
             
             # Calculate output file size and statistics
