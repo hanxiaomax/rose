@@ -13,7 +13,7 @@ import threading
 import queue
 from ..core.parser import create_parser, ParserType, IBagParser
 from ..core.util import get_logger, get_preferred_parser_type
-from ..core.theme import theme  # Import unified theme
+from ..core.ui_control import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 

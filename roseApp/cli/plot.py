@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 
 # Import unified theme system
-from ..core.theme import theme
+from ..core.ui_control import theme
 from ..core.parser import create_parser, ParserType
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
 from .error_handling import ValidationError, validate_file_exists, validate_choice, validate_series_format, handle_runtime_error

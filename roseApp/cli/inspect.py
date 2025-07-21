@@ -9,8 +9,8 @@ from typing import Optional, List
 import typer
 from rich.console import Console
 from ..core.bag_manager import BagManager, InspectOptions
-from ..core.result_handler import OutputFormat, RenderOptions, ExportOptions
-from ..core.util import ProgressManager
+from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
+from ..core.util import set_app_mode, AppMode, get_logger
 
 app = typer.Typer(help="Inspect ROS bag files")
 console = Console()
@@ -72,15 +72,23 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
     
     try:
         # Show progress during analysis
-        with ProgressManager.analysis_progress(
+        with UIControl.responsive_progress(
             f"Analyzing bag file: {bag_path.name}...",
-            console
-        ) as (progress, task, progress_callback):
-            # Note: inspect_bag doesn't support progress callback yet, but we prepare for it
-            result = await manager.inspect_bag(bag_path, options)
-        
-        # Get result handler
-        handler = manager.get_result_handler()
+            show_speed=False,
+            theme=UITheme.ANALYSIS,
+            console=console
+        ) as (progress, task, progress_callback, update_description):
+            # Create enhanced callback for analysis
+            def analysis_callback(percent: float):
+                progress_callback(percent)
+                if percent > 30:
+                    update_description(f"Analyzing bag file: {bag_path.name}... (reading topics)")
+                elif percent > 70:
+                    update_description(f"Analyzing bag file: {bag_path.name}... (processing metadata)")
+                elif percent > 90:
+                    update_description(f"Analyzing bag file: {bag_path.name}... (finalizing)")
+
+            result = await manager.inspect_bag(bag_path, options, progress_callback=analysis_callback)
         
         # Determine if we should export to file or render to console
         if options.output_file:
@@ -92,7 +100,7 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
                 include_metadata=True
             )
             
-            success = handler.export(result, export_options)
+            success = UIControl.export_result(result, export_options)
             if not success:
                 console.print("[red]Export failed[/red]")
                 raise typer.Exit(1)
@@ -107,8 +115,7 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
                 color=True,
                 title=f"Topics in {bag_path.name}"
             )
-            
-            handler.render(result, render_options)
+            UIControl.render_result(result, render_options, console)
             
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

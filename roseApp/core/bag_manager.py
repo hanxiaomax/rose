@@ -11,7 +11,7 @@ import logging
 
 from .analyzer import BagAnalyzer, AnalysisResult, AnalysisType
 from .cache import get_cache
-from .result_handler import ResultHandler, OutputFormat, RenderOptions, ExportOptions
+from .ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions
 
 
 @dataclass
@@ -87,16 +87,17 @@ class BagManager:
         self.logger = logging.getLogger(__name__)
         self._result_handler = None
         
-    def get_result_handler(self) -> ResultHandler:
+    def get_result_handler(self) -> UIControl:
         """Get the result handler instance for rendering and exporting"""
         if self._result_handler is None:
-            self._result_handler = ResultHandler()
+            self._result_handler = UIControl()
         return self._result_handler
         
     async def inspect_bag(
         self, 
         bag_path: Union[str, Path], 
-        options: Optional[InspectOptions] = None
+        options: Optional[InspectOptions] = None,
+        progress_callback: Optional[Callable[[float], None]] = None
     ) -> Dict[str, Any]:
         """
         Inspect a ROS bag file and return analysis results
@@ -117,7 +118,11 @@ class BagManager:
         analysis_type = AnalysisType.FULL_ANALYSIS if options.show_fields else AnalysisType.METADATA
         
         # Perform bag analysis
-        result = await self.analyzer.analyze_bag_async(bag_path, analysis_type)
+        result = await self.analyzer.analyze_bag_async(
+            bag_path, 
+            analysis_type,
+            progress_callback=progress_callback
+        )
         
         # Apply topic filtering if specified
         filtered_topics = self._filter_topics(
@@ -254,7 +259,7 @@ class BagManager:
         self,
         bag_path: Union[str, Path],
         options: ExtractOptions,
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Union[Callable[[float], None], Callable[[int, str, int, int, str], None]]] = None
     ) -> Dict[str, Any]:
         """
         Extract specific topics from a ROS bag file
@@ -346,15 +351,27 @@ class BagManager:
             if options.output_path.exists() and not options.overwrite:
                 raise FileExistsError(f"Output file already exists: {options.output_path}")
             
-            # Use parser to filter/extract the bag
-            filter_result = parser.filter_bag(
-                str(bag_path),
-                str(options.output_path),
-                topics_to_extract,
-                compression=options.compression,
-                overwrite=options.overwrite,
-                progress_callback=progress_callback
-            )
+            # Use parser to filter/extract the bag with topic-level progress
+            if hasattr(parser, 'filter_bag_with_topic_progress') and callable(getattr(parser, 'filter_bag_with_topic_progress')):
+                # Use enhanced topic progress if available
+                filter_result = parser.filter_bag_with_topic_progress(
+                    str(bag_path),
+                    str(options.output_path),
+                    topics_to_extract,
+                    compression=options.compression,
+                    overwrite=options.overwrite,
+                    topic_progress_callback=progress_callback
+                )
+            else:
+                # Fall back to regular progress callback
+                filter_result = parser.filter_bag(
+                    str(bag_path),
+                    str(options.output_path),
+                    topics_to_extract,
+                    compression=options.compression,
+                    overwrite=options.overwrite,
+                    progress_callback=progress_callback
+                )
             
             # Calculate output file size and statistics
             if options.output_path.exists():

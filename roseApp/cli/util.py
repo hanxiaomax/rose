@@ -11,7 +11,7 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..core.theme import theme
+from ..core.ui_control import theme
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗

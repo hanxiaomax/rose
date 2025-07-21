@@ -15,8 +15,8 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 from ..core.bag_manager import BagManager, ExtractOptions
-from ..core.result_handler import OutputFormat, RenderOptions, ExportOptions, ResultHandler
-from ..core.util import set_app_mode, AppMode, get_logger, ProgressManager
+from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
+from ..core.util import set_app_mode, AppMode, get_logger
 
 
 # Set to CLI mode
@@ -114,10 +114,10 @@ def _extract_topics_impl(
         manager = BagManager()
         
         # Show progress during bag analysis
-        with ProgressManager.responsive_progress(
+        with UIControl.responsive_progress(
             f"Analyzing bag file: {input_path.name}...",
             show_speed=False,
-            style="cyan",
+            theme=UITheme.ANALYSIS,
             console=console
         ) as (progress, task, progress_callback, update_description):
             # Create enhanced callback for analysis
@@ -221,25 +221,19 @@ def _extract_topics_impl(
         # Track extraction timing
         extraction_start_time = time.time()
         
-        # Show progress during extraction
-        total_messages = extraction_result['statistics']['selected_messages']
-        with ProgressManager.responsive_progress(
-            f"Extracting {len(topics_to_extract)} topics ({total_messages:,} messages)...",
-            show_speed=True,
-            style="green",
+        # Show progress during extraction with topic-level detail
+        with UIControl.topic_progress(
+            f"Extracting {len(topics_to_extract)} topics",
+            topics_to_extract,
+            theme=UITheme.EXTRACTION,
             console=console
-        ) as (progress, task, progress_callback, update_description):
-            # Create a wrapper callback that provides more detailed updates
-            def enhanced_callback(percent: float):
-                messages_processed = int((percent / 100) * total_messages)
-                progress_callback(percent, current=messages_processed, total_items=total_messages)
-                
-                # Update description with current status
-                if percent > 0:
-                    rate = messages_processed / ((time.time() - extraction_start_time) or 1)
-                    update_description(f"Extracting {len(topics_to_extract)} topics... ({messages_processed:,}/{total_messages:,} messages, {rate:.0f} msg/s)")
+        ) as (progress, task, topic_callback):
+            # Create enhanced topic progress callback
+            def enhanced_topic_callback(topic_index: int, topic: str, messages_processed: int, 
+                                       total_messages: int, phase: str):
+                topic_callback(topic_index, topic, messages_processed, total_messages, phase)
             
-            result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_callback))
+            result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_topic_callback))
         
         extraction_end_time = time.time()
         extraction_time = extraction_end_time - extraction_start_time
@@ -249,35 +243,22 @@ def _extract_topics_impl(
             console.print(f"\n[red]Extraction failed: {result.get('error', 'Unknown error')}[/red]")
             raise typer.Exit(1)
         
-        # Show success message
-        console.print(f"\n[green]✓ Successfully extracted to: {output_path}[/green]")
+        # Display results using UIControl
+        if result.get('success'):
+            UIControl.show_success(f"Successfully extracted to: {options.output_path}", console)
+        else:
+            UIControl.show_error(f"Extraction failed: {result.get('error', 'Unknown error')}", console)
         
-        # Add extraction results to the data structure
-        extraction_result.update({
-            'success': True,
-            'extraction_time': extraction_time,
-            'file_stats': result.get('file_stats', {}),
-            'message': f"Successfully extracted to: {output_path}",
-            'performance': {
-                'extraction_time': extraction_time,
-                'messages_per_sec': extraction_result['statistics']['selected_messages'] / extraction_time if extraction_time > 0 else 0,
-                'analysis_time': extraction_result['bag_info'].get('analysis_time', 0),
-                'total_time': extraction_result['bag_info'].get('analysis_time', 0) + extraction_time
-            }
-        })
-        
-        # Use ResultHandler to render the final result
-        handler = ResultHandler(console)
-        
-        # Render to console using default summary format
-        render_options = RenderOptions(
-            format=OutputFormat.SUMMARY,
-            verbose=verbose,
+        # Display extraction summary
+        display_config = DisplayConfig(
             show_summary=True,
-            color=True,
-            title=f"Extraction Results - {input_path.name}"
+            show_details=True,
+            show_cache_stats=True,
+            show_performance=True,
+            verbose=verbose,
+            full_width=True
         )
-        handler.render(extraction_result, render_options)
+        UIControl.display_extraction_result(extraction_result, display_config, console)
         
         manager.cleanup()
         

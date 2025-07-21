@@ -254,6 +254,166 @@ class RosbagsBagParser(IBagParser):
             _logger.error(f"Error filtering bag with AnyReader: {e}")
             raise Exception(f"Error filtering bag: {e}")
     
+    def filter_bag_with_topic_progress(self, input_bag: str, output_bag: str, topics: List[str], 
+                                     time_range: Optional[Tuple] = None,
+                                     topic_progress_callback: Optional[Callable] = None,
+                                     compression: str = 'none',
+                                     overwrite: bool = False) -> str:
+        """Filter bag file with detailed topic-by-topic progress tracking"""
+        try:
+            # Validate compression type before starting
+            from roseApp.core.util import validate_compression_type
+            is_valid, error_message = validate_compression_type(compression)
+            if not is_valid:
+                raise ValueError(error_message)
+            
+            # Check if output file exists
+            if os.path.exists(output_bag) and not overwrite:
+                raise FileExistsError(f"Output file '{output_bag}' already exists. Use overwrite=True to overwrite.")
+            
+            # Remove existing file if overwrite is True
+            if os.path.exists(output_bag) and overwrite:
+                os.remove(output_bag)
+            
+            start_time = time.time()
+            
+            # Convert compression format for rosbags
+            rosbags_compression = self._get_compression_format(compression)
+            
+            # Use AnyReader for enhanced performance
+            from rosbags.highlevel import AnyReader
+            from rosbags.rosbag1 import Writer as Rosbag1Writer
+            
+            with AnyReader([Path(input_bag)]) as reader:
+                # Pre-filter connections based on selected topics
+                selected_connections = [
+                    conn for conn in reader.connections 
+                    if conn.topic in topics
+                ]
+                
+                if not selected_connections:
+                    _logger.warning(f"No matching topics found in {input_bag}")
+                    return "No messages found for selected topics"
+                
+                # Phase 1: Analyze topics and count messages
+                if topic_progress_callback:
+                    topic_progress_callback(0, "Initialization", 0, 0, "analyzing")
+                
+                topic_message_counts = {}
+                for i, connection in enumerate(selected_connections):
+                    topic = connection.topic
+                    if topic_progress_callback:
+                        topic_progress_callback(i, topic, 0, 0, "analyzing")
+                    
+                    # Count messages efficiently
+                    count = sum(1 for _ in reader.messages([connection]))
+                    topic_message_counts[topic] = count
+                    
+                    if topic_progress_callback:
+                        topic_progress_callback(i, topic, count, count, "completed")
+                
+                total_messages = sum(topic_message_counts.values())
+                if total_messages == 0:
+                    _logger.warning(f"No messages found for selected topics in {input_bag}")
+                    return "No messages found for selected topics"
+                
+                # Create output directory if needed
+                output_dir = os.path.dirname(output_bag)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                # Phase 2: Filter and write messages topic by topic
+                output_path = Path(output_bag)
+                writer = Rosbag1Writer(output_path)
+                
+                # Set compression if specified
+                if rosbags_compression:
+                    writer.set_compression(rosbags_compression)
+                
+                with writer:
+                    # Convert time range if provided
+                    start_ns = None
+                    end_ns = None
+                    if time_range:
+                        start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
+                        end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
+                    
+                    # Add connections to writer
+                    topic_connections = {}
+                    for connection in selected_connections:
+                        # Extract connection information with proper defaults
+                        callerid = '/rosbags_enhanced_parser'
+                        if hasattr(connection, 'ext') and hasattr(connection.ext, 'callerid'):
+                            if connection.ext.callerid is not None:
+                                callerid = connection.ext.callerid
+                        
+                        msgdef = getattr(connection, 'msgdef', None)
+                        md5sum = getattr(connection, 'digest', None)
+                        
+                        new_connection = writer.add_connection(
+                            topic=connection.topic,
+                            msgtype=connection.msgtype,
+                            msgdef=msgdef,
+                            md5sum=md5sum,
+                            callerid=callerid
+                        )
+                        topic_connections[connection.topic] = new_connection
+                    
+                    # Process messages topic by topic for better progress tracking
+                    total_processed = 0
+                    for topic_index, connection in enumerate(selected_connections):
+                        topic = connection.topic
+                        topic_total = topic_message_counts[topic]
+                        topic_processed = 0
+                        
+                        if topic_progress_callback:
+                            topic_progress_callback(topic_index, topic, 0, topic_total, "processing")
+                        
+                        # Process all messages for this topic
+                        for (conn, timestamp, rawdata) in reader.messages([connection]):
+                            # Check time range if specified
+                            if time_range:
+                                if timestamp < start_ns or timestamp > end_ns:
+                                    continue
+                            
+                            # Write message using connection mapping
+                            writer.write(topic_connections[topic], timestamp, rawdata)
+                            
+                            topic_processed += 1
+                            total_processed += 1
+                            
+                            # Update progress every 100 messages or at 10% intervals
+                            if (topic_processed % 100 == 0 or 
+                                topic_processed % max(1, topic_total // 10) == 0 or
+                                topic_processed == topic_total):
+                                if topic_progress_callback:
+                                    topic_progress_callback(
+                                        topic_index, topic, 
+                                        topic_processed, topic_total, 
+                                        "processing"
+                                    )
+                        
+                        # Mark topic as completed
+                        if topic_progress_callback:
+                            topic_progress_callback(topic_index, topic, topic_processed, topic_total, "completed")
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            mins, secs = divmod(elapsed, 60)
+            
+            # Log performance statistics
+            _logger.info(f"Filtered {total_processed} messages from {len(selected_connections)} topics in {elapsed:.2f}s")
+                
+            return f"Filtering completed in {int(mins)}m {secs:.2f}s"
+            
+        except ValueError as ve:
+            raise ve
+        except FileExistsError as fe:
+            raise fe
+        except Exception as e:
+            _logger.error(f"Error filtering bag with topic progress: {e}")
+            raise Exception(f"Error filtering bag: {e}")
+    
     def _get_compression_format(self, compression: str):
         """Get rosbags CompressionFormat enum from string"""
         try:
