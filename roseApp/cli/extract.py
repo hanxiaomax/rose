@@ -237,18 +237,48 @@ def _extract_topics_impl(
         # Track extraction timing
         extraction_start_time = time.time()
         
-        # Show minimal extraction progress with clean table
-        with UIControl.minimal_extraction_progress(
-            topics_for_display, 
+        # Show unified parsing progress with two-line display
+        with UIControl.unified_parsing_progress(
             f"Extracting from {input_path.name}",
             console
-        ) as update_topic:
+        ) as update_progress:
+            
+            # Set initial format information
+            update_progress(
+                topic="Analyzing bag structure...",
+                progress=0.0,
+                bag_format=compression.upper() if compression != "none" else "Uncompressed"
+            )
             
             # Create enhanced topic progress callback
             def enhanced_topic_callback(topic_index: int, topic: str, messages_processed: int,
                                        total_messages: int, phase: str):
-                # Update the minimal display
-                update_topic(topic, phase, messages_processed)
+                # Determine current topic name and progress
+                if phase == "analyzing":
+                    current_topic = f"Analyzing {topic}..."
+                    progress_percent = (topic_index / len(topics_to_extract)) * 100
+                elif phase == "processing":
+                    if total_messages > 0:
+                        topic_progress = (messages_processed / total_messages) * 100
+                        current_topic = f"Processing {topic} ({messages_processed:,}/{total_messages:,} messages)"
+                    else:
+                        current_topic = f"Processing {topic}..."
+                    progress_percent = (topic_index / len(topics_to_extract)) * 100
+                elif phase == "completed":
+                    current_topic = f"Completed {topic} ({messages_processed:,} messages)"
+                    progress_percent = ((topic_index + 1) / len(topics_to_extract)) * 100
+                else:
+                    current_topic = f"{phase.title()} {topic}"
+                    progress_percent = (topic_index / len(topics_to_extract)) * 100
+                
+                # Update the unified display
+                update_progress(
+                    topic=current_topic,
+                    progress=progress_percent,
+                    topics_total=len(topics_to_extract),
+                    topics_processed=topic_index if phase != "completed" else topic_index + 1,
+                    bag_format=compression.upper() if compression != "none" else "Uncompressed"
+                )
             
             result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_topic_callback))
         

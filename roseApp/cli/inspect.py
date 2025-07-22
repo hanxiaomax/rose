@@ -73,15 +73,41 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
     manager = BagManager()
     
     try:
-        # Show minimal progress during analysis
-        with UIControl.minimal_inspection_progress(
+        # Show unified parsing progress with two-line display
+        with UIControl.unified_parsing_progress(
             f"Analyzing {bag_path.name}",
             console
         ) as update_progress:
             
+            # Set initial format information
+            update_progress(
+                topic="Reading bag structure...",
+                progress=0.0,
+                bag_format="ROS Bag"
+            )
+            
             # Create enhanced callback for analysis
             def analysis_callback(percent: float):
-                update_progress(percent)
+                # Determine current phase based on progress
+                if percent < 20:
+                    current_topic = "Reading bag metadata..."
+                elif percent < 40:
+                    current_topic = "Analyzing topics structure..."
+                elif percent < 60:
+                    current_topic = "Processing message types..."
+                elif percent < 80:
+                    current_topic = "Extracting field information..." if options.show_fields else "Analyzing message counts..."
+                elif percent < 95:
+                    current_topic = "Finalizing analysis..."
+                else:
+                    current_topic = "Completing inspection..."
+                
+                # Update the unified display
+                update_progress(
+                    topic=current_topic,
+                    progress=percent,
+                    bag_format="ROS Bag"
+                )
 
             result = await manager.inspect_bag(bag_path, options, progress_callback=analysis_callback)
         

@@ -418,6 +418,99 @@ class UIControl:
         with cls.progress_bar(config, console) as (progress, task, callback, update_desc):
             yield progress, task, callback, update_desc
     
+    @classmethod
+    @contextmanager
+    def unified_parsing_progress(cls, operation_title: str = "Processing ROS Bag",
+                                console: Optional[Console] = None):
+        """
+        Create a unified two-line parsing progress display for extract and inspect
+        
+        Line 1: Currently processing topic
+        Line 2: Progress bar with format, count, and percentage
+        
+        Args:
+            operation_title: Title for the operation
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update progress
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        # Progress state
+        current_topic = "Initializing..."
+        current_progress = 0.0
+        total_topics = 0
+        processed_topics = 0
+        current_format = ""
+        
+        def create_display():
+            """Create and display the two-line progress"""
+            console.clear()
+            
+            # Line 1: Current topic being processed
+            console.print(f"[bold white]{operation_title}[/bold white]")
+            console.print()
+            console.print(f"[cyan]📁 Processing:[/cyan] [yellow]{current_topic}[/yellow]")
+            
+            # Line 2: Progress bar with details
+            if total_topics > 0:
+                # Calculate progress bar
+                progress_percent = (processed_topics / total_topics) * 100
+                bar_width = 40
+                filled = int((progress_percent / 100) * bar_width)
+                bar = "█" * filled + "░" * (bar_width - filled)
+                
+                # Format details
+                format_text = f"[dim]Format:[/dim] [green]{current_format}[/green]" if current_format else ""
+                count_text = f"[dim]Topics:[/dim] [cyan]{processed_topics}/{total_topics}[/cyan]"
+                percent_text = f"[dim]Progress:[/dim] [yellow]{progress_percent:.1f}%[/yellow]"
+                
+                console.print(f"[blue]{bar}[/blue] {format_text} {count_text} {percent_text}")
+            else:
+                # Simple progress for unknown total
+                spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+                frame_index = int(current_progress / 10) % len(spinner_frames)
+                spinner = spinner_frames[frame_index]
+                
+                format_text = f"[dim]Format:[/dim] [green]{current_format}[/green]" if current_format else ""
+                percent_text = f"[dim]Progress:[/dim] [yellow]{current_progress:.1f}%[/yellow]"
+                
+                console.print(f"[blue]{spinner}[/blue] {format_text} {percent_text}")
+            
+            console.print()
+        
+        def update_progress(topic: str = None, progress: float = None, 
+                          topics_total: int = None, topics_processed: int = None,
+                          bag_format: str = None):
+            """Update the progress display"""
+            nonlocal current_topic, current_progress, total_topics, processed_topics, current_format
+            
+            if topic is not None:
+                current_topic = topic
+            if progress is not None:
+                current_progress = progress
+            if topics_total is not None:
+                total_topics = topics_total
+            if topics_processed is not None:
+                processed_topics = topics_processed
+            if bag_format is not None:
+                current_format = bag_format
+                
+            create_display()
+        
+        # Show initial display
+        update_progress("Starting analysis...", 0.0)
+        
+        try:
+            yield update_progress
+        finally:
+            # Clear and show completion
+            console.clear()
+            console.print(f"[bold green]✓ {operation_title} complete[/bold green]")
+            console.print()
+    
     # ========================================================================
     # Advanced Progress Display Methods
     # ========================================================================
