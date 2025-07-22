@@ -1249,7 +1249,7 @@ class UIControl:
     @classmethod
     def _display_topics_table(cls, topics: List[Dict[str, Any]], bag_info: Dict[str, Any], 
                              config: DisplayConfig, console: Console):
-        """Display topics in table format"""
+        """Display topics in table format with size column"""
         table = Table(
             title=f"Topics in {bag_info.get('file_name', 'Unknown')}",
             show_header=True,
@@ -1258,17 +1258,27 @@ class UIControl:
         )
         
         table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Message Type", style="magenta")
         table.add_column("Count", justify="right", style="green")
+        table.add_column("Size", justify="right", style="yellow")
         table.add_column("Frequency", justify="right", style="blue")
         
         # Add topic rows
         for topic_info in topics:
             frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
+            
+            # Format size
+            size_bytes = topic_info.get('size_bytes', 0)
+            if size_bytes > 1024 * 1024:
+                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+            elif size_bytes > 1024:
+                size_str = f"{size_bytes / 1024:.1f} KB"
+            else:
+                size_str = f"{size_bytes} B"
+            
             table.add_row(
                 topic_info.get('name', ''),
-                topic_info.get('message_type', ''),
                 f"{topic_info.get('message_count', 0):,}",
+                size_str,
                 frequency_str
             )
         
@@ -1467,35 +1477,32 @@ class UIControl:
         )
         
         table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Message Type", style="magenta")
         table.add_column("Count", justify="right", style="green")
+        table.add_column("Size", justify="right", style="yellow")
         table.add_column("Frequency", justify="right", style="blue")
         
-        if options.show_fields:
-            table.add_column("Fields", style="yellow", no_wrap=False)
-        
+
         # Add topic rows
         for topic_info in topics:
             frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
+            
+            # Format size
+            size_bytes = topic_info.get('size_bytes', 0)
+            if size_bytes > 1024 * 1024:
+                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+            elif size_bytes > 1024:
+                size_str = f"{size_bytes / 1024:.1f} KB"
+            else:
+                size_str = f"{size_bytes} B"
+            
             row = [
                 topic_info.get('name', ''),
-                topic_info.get('message_type', ''),
                 f"{topic_info.get('message_count', 0):,}",
+                size_str,
                 frequency_str
             ]
             
-            if options.show_fields:
-                if 'field_paths' in topic_info and topic_info['field_paths']:
-                    # Show first few field paths with "..." if there are more
-                    field_paths = topic_info['field_paths']
-                    if len(field_paths) <= 3:
-                        fields_display = ', '.join(field_paths)
-                    else:
-                        fields_display = ', '.join(field_paths[:3]) + f', ... ({len(field_paths)} total)'
-                    row.append(fields_display)
-                else:
-                    row.append("N/A")
-            
+
             table.add_row(*row)
         
         console.print(table)
@@ -1508,10 +1515,36 @@ class UIControl:
                 console.print("[bold magenta]Field Analysis Details[/bold magenta]")
                 console.print()
                 
+                # Show fields for all topics that have field analysis
                 for topic, analysis in field_analysis.items():
                     field_paths = analysis.get('field_paths', [])
                     if field_paths:
                         console.print(f"[bold cyan]{topic}[/bold cyan] ({analysis.get('message_type', 'Unknown')})")
+                        
+                        # Display fields as simple list with dot notation
+                        for field_path in sorted(field_paths):
+                            if '.' in field_path:
+                                # Nested field - show with yellow color
+                                console.print(f"  • [yellow]{field_path}[/yellow]")
+                            else:
+                                # Top-level field - show with green color
+                                console.print(f"  • [green]{field_path}[/green]")
+                        
+                        console.print()
+            
+            # Also check if topics have field_paths directly (fallback)
+            elif any('field_paths' in topic for topic in topics):
+                console.print()
+                console.print("[bold magenta]Field Analysis Details[/bold magenta]")
+                console.print()
+                
+                for topic_info in topics:
+                    if 'field_paths' in topic_info and topic_info['field_paths']:
+                        topic_name = topic_info.get('name', '')
+                        message_type = topic_info.get('message_type', 'Unknown')
+                        field_paths = topic_info['field_paths']
+                        
+                        console.print(f"[bold cyan]{topic_name}[/bold cyan] ({message_type})")
                         
                         # Display fields as simple list with dot notation
                         for field_path in sorted(field_paths):

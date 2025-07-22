@@ -22,12 +22,13 @@ def inspect(
     topics: Optional[List[str]] = typer.Option(None, "--topics", "-t", help="Filter specific topics"),
     topic_filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter topics by pattern"),
     show_fields: bool = typer.Option(False, "--show-fields", help="Show field analysis for messages"),
-    sort_by: str = typer.Option("name", "--sort", help="Sort topics by (name, count, frequency)"),
+    sort_by: str = typer.Option("size", "--sort", help="Sort topics by (name, count, frequency, size)"),
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of topics shown"),
     as_format: str = typer.Option("table", "--as", help="Output format (table, list, summary, json, yaml, csv, xml, html, markdown)"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache and reparse the bag file")
 ):
     """
@@ -48,6 +49,14 @@ def inspect(
         console.print(f"[red]Error: Unsupported output format '{as_format}'. Supported: {supported}[/red]")
         raise typer.Exit(1)
     
+    # Configure logging based on debug flag
+    if not debug:
+        # Suppress logs in standard output unless debug mode
+        import logging
+        logging.getLogger().setLevel(logging.CRITICAL)
+        logging.getLogger('cache').setLevel(logging.CRITICAL)
+        logging.getLogger('root').setLevel(logging.CRITICAL)
+    
     # Create options object
     options = InspectOptions(
         topics=topics,
@@ -63,53 +72,103 @@ def inspect(
     )
     
     # Run the async inspection
-    asyncio.run(_run_inspect(bag_path, options))
+    asyncio.run(_run_inspect(bag_path, options, debug))
 
 
-async def _run_inspect(bag_path: Path, options: InspectOptions):
+async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = False):
     """Run the bag inspection asynchronously using BagManager and ResultHandler"""
     
     # Create BagManager
     manager = BagManager()
     
     try:
-        # Show unified parsing progress with two-line display
-        with UIControl.unified_parsing_progress(
-            f"Analyzing {bag_path.name}",
-            console
-        ) as update_progress:
+        # Show responsive real-time analysis status (indented TODO list style)
+        from rich.live import Live
+        from rich.text import Text
+        
+        # Define analysis tasks in TODO list style
+        tasks = [
+            "Reading bag metadata",
+            "Discovering topics",
+            "Analyzing message structure", 
+            "Counting messages per topic",
+            "Calculating topic sizes",
+            "Computing frequencies" if not options.show_fields else "Extracting field information",
+            "Finalizing analysis"
+        ]
+        
+        # Task status tracking
+        task_status = {i: "pending" for i in range(len(tasks))}
+        task_cache_hit = {i: False for i in range(len(tasks))}
+        current_task = 0
+        
+        def create_todo_display():
+            """Create indented TODO list display"""
+            todo_text = Text()
             
-            # Set initial format information
-            update_progress(
-                topic="Reading bag structure...",
-                progress=0.0,
-                bag_format="ROS Bag"
-            )
+            # Main header
+            todo_text.append("⏺ ", style="cyan bold")
+            todo_text.append(f"Analyzing {bag_path.name}\n", style="cyan bold")
             
-            # Create enhanced callback for analysis
-            def analysis_callback(percent: float):
-                # Determine current phase based on progress
-                if percent < 20:
-                    current_topic = "Reading bag metadata..."
-                elif percent < 40:
-                    current_topic = "Analyzing topics structure..."
-                elif percent < 60:
-                    current_topic = "Processing message types..."
-                elif percent < 80:
-                    current_topic = "Extracting field information..." if options.show_fields else "Analyzing message counts..."
-                elif percent < 95:
-                    current_topic = "Finalizing analysis..."
+            for i, task in enumerate(tasks):
+                # Indentation and connector
+                if i == 0:
+                    todo_text.append("  ⎿  ", style="dim")  # First item connector
                 else:
-                    current_topic = "Completing inspection..."
+                    todo_text.append("     ", style="dim")  # Regular indentation
                 
-                # Update the unified display
-                update_progress(
-                    topic=current_topic,
-                    progress=percent,
-                    bag_format="ROS Bag"
-                )
+                # Status icon and task
+                if task_status[i] == "completed":
+                    todo_text.append("✓ ", style="green bold")
+                    task_text = f"{task}"
+                    if task_cache_hit[i]:
+                        task_text += " (cached)"
+                    todo_text.append(f"{task_text}\n", style="green")
+                elif task_status[i] == "in_progress":
+                    todo_text.append("⠋ ", style="yellow bold")
+                    todo_text.append(f"{task}\n", style="yellow bold")
+                else:  # pending
+                    todo_text.append("○ ", style="dim")
+                    todo_text.append(f"{task}\n", style="dim")
+            
+            return todo_text
+        
+        with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
+            
+            # Create responsive callback for analysis
+            def analysis_callback(percent: float):
+                nonlocal current_task
+                
+                # Determine current task based on progress
+                new_task = min(int(percent / 100 * len(tasks)), len(tasks) - 1)
+                
+                # Mark previous tasks as completed
+                for i in range(new_task):
+                    if task_status[i] != "completed":
+                        task_status[i] = "completed"
+                
+                # Mark current task as in progress
+                if new_task < len(tasks) and task_status[new_task] != "completed":
+                    task_status[new_task] = "in_progress"
+                    current_task = new_task
+                
+                # Update display
+                live.update(create_todo_display())
 
             result = await manager.inspect_bag(bag_path, options, progress_callback=analysis_callback)
+            
+            # Check if analysis was cached and mark appropriate tasks
+            if result.get('bag_info', {}).get('cached', False):
+                # Mark cache-related tasks as cached
+                for i in [0, 1, 2, 3, 4]:  # First 5 tasks typically use cache
+                    task_cache_hit[i] = True
+            
+            # Mark all tasks as completed
+            for i in range(len(tasks)):
+                task_status[i] = "completed"
+            live.update(create_todo_display())
+            
+        console.print()  # Add spacing after TODO list
         
         # Determine if we should export to file or render to console
         if options.output_file:
@@ -139,11 +198,10 @@ async def _run_inspect(bag_path: Path, options: InspectOptions):
             UIControl.render_result(result, render_options, console)
             
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]Error during bag inspection: {e}[/red]")
         raise typer.Exit(1)
     finally:
-        # Clean up resources
-        manager.cleanup()
+        pass
 
 
 if __name__ == "__main__":

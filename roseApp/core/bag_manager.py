@@ -20,7 +20,7 @@ class InspectOptions:
     topics: Optional[List[str]] = None
     topic_filter: Optional[str] = None
     show_fields: bool = False
-    sort_by: str = "name"
+    sort_by: str = "size"  # Default to size sorting
     reverse_sort: bool = False
     limit: Optional[int] = None
     output_format: OutputFormat = OutputFormat.TABLE
@@ -153,28 +153,48 @@ class BagManager:
             'cache_stats': self._get_cache_stats()
         }
         
-        # Build topic information
-        for topic in self._sort_topics(filtered_topics, options.sort_by, options.reverse_sort):
-            if options.limit and len(inspection_result['topics']) >= options.limit:
-                break
-                
+        # Get topic sizes using parser
+        topic_sizes = {}
+        try:
+            from .parser import create_parser, ParserType
+            parser = create_parser(ParserType.ROSBAGS)
+            topic_stats = parser.get_topic_stats(str(bag_path))
+            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+        except Exception as e:
+            self.logger.warning(f"Could not get topic sizes: {e}")
+        
+        # Build topic information with size data
+        topics_with_info = []
+        for topic in filtered_topics:
             message_type = result.bag_info.connections.get(topic, 'Unknown')
             message_count = result.bag_info.message_counts.get(topic, 0)
             frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+            size_bytes = topic_sizes.get(topic, 0)
             
             topic_info = {
                 'name': topic,
                 'message_type': message_type,
                 'message_count': message_count,
-                'frequency': frequency
+                'frequency': frequency,
+                'size_bytes': size_bytes
             }
+            topics_with_info.append(topic_info)
+        
+        # Sort topics based on sort_by option
+        topics_with_info = self._sort_topics_with_info(topics_with_info, options.sort_by, options.reverse_sort)
+        
+        # Apply limit and add to result
+        for topic_info in topics_with_info:
+            if options.limit and len(inspection_result['topics']) >= options.limit:
+                break
             
             # Add field analysis if requested
             if options.show_fields and result.message_types:
-                field_paths = result.get_topic_field_paths(topic)
+                topic_name = topic_info['name']
+                field_paths = result.get_topic_field_paths(topic_name)
                 if field_paths:
                     topic_info['field_paths'] = field_paths
-                    inspection_result['field_analysis'][topic] = {
+                    inspection_result['field_analysis'][topic_name] = {
                         'message_type': message_type,
                         'field_paths': field_paths,
                         'samples_analyzed': len([t for t in filtered_topics if result.bag_info.connections.get(t) == message_type])
@@ -629,6 +649,23 @@ class BagManager:
         else:
             # Default to name sorting
             return sorted(topics, reverse=reverse)
+    
+    def _sort_topics_with_info(self, topics: List[Dict[str, Any]], sort_by: str, reverse: bool) -> List[Dict[str, Any]]:
+        """Sort topics with full information based on criteria"""
+        if sort_by == "name":
+            return sorted(topics, key=lambda x: x['name'], reverse=reverse)
+        elif sort_by == "count":
+            return sorted(topics, key=lambda x: x['message_count'], reverse=reverse)
+        elif sort_by == "frequency":
+            return sorted(topics, key=lambda x: x['frequency'], reverse=reverse)
+        elif sort_by == "size":
+            return sorted(topics, key=lambda x: x['size_bytes'], reverse=reverse)
+        else:
+            # Default to size sorting (descending by default for size)
+            if sort_by == "size" or not sort_by:
+                return sorted(topics, key=lambda x: x['size_bytes'], reverse=True)
+            else:
+                return sorted(topics, key=lambda x: x['name'], reverse=reverse)
     
     def _get_cache_stats(self) -> Dict[str, Any]:
         """Get cache performance statistics"""
