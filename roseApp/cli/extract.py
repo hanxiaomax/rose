@@ -196,9 +196,6 @@ def _extract_topics_impl(
             extraction_result['success'] = True
             extraction_result['message'] = "Dry run completed - no files were created"
             
-            # Use ResultHandler to render the result
-            handler = ResultHandler(console)
-            
             # Render to console using default summary format
             render_options = RenderOptions(
                 format=OutputFormat.SUMMARY,
@@ -207,7 +204,7 @@ def _extract_topics_impl(
                 color=True,
                 title=f"Extraction Preview - {input_path.name}"
             )
-            handler.render(extraction_result, render_options)
+            UIControl.render_result(extraction_result, render_options, console)
             
             console.print(f"\n[yellow]Dry run completed - no files were created[/yellow]")
             return
@@ -296,6 +293,18 @@ def _extract_topics_impl(
             UIControl.show_success(f"Successfully extracted to: {options.output_path}", console)
         else:
             UIControl.show_error(f"Extraction failed: {result.get('error', 'Unknown error')}", console)
+        
+        # Merge extraction result with BagManager result to include validation
+        if result.get('validation'):
+            extraction_result['validation'] = result['validation']
+        
+        # Add file stats if available
+        if result.get('file_stats'):
+            extraction_result['file_stats'] = result['file_stats']
+            
+        # Update success status and message
+        extraction_result['success'] = result.get('success', True)
+        extraction_result['message'] = result.get('message', '')
         
         # Display extraction summary
         display_config = DisplayConfig(

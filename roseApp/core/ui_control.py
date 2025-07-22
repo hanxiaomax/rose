@@ -1321,6 +1321,51 @@ class UIControl:
             if perf.get('messages_per_sec', 0) > 0:
                 summary_text.append(f"  Processing Rate: {perf.get('messages_per_sec', 0):.0f} messages/sec\n")
         
+        # Validation information
+        validation = result.get('validation')
+        if validation:
+            summary_text.append("\nValidation Results:\n", style="bold cyan")
+            
+            # Overall validation status
+            if validation.get('is_valid', False):
+                summary_text.append("  Status: ", style="bold cyan")
+                summary_text.append(" PASSED", style="bold green")
+                summary_text.append(f" ({validation.get('validation_time', 0):.3f}s)\n")
+            else:
+                summary_text.append("  Status: ", style="bold cyan")
+                summary_text.append(" FAILED", style="bold red")
+                summary_text.append(f" ({validation.get('validation_time', 0):.3f}s)\n")
+            
+            # Validation details
+            val_topics = validation.get('topics_count', 0)
+            val_messages = validation.get('total_messages', 0)
+            val_size = validation.get('file_size_bytes', 0) / 1024 / 1024  # Convert to MB
+            
+            if val_topics > 0:
+                summary_text.append(f"  Verified Topics: {val_topics}\n")
+            if val_messages > 0:
+                summary_text.append(f"  Verified Messages: {val_messages:,}\n")
+            if val_size > 0:
+                summary_text.append(f"  Output File Size: {val_size:.1f} MB\n")
+            
+            # Show errors if any
+            errors = validation.get('errors', [])
+            if errors:
+                summary_text.append("  Errors:\n", style="bold red")
+                for error in errors[:3]:  # Show first 3 errors
+                    summary_text.append(f"    • {error}\n", style="red")
+                if len(errors) > 3:
+                    summary_text.append(f"    • ... and {len(errors) - 3} more errors\n", style="red")
+            
+            # Show warnings if any
+            warnings = validation.get('warnings', [])
+            if warnings:
+                summary_text.append("  Warnings:\n", style="bold yellow")
+                for warning in warnings[:2]:  # Show first 2 warnings
+                    summary_text.append(f"    • {warning}\n", style="yellow")
+                if len(warnings) > 2:
+                    summary_text.append(f"    • ... and {len(warnings) - 2} more warnings\n", style="yellow")
+        
         # Add topics overview
         summary_text.append("\nTopics Overview:\n", style="bold cyan")
         summary_text.append(f"  Keeping {stats.get('selected_topics', 0)}, Excluding {stats.get('excluded_topics', 0)}\n")

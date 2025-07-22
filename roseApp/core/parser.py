@@ -140,10 +140,6 @@ class RosbagsBagParser(IBagParser):
             last_progress = -1
             processed_messages = 0
             
-            # Count total messages first for progress tracking
-            total_messages = 0
-            selected_topic_counts = {}
-            
             # Use AnyReader for enhanced performance
             from rosbags.highlevel import AnyReader
             from rosbags.rosbag1 import Writer as Rosbag1Writer
@@ -161,11 +157,10 @@ class RosbagsBagParser(IBagParser):
                         progress_callback(100)
                     return "No messages found for selected topics"
                 
-                # Count messages for each selected topic
+                # Count total messages for progress tracking
+                total_messages = 0
                 for connection in selected_connections:
-                    # Use efficient message counting
                     count = sum(1 for _ in reader.messages([connection]))
-                    selected_topic_counts[connection.topic] = count
                     total_messages += count
                 
                 if total_messages == 0:
@@ -179,6 +174,28 @@ class RosbagsBagParser(IBagParser):
                 if output_dir:
                     os.makedirs(output_dir, exist_ok=True)
                 
+                # Collect all messages with timestamps for sorting
+                messages_to_write = []
+                
+                # Convert time range if provided
+                start_ns = None
+                end_ns = None
+                if time_range:
+                    start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
+                    end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
+                
+                # Collect all messages from selected connections
+                for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
+                    # Check time range if specified
+                    if time_range:
+                        if timestamp < start_ns or timestamp > end_ns:
+                            continue
+                    
+                    messages_to_write.append((connection, timestamp, rawdata))
+                
+                # Sort messages by timestamp to ensure chronological order
+                messages_to_write.sort(key=lambda x: x[1])
+                
                 # Filter and write messages using Rosbag1Writer
                 output_path = Path(output_bag)
                 writer = Rosbag1Writer(output_path)
@@ -188,13 +205,6 @@ class RosbagsBagParser(IBagParser):
                     writer.set_compression(rosbags_compression)
                 
                 with writer:
-                    # Convert time range if provided
-                    start_ns = None
-                    end_ns = None
-                    if time_range:
-                        start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
-                        end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
-                    
                     # Add connections to writer
                     topic_connections = {}
                     for connection in selected_connections:
@@ -216,20 +226,14 @@ class RosbagsBagParser(IBagParser):
                         )
                         topic_connections[connection.topic] = new_connection
                     
-                    # Process messages with progress tracking
-                    for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
-                        # Check time range if specified
-                        if time_range:
-                            if timestamp < start_ns or timestamp > end_ns:
-                                continue
-                        
-                        # Write message using connection mapping
+                    # Write messages in chronological order
+                    for connection, timestamp, rawdata in messages_to_write:
                         writer.write(topic_connections[connection.topic], timestamp, rawdata)
                         
                         # Update progress
                         processed_messages += 1
                         if progress_callback and total_messages > 0:
-                            current_progress = int((processed_messages / total_messages) * 100)
+                            current_progress = int((processed_messages / len(messages_to_write)) * 100)
                             if current_progress != last_progress:
                                 progress_callback(current_progress)
                                 last_progress = current_progress
@@ -242,7 +246,7 @@ class RosbagsBagParser(IBagParser):
                 progress_callback(100)
                 
             # Log performance statistics
-            _logger.info(f"Filtered {processed_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s")
+            _logger.info(f"Filtered {processed_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s (chronologically sorted)")
                 
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
             
@@ -259,7 +263,7 @@ class RosbagsBagParser(IBagParser):
                                      topic_progress_callback: Optional[Callable] = None,
                                      compression: str = 'none',
                                      overwrite: bool = False) -> str:
-        """Filter bag file with detailed topic-by-topic progress tracking"""
+        """Filter bag file with detailed topic-by-topic progress tracking and chronological sorting"""
         try:
             # Validate compression type before starting
             from roseApp.core.util import validate_compression_type
@@ -322,7 +326,62 @@ class RosbagsBagParser(IBagParser):
                 if output_dir:
                     os.makedirs(output_dir, exist_ok=True)
                 
-                # Phase 2: Filter and write messages topic by topic
+                # Phase 2: Collect all messages with timestamps for chronological sorting
+                messages_to_write = []
+                
+                # Convert time range if provided
+                start_ns = None
+                end_ns = None
+                if time_range:
+                    start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
+                    end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
+                
+                # Collect messages topic by topic for progress tracking
+                total_processed = 0
+                for topic_index, connection in enumerate(selected_connections):
+                    topic = connection.topic
+                    topic_total = topic_message_counts[topic]
+                    topic_processed = 0
+                    
+                    if topic_progress_callback:
+                        topic_progress_callback(topic_index, topic, 0, topic_total, "processing")
+                    
+                    # Collect all messages for this topic
+                    for (conn, timestamp, rawdata) in reader.messages([connection]):
+                        # Check time range if specified
+                        if time_range:
+                            if timestamp < start_ns or timestamp > end_ns:
+                                continue
+                        
+                        messages_to_write.append((conn, timestamp, rawdata))
+                        topic_processed += 1
+                        total_processed += 1
+                        
+                        # Update progress every 100 messages or at 10% intervals
+                        if (topic_processed % 100 == 0 or 
+                            topic_processed % max(1, topic_total // 10) == 0 or
+                            topic_processed == topic_total):
+                            if topic_progress_callback:
+                                topic_progress_callback(
+                                    topic_index, topic, 
+                                    topic_processed, topic_total, 
+                                    "processing"
+                                )
+                    
+                    # Mark topic as completed
+                    if topic_progress_callback:
+                        topic_progress_callback(topic_index, topic, topic_processed, topic_total, "completed")
+                
+                # Sort all messages by timestamp to ensure chronological order
+                if topic_progress_callback:
+                    topic_progress_callback(len(selected_connections), "Sorting messages", 0, len(messages_to_write), "processing")
+                
+                messages_to_write.sort(key=lambda x: x[1])
+                
+                if topic_progress_callback:
+                    topic_progress_callback(len(selected_connections), "Sorting messages", len(messages_to_write), len(messages_to_write), "completed")
+                
+                # Phase 3: Write messages in chronological order
                 output_path = Path(output_bag)
                 writer = Rosbag1Writer(output_path)
                 
@@ -331,13 +390,6 @@ class RosbagsBagParser(IBagParser):
                     writer.set_compression(rosbags_compression)
                 
                 with writer:
-                    # Convert time range if provided
-                    start_ns = None
-                    end_ns = None
-                    if time_range:
-                        start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
-                        end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
-                    
                     # Add connections to writer
                     topic_connections = {}
                     for connection in selected_connections:
@@ -359,50 +411,35 @@ class RosbagsBagParser(IBagParser):
                         )
                         topic_connections[connection.topic] = new_connection
                     
-                    # Process messages topic by topic for better progress tracking
-                    total_processed = 0
-                    for topic_index, connection in enumerate(selected_connections):
-                        topic = connection.topic
-                        topic_total = topic_message_counts[topic]
-                        topic_processed = 0
+                    # Write all messages in chronological order
+                    if topic_progress_callback:
+                        topic_progress_callback(len(selected_connections) + 1, "Writing messages", 0, len(messages_to_write), "processing")
+                    
+                    written_messages = 0
+                    for connection, timestamp, rawdata in messages_to_write:
+                        writer.write(topic_connections[connection.topic], timestamp, rawdata)
+                        written_messages += 1
                         
-                        if topic_progress_callback:
-                            topic_progress_callback(topic_index, topic, 0, topic_total, "processing")
-                        
-                        # Process all messages for this topic
-                        for (conn, timestamp, rawdata) in reader.messages([connection]):
-                            # Check time range if specified
-                            if time_range:
-                                if timestamp < start_ns or timestamp > end_ns:
-                                    continue
-                            
-                            # Write message using connection mapping
-                            writer.write(topic_connections[topic], timestamp, rawdata)
-                            
-                            topic_processed += 1
-                            total_processed += 1
-                            
-                            # Update progress every 100 messages or at 10% intervals
-                            if (topic_processed % 100 == 0 or 
-                                topic_processed % max(1, topic_total // 10) == 0 or
-                                topic_processed == topic_total):
-                                if topic_progress_callback:
-                                    topic_progress_callback(
-                                        topic_index, topic, 
-                                        topic_processed, topic_total, 
-                                        "processing"
-                                    )
-                        
-                        # Mark topic as completed
-                        if topic_progress_callback:
-                            topic_progress_callback(topic_index, topic, topic_processed, topic_total, "completed")
+                        # Update progress every 1000 messages or at 5% intervals
+                        if (written_messages % 1000 == 0 or 
+                            written_messages % max(1, len(messages_to_write) // 20) == 0 or
+                            written_messages == len(messages_to_write)):
+                            if topic_progress_callback:
+                                topic_progress_callback(
+                                    len(selected_connections) + 1, "Writing messages", 
+                                    written_messages, len(messages_to_write), 
+                                    "processing"
+                                )
+                    
+                    if topic_progress_callback:
+                        topic_progress_callback(len(selected_connections) + 1, "Writing messages", written_messages, len(messages_to_write), "completed")
             
             end_time = time.time()
             elapsed = end_time - start_time
             mins, secs = divmod(elapsed, 60)
             
             # Log performance statistics
-            _logger.info(f"Filtered {total_processed} messages from {len(selected_connections)} topics in {elapsed:.2f}s")
+            _logger.info(f"Filtered {written_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s (chronologically sorted)")
                 
             return f"Filtering completed in {int(mins)}m {secs:.2f}s"
             
@@ -412,6 +449,177 @@ class RosbagsBagParser(IBagParser):
             raise fe
         except Exception as e:
             _logger.error(f"Error filtering bag with topic progress: {e}")
+            raise Exception(f"Error filtering bag: {e}")
+    
+    def filter_bag_streaming(self, input_bag: str, output_bag: str, topics: List[str], 
+                            time_range: Optional[Tuple] = None,
+                            progress_callback: Optional[Callable] = None,
+                            compression: str = 'none',
+                            overwrite: bool = False,
+                            chunk_size: int = 10000) -> str:
+        """
+        Filter bag file using streaming approach for large files
+        
+        This method processes messages in chunks to avoid memory issues with large bags,
+        but may still produce overlap chunk warnings if timestamps are not strictly ordered.
+        Use this for very large files where memory is a constraint.
+        
+        Args:
+            chunk_size: Number of messages to process in each chunk (default: 10000)
+        """
+        try:
+            # Validate compression type before starting
+            from roseApp.core.util import validate_compression_type
+            is_valid, error_message = validate_compression_type(compression)
+            if not is_valid:
+                raise ValueError(error_message)
+            
+            # Check if output file exists
+            if os.path.exists(output_bag) and not overwrite:
+                raise FileExistsError(f"Output file '{output_bag}' already exists. Use overwrite=True to overwrite.")
+            
+            # Remove existing file if overwrite is True
+            if os.path.exists(output_bag) and overwrite:
+                os.remove(output_bag)
+            
+            start_time = time.time()
+            
+            # Convert compression format for rosbags
+            rosbags_compression = self._get_compression_format(compression)
+            
+            # Use AnyReader for enhanced performance
+            from rosbags.highlevel import AnyReader
+            from rosbags.rosbag1 import Writer as Rosbag1Writer
+            
+            with AnyReader([Path(input_bag)]) as reader:
+                # Pre-filter connections based on selected topics
+                selected_connections = [
+                    conn for conn in reader.connections 
+                    if conn.topic in topics
+                ]
+                
+                if not selected_connections:
+                    _logger.warning(f"No matching topics found in {input_bag}")
+                    if progress_callback:
+                        progress_callback(100)
+                    return "No messages found for selected topics"
+                
+                # Count total messages for progress tracking
+                total_messages = 0
+                for connection in selected_connections:
+                    count = sum(1 for _ in reader.messages([connection]))
+                    total_messages += count
+                
+                if total_messages == 0:
+                    _logger.warning(f"No messages found for selected topics in {input_bag}")
+                    if progress_callback:
+                        progress_callback(100)
+                    return "No messages found for selected topics"
+                
+                # Create output directory if needed
+                output_dir = os.path.dirname(output_bag)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                # Convert time range if provided
+                start_ns = None
+                end_ns = None
+                if time_range:
+                    start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
+                    end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
+                
+                # Process messages in chunks with local sorting
+                output_path = Path(output_bag)
+                writer = Rosbag1Writer(output_path)
+                
+                # Set compression if specified
+                if rosbags_compression:
+                    writer.set_compression(rosbags_compression)
+                
+                with writer:
+                    # Add connections to writer
+                    topic_connections = {}
+                    for connection in selected_connections:
+                        callerid = '/rosbags_enhanced_parser'
+                        if hasattr(connection, 'ext') and hasattr(connection.ext, 'callerid'):
+                            if connection.ext.callerid is not None:
+                                callerid = connection.ext.callerid
+                        
+                        msgdef = getattr(connection, 'msgdef', None)
+                        md5sum = getattr(connection, 'digest', None)
+                        
+                        new_connection = writer.add_connection(
+                            topic=connection.topic,
+                            msgtype=connection.msgtype,
+                            msgdef=msgdef,
+                            md5sum=md5sum,
+                            callerid=callerid
+                        )
+                        topic_connections[connection.topic] = new_connection
+                    
+                    # Process messages in chunks
+                    processed_messages = 0
+                    last_progress = -1
+                    message_buffer = []
+                    
+                    for (connection, timestamp, rawdata) in reader.messages(connections=selected_connections):
+                        # Check time range if specified
+                        if time_range:
+                            if timestamp < start_ns or timestamp > end_ns:
+                                continue
+                        
+                        message_buffer.append((connection, timestamp, rawdata))
+                        
+                        # Process chunk when buffer is full
+                        if len(message_buffer) >= chunk_size:
+                            # Sort current chunk by timestamp
+                            message_buffer.sort(key=lambda x: x[1])
+                            
+                            # Write sorted chunk
+                            for conn, ts, rd in message_buffer:
+                                writer.write(topic_connections[conn.topic], ts, rd)
+                                processed_messages += 1
+                        
+                        # Update progress
+                                if progress_callback and total_messages > 0:
+                                    current_progress = int((processed_messages / total_messages) * 100)
+                                    if current_progress != last_progress:
+                                        progress_callback(current_progress)
+                                        last_progress = current_progress
+                            
+                            message_buffer.clear()
+                    
+                    # Process remaining messages
+                    if message_buffer:
+                        message_buffer.sort(key=lambda x: x[1])
+                        for conn, ts, rd in message_buffer:
+                            writer.write(topic_connections[conn.topic], ts, rd)
+                        processed_messages += 1
+                            
+                        if progress_callback and total_messages > 0:
+                            current_progress = int((processed_messages / total_messages) * 100)
+                            if current_progress != last_progress:
+                                progress_callback(current_progress)
+                                last_progress = current_progress
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            mins, secs = divmod(elapsed, 60)
+            
+            if progress_callback and last_progress < 100:
+                progress_callback(100)
+                
+            # Log performance statistics
+            _logger.info(f"Filtered {processed_messages} messages from {len(selected_connections)} topics in {elapsed:.2f}s (streaming with chunk size {chunk_size})")
+                
+            return f"Streaming filtering completed in {int(mins)}m {secs:.2f}s"
+            
+        except ValueError as ve:
+            raise ve
+        except FileExistsError as fe:
+            raise fe
+        except Exception as e:
+            _logger.error(f"Error filtering bag with streaming: {e}")
             raise Exception(f"Error filtering bag: {e}")
     
     def _get_compression_format(self, compression: str):

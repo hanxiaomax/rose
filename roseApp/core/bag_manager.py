@@ -398,6 +398,46 @@ class BagManager:
                     },
                     'message': f'Successfully extracted {len(topics_to_extract)} topics to {options.output_path}'
                 })
+                
+                # Perform automatic validation of the extracted bag
+                try:
+                    from .bag_validator import BagValidator, ValidationLevel
+                    validator = BagValidator(parser)
+                    validation_result = validator.validate_extracted_bag(
+                        bag_path, options.output_path, topics_to_extract
+                    )
+                    
+                    # Add validation results to extraction result
+                    extraction_result['validation'] = {
+                        'is_valid': validation_result.is_valid,
+                        'validation_time': validation_result.validation_time,
+                        'topics_count': validation_result.topics_count,
+                        'total_messages': validation_result.total_messages,
+                        'duration_seconds': validation_result.duration_seconds,
+                        'file_size_bytes': validation_result.file_size_bytes,
+                        'errors': validation_result.errors or [],
+                        'warnings': validation_result.warnings or [],
+                        'validation_level': validation_result.validation_level.value
+                    }
+                    
+                    # Log validation results
+                    if validation_result.is_valid:
+                        self.logger.info(f"Bag validation passed for {options.output_path}")
+                        if validation_result.warnings:
+                            self.logger.warning(f"Validation warnings: {validation_result.warnings}")
+                    else:
+                        self.logger.error(f"Bag validation failed for {options.output_path}: {validation_result.errors}")
+                        
+                except Exception as validation_error:
+                    self.logger.warning(f"Could not validate extracted bag: {validation_error}")
+                    extraction_result['validation'] = {
+                        'is_valid': False,
+                        'validation_time': 0.0,
+                        'errors': [f"Validation failed: {validation_error}"],
+                        'warnings': [],
+                        'validation_level': 'none'
+                    }
+                
             else:
                 extraction_result.update({
                     'success': False,
