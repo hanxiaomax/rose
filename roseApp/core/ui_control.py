@@ -912,7 +912,7 @@ class UIControl:
     @contextmanager
     def todo_analysis_progress(cls, bag_name: str, show_fields: bool = False, console: Optional[Console] = None):
         """
-        Create a TODO-style analysis progress display
+        Create a TODO-style analysis progress display with panel
         
         Args:
             bag_name: Name of the bag file being analyzed
@@ -927,6 +927,8 @@ class UIControl:
         
         from rich.live import Live
         from rich.text import Text
+        from rich.panel import Panel
+        from rich.align import Align
         
         # Define analysis tasks in TODO list style
         tasks = [
@@ -944,7 +946,7 @@ class UIControl:
         current_task = 0
         
         def create_todo_display():
-            """Create indented TODO list display"""
+            """Create indented TODO list display in panel"""
             todo_text = Text()
             
             # Main header
@@ -969,7 +971,12 @@ class UIControl:
                     todo_text.append("○ ", style="dim")
                     todo_text.append(f"{task}\n", style="dim")
             
-            return todo_text
+            return Panel(
+                Align.left(todo_text),
+                title=f"[bold cyan]Analysis Progress[/bold cyan]",
+                border_style="cyan",
+                padding=(1, 2)
+            )
         
         with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
             
@@ -999,6 +1006,195 @@ class UIControl:
                 # Mark all tasks as completed
                 for i in range(len(tasks)):
                     task_status[i] = "completed"
+                live.update(create_todo_display())
+        
+        console.print()  # Add spacing after TODO list
+    
+    @classmethod
+    @contextmanager
+    def todo_extraction_progress(cls, bag_name: str, operation: str = "Extracting", console: Optional[Console] = None):
+        """
+        Create a TODO-style extraction progress display with progress bar at bottom
+        
+        Args:
+            bag_name: Name of the bag file being processed
+            operation: Operation description (e.g., "Extracting", "Processing")
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update progress
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        from rich.live import Live
+        from rich.text import Text
+        from rich.panel import Panel
+        from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+        from rich.align import Align
+        
+        # Define extraction tasks in TODO list style
+        tasks = [
+            "Analyzing bag structure",
+            "Discovering topics",
+            "Filtering topic selection",
+            "Preparing extraction",
+            "Processing messages",
+            "Writing output file",
+            "Finalizing extraction"
+        ]
+        
+        # Task status tracking
+        task_status = {i: "pending" for i in range(len(tasks))}
+        current_task = 0
+        
+        # Progress bar setup
+        progress_bar = Progress(
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False
+        )
+        progress_task = progress_bar.add_task("Processing...", total=100)
+        
+        # Current status tracking
+        current_status = {
+            'topic': 'Initializing...',
+            'progress': 0.0,
+            'topics_processed': 0,
+            'topics_total': 0,
+            'bag_format': 'ROS Bag'
+        }
+        
+        def create_todo_display():
+            """Create TODO list with progress bar at bottom"""
+            todo_text = Text()
+            
+            # Main header
+            todo_text.append("⏺ ", style="cyan bold")
+            todo_text.append(f"{operation} {bag_name}\n", style="cyan bold")
+            
+            for i, task in enumerate(tasks):
+                # Indentation and connector
+                if i == 0:
+                    todo_text.append("  ⎿  ", style="dim")  # First item connector
+                else:
+                    todo_text.append("     ", style="dim")  # Regular indentation
+                
+                # Status icon and task
+                if task_status[i] == "completed":
+                    todo_text.append("✓ ", style="green bold")
+                    todo_text.append(f"{task}\n", style="green")
+                elif task_status[i] == "in_progress":
+                    todo_text.append("⠋ ", style="yellow bold")
+                    todo_text.append(f"{task}\n", style="yellow bold")
+                else:  # pending
+                    todo_text.append("○ ", style="dim")
+                    todo_text.append(f"{task}\n", style="dim")
+            
+            # Add current status info
+            todo_text.append("\n", style="dim")
+            todo_text.append(f"Current: {current_status['topic']}\n", style="cyan")
+            
+            if current_status['topics_total'] > 0:
+                todo_text.append(f"Topics: {current_status['topics_processed']}/{current_status['topics_total']} ", style="blue")
+                todo_text.append(f"({current_status['bag_format']})\n", style="dim")
+            
+            # Combine TODO list and progress bar
+            from rich.console import Group
+            combined_content = Group(
+                Align.left(todo_text),
+                "",  # Spacing
+                progress_bar
+            )
+            
+            return Panel(
+                combined_content,
+                title=f"[bold cyan]{operation} Progress[/bold cyan]",
+                border_style="cyan",
+                padding=(1, 2)
+            )
+        
+        with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
+            
+            def update_progress(topic: str = None, progress: float = None,
+                              topics_total: int = None, topics_processed: int = None,
+                              bag_format: str = None, phase: str = None):
+                """Update progress callback"""
+                nonlocal current_task
+                
+                # Update current status
+                if topic is not None:
+                    current_status['topic'] = topic
+                if progress is not None:
+                    current_status['progress'] = progress
+                    # Update progress bar
+                    progress_bar.update(progress_task, completed=progress)
+                if topics_total is not None:
+                    current_status['topics_total'] = topics_total
+                if topics_processed is not None:
+                    current_status['topics_processed'] = topics_processed
+                if bag_format is not None:
+                    current_status['bag_format'] = bag_format
+                
+                # Determine current task based on progress or phase
+                if phase:
+                    if phase == "analyzing":
+                        new_task = 0
+                    elif phase == "filtering":
+                        new_task = 2
+                    elif phase == "preparing":
+                        new_task = 3
+                    elif phase == "processing":
+                        new_task = 4
+                    elif phase == "writing":
+                        new_task = 5
+                    elif phase == "finalizing":
+                        new_task = 6
+                    else:
+                        new_task = current_task
+                elif progress is not None:
+                    # Map progress to tasks
+                    if progress < 10:
+                        new_task = 0  # Analyzing
+                    elif progress < 20:
+                        new_task = 1  # Discovering
+                    elif progress < 30:
+                        new_task = 2  # Filtering
+                    elif progress < 40:
+                        new_task = 3  # Preparing
+                    elif progress < 80:
+                        new_task = 4  # Processing
+                    elif progress < 95:
+                        new_task = 5  # Writing
+                    else:
+                        new_task = 6  # Finalizing
+                else:
+                    new_task = current_task
+                
+                # Mark previous tasks as completed
+                for i in range(new_task):
+                    if task_status[i] != "completed":
+                        task_status[i] = "completed"
+                
+                # Mark current task as in progress
+                if new_task < len(tasks) and task_status[new_task] != "completed":
+                    task_status[new_task] = "in_progress"
+                    current_task = new_task
+                
+                # Update display
+                live.update(create_todo_display())
+            
+            try:
+                yield update_progress
+            finally:
+                # Mark all tasks as completed
+                for i in range(len(tasks)):
+                    task_status[i] = "completed"
+                progress_bar.update(progress_task, completed=100)
                 live.update(create_todo_display())
         
         console.print()  # Add spacing after TODO list
