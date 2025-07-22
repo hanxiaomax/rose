@@ -101,17 +101,35 @@ async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = Fa
                 console.print("[red]Export failed[/red]")
                 raise typer.Exit(1)
         else:
-            # Render to console
-            render_options = RenderOptions(
-                format=options.output_format,
-                verbose=options.verbose,
-                show_fields=options.show_fields,
-                show_cache_stats=True,
+            # Display results in panel
+            display_config = DisplayConfig(
                 show_summary=True,
-                color=True,
-                title=f"Topics in {bag_path.name}"
+                show_details=True,
+                show_cache_stats=True,
+                verbose=options.verbose,
+                full_width=True
             )
-            UIControl.render_result(result, render_options, console)
+            UIControl.display_inspection_result(result, display_config, console)
+            
+            # Handle fields display separately if requested
+            if options.show_fields:
+                field_analysis = result.get('field_analysis', {})
+                topics = result.get('topics', [])
+                if field_analysis or any('field_paths' in topic for topic in topics):
+                    # Create fields content
+                    fields_content = UIControl._create_fields_content(field_analysis, topics)
+                    
+                    # Create fields panel
+                    from rich.panel import Panel
+                    fields_panel = Panel(
+                        fields_content,
+                        title=f"[bold magenta]Field Analysis Details[/bold magenta]",
+                        border_style="magenta",
+                        padding=(1, 2)
+                    )
+                    
+                    console.print()  # Add spacing
+                    console.print(fields_panel)
             
     except Exception as e:
         console.print(f"[red]Error during bag inspection: {e}[/red]")

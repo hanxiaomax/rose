@@ -1113,7 +1113,7 @@ class UIControl:
             
             return Panel(
                 combined_content,
-                title=f"[bold cyan]{operation} Progress[/bold cyan]",
+                title=f"[bold cyan]Extraction Progress[/bold cyan]",
                 border_style="cyan",
                 padding=(1, 2)
             )
@@ -1206,7 +1206,7 @@ class UIControl:
     @classmethod
     def display_inspection_result(cls, result: Dict[str, Any], config: Optional[DisplayConfig] = None,
                                  console: Optional[Console] = None):
-        """Display inspection results with rich formatting"""
+        """Display inspection results with rich formatting in panel"""
         if console is None:
             console = cls.get_console()
         if config is None:
@@ -1215,17 +1215,39 @@ class UIControl:
         bag_info = result.get('bag_info', {})
         topics = result.get('topics', [])
         
+        # Create content for the results panel
+        from rich.console import Group
+        content_parts = []
+        
         # Show summary if requested
         if config.show_summary:
-            cls._display_bag_summary(bag_info, config, console)
+            summary_content = cls._create_bag_summary_content(bag_info, config)
+            content_parts.append(summary_content)
+            content_parts.append("")  # Add spacing
         
         # Create topics table
         if config.show_details:
-            cls._display_topics_table(topics, bag_info, config, console)
+            topics_table = cls._create_topics_table_content(topics, bag_info, config)
+            content_parts.append(topics_table)
         
         # Show cache stats if requested
         if config.show_cache_stats and result.get('cache_stats'):
-            cls._display_cache_stats(result['cache_stats'], console)
+            cache_content = cls._create_cache_stats_content(result['cache_stats'])
+            content_parts.append("")  # Add spacing
+            content_parts.append(cache_content)
+        
+        # Combine all content
+        combined_content = Group(*content_parts)
+        
+        # Create results panel
+        results_panel = Panel(
+            combined_content,
+            title=f"[bold green]Analysis Results[/bold green]",
+            border_style="green",
+            padding=(1, 2)
+        )
+        
+        console.print(results_panel)
     
     @classmethod
     def display_extraction_result(cls, result: Dict[str, Any], config: Optional[DisplayConfig] = None,
@@ -1799,55 +1821,23 @@ class UIControl:
         
         console.print(table)
         
-        # If show_fields is enabled, show detailed field analysis
+        # If show_fields is enabled, show detailed field analysis in separate panel
         if options.show_fields:
             field_analysis = result.get('field_analysis', {})
             if field_analysis:
-                console.print()
-                console.print("[bold magenta]Field Analysis Details[/bold magenta]")
-                console.print()
+                # Create fields content
+                fields_content = cls._create_fields_content(field_analysis, topics)
                 
-                # Show fields for all topics that have field analysis
-                for topic, analysis in field_analysis.items():
-                    field_paths = analysis.get('field_paths', [])
-                    if field_paths:
-                        console.print(f"[bold cyan]{topic}[/bold cyan] ({analysis.get('message_type', 'Unknown')})")
-                        
-                        # Display fields as simple list with dot notation
-                        for field_path in sorted(field_paths):
-                            if '.' in field_path:
-                                # Nested field - show with yellow color
-                                console.print(f"  • [yellow]{field_path}[/yellow]")
-                            else:
-                                # Top-level field - show with green color
-                                console.print(f"  • [green]{field_path}[/green]")
-                        
-                        console.print()
-            
-            # Also check if topics have field_paths directly (fallback)
-            elif any('field_paths' in topic for topic in topics):
-                console.print()
-                console.print("[bold magenta]Field Analysis Details[/bold magenta]")
-                console.print()
+                # Create fields panel
+                fields_panel = Panel(
+                    fields_content,
+                    title=f"[bold magenta]Field Analysis Details[/bold magenta]",
+                    border_style="magenta",
+                    padding=(1, 2)
+                )
                 
-                for topic_info in topics:
-                    if 'field_paths' in topic_info and topic_info['field_paths']:
-                        topic_name = topic_info.get('name', '')
-                        message_type = topic_info.get('message_type', 'Unknown')
-                        field_paths = topic_info['field_paths']
-                        
-                        console.print(f"[bold cyan]{topic_name}[/bold cyan] ({message_type})")
-                        
-                        # Display fields as simple list with dot notation
-                        for field_path in sorted(field_paths):
-                            if '.' in field_path:
-                                # Nested field - show with yellow color
-                                console.print(f"  • [yellow]{field_path}[/yellow]")
-                            else:
-                                # Top-level field - show with green color
-                                console.print(f"  • [green]{field_path}[/green]")
-                        
-                        console.print()
+                console.print()  # Add spacing
+                console.print(fields_panel)
         
         return ""  # Console output, no string return
     
@@ -2283,6 +2273,156 @@ class UIControl:
     def _get_timestamp(cls) -> str:
         """Get current timestamp for reports"""
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    @classmethod
+    def _create_bag_summary_content(cls, bag_info: Dict[str, Any], config: DisplayConfig):
+        """Create bag summary content for panel display"""
+        from rich.text import Text
+        
+        summary_text = Text()
+        summary_text.append("Summary\n", style="bold blue")
+        
+        # File information
+        file_name = bag_info.get('file_name', 'Unknown')
+        file_size = cls._format_size(bag_info.get('file_size', 0))
+        topics_count = bag_info.get('topics_count', 0)
+        total_messages = bag_info.get('total_messages', 0)
+        duration = bag_info.get('duration_seconds', 0)
+        
+        summary_text.append(f"  File: {file_name}\n", style="cyan")
+        summary_text.append(f"  Topics: {topics_count}\n", style="cyan")
+        summary_text.append(f"  Messages: {total_messages:,}\n", style="cyan")
+        summary_text.append(f"  File Size: {file_size}\n", style="cyan")
+        summary_text.append(f"  Duration: {duration:.1f}s\n", style="cyan")
+        
+        if duration > 0 and total_messages > 0:
+            avg_rate = total_messages / duration
+            summary_text.append(f"  Avg Rate: {avg_rate:.1f} Hz\n", style="cyan")
+        
+        # Analysis information
+        analysis_time = bag_info.get('analysis_time', 0)
+        cached = bag_info.get('cached', False)
+        summary_text.append(f"  Analysis Time: {analysis_time:.3f}s\n", style="dim")
+        summary_text.append(f"  Cached: {'Yes' if cached else 'No'}\n", style="dim")
+        
+        return summary_text
+    
+    @classmethod
+    def _create_topics_table_content(cls, topics: List[Dict[str, Any]], bag_info: Dict[str, Any], config: DisplayConfig):
+        """Create topics table content for panel display"""
+        table = Table(
+            title=f"Topics ({len(topics)})",
+            show_header=True,
+            header_style="bold magenta",
+            expand=config.full_width,
+            box=None
+        )
+        
+        table.add_column("Topic", style="cyan", no_wrap=True)
+        table.add_column("Count", justify="right", style="green")
+        table.add_column("Size", justify="right", style="yellow")
+        table.add_column("Frequency", justify="right", style="blue")
+        
+        # Add topic rows
+        for topic_info in topics:
+            frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
+            
+            # Format size
+            size_bytes = topic_info.get('size_bytes', 0)
+            if size_bytes > 1024 * 1024:
+                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+            elif size_bytes > 1024:
+                size_str = f"{size_bytes / 1024:.1f} KB"
+            else:
+                size_str = f"{size_bytes} B"
+            
+            table.add_row(
+                topic_info.get('name', ''),
+                f"{topic_info.get('message_count', 0):,}",
+                size_str,
+                frequency_str
+            )
+        
+        return table
+    
+    @classmethod
+    def _create_cache_stats_content(cls, cache_stats: Dict[str, Any]):
+        """Create cache stats content for panel display"""
+        from rich.text import Text
+        
+        if cache_stats.get('total_requests', 0) > 0:
+            hit_rate = cache_stats.get('hit_rate', 0) * 100
+            total_requests = cache_stats.get('total_requests', 0)
+            
+            cache_text = Text()
+            cache_text.append("Cache Performance\n", style="bold blue")
+            cache_text.append(f"  Hit Rate: {hit_rate:.1f}% ({total_requests} requests)", style="cyan")
+            
+            return cache_text
+        return Text("")
+    
+    @classmethod
+    def _create_fields_content(cls, field_analysis: Dict[str, Any], topics: List[Dict[str, Any]]):
+        """Create fields content for panel display"""
+        from rich.text import Text
+        from rich.console import Group
+        
+        content_parts = []
+        
+        # Show fields for all topics that have field analysis
+        if field_analysis:
+            for topic, analysis in field_analysis.items():
+                field_paths = analysis.get('field_paths', [])
+                if field_paths:
+                    topic_text = Text()
+                    topic_text.append(f"{topic}", style="bold cyan")
+                    topic_text.append(f" ({analysis.get('message_type', 'Unknown')})", style="dim")
+                    content_parts.append(topic_text)
+                    
+                    fields_text = Text()
+                    # Display fields as simple list with dot notation
+                    for field_path in sorted(field_paths):
+                        if '.' in field_path:
+                            # Nested field - show with yellow color
+                            fields_text.append(f"  • {field_path}\n", style="yellow")
+                        else:
+                            # Top-level field - show with green color
+                            fields_text.append(f"  • {field_path}\n", style="green")
+                    
+                    content_parts.append(fields_text)
+                    content_parts.append("")  # Add spacing between topics
+        
+        # Also check if topics have field_paths directly (fallback)
+        elif any('field_paths' in topic for topic in topics):
+            for topic_info in topics:
+                if 'field_paths' in topic_info and topic_info['field_paths']:
+                    topic_name = topic_info.get('name', '')
+                    message_type = topic_info.get('message_type', 'Unknown')
+                    field_paths = topic_info['field_paths']
+                    
+                    topic_text = Text()
+                    topic_text.append(f"{topic_name}", style="bold cyan")
+                    topic_text.append(f" ({message_type})", style="dim")
+                    content_parts.append(topic_text)
+                    
+                    fields_text = Text()
+                    # Display fields as simple list with dot notation
+                    for field_path in sorted(field_paths):
+                        if '.' in field_path:
+                            # Nested field - show with yellow color
+                            fields_text.append(f"  • {field_path}\n", style="yellow")
+                        else:
+                            # Top-level field - show with green color
+                            fields_text.append(f"  • {field_path}\n", style="green")
+                    
+                    content_parts.append(fields_text)
+                    content_parts.append("")  # Add spacing between topics
+        
+        # Remove last empty spacing if exists
+        if content_parts and content_parts[-1] == "":
+            content_parts.pop()
+        
+        return Group(*content_parts)
 
 
 # ============================================================================
