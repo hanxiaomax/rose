@@ -329,12 +329,12 @@ class RosbagsBagParser(IBagParser):
                 # Phase 2: Collect all messages with timestamps for chronological sorting
                 messages_to_write = []
                 
-                # Convert time range if provided
+                    # Convert time range if provided
                 start_ns = None
                 end_ns = None
                 if time_range:
-                    start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
-                    end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
+                        start_ns = time_range[0][0] * 1_000_000_000 + time_range[0][1]
+                        end_ns = time_range[1][0] * 1_000_000_000 + time_range[1][1]
                 
                 # Collect messages topic by topic for progress tracking
                 total_processed = 0

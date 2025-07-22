@@ -82,93 +82,9 @@ async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = Fa
     manager = BagManager()
     
     try:
-        # Show responsive real-time analysis status (indented TODO list style)
-        from rich.live import Live
-        from rich.text import Text
-        
-        # Define analysis tasks in TODO list style
-        tasks = [
-            "Reading bag metadata",
-            "Discovering topics",
-            "Analyzing message structure", 
-            "Counting messages per topic",
-            "Calculating topic sizes",
-            "Computing frequencies" if not options.show_fields else "Extracting field information",
-            "Finalizing analysis"
-        ]
-        
-        # Task status tracking
-        task_status = {i: "pending" for i in range(len(tasks))}
-        task_cache_hit = {i: False for i in range(len(tasks))}
-        current_task = 0
-        
-        def create_todo_display():
-            """Create indented TODO list display"""
-            todo_text = Text()
-            
-            # Main header
-            todo_text.append("⏺ ", style="cyan bold")
-            todo_text.append(f"Analyzing {bag_path.name}\n", style="cyan bold")
-            
-            for i, task in enumerate(tasks):
-                # Indentation and connector
-                if i == 0:
-                    todo_text.append("  ⎿  ", style="dim")  # First item connector
-                else:
-                    todo_text.append("     ", style="dim")  # Regular indentation
-                
-                # Status icon and task
-                if task_status[i] == "completed":
-                    todo_text.append("✓ ", style="green bold")
-                    task_text = f"{task}"
-                    if task_cache_hit[i]:
-                        task_text += " (cached)"
-                    todo_text.append(f"{task_text}\n", style="green")
-                elif task_status[i] == "in_progress":
-                    todo_text.append("⠋ ", style="yellow bold")
-                    todo_text.append(f"{task}\n", style="yellow bold")
-                else:  # pending
-                    todo_text.append("○ ", style="dim")
-                    todo_text.append(f"{task}\n", style="dim")
-            
-            return todo_text
-        
-        with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
-            
-            # Create responsive callback for analysis
-            def analysis_callback(percent: float):
-                nonlocal current_task
-                
-                # Determine current task based on progress
-                new_task = min(int(percent / 100 * len(tasks)), len(tasks) - 1)
-                
-                # Mark previous tasks as completed
-                for i in range(new_task):
-                    if task_status[i] != "completed":
-                        task_status[i] = "completed"
-                
-                # Mark current task as in progress
-                if new_task < len(tasks) and task_status[new_task] != "completed":
-                    task_status[new_task] = "in_progress"
-                    current_task = new_task
-                
-                # Update display
-                live.update(create_todo_display())
-
-            result = await manager.inspect_bag(bag_path, options, progress_callback=analysis_callback)
-            
-            # Check if analysis was cached and mark appropriate tasks
-            if result.get('bag_info', {}).get('cached', False):
-                # Mark cache-related tasks as cached
-                for i in [0, 1, 2, 3, 4]:  # First 5 tasks typically use cache
-                    task_cache_hit[i] = True
-            
-            # Mark all tasks as completed
-            for i in range(len(tasks)):
-                task_status[i] = "completed"
-            live.update(create_todo_display())
-            
-        console.print()  # Add spacing after TODO list
+        # Show responsive real-time analysis status using UIControl
+        with UIControl.todo_analysis_progress(bag_path.name, options.show_fields, console) as update_progress:
+            result = await manager.inspect_bag(bag_path, options, progress_callback=update_progress)
         
         # Determine if we should export to file or render to console
         if options.output_file:

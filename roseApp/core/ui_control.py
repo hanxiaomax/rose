@@ -34,6 +34,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 from rich.markdown import Markdown
+from rich.live import Live
 
 from .util import get_logger
 
@@ -906,6 +907,101 @@ class UIControl:
             # Clear the screen completely when done
             console.clear()
             console.print(f"[bold green]✓ Analysis complete[/bold green]")
+    
+    @classmethod
+    @contextmanager
+    def todo_analysis_progress(cls, bag_name: str, show_fields: bool = False, console: Optional[Console] = None):
+        """
+        Create a TODO-style analysis progress display
+        
+        Args:
+            bag_name: Name of the bag file being analyzed
+            show_fields: Whether field extraction is enabled
+            console: Optional console instance
+            
+        Yields:
+            Callback function to update progress
+        """
+        if console is None:
+            console = cls.get_console()
+        
+        from rich.live import Live
+        from rich.text import Text
+        
+        # Define analysis tasks in TODO list style
+        tasks = [
+            "Reading bag metadata",
+            "Discovering topics",
+            "Analyzing message structure", 
+            "Counting messages per topic",
+            "Calculating topic sizes",
+            "Extracting field information" if show_fields else "Computing frequencies",
+            "Finalizing analysis"
+        ]
+        
+        # Task status tracking
+        task_status = {i: "pending" for i in range(len(tasks))}
+        current_task = 0
+        
+        def create_todo_display():
+            """Create indented TODO list display"""
+            todo_text = Text()
+            
+            # Main header
+            todo_text.append("⏺ ", style="cyan bold")
+            todo_text.append(f"Analyzing {bag_name}\n", style="cyan bold")
+            
+            for i, task in enumerate(tasks):
+                # Indentation and connector
+                if i == 0:
+                    todo_text.append("  ⎿  ", style="dim")  # First item connector
+                else:
+                    todo_text.append("     ", style="dim")  # Regular indentation
+                
+                # Status icon and task
+                if task_status[i] == "completed":
+                    todo_text.append("✓ ", style="green bold")
+                    todo_text.append(f"{task}\n", style="green")
+                elif task_status[i] == "in_progress":
+                    todo_text.append("⠋ ", style="yellow bold")
+                    todo_text.append(f"{task}\n", style="yellow bold")
+                else:  # pending
+                    todo_text.append("○ ", style="dim")
+                    todo_text.append(f"{task}\n", style="dim")
+            
+            return todo_text
+        
+        with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
+            
+            def update_progress(percent: float):
+                """Update progress callback"""
+                nonlocal current_task
+                
+                # Determine current task based on progress
+                new_task = min(int(percent / 100 * len(tasks)), len(tasks) - 1)
+                
+                # Mark previous tasks as completed
+                for i in range(new_task):
+                    if task_status[i] != "completed":
+                        task_status[i] = "completed"
+                
+                # Mark current task as in progress
+                if new_task < len(tasks) and task_status[new_task] != "completed":
+                    task_status[new_task] = "in_progress"
+                    current_task = new_task
+                
+                # Update display
+                live.update(create_todo_display())
+            
+            try:
+                yield update_progress
+            finally:
+                # Mark all tasks as completed
+                for i in range(len(tasks)):
+                    task_status[i] = "completed"
+                live.update(create_todo_display())
+        
+        console.print()  # Add spacing after TODO list
     
     # ========================================================================
     # Result Display Methods
