@@ -249,18 +249,30 @@ class BagManager:
         else:
             filtered_topics = all_topics
         
+        # Get topic sizes using parser
+        topic_sizes = {}
+        try:
+            from .parser import create_parser, ParserType
+            parser = create_parser(ParserType.ROSBAGS)
+            topic_stats = parser.get_topic_stats(str(bag_path))
+            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+        except Exception as e:
+            self.logger.warning(f"Could not get topic sizes: {e}")
+        
         # Build topic information
         topics_info = []
         for topic in filtered_topics:
             message_type = result.bag_info.connections.get(topic, 'Unknown')
             message_count = result.bag_info.message_counts.get(topic, 0)
             frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+            estimated_size_bytes = topic_sizes.get(topic, 0)
             
             topics_info.append({
                 'name': topic,
                 'message_type': message_type,
                 'message_count': message_count,
-                'frequency': frequency
+                'frequency': frequency,
+                'estimated_size_bytes': estimated_size_bytes
             })
         
         # Sort topics by name
@@ -333,7 +345,38 @@ class BagManager:
         total_messages = sum(result.bag_info.message_counts.values())
         extract_messages = sum(result.bag_info.message_counts.get(topic, 0) for topic in topics_to_extract)
         
+        # Get topic sizes using parser
+        topic_sizes = {}
+        try:
+            from .parser import create_parser, ParserType
+            parser = create_parser(ParserType.ROSBAGS)
+            topic_stats = parser.get_topic_stats(str(bag_path))
+            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+        except Exception as e:
+            self.logger.warning(f"Could not get topic sizes: {e}")
+        
+        # Build all_topics information (needed for the summary table)
+        all_topics = []
+        for topic in result.bag_info.topics:
+            message_type = result.bag_info.connections.get(topic, 'Unknown')
+            message_count = result.bag_info.message_counts.get(topic, 0)
+            estimated_size_bytes = topic_sizes.get(topic, 0)
+            
+            all_topics.append({
+                'name': topic,
+                'message_type': message_type,
+                'message_count': message_count,
+                'estimated_size_bytes': estimated_size_bytes
+            })
+        
         extraction_result = {
+            'input_file': str(bag_path),
+            'output_file': str(options.output_path),
+            'compression': options.compression,
+            'success': True,
+            'dry_run': options.dry_run,
+            'topics_to_extract': topics_to_extract,
+            'all_topics': all_topics,
             'bag_info': {
                 'input_file': str(bag_path),
                 'output_file': str(options.output_path),
@@ -345,9 +388,16 @@ class BagManager:
                 'duration_seconds': result.bag_info.duration_seconds,
                 'compression': options.compression
             },
-            'topics': [],
-            'success': True,
-            'dry_run': options.dry_run
+            'statistics': {
+                'total_topics': len(result.bag_info.topics),
+                'selected_topics': len(topics_to_extract),
+                'excluded_topics': len(result.bag_info.topics) - len(topics_to_extract),
+                'total_messages': total_messages,
+                'selected_messages': extract_messages,
+                'selection_percentage': (len(topics_to_extract) / len(result.bag_info.topics) * 100) if len(result.bag_info.topics) > 0 else 0,
+                'message_percentage': (extract_messages / total_messages * 100) if total_messages > 0 else 0
+            },
+            'topics': []
         }
         
         # Build topic information
