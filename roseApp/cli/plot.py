@@ -15,7 +15,7 @@ from rich.console import Console
 from ..core.bag_manager import BagManager, InspectOptions
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
-from ..core.parser import create_parser, ParserType
+from ..core.parser import create_parser
 
 # Import plotting dependencies (will be checked at runtime)
 try:

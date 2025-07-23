@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from roseApp.core.parser import IBagParser, ParserType, create_parser, FileExistsError
+from roseApp.core.parser import IBagParser, create_parser, FileExistsError
 from roseApp.core.util import TimeUtil, get_preferred_parser_type
 
 class BagStatus(Enum):

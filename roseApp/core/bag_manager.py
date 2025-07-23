@@ -156,8 +156,8 @@ class BagManager:
         # Get topic sizes using parser
         topic_sizes = {}
         try:
-            from .parser import create_parser, ParserType
-            parser = create_parser(ParserType.ROSBAGS)
+            from .parser import create_parser
+            parser = create_parser()
             topic_stats = parser.get_topic_stats(str(bag_path))
             topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
         except Exception as e:
@@ -252,8 +252,8 @@ class BagManager:
         # Get topic sizes using parser
         topic_sizes = {}
         try:
-            from .parser import create_parser, ParserType
-            parser = create_parser(ParserType.ROSBAGS)
+            from .parser import create_parser
+            parser = create_parser()
             topic_stats = parser.get_topic_stats(str(bag_path))
             topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
         except Exception as e:
@@ -348,8 +348,8 @@ class BagManager:
         # Get topic sizes using parser
         topic_sizes = {}
         try:
-            from .parser import create_parser, ParserType
-            parser = create_parser(ParserType.ROSBAGS)
+            from .parser import create_parser
+            parser = create_parser()
             topic_stats = parser.get_topic_stats(str(bag_path))
             topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
         except Exception as e:
@@ -422,8 +422,8 @@ class BagManager:
         
         # Perform the actual extraction using the analyzer
         try:
-            from .parser import create_parser, ParserType
-            parser = create_parser(ParserType.ROSBAGS)
+            from .parser import create_parser
+            parser = create_parser()
             
             # Create output directory if needed
             options.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -432,27 +432,16 @@ class BagManager:
             if options.output_path.exists() and not options.overwrite:
                 raise FileExistsError(f"Output file already exists: {options.output_path}")
             
-            # Use parser to filter/extract the bag with topic-level progress
-            if hasattr(parser, 'filter_bag_with_topic_progress') and callable(getattr(parser, 'filter_bag_with_topic_progress')):
-                # Use enhanced topic progress if available
-                filter_result = parser.filter_bag_with_topic_progress(
-                    str(bag_path),
-                    str(options.output_path),
-                    topics_to_extract,
-                    compression=options.compression,
-                    overwrite=options.overwrite,
-                    topic_progress_callback=progress_callback
-                )
-            else:
-                # Fall back to regular progress callback
-                filter_result = parser.filter_bag(
-                    str(bag_path),
-                    str(options.output_path),
-                    topics_to_extract,
-                    compression=options.compression,
-                    overwrite=options.overwrite,
-                    progress_callback=progress_callback
-                )
+            # Use parser to filter/extract the bag
+            # The unified filter_bag method automatically detects callback type
+            filter_result = parser.filter_bag(
+                str(bag_path),
+                str(options.output_path),
+                topics_to_extract,
+                compression=options.compression,
+                overwrite=options.overwrite,
+                progress_callback=progress_callback
+            )
             
             # Calculate output file size and statistics
             if options.output_path.exists():

@@ -9,11 +9,7 @@ import asyncio
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.align import Align
+from rich.console import Console
 from ..core.bag_manager import BagManager, ExtractOptions
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger

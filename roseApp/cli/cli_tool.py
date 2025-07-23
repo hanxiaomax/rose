@@ -11,7 +11,7 @@ from InquirerPy.validator import PathValidator
 import concurrent.futures
 import threading
 import queue
-from ..core.parser import create_parser, ParserType, IBagParser
+from ..core.parser import create_parser, IBagParser
 from ..core.util import get_logger, get_preferred_parser_type
 from ..core.ui_control import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 

@@ -12,7 +12,7 @@ from textual.widgets import DirectoryTree
 from roseApp.tui.components.StatusBar import StatusBar
 from roseApp.core.BagManager import BagManager
 from roseApp.core.util import get_logger
-from roseApp.core.parser import create_parser, ParserType
+from roseApp.core.parser import create_parser
 
 logger = get_logger("BagExplorer")
 

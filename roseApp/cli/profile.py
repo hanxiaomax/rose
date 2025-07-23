@@ -21,7 +21,7 @@ from rich.table import Table
 from rich.progress import Progress, TaskID, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
 from ..core.analyzer import analyze_bag_async, AnalysisType
-from ..core.parser import create_parser, ParserType
+from ..core.parser import create_parser
 from ..core.util import set_app_mode, AppMode, get_logger, log_cli_error
 from .error_handling import ValidationError, validate_file_exists
 
