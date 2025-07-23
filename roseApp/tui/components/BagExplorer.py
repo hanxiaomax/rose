@@ -18,7 +18,7 @@ logger = get_logger("BagExplorer")
 
 class BagExplorer(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
-    bags = reactive(BagManager(create_parser(ParserType.ROSBAGS)))
+    bags = reactive(BagManager(create_parser()))
     multi_select_mode = reactive(False)
     
     BINDINGS = [
@@ -37,7 +37,7 @@ class BagExplorer(DirectoryTree):
         self.logger = logger.getChild("BagExplorer")
         
         # Use RosbagsBagParser for enhanced performance
-        self.bags = BagManager(create_parser(ParserType.ROSBAGS))
+        self.bags = BagManager(create_parser())
         self.logger.info("Using RosbagsBagParser for enhanced performance")
 
     def on_mount(self) -> None:

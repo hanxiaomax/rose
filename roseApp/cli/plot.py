@@ -298,7 +298,7 @@ async def _run_plot(
             console
         ) as update_progress:
             
-            parser = create_parser(ParserType.ROSBAGS)
+            parser = create_parser()
             topics, connections, time_range = parser.load_bag(str(input_path))
             
             available_topics = set(topics)
@@ -370,8 +370,8 @@ async def _run_plot(
                     topics_processed=processed_series
                 )
                 
-                time_series_data[topic] = topic_data
-        
+            time_series_data[topic] = topic_data
+    
         # Create the plot
         console.print(f"[cyan]Creating {plot_type} plot...[/cyan]")
         _create_time_series_plot(time_series_data, str(output_path), plot_type, as_format, console)

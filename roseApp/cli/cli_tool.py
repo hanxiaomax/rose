@@ -31,7 +31,7 @@ class CliTool:
     def __init__(self):
         self.console = Console()
         # Auto-select best parser (always RosbagsBagParser)
-        self.parser = create_parser(ParserType.ROSBAGS)
+        self.parser = create_parser()
         logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
         self.topics = None
         self.connections = None
@@ -444,7 +444,7 @@ class CliTool:
                     # We need to create a new parser instance for each thread
                     if not hasattr(thread_local, 'parser'):
                         # Use RosbagsBagParser for all threads
-                            thread_local.parser = create_parser(ParserType.ROSBAGS)
+                            thread_local.parser = create_parser()
                     
                     # Initialize progress to 30% to indicate preparation complete
                     progress.update(task, description=f"Processing: {display_path}", style=theme.ACCENT, completed=0)

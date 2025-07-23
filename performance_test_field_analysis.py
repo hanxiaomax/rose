@@ -32,7 +32,7 @@ class FieldAnalysisPerformanceTest:
         self.console = console
         self.analyzer = get_unified_analyzer()
         self.type_analyzer = get_message_type_analyzer()
-        self.parser = create_parser(ParserType.ROSBAGS)
+        self.parser = create_parser()
         
     def run_comprehensive_test(self, bag_path: str, iterations: int = 5):
         """Run comprehensive performance test"""

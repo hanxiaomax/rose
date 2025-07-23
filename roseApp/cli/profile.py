@@ -320,7 +320,7 @@ class BagAnalysisBenchmark:
         """Run synchronous analysis (legacy mode)"""
         
         def _sync_analysis():
-            parser = create_parser(ParserType.ROSBAGS)
+            parser = create_parser()
             
             # Load basic metadata
             topics, connections, time_range = parser.load_bag(bag_path)
