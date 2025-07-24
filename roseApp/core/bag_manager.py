@@ -139,7 +139,7 @@ class BagManager:
         inspection_result = {
             'bag_info': {
                 'file_name': bag_path.name,
-                'file_path': str(bag_path),
+                'file_path': str(bag_path.absolute()),  # Use absolute path for display
                 'file_size': bag_path.stat().st_size if bag_path.exists() else 0,
                 'topics_count': len(filtered_topics),
                 'total_messages': sum(result.bag_info.message_counts.get(topic, 0) for topic in filtered_topics),
@@ -281,7 +281,7 @@ class BagManager:
         return {
             'bag_info': {
                 'file_name': bag_path.name,
-                'file_path': str(bag_path),
+                'file_path': str(bag_path.absolute()),  # Use absolute path for display
                 'total_topics': len(all_topics),
                 'filtered_topics': len(filtered_topics),
                 'duration_seconds': result.bag_info.duration_seconds,
@@ -370,16 +370,16 @@ class BagManager:
             })
         
         extraction_result = {
-            'input_file': str(bag_path),
-            'output_file': str(options.output_path),
+            'input_file': str(bag_path.absolute()),  # Use absolute path for display
+            'output_file': str(options.output_path.absolute()),  # Use absolute path for display
             'compression': options.compression,
             'success': True,
             'dry_run': options.dry_run,
             'topics_to_extract': topics_to_extract,
             'all_topics': all_topics,
             'bag_info': {
-                'input_file': str(bag_path),
-                'output_file': str(options.output_path),
+                'input_file': str(bag_path.absolute()),
+                'output_file': str(options.output_path.absolute()),
                 'total_topics': len(result.bag_info.topics),
                 'extracted_topics': len(topics_to_extract),
                 'total_messages': total_messages,

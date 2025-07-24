@@ -102,8 +102,11 @@ class BagAnalyzer:
         if not no_cache:
             cached_result = self.cache.get(cache_key)
             if cached_result:
-                self.logger.info(f"Using cached analysis for {bag_path}")
+                # Update analysis time to reflect cache lookup time
+                cache_lookup_time = time.time() - start_time
+                self.logger.info(f"Using cached analysis for {bag_path} (cache lookup: {cache_lookup_time:.3f}s)")
                 cached_result.cached = True
+                cached_result.analysis_time = cache_lookup_time  # Use actual cache lookup time
                 return cached_result
         else:
             self.logger.info(f"Skipping cache for {bag_path} (--no-cache specified)")

@@ -57,6 +57,29 @@ class ParserHealth:
         return self.available and not self.error_message
 
 
+@dataclass
+class ComprehensiveBagInfo:
+    """Comprehensive bag information data structure to eliminate redundant calculations"""
+    # Basic information
+    topics: List[str]
+    connections: Dict[str, str]  # topic -> message_type
+    time_range: Tuple[Tuple[int, int], Tuple[int, int]]
+    
+    # Statistical information (calculated once, used multiple times)
+    message_counts: Dict[str, int]
+    topic_sizes: Dict[str, int]
+    topic_stats: Dict[str, Dict[str, int]]  # includes count, size, avg_size, min_size, max_size
+    
+    # Metadata
+    total_messages: int
+    total_size: int
+    duration_seconds: float
+    
+    # Cache metadata
+    cache_time: float
+    file_path: str
+
+
 class IBagParser(ABC):
     """Abstract base class for bag parser implementations"""
     
@@ -113,14 +136,19 @@ class RosbagsBagParser(IBagParser):
     CHUNK_MEMORY_LIMIT = 64 * 1024 * 1024  # 64MB per chunk
     
     def __init__(self):
-        """Initialize rosbags parser"""
+        """Initialize rosbags parser with optimization features"""
         if not ROSBAGS_AVAILABLE:
             raise ImportError("rosbags library is not available")
         self._registered_types = set()
         # Initialize type system optimization
         self._typestore = None
         self._message_cache = {}
-        _logger.debug("Initialized RosbagsBagParser with enhanced performance features and memory optimization")
+        
+        # Comprehensive bag info cache to eliminate redundant calculations
+        self._bag_info_cache: Dict[str, ComprehensiveBagInfo] = {}
+        self._cache_ttl = 300  # 5 minutes cache TTL
+        
+        _logger.debug("Initialized RosbagsBagParser with enhanced performance features, memory optimization, and intelligent caching")
     
     def _initialize_typestore(self):
         """Initialize optimized typestore for better performance"""
@@ -137,6 +165,155 @@ class RosbagsBagParser(IBagParser):
             except Exception as e:
                 _logger.warning(f"Could not initialize typestore optimization: {e}")
                 self._typestore = None
+    
+    def get_comprehensive_bag_info(self, bag_path: str, force_refresh: bool = False) -> ComprehensiveBagInfo:
+        """
+        Get comprehensive bag information in a single pass to eliminate redundant calculations
+        
+        This method consolidates all bag data retrieval operations into a single, efficient
+        process with intelligent caching to avoid repeated AnyReader instantiation and
+        bag traversal.
+        
+        Args:
+            bag_path: Path to the bag file
+            force_refresh: If True, bypass cache and reload from file
+            
+        Returns:
+            ComprehensiveBagInfo containing all bag metadata and statistics
+        """
+        # Check cache validity
+        if not force_refresh and bag_path in self._bag_info_cache:
+            cached_info = self._bag_info_cache[bag_path]
+            if time.time() - cached_info.cache_time < self._cache_ttl:
+                _logger.debug(f"Using cached comprehensive bag info for {bag_path}")
+                return cached_info
+        
+        _logger.debug(f"Loading comprehensive bag info for {bag_path}")
+        start_time = time.time()
+        
+        try:
+            # Initialize typestore for optimal performance
+            self._initialize_typestore()
+            
+            reader_args = [Path(bag_path)]
+            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
+            
+            with AnyReader(reader_args, **reader_kwargs) as reader:
+                # Extract basic information in single pass
+                topics = [conn.topic for conn in reader.connections]
+                connections = {conn.topic: conn.msgtype for conn in reader.connections}
+                
+                # Extract time range
+                start_ns = reader.start_time
+                end_ns = reader.end_time
+                start_time_tuple = (int(start_ns // 1_000_000_000), int(start_ns % 1_000_000_000))
+                end_time_tuple = (int(end_ns // 1_000_000_000), int(end_ns % 1_000_000_000))
+                time_range = (start_time_tuple, end_time_tuple)
+                
+                # Calculate comprehensive statistics in single pass
+                topic_stats = {}
+                total_messages = 0
+                total_size = 0
+                
+                _logger.debug(f"Calculating statistics for {len(reader.connections)} topics")
+                
+                for connection in reader.connections:
+                    count = 0
+                    connection_size = 0
+                    min_size = float('inf')
+                    max_size = 0
+                    
+                    # Stream messages efficiently to avoid memory buildup
+                    for (_, _, rawdata) in reader.messages([connection]):
+                        count += 1
+                        msg_size = len(rawdata)
+                        connection_size += msg_size
+                        min_size = min(min_size, msg_size)
+                        max_size = max(max_size, msg_size)
+                    
+                    # Calculate derived statistics
+                    avg_size = connection_size // count if count > 0 else 0
+                    min_size = min_size if min_size != float('inf') else 0
+                    
+                    topic_stats[connection.topic] = {
+                        'count': count,
+                        'size': connection_size,
+                        'avg_size': avg_size,
+                        'min_size': min_size,
+                        'max_size': max_size
+                    }
+                    
+                    total_messages += count
+                    total_size += connection_size
+                
+                # Extract simplified dictionaries for convenience
+                message_counts = {topic: stats['count'] for topic, stats in topic_stats.items()}
+                topic_sizes = {topic: stats['size'] for topic, stats in topic_stats.items()}
+                
+                # Calculate duration
+                duration_seconds = (end_ns - start_ns) / 1_000_000_000
+                
+                # Create comprehensive info object
+                comprehensive_info = ComprehensiveBagInfo(
+                    topics=topics,
+                    connections=connections,
+                    time_range=time_range,
+                    message_counts=message_counts,
+                    topic_sizes=topic_sizes,
+                    topic_stats=topic_stats,
+                    total_messages=total_messages,
+                    total_size=total_size,
+                    duration_seconds=duration_seconds,
+                    cache_time=time.time(),
+                    file_path=bag_path
+                )
+                
+                # Cache the result
+                self._bag_info_cache[bag_path] = comprehensive_info
+                
+                elapsed = time.time() - start_time
+                _logger.info(f"Loaded comprehensive bag info in {elapsed:.3f}s - {total_messages} messages from {len(topics)} topics (cached for {self._cache_ttl}s)")
+                
+                return comprehensive_info
+                
+        except Exception as e:
+            _logger.error(f"Error loading comprehensive bag info for {bag_path}: {e}")
+            raise Exception(f"Error loading comprehensive bag info: {e}")
+    
+    def clear_cache(self, bag_path: Optional[str] = None) -> None:
+        """
+        Clear cached bag information
+        
+        Args:
+            bag_path: If specified, clear cache for specific bag. If None, clear all cache.
+        """
+        if bag_path:
+            if bag_path in self._bag_info_cache:
+                del self._bag_info_cache[bag_path]
+                _logger.debug(f"Cleared cache for {bag_path}")
+        else:
+            self._bag_info_cache.clear()
+            _logger.debug("Cleared all bag info cache")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring and debugging"""
+        current_time = time.time()
+        valid_entries = 0
+        expired_entries = 0
+        
+        for info in self._bag_info_cache.values():
+            if current_time - info.cache_time < self._cache_ttl:
+                valid_entries += 1
+            else:
+                expired_entries += 1
+        
+        return {
+            'total_entries': len(self._bag_info_cache),
+            'valid_entries': valid_entries,
+            'expired_entries': expired_entries,
+            'cache_ttl': self._cache_ttl,
+            'cache_hit_rate': valid_entries / max(1, len(self._bag_info_cache)) * 100
+        }
     
     def _validate_compression(self, compression: str) -> None:
         """Validate compression type"""
@@ -473,9 +650,8 @@ class RosbagsBagParser(IBagParser):
             topic_progress_callback(topic_index, topic, topic_processed, topic_total, "completed")
         
         # Sort all messages by timestamp to ensure chronological order
-        topic_progress_callback(len(selected_connections), "Sorting messages", 0, len(messages_to_write), "processing")
+        # Don't add extra phases to progress - keep topic count accurate
         messages_to_write.sort(key=lambda x: x[1])
-        topic_progress_callback(len(selected_connections), "Sorting messages", len(messages_to_write), len(messages_to_write), "completed")
         
         # Phase 3: Write messages using chunked processing
         output_path = Path(output_bag)
@@ -492,19 +668,11 @@ class RosbagsBagParser(IBagParser):
             total_written = 0
             chunk_size = self.CHUNK_SIZE
             
+            # Use a final progress update without adding to topic count
             for i in range(0, len(messages_to_write), chunk_size):
                 chunk = messages_to_write[i:i + chunk_size]
                 written = self._write_chunk_sorted(writer, topic_connections, chunk)
                 total_written += written
-                
-                # Update progress
-                progress = min(100, int((i + len(chunk)) / len(messages_to_write) * 100))
-                topic_progress_callback(len(selected_connections) + 1, "Writing messages", 
-                                      i + len(chunk), len(messages_to_write), "processing")
-            
-            # Update final progress
-            topic_progress_callback(len(selected_connections) + 1, "Writing messages", 
-                                  len(messages_to_write), len(messages_to_write), "completed")
         
         end_time = time.time()
         elapsed = end_time - start_time
@@ -515,21 +683,14 @@ class RosbagsBagParser(IBagParser):
         return f"Filtering completed in {int(mins)}m {secs:.2f}s"
     
     def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
-        """Load bag file and return topics, connections and time range using optimized AnyReader"""
+        """Load bag file and return topics, connections and time range using comprehensive info interface"""
         try:
-            # Initialize typestore for better performance
-            self._initialize_typestore()
-            
-            reader_args = [Path(bag_path)]
-            if self._typestore:
-                with AnyReader(reader_args, default_typestore=self._typestore) as reader:  # type: ignore
-                    return self._extract_bag_metadata(reader)
-            else:
-                with AnyReader(reader_args) as reader:  # type: ignore
-                    return self._extract_bag_metadata(reader)
+            # Use comprehensive info interface to eliminate redundant AnyReader creation
+            info = self.get_comprehensive_bag_info(bag_path)
+            return info.topics, info.connections, info.time_range
                 
         except Exception as e:
-            _logger.error(f"Error loading bag with AnyReader: {e}")
+            _logger.error(f"Error loading bag: {e}")
             raise Exception(f"Error loading bag: {e}")
     
     def _extract_bag_metadata(self, reader: Any) -> Tuple[List[str], Dict[str, str], Tuple]:
@@ -549,12 +710,10 @@ class RosbagsBagParser(IBagParser):
         return topics, connections, (start, end)
     
     def inspect_bag(self, bag_path: str) -> str:
-        """List all topics and message types in the bag file using AnyReader"""
+        """List all topics and message types using comprehensive info interface to eliminate redundant reads"""
         try:
-            topics, connections, (start_time, end_time) = self.load_bag(bag_path)
-            
-            # Get topic statistics
-            topic_stats = self.get_topic_stats(bag_path)
+            # Use comprehensive info interface to get all data in single pass
+            info = self.get_comprehensive_bag_info(bag_path)
             
             # Helper function to format size
             def format_size(size_bytes: int) -> str:
@@ -572,25 +731,21 @@ class RosbagsBagParser(IBagParser):
             result.append("{:<35} {:<35} {:<10} {:<10}".format("Topic", "Message Type", "Count", "Size"))
             result.append("-" * 90)
             
-            for topic in topics:
-                stats = topic_stats.get(topic, {'count': 0, 'size': 0})
+            for topic in info.topics:
+                stats = info.topic_stats.get(topic, {'count': 0, 'size': 0})
                 count = stats['count']
                 size = stats['size']
                 
                 result.append("{:<35} {:<35} {:<10} {:<10}".format(
                     topic[:33], 
-                    connections[topic][:33], 
+                    info.connections[topic][:33], 
                     count, 
                     format_size(size)
                 ))
             
-            # Calculate totals
-            total_count = sum(stats['count'] for stats in topic_stats.values())
-            total_size = sum(stats['size'] for stats in topic_stats.values())
-            
             result.append("-" * 90)
-            result.append(f"Total: {len(topics)} topics, {total_count} messages, {format_size(total_size)}")
-            result.append(f"\nTime range: {TimeUtil.to_datetime(start_time)} - {TimeUtil.to_datetime(end_time)}")
+            result.append(f"Total: {len(info.topics)} topics, {info.total_messages} messages, {format_size(info.total_size)}")
+            result.append(f"\nTime range: {TimeUtil.to_datetime(info.time_range[0])} - {TimeUtil.to_datetime(info.time_range[1])}")
             return "\n".join(result)
             
         except Exception as e:
@@ -598,40 +753,33 @@ class RosbagsBagParser(IBagParser):
             raise Exception(f"Error inspecting bag file: {e}")
 
     def get_message_counts(self, bag_path: str) -> Dict[str, int]:
-        """Get message counts for each topic using optimized single-pass approach"""
+        """Get message counts for each topic using comprehensive info interface"""
         try:
-            # Use the comprehensive stats method and extract counts
-            stats = self.get_topic_stats(bag_path)
-            return {topic: stats[topic]['count'] for topic in stats}
+            # Use comprehensive info interface to eliminate redundant calculations
+            info = self.get_comprehensive_bag_info(bag_path)
+            return info.message_counts
             
         except Exception as e:
             _logger.error(f"Error getting message counts: {e}")
             raise Exception(f"Error getting message counts: {e}")
 
     def get_topic_sizes(self, bag_path: str) -> Dict[str, int]:
-        """Get total size in bytes for each topic using optimized single-pass approach"""
+        """Get total size in bytes for each topic using comprehensive info interface"""
         try:
-            # Use the comprehensive stats method and extract sizes
-            stats = self.get_topic_stats(bag_path)
-            return {topic: stats[topic]['size'] for topic in stats}
+            # Use comprehensive info interface to eliminate redundant calculations
+            info = self.get_comprehensive_bag_info(bag_path)
+            return info.topic_sizes
                 
         except Exception as e:
             _logger.error(f"Error getting topic sizes: {e}")
             raise Exception(f"Error getting topic sizes: {e}")
     
     def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
-        """Get comprehensive statistics for each topic using memory-efficient streaming"""
+        """Get comprehensive statistics for each topic using comprehensive info interface"""
         try:
-            # Initialize typestore for better performance
-            self._initialize_typestore()
-            
-            reader_args = [Path(bag_path)]
-            if self._typestore:
-                with AnyReader(reader_args, default_typestore=self._typestore) as reader:  # type: ignore
-                    return self._calculate_stats_streaming(reader)
-            else:
-                with AnyReader(reader_args) as reader:  # type: ignore
-                    return self._calculate_stats_streaming(reader)
+            # Use comprehensive info interface to eliminate redundant calculations
+            info = self.get_comprehensive_bag_info(bag_path)
+            return info.topic_stats
                 
         except Exception as e:
             _logger.error(f"Error getting topic stats: {e}")
