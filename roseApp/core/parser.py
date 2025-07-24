@@ -127,8 +127,13 @@ class RosbagsBagParser(IBagParser):
         if self._typestore is None:
             try:
                 from rosbags.typesys import get_typestore, Stores
-                self._typestore = get_typestore(Stores.ROS1_NOCT)
-                _logger.debug("Initialized optimized typestore for ROS1")
+                # Try ROS1_NOETIC first, then fallback to LATEST
+                try:
+                    self._typestore = get_typestore(Stores.ROS1_NOETIC)
+                    _logger.debug("Initialized optimized typestore for ROS1_NOETIC")
+                except:
+                    self._typestore = get_typestore(Stores.LATEST)
+                    _logger.debug("Initialized optimized typestore with LATEST")
             except Exception as e:
                 _logger.warning(f"Could not initialize typestore optimization: {e}")
                 self._typestore = None
@@ -517,7 +522,7 @@ class RosbagsBagParser(IBagParser):
             
             reader_args = [Path(bag_path)]
             if self._typestore:
-                with AnyReader(reader_args, typestore=self._typestore) as reader:  # type: ignore
+                with AnyReader(reader_args, default_typestore=self._typestore) as reader:  # type: ignore
                     return self._extract_bag_metadata(reader)
             else:
                 with AnyReader(reader_args) as reader:  # type: ignore
@@ -622,7 +627,7 @@ class RosbagsBagParser(IBagParser):
             
             reader_args = [Path(bag_path)]
             if self._typestore:
-                with AnyReader(reader_args, typestore=self._typestore) as reader:  # type: ignore
+                with AnyReader(reader_args, default_typestore=self._typestore) as reader:  # type: ignore
                     return self._calculate_stats_streaming(reader)
             else:
                 with AnyReader(reader_args) as reader:  # type: ignore
