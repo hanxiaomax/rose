@@ -1,13 +1,12 @@
 """
-Enhanced ROS bag parser module using rosbags library.
+ROS bag parser module using rosbags library.
 
-This module provides comprehensive bag parsing capabilities using the modern
-rosbags library for high performance and reliability.
+Provides high-performance bag parsing capabilities with intelligent caching
+and memory optimization using the rosbags library.
 """
 
 import os
 import time
-from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Callable, Any, Union, TYPE_CHECKING
@@ -38,9 +37,7 @@ class FileExistsError(Exception):
     pass
 
 
-class ParserType(Enum):
-    """Enum for parser implementation"""
-    ROSBAGS = "rosbags"  # Enhanced rosbags-based implementation
+# Parser type is now fixed to rosbags implementation
 
 
 @dataclass
@@ -80,66 +77,18 @@ class ComprehensiveBagInfo:
     file_path: str
 
 
-class IBagParser(ABC):
-    """Abstract base class for bag parser implementations"""
-    
-    @abstractmethod
-    def load_whitelist(self, whitelist_path: str) -> List[str]:
-        """Load topics from whitelist file"""
-        pass
-    
-    @abstractmethod
-    def filter_bag(self, input_bag: str, output_bag: str, topics: List[str], 
-                  time_range: Optional[Tuple] = None, 
-                  progress_callback: Optional[Callable] = None,
-                  compression: str = 'none',
-                  overwrite: bool = False) -> str:
-        """Filter rosbag using rosbags implementation"""
-        pass
-    
-    @abstractmethod
-    def load_bag(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
-        """Load bag file and return topics, connections and time range"""
-        pass
-    
-    @abstractmethod
-    def inspect_bag(self, bag_path: str) -> str:
-        """List all topics and message types"""
-        pass
-
-    @abstractmethod
-    def get_message_counts(self, bag_path: str) -> Dict[str, int]:
-        """Get message counts for each topic in the bag file"""
-        pass
-
-    @abstractmethod
-    def get_topic_sizes(self, bag_path: str) -> Dict[str, int]:
-        """Get total size in bytes for each topic in the bag file"""
-        pass
-
-    @abstractmethod
-    def get_topic_stats(self, bag_path: str) -> Dict[str, Dict[str, int]]:
-        """Get comprehensive statistics for each topic"""
-        pass
-
-    @abstractmethod
-    def read_messages(self, bag_path: str, topics: List[str]):
-        """Read messages from specified topics in the bag file"""
-        pass
-
-
-class RosbagsBagParser(IBagParser):
-    """High-performance rosbags implementation using AnyReader/Rosbag1Writer with memory optimization"""
+class BagParser:
+    """High-performance ROS bag parser using rosbags library with memory optimization and intelligent caching"""
     
     # Memory optimization constants
     CHUNK_SIZE = 10000  # Messages per chunk for memory efficiency
     CHUNK_MEMORY_LIMIT = 64 * 1024 * 1024  # 64MB per chunk
     
     def __init__(self):
-        """Initialize rosbags parser with optimization features"""
+        """Initialize bag parser with rosbags library and optimization features"""
         if not ROSBAGS_AVAILABLE:
             raise ImportError("rosbags library is not available")
-        self._registered_types = set()
+        
         # Initialize type system optimization
         self._typestore = None
         self._message_cache = {}
@@ -148,7 +97,7 @@ class RosbagsBagParser(IBagParser):
         self._bag_info_cache: Dict[str, ComprehensiveBagInfo] = {}
         self._cache_ttl = 300  # 5 minutes cache TTL
         
-        _logger.debug("Initialized RosbagsBagParser with enhanced performance features, memory optimization, and intelligent caching")
+        _logger.debug("Initialized BagParser with memory optimization and intelligent caching")
     
     def _initialize_typestore(self):
         """Initialize optimized typestore for better performance"""
@@ -919,16 +868,16 @@ def check_rosbags_availability() -> ParserHealth:
         )
 
 
-def create_parser() -> IBagParser:
+def create_parser() -> BagParser:
     """Create parser instance"""
     health = check_rosbags_availability()
     if not health.is_healthy():
         raise RuntimeError(f"rosbags parser is not available: {health.error_message}")
     
-    return RosbagsBagParser()
+    return BagParser()
 
 
-def create_best_parser() -> IBagParser:
+def create_best_parser() -> BagParser:
     """Create the best available parser (same as create_parser)"""
     return create_parser()
 

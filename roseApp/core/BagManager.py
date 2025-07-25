@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import time
 
 # Local application imports
-from roseApp.core.parser import IBagParser, create_parser, FileExistsError
+from roseApp.core.parser import create_parser, FileExistsError
 from roseApp.core.util import TimeUtil, get_preferred_parser_type
 
 class BagStatus(Enum):
@@ -108,7 +108,7 @@ class Bag:
   
 class BagManager:
     """Manages multiple ROS bag files"""
-    def __init__(self, parser: IBagParser = None):
+    def __init__(self, parser = None):
         """Initialize BagManager with optimal parser
         
         Args:

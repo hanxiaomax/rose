@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from .parser import create_best_parser, IBagParser
+from .parser import create_best_parser
 from .util import get_logger
 
 _logger = get_logger(__name__)
@@ -70,7 +70,7 @@ class ValidationResult:
 class BagValidator:
     """Comprehensive ROS bag file validator"""
     
-    def __init__(self, parser: Optional[IBagParser] = None):
+    def __init__(self, parser = None):
         """Initialize bag validator
         
         Args:
