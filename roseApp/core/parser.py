@@ -172,7 +172,7 @@ class RosbagsBagParser(IBagParser):
         
         This method consolidates all bag data retrieval operations into a single, efficient
         process with intelligent caching to avoid repeated AnyReader instantiation and
-        bag traversal.
+        bag traversal. Now uses unified cache coordination.
         
         Args:
             bag_path: Path to the bag file
@@ -181,12 +181,24 @@ class RosbagsBagParser(IBagParser):
         Returns:
             ComprehensiveBagInfo containing all bag metadata and statistics
         """
-        # Check cache validity
-        if not force_refresh and bag_path in self._bag_info_cache:
-            cached_info = self._bag_info_cache[bag_path]
-            if time.time() - cached_info.cache_time < self._cache_ttl:
-                _logger.debug(f"Using cached comprehensive bag info for {bag_path}")
-                return cached_info
+        # Try unified cache first (Phase 2 optimization)
+        if not force_refresh:
+            try:
+                from .cache_coordinator import get_cache_bridge
+                cache_bridge = get_cache_bridge()
+                
+                # Check unified cache with fallback to instance cache
+                cached_info = cache_bridge.get_parser_data_with_fallback(bag_path, self)
+                if cached_info:
+                    _logger.debug(f"Using cached comprehensive bag info (unified) for {bag_path}")
+                    return cached_info
+            except ImportError:
+                # Fallback to original instance cache if coordinator not available
+                if bag_path in self._bag_info_cache:
+                    cached_info = self._bag_info_cache[bag_path]
+                    if time.time() - cached_info.cache_time < self._cache_ttl:
+                        _logger.debug(f"Using cached comprehensive bag info (instance) for {bag_path}")
+                        return cached_info
         
         _logger.debug(f"Loading comprehensive bag info for {bag_path}")
         start_time = time.time()
@@ -268,8 +280,16 @@ class RosbagsBagParser(IBagParser):
                     file_path=bag_path
                 )
                 
-                # Cache the result
-                self._bag_info_cache[bag_path] = comprehensive_info
+                # Cache the result using coordinated storage (Phase 2 optimization)
+                try:
+                    from .cache_coordinator import get_cache_bridge
+                    cache_bridge = get_cache_bridge()
+                    cache_bridge.store_parser_data(bag_path, comprehensive_info, self)
+                    _logger.debug(f"Stored comprehensive bag info (coordinated): {bag_path}")
+                except ImportError:
+                    # Fallback to instance cache
+                    self._bag_info_cache[bag_path] = comprehensive_info
+                    _logger.debug(f"Stored comprehensive bag info (instance): {bag_path}")
                 
                 elapsed = time.time() - start_time
                 _logger.info(f"Loaded comprehensive bag info in {elapsed:.3f}s - {total_messages} messages from {len(topics)} topics (cached for {self._cache_ttl}s)")

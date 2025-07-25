@@ -94,20 +94,46 @@ class BagAnalyzer:
         """Analyze bag file asynchronously"""
         start_time = time.time()
         
-        # Generate cache key
-        cache_key = f"analysis_{bag_path}_{analysis_type.value}_{bag_path.stat().st_mtime}"
-        
-        # Check cache first (unless no_cache is specified)
-        cached_result = None
-        if not no_cache:
-            cached_result = self.cache.get(cache_key)
-            if cached_result:
-                # Update analysis time to reflect cache lookup time
-                cache_lookup_time = time.time() - start_time
-                self.logger.info(f"Using cached analysis for {bag_path} (cache lookup: {cache_lookup_time:.3f}s)")
-                cached_result.cached = True
-                cached_result.analysis_time = cache_lookup_time  # Use actual cache lookup time
-                return cached_result
+        # Phase 2 optimization: Try cache coordination first
+        try:
+            from .cache_coordinator import get_cache_bridge, CacheKeyManager
+            cache_bridge = get_cache_bridge()
+            
+            # Generate unified cache key
+            cache_key = CacheKeyManager.generate_analysis_key(str(bag_path), analysis_type.value)
+            
+            # Check cache first (unless no_cache is specified)
+            if not no_cache:
+                # Try full analysis cache
+                cached_result = self.cache.get(cache_key)
+                if cached_result:
+                    cache_lookup_time = time.time() - start_time
+                    self.logger.info(f"Using cached analysis for {bag_path} (cache lookup: {cache_lookup_time:.3f}s)")
+                    cached_result.cached = True
+                    cached_result.analysis_time = cache_lookup_time
+                    return cached_result
+                
+                # Try building from parser cache for metadata analysis
+                if analysis_type == AnalysisType.METADATA:
+                    lightweight_result = cache_bridge.build_analysis_from_parser(str(bag_path), analysis_type.value)
+                    if lightweight_result:
+                        cache_lookup_time = time.time() - start_time
+                        lightweight_result.analysis_time = cache_lookup_time
+                        self.logger.info(f"Built lightweight analysis from parser cache: {bag_path}")
+                        return lightweight_result
+        except ImportError:
+            # Fallback to original cache strategy
+            cache_key = f"analysis_{bag_path}_{analysis_type.value}_{bag_path.stat().st_mtime}"
+            
+            cached_result = None
+            if not no_cache:
+                cached_result = self.cache.get(cache_key)
+                if cached_result:
+                    cache_lookup_time = time.time() - start_time
+                    self.logger.info(f"Using cached analysis for {bag_path} (cache lookup: {cache_lookup_time:.3f}s)")
+                    cached_result.cached = True
+                    cached_result.analysis_time = cache_lookup_time
+                    return cached_result
         else:
             self.logger.info(f"Skipping cache for {bag_path} (--no-cache specified)")
         
