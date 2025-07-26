@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 
-from .parser import create_best_parser
+from .parser import create_parser
 from .cache import get_cache
 from .util import get_logger
 
@@ -139,7 +139,7 @@ class BagAnalyzer:
                 progress_callback(10.0)
             
             # Create parser
-            parser = create_best_parser()
+            parser = create_parser()
             
             if progress_callback:
                 progress_callback(20.0)
@@ -253,7 +253,7 @@ class BagAnalyzer:
             type_to_topics[msg_type].append(topic)
         
         loop = asyncio.get_event_loop()
-        parser = create_best_parser()
+        parser = create_parser()
         
         for msg_type, topics in type_to_topics.items():
             try:

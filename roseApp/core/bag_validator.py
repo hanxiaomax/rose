@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from .parser import create_best_parser
+from .parser import create_parser
 from .util import get_logger
 
 _logger = get_logger(__name__)
@@ -76,7 +76,7 @@ class BagValidator:
         Args:
             parser: Optional parser instance. If None, will auto-select the best parser
         """
-        self.parser = parser or create_best_parser()
+        self.parser = parser or create_parser()
         self.logger = get_logger(__name__)
     
     def validate_bag(self, bag_path: Path, 

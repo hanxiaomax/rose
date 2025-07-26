@@ -7,26 +7,11 @@ and memory optimization using the rosbags library.
 
 import os
 import time
-from enum import Enum
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Callable, Any, Union, TYPE_CHECKING
 from dataclasses import dataclass
-
-# Import rosbags modules at module level to avoid repeated imports
-try:
-    from rosbags.highlevel import AnyReader
-    from rosbags.rosbag1 import Writer as Rosbag1Writer
-    ROSBAGS_AVAILABLE = True
-except ImportError:
-    AnyReader = None
-    Rosbag1Writer = None
-    ROSBAGS_AVAILABLE = False
-
-if TYPE_CHECKING and ROSBAGS_AVAILABLE:
-    # For type checking, import the actual types
-    from rosbags.highlevel import AnyReader
-    from rosbags.rosbag1 import Writer as Rosbag1Writer
-
+from rosbags.highlevel import AnyReader
+from rosbags.rosbag1 import Writer as Rosbag1Writer
 from roseApp.core.util import get_logger
 
 _logger = get_logger("parser")
@@ -35,23 +20,6 @@ _logger = get_logger("parser")
 class FileExistsError(Exception):
     """Custom exception for file existence errors"""
     pass
-
-
-# Parser type is now fixed to rosbags implementation
-
-
-@dataclass
-class ParserHealth:
-    """Parser health status information"""
-    available: bool
-    version: Optional[str] = None
-    performance_score: float = 0.0
-    last_check: float = 0.0
-    error_message: Optional[str] = None
-    
-    def is_healthy(self) -> bool:
-        """Check if parser is healthy and available"""
-        return self.available and not self.error_message
 
 
 @dataclass
@@ -86,8 +54,6 @@ class BagParser:
     
     def __init__(self):
         """Initialize bag parser with rosbags library and optimization features"""
-        if not ROSBAGS_AVAILABLE:
-            raise ImportError("rosbags library is not available")
         
         # Initialize type system optimization
         self._typestore = None
@@ -834,60 +800,8 @@ class BagParser:
             raise Exception(f"Error reading messages from bag: {e}")
 
 
-def check_rosbags_availability() -> ParserHealth:
-    """Check rosbags parser availability and health"""
-    try:
-        if not ROSBAGS_AVAILABLE:
-            raise ImportError("rosbags modules not available")
-        
-        # Try to get version
-        try:
-            import rosbags
-            version = getattr(rosbags, '__version__', 'unknown')
-        except:
-            version = 'unknown'
-        
-        return ParserHealth(
-            available=True,
-            version=version,
-            performance_score=100.0,
-            last_check=time.time()
-        )
-        
-    except ImportError as e:
-        return ParserHealth(
-            available=False,
-            error_message=f"rosbags not available: {e}",
-            last_check=time.time()
-        )
-    except Exception as e:
-        return ParserHealth(
-            available=False,
-            error_message=f"rosbags health check failed: {e}",
-            last_check=time.time()
-        )
-
 
 def create_parser() -> BagParser:
     """Create parser instance"""
-    health = check_rosbags_availability()
-    if not health.is_healthy():
-        raise RuntimeError(f"rosbags parser is not available: {health.error_message}")
-    
     return BagParser()
 
-
-def create_best_parser() -> BagParser:
-    """Create the best available parser (same as create_parser)"""
-    return create_parser()
-
-
-def get_parser_health() -> ParserHealth:
-    """Get health status for rosbags parser"""
-    return check_rosbags_availability()
-
-
-def check_parser_availability() -> Dict[str, bool]:
-    """Check availability of rosbags parser"""
-    health = check_rosbags_availability()
-    return {"rosbags": health.is_healthy()}
