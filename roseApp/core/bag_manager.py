@@ -195,17 +195,28 @@ class BagManager:
                 break
             
             # Add field analysis if requested
-            if options.show_fields and result.message_types:
+            if options.show_fields:
                 topic_name = topic_info['name']
+                message_type = topic_info['message_type']
+                
+                # Get field paths from analysis result
                 field_paths = result.get_topic_field_paths(topic_name)
+                
+                # Also try to get field information from message types
+                if not field_paths and result.message_types and message_type in result.message_types:
+                    field_paths = result.message_types[message_type].get_field_paths()
+                
                 if field_paths:
                     topic_info['field_paths'] = field_paths
                     inspection_result['field_analysis'][topic_name] = {
                         'message_type': message_type,
                         'field_paths': field_paths,
-                        'samples_analyzed': len([t for t in filtered_topics if result.bag_info.connections.get(t) == message_type])
+                        'samples_analyzed': len([t for t in filtered_topics if result.bag_info.connections.get(t) == message_type]),
+                        'field_count': len(field_paths)
                     }
-                print(f"Field paths: {field_paths}")
+                    self.logger.debug(f"Added field analysis for {topic_name}: {len(field_paths)} fields")
+                else:
+                    self.logger.debug(f"No field paths found for {topic_name} ({message_type})")
             
             inspection_result['topics'].append(topic_info)
         

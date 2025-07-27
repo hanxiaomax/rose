@@ -229,54 +229,71 @@ class BagAnalyzer:
         connections: Dict[str, str],
         bag_path: Path
     ) -> Dict[str, MessageTypeInfo]:
-        """Analyze message types by sampling messages"""
+        """
+        Analyze message types using new parser interface field analysis
+        
+        This method now uses the field structure information from the parser's
+        ComprehensiveBagInfo instead of sampling messages.
+        """
         message_types = {}
         
-        # Get unique message types and their topics
-        type_to_topics = {}
-        for topic, msg_type in connections.items():
-            if msg_type not in type_to_topics:
-                type_to_topics[msg_type] = []
-            type_to_topics[msg_type].append(topic)
+        # Get unique message types
+        unique_types = set(connections.values())
         
         loop = asyncio.get_event_loop()
         parser = create_parser()
         
-        for msg_type, topics in type_to_topics.items():
-            try:
-                # Sample messages from the first topic of this type
-                sample_topic = topics[0]
-                
-                # Read a few sample messages to analyze structure
-                def _sample_messages():
-                    try:
-                        fields = {}
-                        sample_count = 0
-                        max_samples = 3  # Limit samples for performance
+        # Get comprehensive bag info with field analysis
+        def get_field_info():
+            bag_details, _ = parser.get_bag_details(str(bag_path))
+            return bag_details
+        
+        try:
+            bag_details = await loop.run_in_executor(self.executor, get_field_info)
+            
+            # Extract field information from parser's analysis
+            for msg_type in unique_types:
+                try:
+                    fields = {}
+                    definition = ""
+                    
+                    # Get field structure from parser's analysis
+                    if (bag_details.has_field_analysis() and 
+                        bag_details.message_fields and 
+                        msg_type in bag_details.message_fields):
                         
-                        # Note: read_messages method not available in new parser interface
-                        # Field analysis is temporarily disabled
-                        # TODO: Implement field analysis with new parser interface if needed
-                        pass
+                        # Convert parser field format to analyzer format
+                        parser_fields = bag_details.message_fields[msg_type]
+                        fields = self._convert_parser_fields_to_analyzer_format(parser_fields)
                         
-                        return fields
-                    except Exception as e:
-                        self.logger.debug(f"Could not sample messages for {msg_type}: {e}")
-                        return {}
-                
-                # Run in executor to avoid blocking
-                fields = await loop.run_in_executor(self.executor, _sample_messages)
-                
-                message_types[msg_type] = MessageTypeInfo(
-                    type_name=msg_type,
-                    fields=fields,
-                    definition="",  # Could be populated from message definition
-                    md5sum=""  # Could be calculated from definition
-                )
-                
-            except Exception as e:
-                self.logger.warning(f"Failed to analyze message type {msg_type}: {e}")
-                # Create empty message type info as fallback
+                        # Get message definition if available
+                        if (bag_details.message_definitions and 
+                            msg_type in bag_details.message_definitions):
+                            definition = bag_details.message_definitions[msg_type]
+                    
+                    message_types[msg_type] = MessageTypeInfo(
+                        type_name=msg_type,
+                        fields=fields,
+                        definition=definition,
+                        md5sum=""  # Could be extracted from connection if needed
+                    )
+                    
+                    self.logger.debug(f"Analyzed message type {msg_type} with {len(fields)} fields")
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to analyze message type {msg_type}: {e}")
+                    # Create empty message type info as fallback
+                    message_types[msg_type] = MessageTypeInfo(
+                        type_name=msg_type,
+                        fields={},
+                        definition="",
+                        md5sum=""
+                    )
+        
+        except Exception as e:
+            self.logger.error(f"Failed to get field information from parser: {e}")
+            # Fallback: create empty message types for all connections
+            for msg_type in unique_types:
                 message_types[msg_type] = MessageTypeInfo(
                     type_name=msg_type,
                     fields={},
@@ -285,6 +302,42 @@ class BagAnalyzer:
                 )
         
         return message_types
+    
+    def _convert_parser_fields_to_analyzer_format(self, parser_fields: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert parser field format to analyzer field format
+        
+        Parser format: {field_name: {'type': str, 'is_array': bool, 'is_builtin': bool, ...}}
+        Analyzer format: {field_name: {'type': str, 'array': bool, 'fields': dict, ...}}
+        """
+        analyzer_fields = {}
+        
+        for field_name, field_info in parser_fields.items():
+            analyzer_field = {
+                'type': field_info.get('type', 'unknown'),
+                'value_sample': None
+            }
+            
+            # Handle array types
+            if field_info.get('is_array', False):
+                analyzer_field['array'] = True
+                # Clean the type name by removing array brackets
+                clean_type = field_info.get('type', '').replace('[]', '')
+                analyzer_field['element_type'] = clean_type
+            
+            # Handle complex types (nested messages)
+            if field_info.get('is_complex', False):
+                # For now, mark as complex but don't recursively parse
+                # This could be enhanced to support nested field analysis
+                analyzer_field['is_complex'] = True
+            
+            # Add builtin type information
+            if field_info.get('is_builtin', False):
+                analyzer_field['is_builtin'] = True
+            
+            analyzer_fields[field_name] = analyzer_field
+        
+        return analyzer_fields
     
     def _extract_message_fields(self, message) -> Dict[str, Any]:
         """Extract field structure from a ROS message"""
