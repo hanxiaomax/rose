@@ -118,7 +118,7 @@ def _extract_topics_impl(
             def analysis_callback(percent: float):
                 analysis_update(percent)
             
-            topics_result = await_sync(manager.get_topics(input_path, progress_callback=analysis_callback, no_cache=no_cache))
+            topics_result = await_sync(manager.list_topics(input_path, progress_callback=analysis_callback, no_cache=no_cache))
         
         all_topics = [t['name'] for t in topics_result['topics']]
         

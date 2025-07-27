@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from .analyzer import BagAnalyzer, AnalysisResult, AnalysisType
+from .parser import BagParser, ComprehensiveBagInfo, ExtractOption
 from .cache import get_cache
 from .ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions
 
@@ -66,36 +66,20 @@ class DiagnoseOptions:
 
 class BagManager:
     """
-    Unified high-level interface for all ROS bag operations
-    
-    This class provides a simple, consistent API for CLI commands to interact
-    with ROS bags without needing to understand the underlying complexity.
-    
-    Example usage:
-        manager = BagManager()
-        result = await manager.inspect_bag("demo.bag", options)
-        
-        # Render results
-        handler = manager.get_result_handler()
-        handler.render(result, RenderOptions(format=OutputFormat.TABLE))
-        
-        # Export results
-        handler.export(result, ExportOptions(format=OutputFormat.JSON, output_file=Path("report.json")))
+    Unified manager for all ROS bag operations
+    Provides high-level interface for CLI commands
     """
     
     def __init__(self, max_workers: int = 4):
         """Initialize the bag manager"""
-        self.analyzer = BagAnalyzer(max_workers=max_workers)
-        self.cache = get_cache()
         self.logger = logging.getLogger(__name__)
-        self._result_handler = None
+        self.parser = BagParser()
+        self.cache = get_cache()
+        self.ui_control = UIControl()
+        self.max_workers = max_workers
         
-    def get_result_handler(self) -> UIControl:
-        """Get the result handler instance for rendering and exporting"""
-        if self._result_handler is None:
-            self._result_handler = UIControl()
-        return self._result_handler
-        
+        self.logger.debug(f"Initialized BagManager with {max_workers} workers")
+    
     async def inspect_bag(
         self, 
         bag_path: Union[str, Path], 
@@ -108,6 +92,7 @@ class BagManager:
         Args:
             bag_path: Path to the bag file
             options: Inspection options
+            progress_callback: Optional progress callback
             
         Returns:
             Dictionary containing inspection results
@@ -117,65 +102,55 @@ class BagManager:
             
         bag_path = Path(bag_path)
         
-        # Determine analysis type based on options
-        analysis_type = AnalysisType.FULL_ANALYSIS if options.show_fields else AnalysisType.METADATA
+        # Clear cache if requested
+        if options.no_cache:
+            self.parser.clear()
         
-        # Perform bag analysis
-        result = await self.analyzer.analyze_bag_async(
-            bag_path, 
-            analysis_type,
-            progress_callback=progress_callback,
-            no_cache=options.no_cache
-        )
+        # Get bag details first
+        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
+        
+        # Perform full analysis if we need topic sizes or field analysis
+        if options.show_fields or options.sort_by == "size":
+            bag_details, full_analysis_time = self.parser.analyze_bag_full(str(bag_path))
+            analysis_time += full_analysis_time
         
         # Apply topic filtering if specified
         filtered_topics = self._filter_topics(
-            list(result.bag_info.topics), 
+            bag_details.topics or [], 
             options.topics, 
             options.topic_filter
         )
+        
+        # Calculate total messages for filtered topics
+        total_messages = 0
+        if bag_details.message_counts:
+            total_messages = sum(bag_details.message_counts.get(topic, 0) for topic in filtered_topics)
         
         # Prepare inspection results
         inspection_result = {
             'bag_info': {
                 'file_name': bag_path.name,
-                'file_path': str(bag_path.absolute()),  # Use absolute path for display
+                'file_path': str(bag_path.absolute()),
                 'file_size': bag_path.stat().st_size if bag_path.exists() else 0,
                 'topics_count': len(filtered_topics),
-                'total_messages': sum(result.bag_info.message_counts.get(topic, 0) for topic in filtered_topics),
-                'duration_seconds': result.bag_info.duration_seconds,
-                'time_range': result.bag_info.time_range,
-                'analysis_time': result.analysis_time,
-                'cached': result.cached
+                'total_messages': total_messages,
+                'duration_seconds': bag_details.duration_seconds or 0.0,
+                'time_range': bag_details.time_range,
+                'analysis_time': analysis_time,
+                'cached': bag_details.analysis_level.value != "none"
             },
             'topics': [],
             'field_analysis': {},
             'cache_stats': self._get_cache_stats()
         }
         
-        # Get topic sizes using new parser interface
-        topic_sizes = {}
-        try:
-            from .parser import create_parser
-            parser = create_parser()
-            # Use get_bag_details to get comprehensive information
-            bag_details, _ = parser.get_bag_details(str(bag_path))
-            if bag_details.has_full_analysis() and bag_details.topic_sizes:
-                topic_sizes = bag_details.topic_sizes
-            else:
-                # Fallback: perform full analysis if needed
-                bag_details, _ = parser.analyze_bag_full(str(bag_path))
-                topic_sizes = bag_details.topic_sizes or {}
-        except Exception as e:
-            self.logger.warning(f"Could not get topic sizes: {e}")
-        
-        # Build topic information with size data
+        # Build topic information
         topics_with_info = []
         for topic in filtered_topics:
-            message_type = result.bag_info.connections.get(topic, 'Unknown')
-            message_count = result.bag_info.message_counts.get(topic, 0)
-            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
-            size_bytes = topic_sizes.get(topic, 0)
+            message_type = bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown'
+            message_count = bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0
+            frequency = message_count / bag_details.duration_seconds if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0
+            size_bytes = bag_details.topic_sizes.get(topic, 0) if bag_details.topic_sizes else 0
             
             topic_info = {
                 'name': topic,
@@ -199,30 +174,29 @@ class BagManager:
                 topic_name = topic_info['name']
                 message_type = topic_info['message_type']
                 
-                # Get field paths from analysis result
-                field_paths = result.get_topic_field_paths(topic_name)
-                
-                # Also try to get field information from message types
-                if not field_paths and result.message_types and message_type in result.message_types:
-                    field_paths = result.message_types[message_type].get_field_paths()
+                # Get field paths from parser
+                field_paths = bag_details.get_topic_field_paths(topic_name)
                 
                 if field_paths:
                     topic_info['field_paths'] = field_paths
+                    
+                    # Add to field analysis summary
                     inspection_result['field_analysis'][topic_name] = {
                         'message_type': message_type,
                         'field_paths': field_paths,
-                        'samples_analyzed': len([t for t in filtered_topics if result.bag_info.connections.get(t) == message_type]),
-                        'field_count': len(field_paths)
+                        'field_count': len(field_paths),
+                        'samples_analyzed': 1  # Parser gets this from message definitions
                     }
+                    
                     self.logger.debug(f"Added field analysis for {topic_name}: {len(field_paths)} fields")
                 else:
-                    self.logger.debug(f"No field paths found for {topic_name} ({message_type})")
+                    self.logger.warning(f"No field information available for topic {topic_name}")
             
             inspection_result['topics'].append(topic_info)
         
         return inspection_result
     
-    async def get_topics(
+    async def list_topics(
         self,
         bag_path: Union[str, Path],
         patterns: Optional[List[str]] = None,
@@ -231,31 +205,31 @@ class BagManager:
         no_cache: bool = False
     ) -> Dict[str, Any]:
         """
-        Get available topics from a ROS bag file with optional filtering
+        List topics in a ROS bag file with optional filtering
         
         Args:
             bag_path: Path to the bag file
-            patterns: Optional list of patterns to match against topic names
-            exact_match: If True, use exact matching; if False, use fuzzy matching
-            no_cache: If True, skip cache and reparse the bag file
+            patterns: Optional list of topic patterns to match
+            exact_match: If True, use exact matching instead of fuzzy matching
+            progress_callback: Optional progress callback
+            no_cache: If True, bypass cache
             
         Returns:
-            Dictionary containing topic information
+            Dictionary containing topic listing results
         """
         bag_path = Path(bag_path)
         
         if not bag_path.exists():
             raise FileNotFoundError(f"Bag file not found: {bag_path}")
         
-        # Analyze the bag to get available topics
-        result = await self.analyzer.analyze_bag_async(
-            bag_path, 
-            AnalysisType.METADATA,
-            progress_callback=progress_callback,
-            no_cache=no_cache
-        )
+        # Clear cache if requested
+        if no_cache:
+            self.parser.clear()
         
-        all_topics = list(result.bag_info.topics)
+        # Get bag details
+        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
+        
+        all_topics = bag_details.topics or []
         
         # Apply filtering if patterns are provided
         if patterns:
@@ -267,285 +241,138 @@ class BagManager:
         else:
             filtered_topics = all_topics
         
-        # Get topic sizes using new parser interface
-        topic_sizes = {}
-        try:
-            from .parser import create_parser
-            parser = create_parser()
-            # Use get_bag_details to get comprehensive information
-            bag_details, _ = parser.get_bag_details(str(bag_path))
-            if bag_details.has_full_analysis() and bag_details.topic_sizes:
-                topic_sizes = bag_details.topic_sizes
-            else:
-                # Fallback: perform full analysis if needed
-                bag_details, _ = parser.analyze_bag_full(str(bag_path))
-                topic_sizes = bag_details.topic_sizes or {}
-        except Exception as e:
-            self.logger.warning(f"Could not get topic sizes: {e}")
-        
-        # Build topic information
-        topics_info = []
-        for topic in filtered_topics:
-            message_type = result.bag_info.connections.get(topic, 'Unknown')
-            message_count = result.bag_info.message_counts.get(topic, 0)
-            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
-            estimated_size_bytes = topic_sizes.get(topic, 0)
-            
-            topics_info.append({
-                'name': topic,
-                'message_type': message_type,
-                'message_count': message_count,
-                'frequency': frequency,
-                'estimated_size_bytes': estimated_size_bytes
-            })
-        
-        # Sort topics by name
-        topics_info.sort(key=lambda x: x['name'])
-        
-        return {
+        # Build topic listing results
+        listing_result = {
             'bag_info': {
                 'file_name': bag_path.name,
-                'file_path': str(bag_path.absolute()),  # Use absolute path for display
+                'file_path': str(bag_path),
                 'total_topics': len(all_topics),
                 'filtered_topics': len(filtered_topics),
-                'duration_seconds': result.bag_info.duration_seconds,
-                'analysis_time': result.analysis_time,
-                'cached': result.cached
+                'analysis_time': analysis_time
             },
-            'topics': topics_info,
-            'patterns': patterns or [],
-            'exact_match': exact_match,
-            'cache_stats': self._get_cache_stats()
-        }
-    
-    async def extract_bag(
-        self,
-        bag_path: Union[str, Path],
-        options: ExtractOptions,
-        progress_callback: Optional[Union[Callable[[float], None], Callable[[int, str, int, int, str], None]]] = None
-    ) -> Dict[str, Any]:
-        """
-        Extract specific topics from a ROS bag file
-        
-        Args:
-            bag_path: Path to the input bag file
-            options: Extraction options including topics, output path, etc.
-            
-        Returns:
-            Dictionary containing extraction results
-        """
-        bag_path = Path(bag_path)
-        
-        if not bag_path.exists():
-            raise FileNotFoundError(f"Bag file not found: {bag_path}")
-        
-        if not options.output_path:
-            raise ValueError("Output path is required for extraction")
-        
-        # Analyze the bag to get available topics
-        result = await self.analyzer.analyze_bag_async(
-            bag_path, 
-            AnalysisType.METADATA,
-            no_cache=options.no_cache
-        )
-        
-        # Apply topic filtering using the same logic as inspect
-        topics_to_extract = self._filter_topics(
-            list(result.bag_info.topics),
-            options.topics,
-            options.topic_filter
-        )
-        
-        if not topics_to_extract:
-            return {
-                'success': False,
-                'error': 'No matching topics found',
-                'available_topics': list(result.bag_info.topics),
-                'requested_patterns': options.topics or [],
-                'filter': options.topic_filter
+            'topics': [],
+            'filtering': {
+                'patterns': patterns or [],
+                'exact_match': exact_match,
+                'matched_topics': len(filtered_topics)
             }
-        
-        # Calculate extraction statistics
-        total_messages = sum(result.bag_info.message_counts.values())
-        extract_messages = sum(result.bag_info.message_counts.get(topic, 0) for topic in topics_to_extract)
-        
-        # Get topic sizes using new parser interface
-        topic_sizes = {}
-        try:
-            from .parser import create_parser
-            parser = create_parser()
-            # Use get_bag_details to get comprehensive information
-            bag_details, _ = parser.get_bag_details(str(bag_path))
-            if bag_details.has_full_analysis() and bag_details.topic_sizes:
-                topic_sizes = bag_details.topic_sizes
-            else:
-                # Fallback: perform full analysis if needed
-                bag_details, _ = parser.analyze_bag_full(str(bag_path))
-                topic_sizes = bag_details.topic_sizes or {}
-        except Exception as e:
-            self.logger.warning(f"Could not get topic sizes: {e}")
-        
-        # Build all_topics information (needed for the summary table)
-        all_topics = []
-        for topic in result.bag_info.topics:
-            message_type = result.bag_info.connections.get(topic, 'Unknown')
-            message_count = result.bag_info.message_counts.get(topic, 0)
-            estimated_size_bytes = topic_sizes.get(topic, 0)
-            
-            all_topics.append({
-                'name': topic,
-                'message_type': message_type,
-                'message_count': message_count,
-                'estimated_size_bytes': estimated_size_bytes
-            })
-        
-        extraction_result = {
-            'input_file': str(bag_path.absolute()),  # Use absolute path for display
-            'output_file': str(options.output_path.absolute()),  # Use absolute path for display
-            'compression': options.compression,
-            'success': True,
-            'dry_run': options.dry_run,
-            'topics_to_extract': topics_to_extract,
-            'all_topics': all_topics,
-            'bag_info': {
-                'input_file': str(bag_path.absolute()),
-                'output_file': str(options.output_path.absolute()),
-                'total_topics': len(result.bag_info.topics),
-                'extracted_topics': len(topics_to_extract),
-                'total_messages': total_messages,
-                'extracted_messages': extract_messages,
-                'extraction_percentage': (extract_messages / total_messages * 100) if total_messages > 0 else 0,
-                'duration_seconds': result.bag_info.duration_seconds,
-                'compression': options.compression
-            },
-            'statistics': {
-                'total_topics': len(result.bag_info.topics),
-                'selected_topics': len(topics_to_extract),
-                'excluded_topics': len(result.bag_info.topics) - len(topics_to_extract),
-                'total_messages': total_messages,
-                'selected_messages': extract_messages,
-                'selection_percentage': (len(topics_to_extract) / len(result.bag_info.topics) * 100) if len(result.bag_info.topics) > 0 else 0,
-                'message_percentage': (extract_messages / total_messages * 100) if total_messages > 0 else 0
-            },
-            'topics': []
         }
         
-        # Build topic information
-        for topic in topics_to_extract:
-            message_type = result.bag_info.connections.get(topic, 'Unknown')
-            message_count = result.bag_info.message_counts.get(topic, 0)
-            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+        # Add topic information
+        for topic in filtered_topics:
+            message_type = bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown'
+            message_count = bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0
             
             topic_info = {
                 'name': topic,
                 'message_type': message_type,
-                'message_count': message_count,
-                'frequency': frequency,
-                'size_percentage': (message_count / extract_messages * 100) if extract_messages > 0 else 0
+                'message_count': message_count
             }
-            extraction_result['topics'].append(topic_info)
+            listing_result['topics'].append(topic_info)
         
-        # If dry run, return without actual extraction
+        return listing_result
+    
+    async def extract_bag(
+        self,
+        bag_path: Union[str, Path],
+        options: Optional[ExtractOptions] = None,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Extract topics from a ROS bag file
+        
+        Args:
+            bag_path: Path to the source bag file
+            options: Extraction options
+            
+        Returns:
+            Dictionary containing extraction results
+        """
+        if options is None:
+            options = ExtractOptions()
+            
+        bag_path = Path(bag_path)
+        
+        # Clear cache if requested
+        if options.no_cache:
+            self.parser.clear()
+        
+        # Get bag metadata first
+        bag_details, _ = self.parser.get_bag_details(str(bag_path))
+        
+        # Apply topic filtering
+        topics_to_extract = self._filter_topics(
+            bag_details.topics or [],
+            options.topics,
+            options.topic_filter
+        )
+        
+        # Prepare extraction parameters
+        output_path = options.output_path or bag_path.parent / f"{bag_path.stem}_filtered.bag"
+        
+        # Create ExtractOption for parser
+        extract_option = ExtractOption(
+            topics=topics_to_extract,
+            time_range=None,  # BagManager.ExtractOptions doesn't provide time_range
+            compression=options.compression,
+            overwrite=options.overwrite,
+            memory_limit_mb=512  # Default memory limit
+        )
+        
+        # Perform extraction if not dry run
+        extraction_error = None
+        if not options.dry_run:
+            try:
+                _, extract_time = self.parser.extract(str(bag_path), str(output_path), extract_option, progress_callback)
+            except Exception as e:
+                self.logger.error(f"Extraction failed: {e}")
+                extraction_error = str(e)
+                extract_time = 0.0
+        else:
+            extract_time = 0.0
+        
+        # Calculate extraction statistics
+        total_messages = sum(bag_details.message_counts.get(topic, 0) for topic in topics_to_extract) if bag_details.message_counts else 0
+        
+        # Determine success status
+        success = options.dry_run or (not options.dry_run and extraction_error is None and output_path.exists())
+        
+        # Determine message
         if options.dry_run:
-            extraction_result['message'] = 'Dry run completed - no files were created'
-            return extraction_result
+            message = 'Dry run completed - no files were created'
+        elif extraction_error:
+            message = f'Extraction failed: {extraction_error}'
+        elif success:
+            message = f'Successfully extracted {len(topics_to_extract)} topics to {output_path}'
+        else:
+            message = 'Extraction failed: output file was not created'
         
-        # Perform the actual extraction using the analyzer
-        try:
-            from .parser import create_parser
-            parser = create_parser()
-            
-            # Create output directory if needed
-            options.output_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Check if output file exists and handle overwrite
-            if options.output_path.exists() and not options.overwrite:
-                raise FileExistsError(f"Output file already exists: {options.output_path}")
-            
-            # Use new parser extract interface
-            from .parser import ExtractOption
-            extract_option = ExtractOption(
-                topics=topics_to_extract,
-                time_range=None,  # ExtractOptions doesn't have time_range, use None
-                compression=options.compression,
-                overwrite=options.overwrite
-            )
-            
-            filter_result, _ = parser.extract(
-                str(bag_path),
-                str(options.output_path),
-                extract_option,
-                progress_callback=progress_callback
-            )
-            
-            # Calculate output file size and statistics
-            if options.output_path.exists():
-                input_size = bag_path.stat().st_size
-                output_size = options.output_path.stat().st_size
-                size_reduction = (1 - output_size / input_size) * 100 if input_size > 0 else 0
-                
-                extraction_result.update({
-                    'file_stats': {
-                        'input_size_bytes': input_size,
-                        'output_size_bytes': output_size,
-                        'size_reduction_percent': size_reduction
-                    },
-                    'message': f'Successfully extracted {len(topics_to_extract)} topics to {options.output_path}'
-                })
-                
-                # Perform automatic validation of the extracted bag
-                try:
-                    from .bag_validator import BagValidator, ValidationLevel
-                    validator = BagValidator(parser)
-                    validation_result = validator.validate_extracted_bag(
-                        bag_path, options.output_path, topics_to_extract
-                    )
-                    
-                    # Add validation results to extraction result
-                    extraction_result['validation'] = {
-                        'is_valid': validation_result.is_valid,
-                        'validation_time': validation_result.validation_time,
-                        'topics_count': validation_result.topics_count,
-                        'total_messages': validation_result.total_messages,
-                        'duration_seconds': validation_result.duration_seconds,
-                        'file_size_bytes': validation_result.file_size_bytes,
-                        'errors': validation_result.errors or [],
-                        'warnings': validation_result.warnings or [],
-                        'validation_level': validation_result.validation_level.value
-                    }
-                    
-                    # Log validation results
-                    if validation_result.is_valid:
-                        self.logger.info(f"Bag validation passed for {options.output_path}")
-                        if validation_result.warnings:
-                            self.logger.warning(f"Validation warnings: {validation_result.warnings}")
-                    else:
-                        self.logger.error(f"Bag validation failed for {options.output_path}: {validation_result.errors}")
-                        
-                except Exception as validation_error:
-                    self.logger.warning(f"Could not validate extracted bag: {validation_error}")
-                    extraction_result['validation'] = {
-                        'is_valid': False,
-                        'validation_time': 0.0,
-                        'errors': [f"Validation failed: {validation_error}"],
-                        'warnings': [],
-                        'validation_level': 'none'
-                    }
-                
-            else:
-                extraction_result.update({
-                    'success': False,
-                    'error': 'Output file was not created',
-                    'message': 'Extraction may have failed'
-                })
-            
-        except Exception as e:
-            extraction_result.update({
-                'success': False,
-                'error': str(e),
-                'message': f'Extraction failed: {e}'
-            })
-            
+        extraction_result = {
+            'success': success,
+            'dry_run': options.dry_run,
+            'message': message,
+            'error': extraction_error,
+            'source_bag': {
+                'file_name': bag_path.name,
+                'file_path': str(bag_path),
+                'total_topics': len(bag_details.topics or []),
+                'total_messages': sum(bag_details.message_counts.values()) if bag_details.message_counts else 0
+            },
+            'extraction_config': {
+                'output_path': str(output_path),
+                'topics_extracted': topics_to_extract,
+                'compression': options.compression,
+                'dry_run': options.dry_run,
+                'overwrite': options.overwrite
+            },
+            'extraction_stats': {
+                'topics_count': len(topics_to_extract),
+                'messages_extracted': total_messages,
+                'extraction_time': extract_time,
+                'output_file_exists': output_path.exists() if not options.dry_run else False
+            }
+        }
+        
         return extraction_result
     
     async def profile_bag(
@@ -566,44 +393,48 @@ class BagManager:
         if options is None:
             options = ProfileOptions()
             
-        # Analyze the bag for profiling
-        result = await self.analyzer.analyze_bag_async(Path(bag_path), AnalysisType.METADATA)
+        # Get bag details for profiling
+        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
         
         # Apply topic filtering
         topics_to_profile = self._filter_topics(
-            list(result.bag_info.topics),
+            bag_details.topics or [],
             options.topics,
             None
         )
+        
+        # Calculate average rate
+        total_messages = sum(bag_details.message_counts.values()) if bag_details.message_counts else 0
+        average_rate = total_messages / bag_details.duration_seconds if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0
         
         # Build profiling results
         profile_result = {
             'bag_info': {
                 'file_name': Path(bag_path).name,
                 'total_topics': len(topics_to_profile),
-                'total_messages': sum(result.bag_info.message_counts.get(topic, 0) for topic in topics_to_profile),
-                'duration_seconds': result.bag_info.duration_seconds,
-                'average_rate': sum(result.bag_info.message_counts.values()) / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+                'total_messages': sum(bag_details.message_counts.get(topic, 0) for topic in topics_to_profile) if bag_details.message_counts else 0,
+                'duration_seconds': bag_details.duration_seconds or 0.0,
+                'average_rate': average_rate
             },
             'topic_statistics': [],
             'performance_metrics': {
-                'analysis_time': result.analysis_time,
-                'cached': result.cached,
+                'analysis_time': analysis_time,
+                'cached': bag_details.analysis_level.value != "none",
                 'cache_hit_rate': self._get_cache_hit_rate()
             }
         }
         
         # Calculate topic statistics
         for topic in topics_to_profile:
-            message_count = result.bag_info.message_counts.get(topic, 0)
-            frequency = message_count / result.bag_info.duration_seconds if result.bag_info.duration_seconds > 0 else 0
+            message_count = bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0
+            frequency = message_count / bag_details.duration_seconds if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0
             
             topic_stats = {
                 'topic': topic,
-                'message_type': result.bag_info.connections.get(topic, 'Unknown'),
+                'message_type': bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown',
                 'message_count': message_count,
                 'frequency': frequency,
-                'percentage': (message_count / sum(result.bag_info.message_counts.values())) * 100 if sum(result.bag_info.message_counts.values()) > 0 else 0
+                'percentage': (message_count / total_messages) * 100 if total_messages > 0 else 0
             }
             
             profile_result['topic_statistics'].append(topic_stats)
@@ -630,8 +461,8 @@ class BagManager:
             
         bag_path = Path(bag_path)
         
-        # Perform bag analysis for diagnosis
-        result = await self.analyzer.analyze_bag_async(bag_path, AnalysisType.METADATA)
+        # Get bag details for diagnosis
+        bag_details, _ = self.parser.get_bag_details(str(bag_path))
         
         diagnosis_result = {
             'bag_info': {
@@ -651,32 +482,26 @@ class BagManager:
             }
         }
         
-        # File integrity check
-        if options.check_integrity:
-            integrity_check = self._check_file_integrity(bag_path, result)
-            diagnosis_result['checks'].append(integrity_check)
-            if not integrity_check['passed']:
-                diagnosis_result['issues'].append(integrity_check['message'])
+        # Perform various diagnostic checks
+        checks = [
+            self._check_file_integrity(bag_path, bag_details),
+            self._check_timestamps(bag_details),
+            self._check_message_counts(bag_details)
+        ]
         
-        # Timestamp consistency check  
-        if options.check_timestamps:
-            timestamp_check = self._check_timestamps(result)
-            diagnosis_result['checks'].append(timestamp_check)
-            if not timestamp_check['passed']:
-                diagnosis_result['issues'].append(timestamp_check['message'])
-        
-        # Message count validation
-        if options.check_message_counts:
-            count_check = self._check_message_counts(result)
-            diagnosis_result['checks'].append(count_check)
-            if not count_check['passed']:
-                diagnosis_result['warnings'].append(count_check['message'])
-        
-        # Update summary
-        diagnosis_result['summary']['total_checks'] = len(diagnosis_result['checks'])
-        diagnosis_result['summary']['passed_checks'] = sum(1 for check in diagnosis_result['checks'] if check['passed'])
-        diagnosis_result['summary']['failed_checks'] = sum(1 for check in diagnosis_result['checks'] if not check['passed'])
-        diagnosis_result['summary']['warnings_count'] = len(diagnosis_result['warnings'])
+        # Process check results
+        for check in checks:
+            diagnosis_result['checks'].append(check)
+            diagnosis_result['summary']['total_checks'] += 1
+            
+            if check['passed']:
+                diagnosis_result['summary']['passed_checks'] += 1
+            else:
+                diagnosis_result['summary']['failed_checks'] += 1
+                diagnosis_result['issues'].append({
+                    'check': check['name'],
+                    'message': check['message']
+                })
         
         return diagnosis_result
     
@@ -766,7 +591,7 @@ class BagManager:
         stats = self._get_cache_stats()
         return stats['hit_rate']
     
-    def _check_file_integrity(self, bag_path: Path, result: AnalysisResult) -> Dict[str, Any]:
+    def _check_file_integrity(self, bag_path: Path, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
         """Check bag file integrity"""
         check_result = {
             'name': 'File Integrity',
@@ -780,15 +605,15 @@ class BagManager:
                 'passed': False,
                 'message': f'Bag file does not exist: {bag_path}'
             })
-        elif len(result.errors) > 0:
+        elif not bag_details.topics:
             check_result.update({
                 'passed': False,
-                'message': f'Bag file has parsing errors: {", ".join(result.errors)}'
+                'message': 'Bag file appears to be empty or corrupted'
             })
         
         return check_result
     
-    def _check_timestamps(self, result: AnalysisResult) -> Dict[str, Any]:
+    def _check_timestamps(self, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
         """Check timestamp consistency"""
         check_result = {
             'name': 'Timestamp Consistency',
@@ -797,8 +622,8 @@ class BagManager:
             'message': 'Timestamps appear consistent'
         }
         
-        if result.bag_info.time_range:
-            start_time, end_time = result.bag_info.time_range
+        if bag_details.time_range:
+            start_time, end_time = bag_details.time_range
             if start_time >= end_time:
                 check_result.update({
                     'passed': False,
@@ -807,7 +632,7 @@ class BagManager:
         
         return check_result
     
-    def _check_message_counts(self, result: AnalysisResult) -> Dict[str, Any]:
+    def _check_message_counts(self, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
         """Check message count consistency"""
         check_result = {
             'name': 'Message Counts',
@@ -816,21 +641,27 @@ class BagManager:
             'message': 'Message counts appear normal'
         }
         
-        total_messages = sum(result.bag_info.message_counts.values())
-        if total_messages == 0:
+        if bag_details.message_counts:
+            total_messages = sum(bag_details.message_counts.values())
+            if total_messages == 0:
+                check_result.update({
+                    'passed': False,
+                    'message': 'Bag file contains no messages'
+                })
+            elif total_messages > 1000000:  # Arbitrary large number threshold
+                check_result.update({
+                    'passed': True,  # Warning, not error
+                    'message': f'Large number of messages detected: {total_messages:,}'
+                })
+        else:
             check_result.update({
                 'passed': False,
-                'message': 'Bag file contains no messages'
-            })
-        elif total_messages > 1000000:  # Arbitrary large number threshold
-            check_result.update({
-                'passed': True,  # Warning, not error
-                'message': f'Large number of messages detected: {total_messages:,}'
+                'message': 'No message count information available'
             })
         
         return check_result
     
     def cleanup(self):
         """Clean up resources"""
-        if hasattr(self.analyzer, 'cleanup'):
-            self.analyzer.cleanup() 
+        if hasattr(self.parser, 'clear'):
+            self.parser.clear() 
