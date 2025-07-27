@@ -684,7 +684,7 @@ class BagParser:
         
         _logger.info(f"Successfully wrote {total_processed} messages in chronological order")
         return total_processed
-
+    
     def _parse_message_definition(self, msgdef: str) -> Dict[str, Any]:
         """
         Parse ROS message definition string into structured field information

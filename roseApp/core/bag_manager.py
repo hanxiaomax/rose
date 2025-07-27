@@ -1,17 +1,222 @@
 """
 Unified Bag Manager - High-level interface for all bag operations
 Provides a single entry point for CLI commands to interact with ROS bags
+Includes unified cache management with persistent storage
 """
 import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 import logging
+from concurrent.futures import ThreadPoolExecutor
+import time
+import json
+import hashlib
+import pickle
+import tempfile
+import os
 
-from .parser import BagParser, ComprehensiveBagInfo, ExtractOption
-from .cache import get_cache
+from .parser import BagParser, ComprehensiveBagInfo, ExtractOption, AnalysisLevel
 from .ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions
+
+
+@dataclass
+class CachedMessageData:
+    """Cached message traversal data"""
+    topic: str
+    message_type: str
+    timestamp: float
+    message_data: Dict[str, Any]  # Serialized message content
+    
+
+@dataclass
+class BagCacheEntry:
+    """Complete bag cache entry with metadata and message data"""
+    bag_info: ComprehensiveBagInfo
+    cached_messages: Dict[str, List[CachedMessageData]]  # topic -> messages
+    cache_timestamp: float
+    file_mtime: float
+    file_size: int
+    
+    def is_valid(self, bag_path: Path) -> bool:
+        """Check if cache entry is still valid"""
+        if not bag_path.exists():
+            return False
+        
+        stat = bag_path.stat()
+        return (stat.st_mtime == self.file_mtime and 
+                stat.st_size == self.file_size)
+    
+    def get_cache_key(self, bag_path: Path) -> str:
+        """Generate cache key for this bag"""
+        return hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
+
+
+class UnifiedCacheManager:
+    """Unified cache manager for bag analysis and message data"""
+    
+    def __init__(self, cache_dir: Optional[Path] = None):
+        self.logger = logging.getLogger(f"{__name__}.cache")
+        
+        # Set up cache directory
+        if cache_dir is None:
+            cache_dir = Path(tempfile.gettempdir()) / "rose_bag_cache"
+        
+        self.cache_dir = cache_dir
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # In-memory cache for fast access
+        self._memory_cache: Dict[str, BagCacheEntry] = {}
+        
+        # Cache configuration
+        self.max_memory_entries = 50
+        self.max_cached_messages_per_topic = 1000
+        
+        self.logger.debug(f"Initialized cache manager with dir: {self.cache_dir}")
+    
+    def _get_cache_file_path(self, cache_key: str) -> Path:
+        """Get cache file path for a given key"""
+        return self.cache_dir / f"{cache_key}.cache"
+    
+    def _load_from_disk(self, cache_key: str) -> Optional[BagCacheEntry]:
+        """Load cache entry from disk"""
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        if not cache_file.exists():
+            return None
+        
+        try:
+            with open(cache_file, 'rb') as f:
+                return pickle.load(f)
+        except Exception as e:
+            self.logger.warning(f"Failed to load cache from {cache_file}: {e}")
+            return None
+    
+    def _save_to_disk(self, cache_key: str, entry: BagCacheEntry):
+        """Save cache entry to disk"""
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        try:
+            with open(cache_file, 'wb') as f:
+                pickle.dump(entry, f)
+            self.logger.debug(f"Saved cache to {cache_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to save cache to {cache_file}: {e}")
+    
+    def get(self, bag_path: Path) -> Optional[BagCacheEntry]:
+        """Get cache entry for bag file"""
+        cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
+        
+        # Try memory cache first
+        if cache_key in self._memory_cache:
+            entry = self._memory_cache[cache_key]
+            if entry.is_valid(bag_path):
+                return entry
+            else:
+                # Remove invalid entry
+                del self._memory_cache[cache_key]
+        
+        # Try disk cache
+        entry = self._load_from_disk(cache_key)
+        if entry and entry.is_valid(bag_path):
+            # Load into memory cache
+            self._memory_cache[cache_key] = entry
+            return entry
+        
+        return None
+    
+    def put(self, bag_path: Path, bag_info: ComprehensiveBagInfo, 
+           cached_messages: Optional[Dict[str, List[CachedMessageData]]] = None):
+        """Store cache entry for bag file"""
+        cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
+        
+        if not bag_path.exists():
+            return
+        
+        stat = bag_path.stat()
+        entry = BagCacheEntry(
+            bag_info=bag_info,
+            cached_messages=cached_messages or {},
+            cache_timestamp=time.time(),
+            file_mtime=stat.st_mtime,
+            file_size=stat.st_size
+        )
+        
+        # Store in memory cache
+        self._memory_cache[cache_key] = entry
+        
+        # Manage memory cache size
+        if len(self._memory_cache) > self.max_memory_entries:
+            # Remove oldest entries
+            sorted_entries = sorted(
+                self._memory_cache.items(),
+                key=lambda x: x[1].cache_timestamp
+            )
+            for old_key, _ in sorted_entries[:len(self._memory_cache) - self.max_memory_entries]:
+                del self._memory_cache[old_key]
+        
+        # Save to disk
+        self._save_to_disk(cache_key, entry)
+    
+    def add_cached_messages(self, bag_path: Path, topic: str, messages: List[CachedMessageData]):
+        """Add cached messages for a topic"""
+        entry = self.get(bag_path)
+        if entry is None:
+            return
+        
+        # Limit number of cached messages per topic
+        if len(messages) > self.max_cached_messages_per_topic:
+            messages = messages[:self.max_cached_messages_per_topic]
+        
+        entry.cached_messages[topic] = messages
+        
+        # Update cache
+        self.put(bag_path, entry.bag_info, entry.cached_messages)
+    
+    def get_cached_messages(self, bag_path: Path, topic: str) -> Optional[List[CachedMessageData]]:
+        """Get cached messages for a topic"""
+        entry = self.get(bag_path)
+        if entry is None:
+            return None
+        
+        return entry.cached_messages.get(topic)
+    
+    def clear(self, bag_path: Optional[Path] = None):
+        """Clear cache entries"""
+        if bag_path is None:
+            # Clear all caches
+            self._memory_cache.clear()
+            for cache_file in self.cache_dir.glob("*.cache"):
+                try:
+                    cache_file.unlink()
+                except Exception as e:
+                    self.logger.warning(f"Failed to remove cache file {cache_file}: {e}")
+        else:
+            # Clear specific bag cache
+            cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
+            
+            if cache_key in self._memory_cache:
+                del self._memory_cache[cache_key]
+            
+            cache_file = self._get_cache_file_path(cache_key)
+            if cache_file.exists():
+                try:
+                    cache_file.unlink()
+                except Exception as e:
+                    self.logger.warning(f"Failed to remove cache file {cache_file}: {e}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        disk_cache_count = len(list(self.cache_dir.glob("*.cache")))
+        
+        return {
+            'memory_entries': len(self._memory_cache),
+            'disk_entries': disk_cache_count,
+            'cache_dir': str(self.cache_dir),
+            'max_memory_entries': self.max_memory_entries,
+            'max_cached_messages_per_topic': self.max_cached_messages_per_topic
+        }
 
 
 @dataclass
@@ -67,19 +272,20 @@ class DiagnoseOptions:
 class BagManager:
     """
     Unified manager for all ROS bag operations
-    Provides high-level interface for CLI commands
+    Provides high-level interface for CLI commands with async capabilities and unified caching
     """
     
-    def __init__(self, max_workers: int = 4):
+    def __init__(self, max_workers: int = 4, cache_dir: Optional[Path] = None):
         """Initialize the bag manager"""
         self.logger = logging.getLogger(__name__)
         self.parser = BagParser()
-        self.cache = get_cache()
+        self.cache_manager = UnifiedCacheManager(cache_dir)
         self.ui_control = UIControl()
         self.max_workers = max_workers
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
         
         self.logger.debug(f"Initialized BagManager with {max_workers} workers")
-    
+        
     async def inspect_bag(
         self, 
         bag_path: Union[str, Path], 
@@ -101,18 +307,70 @@ class BagManager:
             options = InspectOptions()
             
         bag_path = Path(bag_path)
+        start_time = time.time()
         
         # Clear cache if requested
         if options.no_cache:
+            self.cache_manager.clear(bag_path)
             self.parser.clear()
         
-        # Get bag details first
-        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
+        # Report progress for initial setup
+        if progress_callback:
+            progress_callback(10.0)
         
-        # Perform full analysis if we need topic sizes or field analysis
-        if options.show_fields or options.sort_by == "size":
-            bag_details, full_analysis_time = self.parser.analyze_bag_full(str(bag_path))
-            analysis_time += full_analysis_time
+        # Try to get from cache first
+        cached_entry = self.cache_manager.get(bag_path)
+        bag_details = None
+        
+        if cached_entry and cached_entry.bag_info.analysis_level != AnalysisLevel.NONE:
+            bag_details = cached_entry.bag_info
+            self.logger.info(f"Using cached analysis for {bag_path}")
+            
+            # Check if we need full analysis but only have quick analysis cached
+            if (options.show_fields or options.sort_by == "size") and not bag_details.has_full_analysis():
+                # Need to perform full analysis
+                bag_details = None
+        
+        if bag_details is None:
+            # Get bag details using parser - run in executor for non-blocking
+            loop = asyncio.get_event_loop()
+            
+            if options.show_fields or options.sort_by == "size":
+                # Need full analysis with optional message caching
+                cache_messages = True  # Enable message caching for potential future use
+                bag_details, analysis_time = await loop.run_in_executor(
+                    self.executor,
+                    self.parser.analyze_bag_full,
+                    str(bag_path),
+                    cache_messages,
+                    1000  # max messages per topic
+                )
+            else:
+                # Quick analysis is sufficient
+                bag_details, analysis_time = await loop.run_in_executor(
+                    self.executor,
+                    self.parser.get_bag_details,
+                    str(bag_path)
+                )
+            
+            # Cache the result using our unified cache manager
+            cached_messages_dict = {}
+            if bag_details.has_cached_messages() and bag_details.cached_messages:
+                # Convert parser's CachedMessage to our CachedMessageData format
+                for topic, parser_messages in bag_details.cached_messages.items():
+                    cached_messages_dict[topic] = [
+                        CachedMessageData(
+                            topic=msg.topic,
+                            message_type=msg.message_type,
+                            timestamp=msg.timestamp,
+                            message_data=msg.message_data
+                        ) for msg in parser_messages
+                    ]
+            
+            self.cache_manager.put(bag_path, bag_details, cached_messages_dict)
+        
+        if progress_callback:
+            progress_callback(70.0)
         
         # Apply topic filtering if specified
         filtered_topics = self._filter_topics(
@@ -126,6 +384,9 @@ class BagManager:
         if bag_details.message_counts:
             total_messages = sum(bag_details.message_counts.get(topic, 0) for topic in filtered_topics)
         
+        if progress_callback:
+            progress_callback(90.0)
+        
         # Prepare inspection results
         inspection_result = {
             'bag_info': {
@@ -136,12 +397,12 @@ class BagManager:
                 'total_messages': total_messages,
                 'duration_seconds': bag_details.duration_seconds or 0.0,
                 'time_range': bag_details.time_range,
-                'analysis_time': analysis_time,
-                'cached': bag_details.analysis_level.value != "none"
+                'analysis_time': time.time() - start_time,
+                'cached': cached_entry is not None
             },
             'topics': [],
             'field_analysis': {},
-            'cache_stats': self._get_cache_stats()
+            'cache_stats': self.cache_manager.get_stats()
         }
         
         # Build topic information
@@ -194,6 +455,9 @@ class BagManager:
             
             inspection_result['topics'].append(topic_info)
         
+        if progress_callback:
+            progress_callback(100.0)
+        
         return inspection_result
     
     async def list_topics(
@@ -224,7 +488,7 @@ class BagManager:
         
         # Clear cache if requested
         if no_cache:
-            self.parser.clear()
+            self.cache_manager.clear(bag_path)
         
         # Get bag details
         bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
@@ -252,8 +516,8 @@ class BagManager:
             },
             'topics': [],
             'filtering': {
-                'patterns': patterns or [],
-                'exact_match': exact_match,
+            'patterns': patterns or [],
+            'exact_match': exact_match,
                 'matched_topics': len(filtered_topics)
             }
         }
@@ -276,7 +540,7 @@ class BagManager:
         self,
         bag_path: Union[str, Path],
         options: Optional[ExtractOptions] = None,
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Callable] = None
     ) -> Dict[str, Any]:
         """
         Extract topics from a ROS bag file
@@ -284,6 +548,7 @@ class BagManager:
         Args:
             bag_path: Path to the source bag file
             options: Extraction options
+            progress_callback: Optional progress callback (can be simple float callback or enhanced topic callback)
             
         Returns:
             Dictionary containing extraction results
@@ -295,10 +560,53 @@ class BagManager:
         
         # Clear cache if requested
         if options.no_cache:
+            self.cache_manager.clear(bag_path)
             self.parser.clear()
         
-        # Get bag metadata first
-        bag_details, _ = self.parser.get_bag_details(str(bag_path))
+        # Detect callback type and create appropriate wrapper
+        simple_progress_callback = None
+        if progress_callback:
+            import inspect
+            sig = inspect.signature(progress_callback)
+            param_count = len(sig.parameters)
+        
+            if param_count == 1:
+                # Simple float progress callback
+                simple_progress_callback = progress_callback
+            elif param_count >= 2:
+                # Enhanced topic callback - create wrapper
+                def simple_wrapper(progress: float):
+                    # Convert simple progress to enhanced callback format
+                    topic_index = int(progress / 100 * len(options.topics or []))
+                    topic_name = (options.topics or ["unknown"])[min(topic_index, len(options.topics or []) - 1)] if options.topics else "unknown"
+                    
+                    if progress < 50:
+                        phase = "analyzing"
+                    elif progress < 90:
+                        phase = "processing"
+                    else:
+                        phase = "writing"
+                    
+                    try:
+                        progress_callback(topic_index, topic_name, 0, 0, phase)
+                    except Exception as e:
+                        self.logger.warning(f"Progress callback failed: {e}")
+                
+                simple_progress_callback = simple_wrapper
+        
+        if simple_progress_callback:
+            simple_progress_callback(10.0)
+        
+        # Get bag metadata first - run in executor for non-blocking
+        loop = asyncio.get_event_loop()
+        bag_details, _ = await loop.run_in_executor(
+            self.executor,
+            self.parser.get_bag_details,
+            str(bag_path)
+        )
+        
+        if simple_progress_callback:
+            simple_progress_callback(30.0)
         
         # Apply topic filtering
         topics_to_extract = self._filter_topics(
@@ -314,22 +622,37 @@ class BagManager:
         extract_option = ExtractOption(
             topics=topics_to_extract,
             time_range=None,  # BagManager.ExtractOptions doesn't provide time_range
-            compression=options.compression,
-            overwrite=options.overwrite,
+                compression=options.compression,
+                overwrite=options.overwrite,
             memory_limit_mb=512  # Default memory limit
         )
         
-        # Perform extraction if not dry run
+        if simple_progress_callback:
+            simple_progress_callback(50.0)
+            
+        # Perform extraction if not dry run - run in executor for non-blocking
         extraction_error = None
         if not options.dry_run:
             try:
-                _, extract_time = self.parser.extract(str(bag_path), str(output_path), extract_option, progress_callback)
+                # Create a wrapper for progress callback to work with executor
+                def extract_with_progress():
+                    # For parser extraction, we can't easily provide detailed progress
+                    # so we'll just call the simple callback at key points
+                    return self.parser.extract(str(bag_path), str(output_path), extract_option)
+                
+                _, extract_time = await loop.run_in_executor(
+                    self.executor,
+                    extract_with_progress
+                )
             except Exception as e:
                 self.logger.error(f"Extraction failed: {e}")
                 extraction_error = str(e)
                 extract_time = 0.0
         else:
             extract_time = 0.0
+        
+        if simple_progress_callback:
+            simple_progress_callback(90.0)
         
         # Calculate extraction statistics
         total_messages = sum(bag_details.message_counts.get(topic, 0) for topic in topics_to_extract) if bag_details.message_counts else 0
@@ -373,6 +696,9 @@ class BagManager:
             }
         }
         
+        if simple_progress_callback:
+            simple_progress_callback(100.0)
+            
         return extraction_result
     
     async def profile_bag(
@@ -505,6 +831,154 @@ class BagManager:
         
         return diagnosis_result
     
+    async def get_messages(
+        self,
+        bag_path: Union[str, Path],
+        topic: str,
+        limit: Optional[int] = None,
+        use_cache: bool = True,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> List[CachedMessageData]:
+        """
+        Get messages from a topic using parser interface with caching support
+        
+        Args:
+            bag_path: Path to the bag file
+            topic: Topic name to get messages from
+            limit: Maximum number of messages to return
+            use_cache: Whether to use cached messages if available
+            progress_callback: Optional progress callback
+            
+        Returns:
+            List of cached message data
+        """
+        bag_path = Path(bag_path)
+        
+        # Check unified cache first if enabled
+        if use_cache:
+            cached_messages = self.cache_manager.get_cached_messages(bag_path, topic)
+            if cached_messages:
+                self.logger.info(f"Using {len(cached_messages)} cached messages for {topic}")
+                if limit:
+                    cached_messages = cached_messages[:limit]
+                return cached_messages
+        
+        # Use parser interface to get messages
+        if progress_callback:
+            progress_callback(10.0)
+        
+        loop = asyncio.get_event_loop()
+        parser_messages, _ = await loop.run_in_executor(
+            self.executor,
+            self.parser.get_messages,
+            str(bag_path),
+            topic,
+            limit
+        )
+        
+        # Convert parser messages to our format
+        messages = [
+            CachedMessageData(
+                topic=msg.topic,
+                message_type=msg.message_type,
+                timestamp=msg.timestamp,
+                message_data=msg.message_data
+            ) for msg in parser_messages
+        ]
+        
+        # Cache the messages if we got any
+        if messages and use_cache:
+            self.cache_manager.add_cached_messages(bag_path, topic, messages)
+        
+        if progress_callback:
+            progress_callback(100.0)
+        
+        return messages
+    
+    def _traverse_messages(
+        self,
+        bag_path: str,
+        topic: str,
+        limit: Optional[int] = None,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> List[CachedMessageData]:
+        """
+        DEPRECATED: Use parser.get_messages instead
+        This method is kept for backward compatibility but delegates to parser
+        """
+        self.logger.warning("_traverse_messages is deprecated, use get_messages instead")
+        
+        # Delegate to parser
+        parser_messages, _ = self.parser.get_messages(bag_path, topic, limit)
+        
+        # Convert to our format
+        return [
+            CachedMessageData(
+                topic=msg.topic,
+                message_type=msg.message_type,
+                timestamp=msg.timestamp,
+                message_data=msg.message_data
+            ) for msg in parser_messages
+        ]
+    
+    def _serialize_message(self, msg) -> Dict[str, Any]:
+        """
+        DEPRECATED: Use parser._serialize_message_for_cache instead
+        This method is kept for backward compatibility but delegates to parser
+        """
+        self.logger.warning("_serialize_message is deprecated, parser handles serialization")
+        return self.parser._serialize_message_for_cache(msg)
+    
+    async def sample_messages(
+        self,
+        bag_path: Union[str, Path],
+        topic: str,
+        sample_count: int = 10,
+        use_cache: bool = True
+    ) -> List[CachedMessageData]:
+        """
+        Get a sample of messages from a topic
+        
+        Args:
+            bag_path: Path to the bag file
+            topic: Topic name
+            sample_count: Number of sample messages
+            use_cache: Whether to use cached messages
+            
+        Returns:
+            List of sample messages
+        """
+        # Get all cached messages first
+        messages = await self.get_messages(bag_path, topic, use_cache=use_cache)
+        
+        if not messages:
+            return []
+        
+        # Sample messages evenly distributed
+        if len(messages) <= sample_count:
+            return messages
+        
+        step = len(messages) // sample_count
+        sampled = []
+        for i in range(0, len(messages), step):
+            if len(sampled) >= sample_count:
+                break
+            sampled.append(messages[i])
+        
+        return sampled
+    
+    def clear_message_cache(self, bag_path: Optional[Union[str, Path]] = None):
+        """
+        Clear message cache
+        
+        Args:
+            bag_path: Specific bag to clear cache for, or None for all
+        """
+        if bag_path:
+            self.cache_manager.clear(Path(bag_path))
+        else:
+            self.cache_manager.clear()
+    
     def _filter_topics(
         self, 
         all_topics: List[str], 
@@ -568,28 +1042,15 @@ class BagManager:
     
     def _get_cache_stats(self) -> Dict[str, Any]:
         """Get cache performance statistics"""
-        try:
-            if hasattr(self.cache, 'get_stats'):
-                stats = self.cache.get_stats()
-                # Extract unified stats from the complex structure
-                unified_stats = stats.get('unified', {})
-                return {
-                    'hit_rate': unified_stats.get('hit_rate', 0.0),
-                    'total_requests': unified_stats.get('hits', 0) + unified_stats.get('misses', 0),
-                    'cache_hits': unified_stats.get('hits', 0),
-                    'cache_misses': unified_stats.get('misses', 0)
-                }
-            else:
-                return {'hit_rate': 0.0, 'total_requests': 0, 'cache_hits': 0, 'cache_misses': 0}
-        except Exception as e:
-            # Log the error for debugging but don't crash
-            self.logger.warning(f"Error getting cache stats: {e}")
-            return {'hit_rate': 0.0, 'total_requests': 0, 'cache_hits': 0, 'cache_misses': 0}
+        return self.cache_manager.get_stats()
     
     def _get_cache_hit_rate(self) -> float:
         """Get cache hit rate percentage"""
         stats = self._get_cache_stats()
-        return stats['hit_rate']
+        total_entries = stats.get('memory_entries', 0) + stats.get('disk_entries', 0)
+        if total_entries == 0:
+            return 0.0
+        return (stats.get('memory_entries', 0) / total_entries) * 100
     
     def _check_file_integrity(self, bag_path: Path, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
         """Check bag file integrity"""
@@ -643,15 +1104,15 @@ class BagManager:
         
         if bag_details.message_counts:
             total_messages = sum(bag_details.message_counts.values())
-            if total_messages == 0:
-                check_result.update({
-                    'passed': False,
-                    'message': 'Bag file contains no messages'
-                })
-            elif total_messages > 1000000:  # Arbitrary large number threshold
-                check_result.update({
-                    'passed': True,  # Warning, not error
-                    'message': f'Large number of messages detected: {total_messages:,}'
+        if total_messages == 0:
+            check_result.update({
+                'passed': False,
+                'message': 'Bag file contains no messages'
+            })
+        elif total_messages > 1000000:  # Arbitrary large number threshold
+            check_result.update({
+                'passed': True,  # Warning, not error
+                'message': f'Large number of messages detected: {total_messages:,}'
                 })
         else:
             check_result.update({
@@ -664,4 +1125,6 @@ class BagManager:
     def cleanup(self):
         """Clean up resources"""
         if hasattr(self.parser, 'clear'):
-            self.parser.clear() 
+            self.parser.clear()
+        if hasattr(self, 'executor'):
+            self.executor.shutdown(wait=True) 

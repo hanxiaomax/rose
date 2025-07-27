@@ -118,11 +118,12 @@ def _extract_topics_impl(
             def analysis_callback(percent: float):
                 analysis_update(percent)
             
+            # Use list_topics instead of get_topics
             topics_result = await_sync(manager.list_topics(input_path, progress_callback=analysis_callback, no_cache=no_cache))
         
         all_topics = [t['name'] for t in topics_result['topics']]
         
-        # Apply topic filtering
+        # Apply topic filtering using BagManager's _filter_topics method
         if reverse:
             # Reverse selection: exclude topics that match the patterns
             topics_to_exclude = manager._filter_topics(all_topics, topics, None)
