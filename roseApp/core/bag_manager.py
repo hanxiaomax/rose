@@ -153,13 +153,19 @@ class BagManager:
             'cache_stats': self._get_cache_stats()
         }
         
-        # Get topic sizes using parser
+        # Get topic sizes using new parser interface
         topic_sizes = {}
         try:
             from .parser import create_parser
             parser = create_parser()
-            topic_stats = parser.get_topic_stats(str(bag_path))
-            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+            # Use get_bag_details to get comprehensive information
+            bag_details, _ = parser.get_bag_details(str(bag_path))
+            if bag_details.has_full_analysis() and bag_details.topic_sizes:
+                topic_sizes = bag_details.topic_sizes
+            else:
+                # Fallback: perform full analysis if needed
+                bag_details, _ = parser.analyze_bag_full(str(bag_path))
+                topic_sizes = bag_details.topic_sizes or {}
         except Exception as e:
             self.logger.warning(f"Could not get topic sizes: {e}")
         
@@ -199,6 +205,7 @@ class BagManager:
                         'field_paths': field_paths,
                         'samples_analyzed': len([t for t in filtered_topics if result.bag_info.connections.get(t) == message_type])
                     }
+                print(f"Field paths: {field_paths}")
             
             inspection_result['topics'].append(topic_info)
         
@@ -249,13 +256,19 @@ class BagManager:
         else:
             filtered_topics = all_topics
         
-        # Get topic sizes using parser
+        # Get topic sizes using new parser interface
         topic_sizes = {}
         try:
             from .parser import create_parser
             parser = create_parser()
-            topic_stats = parser.get_topic_stats(str(bag_path))
-            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+            # Use get_bag_details to get comprehensive information
+            bag_details, _ = parser.get_bag_details(str(bag_path))
+            if bag_details.has_full_analysis() and bag_details.topic_sizes:
+                topic_sizes = bag_details.topic_sizes
+            else:
+                # Fallback: perform full analysis if needed
+                bag_details, _ = parser.analyze_bag_full(str(bag_path))
+                topic_sizes = bag_details.topic_sizes or {}
         except Exception as e:
             self.logger.warning(f"Could not get topic sizes: {e}")
         
@@ -345,13 +358,19 @@ class BagManager:
         total_messages = sum(result.bag_info.message_counts.values())
         extract_messages = sum(result.bag_info.message_counts.get(topic, 0) for topic in topics_to_extract)
         
-        # Get topic sizes using parser
+        # Get topic sizes using new parser interface
         topic_sizes = {}
         try:
             from .parser import create_parser
             parser = create_parser()
-            topic_stats = parser.get_topic_stats(str(bag_path))
-            topic_sizes = {topic: stats.get('size', 0) for topic, stats in topic_stats.items()}
+            # Use get_bag_details to get comprehensive information
+            bag_details, _ = parser.get_bag_details(str(bag_path))
+            if bag_details.has_full_analysis() and bag_details.topic_sizes:
+                topic_sizes = bag_details.topic_sizes
+            else:
+                # Fallback: perform full analysis if needed
+                bag_details, _ = parser.analyze_bag_full(str(bag_path))
+                topic_sizes = bag_details.topic_sizes or {}
         except Exception as e:
             self.logger.warning(f"Could not get topic sizes: {e}")
         
@@ -432,14 +451,19 @@ class BagManager:
             if options.output_path.exists() and not options.overwrite:
                 raise FileExistsError(f"Output file already exists: {options.output_path}")
             
-            # Use parser to filter/extract the bag
-            # The unified filter_bag method automatically detects callback type
-            filter_result = parser.filter_bag(
+            # Use new parser extract interface
+            from .parser import ExtractOption
+            extract_option = ExtractOption(
+                topics=topics_to_extract,
+                time_range=None,  # ExtractOptions doesn't have time_range, use None
+                compression=options.compression,
+                overwrite=options.overwrite
+            )
+            
+            filter_result, _ = parser.extract(
                 str(bag_path),
                 str(options.output_path),
-                topics_to_extract,
-                compression=options.compression,
-                overwrite=options.overwrite,
+                extract_option,
                 progress_callback=progress_callback
             )
             

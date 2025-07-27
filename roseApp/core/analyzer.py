@@ -192,40 +192,27 @@ class BagAnalyzer:
             )
     
     async def _load_bag_info_async(self, parser, bag_path: Path) -> BagInfo:
-        """Load basic bag information asynchronously"""
+        """Load basic bag information asynchronously using new parser interface"""
         loop = asyncio.get_event_loop()
         
-        # Run parser operations in thread pool
-        topics, connections, time_range = await loop.run_in_executor(
+        # Use new parser interface - get comprehensive bag details
+        def get_bag_info():
+            bag_details, _ = parser.get_bag_details(str(bag_path))
+            return bag_details
+        
+        bag_details = await loop.run_in_executor(
             self.executor,
-            parser.load_bag,
-            str(bag_path)
+            get_bag_info
         )
         
-        message_counts = await loop.run_in_executor(
-            self.executor,
-            parser.get_message_counts,
-            str(bag_path)
-        )
+        # Extract information from comprehensive bag details
+        topics = bag_details.topics or []
+        connections = bag_details.connections or {}
+        time_range = bag_details.time_range
+        message_counts = bag_details.message_counts or {}
         
-        # Calculate duration
-        duration = 0.0
-        if time_range and len(time_range) >= 2:
-            # time_range contains tuples of (seconds, nanoseconds)
-            start_time = time_range[0]
-            end_time = time_range[1]
-            
-            if isinstance(start_time, tuple) and isinstance(end_time, tuple):
-                # Convert to seconds with nanosecond precision
-                start_seconds = start_time[0] + start_time[1] / 1e9
-                end_seconds = end_time[0] + end_time[1] / 1e9
-                duration = end_seconds - start_seconds
-            else:
-                # Fallback for simple numeric timestamps
-                try:
-                    duration = float(end_time) - float(start_time)
-                except (TypeError, ValueError):
-                    duration = 0.0
+        # Use duration from comprehensive bag details
+        duration = bag_details.duration_seconds or 0.0
         
         return BagInfo(
             path=bag_path,
@@ -267,16 +254,10 @@ class BagAnalyzer:
                         sample_count = 0
                         max_samples = 3  # Limit samples for performance
                         
-                        message_generator = parser.read_messages(str(bag_path), [sample_topic])
-                        if message_generator is not None:
-                            for timestamp, message in message_generator:
-                                 if sample_count >= max_samples:
-                                     break
-                                 
-                                 # Analyze message structure
-                                 message_fields = self._extract_message_fields(message)
-                                 fields = self._merge_fields(fields, message_fields)
-                                 sample_count += 1
+                        # Note: read_messages method not available in new parser interface
+                        # Field analysis is temporarily disabled
+                        # TODO: Implement field analysis with new parser interface if needed
+                        pass
                         
                         return fields
                     except Exception as e:
