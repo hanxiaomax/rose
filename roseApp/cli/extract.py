@@ -72,13 +72,12 @@ def _extract_topics_impl(
     no_cache: bool
 ):
     """
-    Extract specific topics from a ROS bag file using ResultHandler for unified output
+    Simplified topic extraction - focus on core functionality
     """
     import time
     console = Console()
     
     try:
-        
         # Validate input arguments
         input_path = Path(input_bag)
         if not input_path.exists():
@@ -109,19 +108,25 @@ def _extract_topics_impl(
                 console.print("Operation cancelled.")
                 raise typer.Exit(0)
         
-        # Create BagManager and get available topics
+        # Create BagManager
         manager = BagManager()
         
-        # Show initial analysis progress
-        with UIControl.todo_analysis_progress(input_path.name, False, console) as analysis_update:
-            # Simple analysis callback
-            def analysis_callback(percent: float):
-                analysis_update(percent)
-            
-            # Use list_topics instead of get_topics
-            topics_result = await_sync(manager.list_topics(input_path, progress_callback=analysis_callback, no_cache=no_cache))
+        # Get topic list using lightweight method
+        console.print(f"[dim]Analyzing bag file...[/dim]")
         
-        all_topics = [t['name'] for t in topics_result['topics']]
+        # Use parser.get_meta for lightweight topic discovery
+        meta, _ = manager.parser.get_meta(str(input_path))
+        
+        # If we don't have topics from meta, fall back to quick analysis
+        if not manager.parser._current_bag_info or not manager.parser._current_bag_info.topics:
+            manager.parser.analyze_bag_quick(str(input_path))
+        
+        # Get topic list
+        if manager.parser._current_bag_info and manager.parser._current_bag_info.topics:
+            all_topics = manager.parser._current_bag_info.topics
+        else:
+            console.print("[red]Error: Unable to read topics from bag file[/red]")
+            raise typer.Exit(1)
         
         # Apply topic filtering using BagManager's _filter_topics method
         if reverse:
@@ -145,56 +150,15 @@ def _extract_topics_impl(
         
         # Show operation description
         console.print(f"\n[bold]{operation_desc}[/bold]")
-        
-        # Prepare extraction result data structure
-        extraction_result = {
-            'operation': 'extract_topics',
-            'input_file': str(input_path),
-            'output_file': str(output_path),
-            'compression': compression,
-            'dry_run': dry_run,
-            'reverse': reverse,
-            'topic_patterns': topics,
-            'topics_to_extract': topics_to_extract,
-            'bag_info': topics_result.get('bag_info', {}),
-            'cache_stats': topics_result.get('cache_stats', {}),
-            'all_topics': topics_result['topics'],
-            'filtered_topics': [t for t in topics_result['topics'] if t['name'] in topics_to_extract],
-            'excluded_topics': [t for t in topics_result['topics'] if t['name'] not in topics_to_extract],
-            'statistics': {
-                'total_topics': len(all_topics),
-                'selected_topics': len(topics_to_extract),
-                'excluded_topics': len(all_topics) - len(topics_to_extract),
-                'total_messages': sum(t['message_count'] for t in topics_result['topics']),
-                'selected_messages': sum(t['message_count'] for t in topics_result['topics'] if t['name'] in topics_to_extract),
-                'selection_percentage': (len(topics_to_extract) / len(all_topics) * 100) if all_topics else 0,
-                'message_percentage': 0  # Will be calculated below
-            }
-        }
-        
-        # Calculate message percentage
-        if extraction_result['statistics']['total_messages'] > 0:
-            extraction_result['statistics']['message_percentage'] = (
-                extraction_result['statistics']['selected_messages'] / 
-                extraction_result['statistics']['total_messages'] * 100
-            )
+        console.print(f"Topics to extract: {', '.join(topics_to_extract)}")
         
         # If dry run, show preview and return
         if dry_run:
-            extraction_result['success'] = True
-            extraction_result['message'] = "Dry run completed - no files were created"
-            
-            # Render to console using default summary format
-            render_options = RenderOptions(
-                format=OutputFormat.SUMMARY,
-                verbose=verbose,
-                show_summary=True,
-                color=True,
-                title=f"Extraction Preview - {input_path.name}"
-            )
-            UIControl.render_result(extraction_result, render_options, console)
-            
-            console.print(f"\n[yellow]Dry run completed - no files were created[/yellow]")
+            console.print(f"\n[yellow]Dry run - would extract {len(topics_to_extract)} topics:[/yellow]")
+            for topic in topics_to_extract:
+                console.print(f"  • {topic}")
+            console.print(f"\n[dim]Output would be saved to: {output_path}[/dim]")
+            console.print(f"[yellow]Dry run completed - no files were created[/yellow]")
             return
         
         # Perform the actual extraction
@@ -208,73 +172,107 @@ def _extract_topics_impl(
             no_cache=no_cache
         )
         
-        # Prepare topics info for fancy progress display
-        topics_for_display = []
-        for topic in extraction_result.get('all_topics', []):
-            if topic['name'] in topics_to_extract:
-                topics_for_display.append({
-                    'name': topic['name'],
-                    'message_count': topic['message_count'],
-                    'message_type': topic.get('message_type', 'Unknown'),
-                    'estimated_size_bytes': topic.get('estimated_size_bytes', 0)
-                })
-        
         # Track extraction timing
         extraction_start_time = time.time()
         
-        # Show TODO-style extraction progress with progress bar
+        # Show realistic extraction progress with actual phases
         with UIControl.todo_extraction_progress(
             input_path.name,
             "Extracting from",
             console
         ) as update_progress:
             
-            # Set initial format information
+            # Phase tracking
+            phase_start_time = extraction_start_time
+            
+            # Phase 1: Initialize extraction
             update_progress(
                 topic="Initializing extraction...",
                 progress=0.0,
                 bag_format=compression.upper() if compression != "none" else "Uncompressed"
             )
             
-            # Create enhanced topic progress callback
-            def enhanced_topic_callback(topic_index: int, topic: str, messages_processed: int = 0,
+            # Create enhanced progress callback that tracks real phases
+            def realistic_progress_callback(topic_index: int, topic: str, messages_processed: int = 0,
                                        total_messages_in_topic: int = 0, phase: str = "processing"):
-                # Calculate overall progress
-                topic_progress = (topic_index / len(topics_to_extract)) * 100
-                if phase == "completed":
-                    topic_progress = ((topic_index + 1) / len(topics_to_extract)) * 100
+                nonlocal phase_start_time
+                current_time = time.time()
+                phase_duration = current_time - phase_start_time
                 
-                # Determine current topic description and phase
+                # Calculate overall progress based on actual extraction phases
                 if phase == "analyzing":
-                    current_topic = f"Analyzing {topic}..."
-                    current_phase = "analyzing"
-                elif phase == "processing":
-                    if total_messages_in_topic > 0 and messages_processed > 0:
-                        current_topic = f"Processing {topic} ({messages_processed:,}/{total_messages_in_topic:,} messages)"
-                    else:
-                        current_topic = f"Processing {topic}..."
-                    current_phase = "processing"
-                elif phase == "completed":
-                    current_topic = f"Completed {topic} ({messages_processed:,} messages)"
-                    current_phase = "processing"
+                    # Phase 1: Reading bag metadata (5%)
+                    progress = 5.0
+                    current_topic = f"Reading bag metadata... ({phase_duration:.1f}s)"
+                elif phase == "filtering":
+                    # Phase 2: Filtering connections (10%)
+                    progress = 10.0
+                    phase_start_time = current_time  # Reset for next phase
+                    current_topic = f"Filtering connections for {len(topics_to_extract)} topics... ({phase_duration:.1f}s)"
+                elif phase == "collecting":
+                    # Phase 3: Collecting messages (10-60%)
+                    base_progress = 10.0
+                    collect_progress = 50.0 * (messages_processed / max(total_messages_in_topic, 1))
+                    progress = base_progress + collect_progress
+                    current_topic = f"Collecting messages ({messages_processed:,} collected)... ({phase_duration:.1f}s)"
+                elif phase == "sorting":
+                    # Phase 4: Sorting chronologically (60-70%)
+                    progress = 70.0
+                    phase_start_time = current_time  # Reset for next phase
+                    current_topic = f"Sorting {messages_processed:,} messages chronologically... ({phase_duration:.1f}s)"
                 elif phase == "writing":
-                    current_topic = f"Writing messages to output file..."
-                    current_phase = "writing"
+                    # Phase 5: Writing to output (70-95%)
+                    base_progress = 70.0
+                    write_progress = 25.0 * (messages_processed / max(total_messages_in_topic, 1))
+                    progress = base_progress + write_progress
+                    current_topic = f"Writing messages to output ({messages_processed:,} written)... ({phase_duration:.1f}s)"
+                elif phase == "finalizing":
+                    # Phase 6: Finalizing (95-100%)
+                    progress = 95.0
+                    phase_start_time = current_time  # Reset for final phase
+                    current_topic = f"Finalizing output file... ({phase_duration:.1f}s)"
+                elif phase == "completed":
+                    # Phase 7: Completed (100%)
+                    progress = 100.0
+                    total_duration = current_time - extraction_start_time
+                    current_topic = f"Extraction completed ({messages_processed:,} messages in {total_duration:.2f}s)"
                 else:
-                    current_topic = f"{phase.title()} {topic}"
-                    current_phase = phase
+                    # Default processing
+                    progress = 50.0 + (topic_index / len(topics_to_extract)) * 40.0
+                    current_topic = f"Processing {topic}... ({phase_duration:.1f}s)"
                 
-                # Update the TODO display
+                # Calculate topics processed based on phase and progress
+                if phase == "analyzing":
+                    topics_processed_count = 0
+                elif phase == "filtering":
+                    topics_processed_count = 0
+                elif phase == "collecting":
+                    # During collection, we're processing topics
+                    topics_processed_count = min(1, len(topics_to_extract))
+                elif phase == "sorting":
+                    # During sorting, we've collected all topics
+                    topics_processed_count = len(topics_to_extract)
+                elif phase == "writing":
+                    # During writing, we're processing all topics
+                    topics_processed_count = len(topics_to_extract)
+                elif phase == "finalizing" or phase == "completed":
+                    # All topics processed
+                    topics_processed_count = len(topics_to_extract)
+                else:
+                    # Default based on progress
+                    topics_processed_count = min(int(progress / 100 * len(topics_to_extract)), len(topics_to_extract))
+                
+                # Update the display with realistic information
                 update_progress(
                     topic=current_topic,
-                    progress=topic_progress,
+                    progress=progress,
                     topics_total=len(topics_to_extract),
-                    topics_processed=topic_index if phase != "completed" else topic_index + 1,
-                    bag_format=compression.upper() if compression != "none" else "Uncompressed",
-                    phase=current_phase
+                    topics_processed=topics_processed_count,
+                    bag_format=compression.upper() if compression != "none" else "Uncompressed"
                 )
             
-            result = await_sync(manager.extract_bag(input_path, options, progress_callback=enhanced_topic_callback))
+            # Execute extraction with realistic progress tracking
+            result = await_sync(manager.extract_bag(input_path, options, progress_callback=realistic_progress_callback))
         
         # Calculate extraction timing
         extraction_end_time = time.time()
@@ -285,34 +283,72 @@ def _extract_topics_impl(
             console.print(f"\n[red]Extraction failed: {result.get('error', 'Unknown error')}[/red]")
             raise typer.Exit(1)
         
-        # Display results using UIControl
-        if result.get('success'):
-            UIControl.show_success(f"Successfully extracted to: {options.output_path}", console)
-        else:
-            UIControl.show_error(f"Extraction failed: {result.get('error', 'Unknown error')}", console)
+        # Show simple success message
+        console.print(f"\n[green]✓[/green] Successfully extracted {len(topics_to_extract)} topics")
+        console.print(f"[dim]Output saved to: {output_path}[/dim]")
+        console.print(f"[dim]Extraction completed in {extraction_time:.2f}s[/dim]")
         
-        # Merge extraction result with BagManager result to include validation
-        if result.get('validation'):
-            extraction_result['validation'] = result['validation']
-        
-        # Add file stats if available
-        if result.get('file_stats'):
-            extraction_result['file_stats'] = result['file_stats']
+        # Show verbose details if requested
+        if verbose:
+            console.print(f"\n[bold]Extraction Details:[/bold]")
+            console.print(f"  Input file: {input_path}")
+            console.print(f"  Output file: {output_path}")
+            console.print(f"  Compression: {compression}")
+            console.print(f"  Extraction time: {extraction_time:.2f}s")
             
-        # Update success status and message
-        extraction_result['success'] = result.get('success', True)
-        extraction_result['message'] = result.get('message', '')
+            if output_path.exists():
+                output_size = output_path.stat().st_size
+                console.print(f"  Output size: {output_size / 1024 / 1024:.1f} MB")
+            
+            # Show topic selection details
+            console.print(f"\n[bold]Topic Selection:[/bold]")
+            console.print(f"  Total topics in bag: {len(all_topics)}")
+            console.print(f"  Topics extracted: {len(topics_to_extract)}")
+            
+            if reverse:
+                excluded_topics = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
+                kept_topics = topics_to_extract
+                console.print(f"  Topics excluded: {len(excluded_topics)}")
+                
+                console.print(f"\n[bold]Excluded Topics (matching patterns):[/bold]")
+                for topic in excluded_topics:
+                    console.print(f"    [red]✗[/red] {topic}")
+                
+                console.print(f"\n[bold]Kept Topics (remaining):[/bold]")
+                for topic in kept_topics:
+                    console.print(f"    [green]✓[/green] {topic}")
+            else:
+                kept_topics = topics_to_extract
+                excluded_topics = [t for t in all_topics if t not in topics_to_extract]
+                
+                console.print(f"\n[bold]Kept Topics (matching patterns):[/bold]")
+                for topic in kept_topics:
+                    console.print(f"    [green]✓[/green] {topic}")
+                
+                if excluded_topics:
+                    console.print(f"\n[bold]Excluded Topics (not matching):[/bold]")
+                    for topic in excluded_topics:
+                        console.print(f"    [dim]○[/dim] {topic}")
         
-        # Display extraction summary
-        display_config = DisplayConfig(
-            show_summary=True,
-            show_details=True,
-            show_cache_stats=True,
-            show_performance=True,
-            verbose=verbose,
-            full_width=True
-        )
-        UIControl.display_extraction_result(extraction_result, display_config, console)
+            # Show pattern matching summary
+            console.print(f"\n[bold]Pattern Matching:[/bold]")
+            console.print(f"  Requested patterns: {', '.join(topics)}")
+            console.print(f"  Matching mode: {'Exclude matching' if reverse else 'Include matching'}")
+            
+            # Show which patterns matched which topics
+            for pattern in topics:
+                # Use more precise matching logic similar to _filter_topics
+                exact_matches = [t for t in all_topics if t == pattern]
+                if exact_matches:
+                    matched_topics = exact_matches
+                else:
+                    # Fall back to fuzzy matching
+                    matched_topics = [t for t in all_topics if pattern.lower() in t.lower()]
+                
+                if matched_topics:
+                    console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_topics)}")
+                else:
+                    console.print(f"  Pattern '{pattern}' matched: [dim]none[/dim]")
         
         manager.cleanup()
         

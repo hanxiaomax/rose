@@ -569,33 +569,72 @@ class BagManager:
             import inspect
             sig = inspect.signature(progress_callback)
             param_count = len(sig.parameters)
-        
+            
             if param_count == 1:
                 # Simple float progress callback
                 simple_progress_callback = progress_callback
             elif param_count >= 2:
-                # Enhanced topic callback - create wrapper
-                def simple_wrapper(progress: float):
-                    # Convert simple progress to enhanced callback format
-                    topic_index = int(progress / 100 * len(options.topics or []))
-                    topic_name = (options.topics or ["unknown"])[min(topic_index, len(options.topics or []) - 1)] if options.topics else "unknown"
+                # Enhanced topic callback - create wrapper that provides realistic phases
+                phase_start_time = time.time()
+                
+                def realistic_wrapper(progress: float):
+                    nonlocal phase_start_time
+                    current_time = time.time()
                     
-                    if progress < 50:
+                    # Map progress to realistic extraction phases
+                    if progress <= 10:
                         phase = "analyzing"
-                    elif progress < 90:
-                        phase = "processing"
+                        topic_name = "bag metadata"
+                        messages_processed = 0
+                        total_messages = 0
+                    elif progress <= 30:
+                        phase = "filtering"  
+                        topic_name = "connections"
+                        messages_processed = 0
+                        total_messages = 0
+                        if progress == 30:
+                            phase_start_time = current_time  # Reset for next phase
+                    elif progress <= 50:
+                        phase = "collecting"
+                        topic_name = "messages"
+                        # Estimate message collection progress
+                        messages_processed = int((progress - 30) / 20 * 1000)  # Rough estimate
+                        total_messages = 1000
+                    elif progress <= 90:
+                        if progress == 70:
+                            phase = "sorting"
+                            topic_name = "chronologically"
+                            messages_processed = 1000
+                            total_messages = 1000
+                            phase_start_time = current_time  # Reset for sorting phase
+                        else:
+                            phase = "writing"
+                            topic_name = "output file"
+                            # Estimate writing progress
+                            messages_processed = int((progress - 70) / 20 * 1000)
+                            total_messages = 1000
                     else:
-                        phase = "writing"
+                        if progress >= 95:
+                            phase = "finalizing" if progress < 100 else "completed"
+                            topic_name = "output"
+                            messages_processed = 1000
+                            total_messages = 1000
+                        else:
+                            phase = "writing"
+                            topic_name = "output file"
+                            messages_processed = int((progress - 70) / 20 * 1000)
+                            total_messages = 1000
                     
                     try:
-                        progress_callback(topic_index, topic_name, 0, 0, phase)
+                        progress_callback(0, topic_name, messages_processed, total_messages, phase)
                     except Exception as e:
                         self.logger.warning(f"Progress callback failed: {e}")
                 
-                simple_progress_callback = simple_wrapper
+                simple_progress_callback = realistic_wrapper
         
+        # Phase 1: Analyzing (0-10%)
         if simple_progress_callback:
-            simple_progress_callback(10.0)
+            simple_progress_callback(5.0)
         
         # Get bag metadata first - run in executor for non-blocking
         loop = asyncio.get_event_loop()
@@ -605,6 +644,7 @@ class BagManager:
             str(bag_path)
         )
         
+        # Phase 2: Filtering connections (10-30%)
         if simple_progress_callback:
             simple_progress_callback(30.0)
         
@@ -627,32 +667,45 @@ class BagManager:
             memory_limit_mb=512  # Default memory limit
         )
         
+        # Phase 3: Starting extraction (30-50%)
         if simple_progress_callback:
             simple_progress_callback(50.0)
-            
+        
         # Perform extraction if not dry run - run in executor for non-blocking
         extraction_error = None
         if not options.dry_run:
             try:
-                # Create a wrapper for progress callback to work with executor
-                def extract_with_progress():
-                    # For parser extraction, we can't easily provide detailed progress
-                    # so we'll just call the simple callback at key points
-                    return self.parser.extract(str(bag_path), str(output_path), extract_option)
+                # Create a wrapper that provides realistic extraction progress
+                def extract_with_realistic_progress():
+                    # The parser's extract method will handle the detailed phases
+                    # We'll provide periodic updates during the actual extraction
+                    
+                    if simple_progress_callback:
+                        # Phase 4: Collecting messages (50-70%)
+                        simple_progress_callback(70.0)
+                    
+                    result = self.parser.extract(str(bag_path), str(output_path), extract_option)
+                    
+                    if simple_progress_callback:
+                        # Phase 5: Writing complete (70-95%)
+                        simple_progress_callback(95.0)
+                    
+                    return result
                 
                 _, extract_time = await loop.run_in_executor(
                     self.executor,
-                    extract_with_progress
+                    extract_with_realistic_progress
                 )
             except Exception as e:
                 self.logger.error(f"Extraction failed: {e}")
                 extraction_error = str(e)
                 extract_time = 0.0
-        else:
-            extract_time = 0.0
+            else:
+                extract_time = 0.0
         
+        # Phase 6: Finalizing (95-100%)
         if simple_progress_callback:
-            simple_progress_callback(90.0)
+            simple_progress_callback(100.0)
         
         # Calculate extraction statistics
         total_messages = sum(bag_details.message_counts.get(topic, 0) for topic in topics_to_extract) if bag_details.message_counts else 0

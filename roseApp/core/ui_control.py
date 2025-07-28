@@ -1014,7 +1014,7 @@ class UIControl:
     @contextmanager
     def todo_extraction_progress(cls, bag_name: str, operation: str = "Extracting", console: Optional[Console] = None):
         """
-        Create a TODO-style extraction progress display with progress bar at bottom
+        Create a TODO-style extraction progress display with timing and progress in each item
         
         Args:
             bag_name: Name of the bag file being processed
@@ -1030,35 +1030,24 @@ class UIControl:
         from rich.live import Live
         from rich.text import Text
         from rich.panel import Panel
-        from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
         from rich.align import Align
+        import time
         
-        # Define extraction tasks in TODO list style
+        # Define extraction tasks with timing tracking
         tasks = [
-            "Analyzing bag structure",
-            "Discovering topics",
-            "Filtering topic selection",
-            "Preparing extraction",
-            "Processing messages",
-            "Writing output file",
-            "Finalizing extraction"
+            {"name": "Reading bag metadata", "key": "analyzing"},
+            {"name": "Filtering connections", "key": "filtering"},
+            {"name": "Collecting messages", "key": "collecting"},
+            {"name": "Sorting chronologically", "key": "sorting"},
+            {"name": "Writing to output", "key": "writing"},
+            {"name": "Finalizing extraction", "key": "finalizing"}
         ]
         
-        # Task status tracking
+        # Task status and timing tracking
         task_status = {i: "pending" for i in range(len(tasks))}
+        task_timings = {i: {"start": None, "duration": None, "progress": None, "details": ""} for i in range(len(tasks))}
         current_task = 0
-        
-        # Progress bar setup
-        progress_bar = Progress(
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(bar_width=40),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            console=console,
-            transient=False
-        )
-        progress_task = progress_bar.add_task("Processing...", total=100)
+        overall_start_time = time.time()
         
         # Current status tracking
         current_status = {
@@ -1066,11 +1055,14 @@ class UIControl:
             'progress': 0.0,
             'topics_processed': 0,
             'topics_total': 0,
-            'bag_format': 'ROS Bag'
+            'bag_format': 'ROS Bag',
+            'phase': None,
+            'messages_processed': 0,
+            'total_messages': 0
         }
         
         def create_todo_display():
-            """Create TODO list with progress bar at bottom"""
+            """Create TODO list with timing and progress in each item"""
             todo_text = Text()
             
             # Main header
@@ -1084,120 +1076,268 @@ class UIControl:
                 else:
                     todo_text.append("     ", style="dim")  # Regular indentation
                 
-                # Status icon and task
+                # Status icon and task name
                 if task_status[i] == "completed":
                     todo_text.append("✓ ", style="green bold")
-                    todo_text.append(f"{task}\n", style="green")
+                    todo_text.append(f"{task['name']}", style="green")
+                    
+                    # Show completion time
+                    if task_timings[i]["duration"] is not None:
+                        todo_text.append(f" ({task_timings[i]['duration']:.1f}s)", style="green dim")
+                    
+                    # Show completion details if available
+                    if task_timings[i]["details"]:
+                        todo_text.append(f" - {task_timings[i]['details']}", style="green dim")
+                    
+                    todo_text.append("\n")
+                    
                 elif task_status[i] == "in_progress":
                     todo_text.append("⠋ ", style="yellow bold")
-                    todo_text.append(f"{task}\n", style="yellow bold")
+                    todo_text.append(f"{task['name']}", style="yellow bold")
+                    
+                    # Show current progress and timing
+                    current_time = time.time()
+                    if task_timings[i]["start"] is not None:
+                        elapsed = current_time - task_timings[i]["start"]
+                        todo_text.append(f" ({elapsed:.1f}s)", style="yellow dim")
+                    
+                    # Show progress details if available
+                    if task_timings[i]["progress"] is not None:
+                        todo_text.append(f" - {task_timings[i]['progress']:.0f}%", style="yellow")
+                    
+                    # Show task-specific details
+                    if task_timings[i]["details"]:
+                        todo_text.append(f" - {task_timings[i]['details']}", style="yellow dim")
+                    
+                    todo_text.append("\n")
+                    
                 else:  # pending
                     todo_text.append("○ ", style="dim")
-                    todo_text.append(f"{task}\n", style="dim")
+                    todo_text.append(f"{task['name']}\n", style="dim")
             
-            # Add current status info
-            todo_text.append("\n", style="dim")
-            todo_text.append(f"Current: {current_status['topic']}\n", style="cyan")
+            # Add overall timing info
+            total_elapsed = time.time() - overall_start_time
+            todo_text.append(f"\nTotal elapsed: {total_elapsed:.1f}s", style="cyan dim")
             
+            # Add current status if extraction is in progress
             if current_status['topics_total'] > 0:
-                todo_text.append(f"Topics: {current_status['topics_processed']}/{current_status['topics_total']} ", style="blue")
-                todo_text.append(f"({current_status['bag_format']})\n", style="dim")
+                todo_text.append(f" • Topics: {current_status['topics_processed']}/{current_status['topics_total']}", style="blue dim")
             
-            # Combine TODO list and progress bar
-            from rich.console import Group
-            combined_content = Group(
-                Align.left(todo_text),
-                "",  # Spacing
-                progress_bar
-            )
+            if current_status['bag_format'] != 'ROS Bag':
+                todo_text.append(f" • Format: {current_status['bag_format']}", style="blue dim")
+            
+            # Add progress bar
+            todo_text.append("\n\n")
+            
+            # Create progress bar
+            progress_percent = current_status['progress']
+            if progress_percent > 0:
+                bar_width = 50
+                filled = int((progress_percent / 100) * bar_width)
+                bar = "█" * filled + "░" * (bar_width - filled)
+                
+                # Progress bar with percentage
+                todo_text.append(f"{bar}", style="blue dim")
+                todo_text.append(f" {progress_percent:.1f}%", style="cyan bold")
+                
+                # Add current phase info if available
+                if current_status.get('phase'):
+                    phase_display = current_status['phase'].title()
+                    todo_text.append(f" • {phase_display}", style="yellow dim")
             
             return Panel(
-                combined_content,
+                Align.left(todo_text),
                 title=f"[bold cyan]Extraction Progress[/bold cyan]",
                 border_style="cyan",
                 padding=(1, 2)
             )
         
-        with Live(create_todo_display(), refresh_per_second=10, console=console) as live:
+        with Live(create_todo_display(), refresh_per_second=4, console=console) as live:
             
             def update_progress(topic: str = None, progress: float = None,
                               topics_total: int = None, topics_processed: int = None,
-                              bag_format: str = None, phase: str = None):
-                """Update progress callback"""
+                              bag_format: str = None, phase: str = None,
+                              messages_processed: int = None, total_messages: int = None):
+                """Update progress callback with enhanced timing tracking"""
                 nonlocal current_task
+                current_time = time.time()
                 
                 # Update current status
                 if topic is not None:
                     current_status['topic'] = topic
                 if progress is not None:
                     current_status['progress'] = progress
-                    # Update progress bar
-                    progress_bar.update(progress_task, completed=progress)
                 if topics_total is not None:
                     current_status['topics_total'] = topics_total
                 if topics_processed is not None:
                     current_status['topics_processed'] = topics_processed
                 if bag_format is not None:
                     current_status['bag_format'] = bag_format
+                if phase is not None:
+                    current_status['phase'] = phase
+                if messages_processed is not None:
+                    current_status['messages_processed'] = messages_processed
+                if total_messages is not None:
+                    current_status['total_messages'] = total_messages
                 
-                # Determine current task based on progress or phase
+                # Determine current task based on phase
+                new_task = current_task
                 if phase:
-                    if phase == "analyzing":
-                        new_task = 0
-                    elif phase == "filtering":
-                        new_task = 2
-                    elif phase == "preparing":
-                        new_task = 3
-                    elif phase == "processing":
-                        new_task = 4
-                    elif phase == "writing":
-                        new_task = 5
-                    elif phase == "finalizing":
-                        new_task = 6
-                    else:
-                        new_task = current_task
+                    phase_to_task = {
+                        "analyzing": 0,
+                        "filtering": 1,
+                        "collecting": 2,
+                        "sorting": 3,
+                        "writing": 4,
+                        "finalizing": 5,
+                        "completed": 5
+                    }
+                    new_task = phase_to_task.get(phase, current_task)
                 elif progress is not None:
                     # Map progress to tasks
                     if progress < 10:
-                        new_task = 0  # Analyzing
-                    elif progress < 20:
-                        new_task = 1  # Discovering
+                        new_task = 0  # Reading metadata
                     elif progress < 30:
-                        new_task = 2  # Filtering
-                    elif progress < 40:
-                        new_task = 3  # Preparing
+                        new_task = 1  # Filtering
+                    elif progress < 70:
+                        new_task = 2  # Collecting
                     elif progress < 80:
-                        new_task = 4  # Processing
+                        new_task = 3  # Sorting
                     elif progress < 95:
-                        new_task = 5  # Writing
+                        new_task = 4  # Writing
                     else:
-                        new_task = 6  # Finalizing
-                else:
-                    new_task = current_task
+                        new_task = 5  # Finalizing
                 
-                # Mark previous tasks as completed
-                for i in range(new_task):
-                    if task_status[i] != "completed":
+                # Handle task transitions
+                if new_task != current_task:
+                    # Complete all tasks up to the current one
+                    for i in range(new_task):
+                        if task_status[i] != "completed":
+                            task_status[i] = "completed"
+                            # Calculate duration if we have start time
+                            if task_timings[i]["start"] is not None and task_timings[i]["duration"] is None:
+                                task_timings[i]["duration"] = current_time - task_timings[i]["start"]
+                            elif task_timings[i]["start"] is None:
+                                # If task was never started, give it a minimal duration
+                                task_timings[i]["duration"] = 0.1
+                    
+                    # Start new task if it's valid and not already completed
+                    if new_task < len(tasks):
+                        # Only start if not already completed
+                        if task_status[new_task] != "completed":
+                            task_status[new_task] = "in_progress"
+                            if task_timings[new_task]["start"] is None:
+                                task_timings[new_task]["start"] = current_time
+                        current_task = new_task
+                
+                # Ensure only one task is in progress at a time
+                for i in range(len(tasks)):
+                    if i != current_task and task_status[i] == "in_progress":
+                        # Complete any other in-progress tasks
                         task_status[i] = "completed"
+                        if task_timings[i]["start"] is not None and task_timings[i]["duration"] is None:
+                            task_timings[i]["duration"] = current_time - task_timings[i]["start"]
                 
-                # Mark current task as in progress
-                if new_task < len(tasks) and task_status[new_task] != "completed":
-                    task_status[new_task] = "in_progress"
-                    current_task = new_task
+                # Update current task details
+                if current_task < len(tasks):
+                    # Ensure current task is marked as in progress (unless completed)
+                    if task_status[current_task] == "pending":
+                        task_status[current_task] = "in_progress"
+                        if task_timings[current_task]["start"] is None:
+                            task_timings[current_task]["start"] = current_time
+                    
+                    # Update progress for current task only if it's in progress
+                    if task_status[current_task] == "in_progress":
+                        # Update progress for current task
+                        if progress is not None:
+                            # Map overall progress to task-specific progress
+                            task_progress_ranges = [
+                                (0, 10),    # Reading metadata
+                                (10, 30),   # Filtering
+                                (30, 70),   # Collecting
+                                (70, 80),   # Sorting
+                                (80, 95),   # Writing
+                                (95, 100)   # Finalizing
+                            ]
+                            
+                            if current_task < len(task_progress_ranges):
+                                start_prog, end_prog = task_progress_ranges[current_task]
+                                if progress >= start_prog:
+                                    task_prog = min(100, ((progress - start_prog) / (end_prog - start_prog)) * 100)
+                                    task_timings[current_task]["progress"] = task_prog
+                        
+                        # Update task-specific details
+                        if phase == "collecting" and messages_processed is not None:
+                            task_timings[current_task]["details"] = f"{messages_processed:,} messages"
+                        elif phase == "sorting" and messages_processed is not None:
+                            task_timings[current_task]["details"] = f"{messages_processed:,} messages"
+                        elif phase == "writing" and messages_processed is not None:
+                            task_timings[current_task]["details"] = f"{messages_processed:,} written"
+                        elif phase == "filtering" and topics_processed is not None:
+                            task_timings[current_task]["details"] = f"{topics_processed} topics"
+                
+                # Handle completion
+                if phase == "completed":
+                    # Mark all tasks as completed
+                    for i in range(len(tasks)):
+                        if task_status[i] != "completed":
+                            task_status[i] = "completed"
+                            if task_timings[i]["start"] is not None and task_timings[i]["duration"] is None:
+                                task_timings[i]["duration"] = current_time - task_timings[i]["start"]
+                            elif task_timings[i]["duration"] is None:
+                                # Give minimal duration if never started
+                                task_timings[i]["duration"] = 0.1
+                    
+                    # Set final completion details
+                    if messages_processed is not None:
+                        task_timings[-1]["details"] = f"{messages_processed:,} messages total"
+                
+                # Also handle completion when progress reaches 100%
+                elif progress is not None and progress >= 100:
+                    # Mark all tasks as completed when 100% reached
+                    for i in range(len(tasks)):
+                        if task_status[i] != "completed":
+                            task_status[i] = "completed"
+                            if task_timings[i]["start"] is not None and task_timings[i]["duration"] is None:
+                                task_timings[i]["duration"] = current_time - task_timings[i]["start"]
+                            elif task_timings[i]["duration"] is None:
+                                # Give minimal duration if never started
+                                task_timings[i]["duration"] = 0.1
+                    
+                    # Set final completion details for the last task
+                    if current_task == len(tasks) - 1 and messages_processed is not None:
+                        task_timings[-1]["details"] = f"{messages_processed:,} messages total"
+                
+                # Handle finalizing phase specifically
+                elif phase == "finalizing":
+                    # Mark all previous tasks as completed
+                    for i in range(len(tasks) - 1):  # All except the last one
+                        if task_status[i] != "completed":
+                            task_status[i] = "completed"
+                            if task_timings[i]["start"] is not None and task_timings[i]["duration"] is None:
+                                task_timings[i]["duration"] = current_time - task_timings[i]["start"]
+                            elif task_timings[i]["duration"] is None:
+                                task_timings[i]["duration"] = 0.1
+                    
+                    # Start the finalizing task if not already started
+                    final_task_idx = len(tasks) - 1
+                    if task_status[final_task_idx] == "pending":
+                        task_status[final_task_idx] = "in_progress"
+                        if task_timings[final_task_idx]["start"] is None:
+                            task_timings[final_task_idx]["start"] = current_time
+                    
+                    # Complete finalizing task if progress indicates completion
+                    if progress is not None and progress >= 95:
+                        task_status[final_task_idx] = "completed"
+                        if task_timings[final_task_idx]["start"] is not None and task_timings[final_task_idx]["duration"] is None:
+                            task_timings[final_task_idx]["duration"] = current_time - task_timings[final_task_idx]["start"]
+                        if messages_processed is not None:
+                            task_timings[final_task_idx]["details"] = f"{messages_processed:,} messages total"
                 
                 # Update display
                 live.update(create_todo_display())
             
-            try:
-                yield update_progress
-            finally:
-                # Mark all tasks as completed
-                for i in range(len(tasks)):
-                    task_status[i] = "completed"
-                progress_bar.update(progress_task, completed=100)
-                live.update(create_todo_display())
-        
-        console.print()  # Add spacing after TODO list
+            yield update_progress
     
     # ========================================================================
     # Result Display Methods
@@ -1702,14 +1842,12 @@ class UIControl:
         table.add_column("Status", style="bold", width=8, justify="center")
         table.add_column("Topic", style="cyan")
         table.add_column("Count", style="yellow", justify="right", width=10)
-        table.add_column("Size Est.", style="green", justify="right", width=12)
         
         topics_to_extract = result.get('topics_to_extract', [])
         
         for topic in result.get('all_topics', []):
             topic_name = topic['name']
             message_count = topic['message_count']
-            size_estimate = topic.get('estimated_size_bytes', 0)
             
             should_keep = topic_name in topics_to_extract
             
@@ -1721,19 +1859,10 @@ class UIControl:
                 status_style = "red dim"
                 topic_name = f"[dim]{topic_name}[/dim]"
             
-            # Format size
-            if size_estimate > 1024 * 1024:
-                size_str = f"{size_estimate / 1024 / 1024:.1f}MB"
-            elif size_estimate > 1024:
-                size_str = f"{size_estimate / 1024:.1f}KB"
-            else:
-                size_str = f"{size_estimate}B"
-            
             table.add_row(
                 f"[{status_style}]{status}[/{status_style}]",
                 topic_name,
                 f"{message_count:,}",
-                size_str
             )
         
         # Create legend
