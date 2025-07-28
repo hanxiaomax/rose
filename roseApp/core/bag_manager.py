@@ -640,7 +640,7 @@ class BagManager:
         loop = asyncio.get_event_loop()
         bag_details, _ = await loop.run_in_executor(
             self.executor,
-            self.parser.get_bag_details,
+            self.parser.analyze_bag_quick,
             str(bag_path)
         )
         

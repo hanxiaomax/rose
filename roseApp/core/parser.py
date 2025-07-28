@@ -244,6 +244,12 @@ class BagParser:
         assert self._current_bag_info is not None
         return self._current_bag_info.get_meta(), elapsed
     
+    def get_topics(self, bag_path: str) -> List[str]:
+        """
+        Get topics from the bag file
+        """
+        return self.analyze_bag_quick(bag_path)[0].topics
+    
     def get_bag_details(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """
         Get complete bag information
@@ -266,6 +272,8 @@ class BagParser:
         # At this point _current_bag_info is guaranteed to be not None
         assert self._current_bag_info is not None
         return self._current_bag_info, elapsed
+    
+
     
     def analyze_bag_quick(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """
