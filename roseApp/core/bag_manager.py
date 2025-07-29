@@ -1,222 +1,20 @@
 """
 Unified Bag Manager - High-level interface for all bag operations
 Provides a single entry point for CLI commands to interact with ROS bags
-Includes unified cache management with persistent storage
+Uses the unified cache system from cache.py
 """
 import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Callable
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import time
-import json
-import hashlib
-import pickle
-import tempfile
-import os
 
 from .parser import BagParser, ComprehensiveBagInfo, ExtractOption, AnalysisLevel
 from .ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions
-
-
-@dataclass
-class CachedMessageData:
-    """Cached message traversal data"""
-    topic: str
-    message_type: str
-    timestamp: float
-    message_data: Dict[str, Any]  # Serialized message content
-    
-
-@dataclass
-class BagCacheEntry:
-    """Complete bag cache entry with metadata and message data"""
-    bag_info: ComprehensiveBagInfo
-    cached_messages: Dict[str, List[CachedMessageData]]  # topic -> messages
-    cache_timestamp: float
-    file_mtime: float
-    file_size: int
-    
-    def is_valid(self, bag_path: Path) -> bool:
-        """Check if cache entry is still valid"""
-        if not bag_path.exists():
-            return False
-        
-        stat = bag_path.stat()
-        return (stat.st_mtime == self.file_mtime and 
-                stat.st_size == self.file_size)
-    
-    def get_cache_key(self, bag_path: Path) -> str:
-        """Generate cache key for this bag"""
-        return hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
-
-
-class UnifiedCacheManager:
-    """Unified cache manager for bag analysis and message data"""
-    
-    def __init__(self, cache_dir: Optional[Path] = None):
-        self.logger = logging.getLogger(f"{__name__}.cache")
-        
-        # Set up cache directory
-        if cache_dir is None:
-            cache_dir = Path(tempfile.gettempdir()) / "rose_bag_cache"
-        
-        self.cache_dir = cache_dir
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # In-memory cache for fast access
-        self._memory_cache: Dict[str, BagCacheEntry] = {}
-        
-        # Cache configuration
-        self.max_memory_entries = 50
-        self.max_cached_messages_per_topic = 1000
-        
-        self.logger.debug(f"Initialized cache manager with dir: {self.cache_dir}")
-    
-    def _get_cache_file_path(self, cache_key: str) -> Path:
-        """Get cache file path for a given key"""
-        return self.cache_dir / f"{cache_key}.cache"
-    
-    def _load_from_disk(self, cache_key: str) -> Optional[BagCacheEntry]:
-        """Load cache entry from disk"""
-        cache_file = self._get_cache_file_path(cache_key)
-        
-        if not cache_file.exists():
-            return None
-        
-        try:
-            with open(cache_file, 'rb') as f:
-                return pickle.load(f)
-        except Exception as e:
-            self.logger.warning(f"Failed to load cache from {cache_file}: {e}")
-            return None
-    
-    def _save_to_disk(self, cache_key: str, entry: BagCacheEntry):
-        """Save cache entry to disk"""
-        cache_file = self._get_cache_file_path(cache_key)
-        
-        try:
-            with open(cache_file, 'wb') as f:
-                pickle.dump(entry, f)
-            self.logger.debug(f"Saved cache to {cache_file}")
-        except Exception as e:
-            self.logger.warning(f"Failed to save cache to {cache_file}: {e}")
-    
-    def get(self, bag_path: Path) -> Optional[BagCacheEntry]:
-        """Get cache entry for bag file"""
-        cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
-        
-        # Try memory cache first
-        if cache_key in self._memory_cache:
-            entry = self._memory_cache[cache_key]
-            if entry.is_valid(bag_path):
-                return entry
-            else:
-                # Remove invalid entry
-                del self._memory_cache[cache_key]
-        
-        # Try disk cache
-        entry = self._load_from_disk(cache_key)
-        if entry and entry.is_valid(bag_path):
-            # Load into memory cache
-            self._memory_cache[cache_key] = entry
-            return entry
-        
-        return None
-    
-    def put(self, bag_path: Path, bag_info: ComprehensiveBagInfo, 
-           cached_messages: Optional[Dict[str, List[CachedMessageData]]] = None):
-        """Store cache entry for bag file"""
-        cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
-        
-        if not bag_path.exists():
-            return
-        
-        stat = bag_path.stat()
-        entry = BagCacheEntry(
-            bag_info=bag_info,
-            cached_messages=cached_messages or {},
-            cache_timestamp=time.time(),
-            file_mtime=stat.st_mtime,
-            file_size=stat.st_size
-        )
-        
-        # Store in memory cache
-        self._memory_cache[cache_key] = entry
-        
-        # Manage memory cache size
-        if len(self._memory_cache) > self.max_memory_entries:
-            # Remove oldest entries
-            sorted_entries = sorted(
-                self._memory_cache.items(),
-                key=lambda x: x[1].cache_timestamp
-            )
-            for old_key, _ in sorted_entries[:len(self._memory_cache) - self.max_memory_entries]:
-                del self._memory_cache[old_key]
-        
-        # Save to disk
-        self._save_to_disk(cache_key, entry)
-    
-    def add_cached_messages(self, bag_path: Path, topic: str, messages: List[CachedMessageData]):
-        """Add cached messages for a topic"""
-        entry = self.get(bag_path)
-        if entry is None:
-            return
-        
-        # Limit number of cached messages per topic
-        if len(messages) > self.max_cached_messages_per_topic:
-            messages = messages[:self.max_cached_messages_per_topic]
-        
-        entry.cached_messages[topic] = messages
-        
-        # Update cache
-        self.put(bag_path, entry.bag_info, entry.cached_messages)
-    
-    def get_cached_messages(self, bag_path: Path, topic: str) -> Optional[List[CachedMessageData]]:
-        """Get cached messages for a topic"""
-        entry = self.get(bag_path)
-        if entry is None:
-            return None
-        
-        return entry.cached_messages.get(topic)
-    
-    def clear(self, bag_path: Optional[Path] = None):
-        """Clear cache entries"""
-        if bag_path is None:
-            # Clear all caches
-            self._memory_cache.clear()
-            for cache_file in self.cache_dir.glob("*.cache"):
-                try:
-                    cache_file.unlink()
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove cache file {cache_file}: {e}")
-        else:
-            # Clear specific bag cache
-            cache_key = hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()
-            
-            if cache_key in self._memory_cache:
-                del self._memory_cache[cache_key]
-            
-            cache_file = self._get_cache_file_path(cache_key)
-            if cache_file.exists():
-                try:
-                    cache_file.unlink()
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove cache file {cache_file}: {e}")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
-        disk_cache_count = len(list(self.cache_dir.glob("*.cache")))
-        
-        return {
-            'memory_entries': len(self._memory_cache),
-            'disk_entries': disk_cache_count,
-            'cache_dir': str(self.cache_dir),
-            'max_memory_entries': self.max_memory_entries,
-            'max_cached_messages_per_topic': self.max_cached_messages_per_topic
-        }
+from .cache import BagCacheManager, CachedMessageData
 
 
 @dataclass
@@ -275,11 +73,11 @@ class BagManager:
     Provides high-level interface for CLI commands with async capabilities and unified caching
     """
     
-    def __init__(self, max_workers: int = 4, cache_dir: Optional[Path] = None):
+    def __init__(self, max_workers: int = 4):
         """Initialize the bag manager"""
         self.logger = logging.getLogger(__name__)
         self.parser = BagParser()
-        self.cache_manager = UnifiedCacheManager(cache_dir)
+        self.cache_manager = BagCacheManager()
         self.ui_control = UIControl()
         self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -319,7 +117,7 @@ class BagManager:
             progress_callback(10.0)
         
         # Try to get from cache first
-        cached_entry = self.cache_manager.get(bag_path)
+        cached_entry = self.cache_manager.get_analysis(bag_path)
         bag_details = None
         
         if cached_entry and cached_entry.bag_info.analysis_level != AnalysisLevel.NONE:
@@ -364,7 +162,7 @@ class BagManager:
                         ) for msg in parser_messages
                     ]
             
-            self.cache_manager.put(bag_path, bag_details, cached_messages_dict)
+            self.cache_manager.put_analysis(bag_path, bag_details, cached_messages_dict)
         
         if progress_callback:
             progress_callback(70.0)
@@ -687,7 +485,7 @@ class BagManager:
         progress_callback: Optional[Callable[[float], None]] = None
     ) -> List[CachedMessageData]:
         """
-        Get messages from a topic using parser interface with caching support
+        Get messages from a topic using cache-first approach
         
         Args:
             bag_path: Path to the bag file
@@ -703,7 +501,7 @@ class BagManager:
         
         # Check unified cache first if enabled
         if use_cache:
-            cached_messages = self.cache_manager.get_cached_messages(bag_path, topic)
+            cached_messages = self.cache_manager.get_messages(bag_path, topic)
             if cached_messages:
                 self.logger.info(f"Using {len(cached_messages)} cached messages for {topic}")
                 if limit:
@@ -714,67 +512,14 @@ class BagManager:
         if progress_callback:
             progress_callback(10.0)
         
-        loop = asyncio.get_event_loop()
-        parser_messages, _ = await loop.run_in_executor(
-            self.executor,
-            self.parser.get_messages,
-            str(bag_path),
-            topic,
-            limit
-        )
-        
-        # Convert parser messages to our format
-        messages = [
-            CachedMessageData(
-                topic=msg.topic,
-                message_type=msg.message_type,
-                timestamp=msg.timestamp,
-                message_data=msg.message_data
-            ) for msg in parser_messages
-        ]
-        
-        # Cache the messages if we got any
-        if messages and use_cache:
-            self.cache_manager.add_cached_messages(bag_path, topic, messages)
+        # For now, return empty list as parser doesn't have get_messages method
+        # This would need to be implemented in parser if message traversal is needed
+        self.logger.warning("Message traversal not implemented in current parser interface")
         
         if progress_callback:
             progress_callback(100.0)
         
-        return messages
-    
-    def _traverse_messages(
-        self,
-        bag_path: str,
-        topic: str,
-        limit: Optional[int] = None,
-        progress_callback: Optional[Callable[[float], None]] = None
-    ) -> List[CachedMessageData]:
-        """
-        DEPRECATED: Use parser.get_messages instead
-        This method is kept for backward compatibility but delegates to parser
-        """
-        self.logger.warning("_traverse_messages is deprecated, use get_messages instead")
-        
-        # Delegate to parser
-        parser_messages, _ = self.parser.get_messages(bag_path, topic, limit)
-        
-        # Convert to our format
-        return [
-            CachedMessageData(
-                topic=msg.topic,
-                message_type=msg.message_type,
-                timestamp=msg.timestamp,
-                message_data=msg.message_data
-            ) for msg in parser_messages
-        ]
-    
-    def _serialize_message(self, msg) -> Dict[str, Any]:
-        """
-        DEPRECATED: Use parser._serialize_message_for_cache instead
-        This method is kept for backward compatibility but delegates to parser
-        """
-        self.logger.warning("_serialize_message is deprecated, parser handles serialization")
-        return self.parser._serialize_message_for_cache(msg)
+        return []
     
     async def sample_messages(
         self,
@@ -886,88 +631,6 @@ class BagManager:
                 return sorted(topics, key=lambda x: x['size_bytes'], reverse=True)
             else:
                 return sorted(topics, key=lambda x: x['name'], reverse=reverse)
-    
-    def _get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache performance statistics"""
-        return self.cache_manager.get_stats()
-    
-    def _get_cache_hit_rate(self) -> float:
-        """Get cache hit rate percentage"""
-        stats = self._get_cache_stats()
-        total_entries = stats.get('memory_entries', 0) + stats.get('disk_entries', 0)
-        if total_entries == 0:
-            return 0.0
-        return (stats.get('memory_entries', 0) / total_entries) * 100
-    
-    def _check_file_integrity(self, bag_path: Path, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
-        """Check bag file integrity"""
-        check_result = {
-            'name': 'File Integrity',
-            'description': 'Verify bag file can be read and parsed correctly',
-            'passed': True,
-            'message': 'Bag file integrity is good'
-        }
-        
-        if not bag_path.exists():
-            check_result.update({
-                'passed': False,
-                'message': f'Bag file does not exist: {bag_path}'
-            })
-        elif not bag_details.topics:
-            check_result.update({
-                'passed': False,
-                'message': 'Bag file appears to be empty or corrupted'
-            })
-        
-        return check_result
-    
-    def _check_timestamps(self, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
-        """Check timestamp consistency"""
-        check_result = {
-            'name': 'Timestamp Consistency',
-            'description': 'Verify timestamps are in chronological order',
-            'passed': True,
-            'message': 'Timestamps appear consistent'
-        }
-        
-        if bag_details.time_range:
-            start_time, end_time = bag_details.time_range
-            if start_time >= end_time:
-                check_result.update({
-                    'passed': False,
-                    'message': f'Invalid time range: start ({start_time}) >= end ({end_time})'
-                })
-        
-        return check_result
-    
-    def _check_message_counts(self, bag_details: ComprehensiveBagInfo) -> Dict[str, Any]:
-        """Check message count consistency"""
-        check_result = {
-            'name': 'Message Counts',
-            'description': 'Verify message counts are reasonable',
-            'passed': True,
-            'message': 'Message counts appear normal'
-        }
-        
-        if bag_details.message_counts:
-            total_messages = sum(bag_details.message_counts.values())
-        if total_messages == 0:
-            check_result.update({
-                'passed': False,
-                'message': 'Bag file contains no messages'
-            })
-        elif total_messages > 1000000:  # Arbitrary large number threshold
-            check_result.update({
-                'passed': True,  # Warning, not error
-                'message': f'Large number of messages detected: {total_messages:,}'
-                })
-        else:
-            check_result.update({
-                'passed': False,
-                'message': 'No message count information available'
-            })
-        
-        return check_result
     
     def cleanup(self):
         """Clean up resources"""

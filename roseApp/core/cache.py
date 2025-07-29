@@ -1,8 +1,8 @@
 """
 Unified cache management system for Rose.
 
-This module provides a comprehensive caching solution with multiple cache levels,
-smart preheating, performance analysis, and cross-session persistence.
+This module provides a comprehensive caching solution with simple interfaces
+for bag analysis data, message caching, and general-purpose caching.
 """
 
 import asyncio
@@ -83,6 +83,38 @@ class CacheStats:
             'hit_rate': self.hit_rate
         }
 
+
+# ===== BAG-SPECIFIC CACHE DATA STRUCTURES =====
+
+@dataclass
+class CachedMessageData:
+    """Cached message traversal data"""
+    topic: str
+    message_type: str
+    timestamp: float
+    message_data: Dict[str, Any]  # Serialized message content
+
+
+@dataclass
+class BagCacheEntry:
+    """Complete bag cache entry with metadata and message data"""
+    bag_info: Any  # ComprehensiveBagInfo - avoiding circular import
+    cached_messages: Dict[str, List[CachedMessageData]]  # topic -> messages
+    cache_timestamp: float
+    file_mtime: float
+    file_size: int
+    
+    def is_valid(self, bag_path: Path) -> bool:
+        """Check if cache entry is still valid"""
+        if not bag_path.exists():
+            return False
+        
+        stat = bag_path.stat()
+        return (stat.st_mtime == self.file_mtime and 
+                stat.st_size == self.file_size)
+
+
+# ===== CACHE BACKENDS =====
 
 class CacheBackend(ABC):
     """Abstract base class for cache backends"""
@@ -382,8 +414,17 @@ class FileCache(CacheBackend):
                     break
 
 
+# ===== UNIFIED CACHE SYSTEM =====
+
 class UnifiedCache:
-    """Unified multi-level cache system with smart management"""
+    """
+    Unified cache system with simple interfaces for different data types
+    
+    Provides:
+    - General purpose caching (get/put/delete/clear)
+    - Bag-specific caching (bag analysis data + messages)
+    - Statistics and monitoring
+    """
     
     def __init__(self, 
                  memory_size: int = 512 * 1024 * 1024,  # 512MB
@@ -397,25 +438,23 @@ class UnifiedCache:
         self.file_cache = FileCache(cache_dir, file_size)
         
         self.stats = CacheStats()
-        self._access_patterns: Dict[str, List[float]] = {}
-        self._preheating_enabled = True
         self._lock = threading.RLock()
         
-        # Performance analyzer
-        self._analyzer = CachePerformanceAnalyzer(self)
+        # Bag-specific configuration
+        self.max_memory_entries = 50
+        self.max_cached_messages_per_topic = 1000
         
         _logger.info(f"Initialized UnifiedCache with memory: {memory_size//1024//1024}MB, "
                     f"file: {file_size//1024//1024}MB, dir: {cache_dir}")
     
+    # ===== GENERAL PURPOSE CACHE INTERFACE =====
+    
     def get(self, key: str) -> Optional[Any]:
         """Retrieve value from cache with multi-level fallback"""
-        start_time = time.time()
-        
         # Try memory cache first
         entry = self.memory_cache.get(key)
         if entry:
             self.stats.hits += 1
-            self._record_access_pattern(key)
             _logger.debug(f"Cache hit (memory): {key}")
             return entry.value
         
@@ -423,7 +462,6 @@ class UnifiedCache:
         entry = self.file_cache.get(key)
         if entry:
             self.stats.hits += 1
-            self._record_access_pattern(key)
             
             # Promote to memory cache if frequently accessed
             if entry.access_count > 3:
@@ -449,13 +487,13 @@ class UnifiedCache:
         )
         
         # Calculate entry size
-        import pickle
         entry_size = len(pickle.dumps(value))
         
         # Strategy: Store large items (>1MB) or analysis results directly in file cache for persistence
         # Store small, frequently accessed items in memory cache for speed
         if (entry_size > 1024 * 1024 or  # Large items > 1MB
-            key.startswith('analysis_')):   # Analysis results for cross-process persistence
+            key.startswith('analysis_') or  # Analysis results for cross-process persistence
+            key.startswith('bag_')):        # Bag data for persistence
             
             # Store in file cache for persistence
             if self.file_cache.put(entry):
@@ -477,7 +515,6 @@ class UnifiedCache:
                 else:
                     _logger.warning(f"Failed to cache: {key}")
         
-        self._record_access_pattern(key)
         self._update_stats()
     
     def delete(self, key: str) -> bool:
@@ -490,18 +527,115 @@ class UnifiedCache:
             return True
         return False
     
-    def clear(self) -> None:
-        """Clear all cache levels"""
-        self.memory_cache.clear()
-        self.file_cache.clear()
-        self.stats = CacheStats()
-        self._access_patterns.clear()
-        _logger.info("All caches cleared")
+    def clear(self, pattern: Optional[str] = None) -> None:
+        """Clear cache entries, optionally filtered by key pattern"""
+        if pattern is None:
+            # Clear all caches
+            self.memory_cache.clear()
+            self.file_cache.clear()
+            self.stats = CacheStats()
+            _logger.info("All caches cleared")
+        else:
+            # Clear entries matching pattern
+            keys_to_delete = []
+            for key in self.memory_cache.keys():
+                if pattern in key:
+                    keys_to_delete.append(key)
+            for key in self.file_cache.keys():
+                if pattern in key and key not in keys_to_delete:
+                    keys_to_delete.append(key)
+            
+            for key in keys_to_delete:
+                self.delete(key)
+            
+            _logger.info(f"Cleared {len(keys_to_delete)} cache entries matching pattern: {pattern}")
+    
+    # ===== BAG-SPECIFIC CACHE INTERFACE =====
+    
+    def get_bag_cache_key(self, bag_path: Path) -> str:
+        """Generate cache key for bag file"""
+        return f"bag_{hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()}"
+    
+    def get_bag_analysis(self, bag_path: Path) -> Optional[BagCacheEntry]:
+        """Get cached bag analysis data"""
+        cache_key = self.get_bag_cache_key(bag_path)
+        cached_data = self.get(cache_key)
+        
+        if cached_data and isinstance(cached_data, BagCacheEntry):
+            if cached_data.is_valid(bag_path):
+                _logger.debug(f"Using cached bag analysis for {bag_path}")
+                return cached_data
+            else:
+                # Remove invalid cache
+                self.delete(cache_key)
+        
+        return None
+    
+    def put_bag_analysis(self, bag_path: Path, bag_info: Any, 
+                        cached_messages: Optional[Dict[str, List[CachedMessageData]]] = None) -> None:
+        """Store bag analysis data in cache"""
+        if not bag_path.exists():
+            return
+        
+        cache_key = self.get_bag_cache_key(bag_path)
+        stat = bag_path.stat()
+        
+        cache_entry = BagCacheEntry(
+            bag_info=bag_info,
+            cached_messages=cached_messages or {},
+            cache_timestamp=time.time(),
+            file_mtime=stat.st_mtime,
+            file_size=stat.st_size
+        )
+        
+        self.put(cache_key, cache_entry, tags={'bag_analysis'})
+        _logger.debug(f"Cached bag analysis for {bag_path}")
+    
+    def get_bag_messages(self, bag_path: Path, topic: str) -> Optional[List[CachedMessageData]]:
+        """Get cached messages for a specific topic"""
+        bag_cache = self.get_bag_analysis(bag_path)
+        if bag_cache:
+            return bag_cache.cached_messages.get(topic)
+        return None
+    
+    def put_bag_messages(self, bag_path: Path, topic: str, messages: List[CachedMessageData]) -> None:
+        """Add cached messages for a topic"""
+        bag_cache = self.get_bag_analysis(bag_path)
+        if bag_cache is None:
+            return
+        
+        # Limit number of cached messages per topic
+        if len(messages) > self.max_cached_messages_per_topic:
+            messages = messages[:self.max_cached_messages_per_topic]
+        
+        bag_cache.cached_messages[topic] = messages
+        
+        # Update cache
+        self.put_bag_analysis(bag_path, bag_cache.bag_info, bag_cache.cached_messages)
+        _logger.debug(f"Cached {len(messages)} messages for topic {topic} in {bag_path}")
+    
+    def clear_bag_cache(self, bag_path: Optional[Path] = None) -> None:
+        """Clear bag-specific cache entries"""
+        if bag_path is None:
+            # Clear all bag caches
+            self.clear("bag_")
+        else:
+            # Clear specific bag cache
+            cache_key = self.get_bag_cache_key(bag_path)
+            self.delete(cache_key)
+            _logger.debug(f"Cleared cache for {bag_path}")
+    
+    # ===== STATISTICS AND MONITORING =====
     
     def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive cache statistics"""
         return {
-            'unified': self.stats.to_dict(),
+            'hits': self.stats.hits,
+            'misses': self.stats.misses,
+            'hit_rate': self.stats.hit_rate,
+            'evictions': self.stats.evictions,
+            'total_size': self.stats.total_size,
+            'entry_count': self.stats.entry_count,
             'memory': {
                 'size_bytes': self.memory_cache.size(),
                 'entry_count': len(self.memory_cache.keys()),
@@ -511,55 +645,12 @@ class UnifiedCache:
                 'size_bytes': self.file_cache.size(),
                 'entry_count': len(self.file_cache.keys()),
                 'max_size': self.file_cache.max_size
+            },
+            'bag_specific': {
+                'max_memory_entries': self.max_memory_entries,
+                'max_cached_messages_per_topic': self.max_cached_messages_per_topic
             }
         }
-    
-    def optimize(self) -> Dict[str, Any]:
-        """Optimize cache performance based on access patterns"""
-        optimization_results = {}
-        
-        # Preheating based on access patterns
-        if self._preheating_enabled:
-            preheated = self._preheat_cache()
-            optimization_results['preheated_keys'] = preheated
-        
-        # Performance analysis
-        analysis = self._analyzer.analyze()
-        optimization_results['performance_analysis'] = analysis
-        
-        return optimization_results
-    
-    def _record_access_pattern(self, key: str):
-        """Record access pattern for smart preheating"""
-        with self._lock:
-            if key not in self._access_patterns:
-                self._access_patterns[key] = []
-            
-            self._access_patterns[key].append(time.time())
-            
-            # Keep only recent access times (last 24 hours)
-            cutoff = time.time() - 86400  # 24 hours
-            self._access_patterns[key] = [
-                t for t in self._access_patterns[key] if t > cutoff
-            ]
-    
-    def _preheat_cache(self) -> List[str]:
-        """Preheat cache based on access patterns"""
-        preheated = []
-        
-        # Find frequently accessed keys that might need preheating
-        for key, access_times in self._access_patterns.items():
-            if len(access_times) >= 5:  # Frequently accessed
-                # Check if key is likely to be accessed soon
-                recent_accesses = [t for t in access_times if time.time() - t < 3600]  # Last hour
-                if len(recent_accesses) >= 2:
-                    # Try to ensure it's in memory cache
-                    entry = self.file_cache.get(key)
-                    if entry and not self.memory_cache.get(key):
-                        if self.memory_cache.put(entry):
-                            preheated.append(key)
-        
-        return preheated
     
     def _update_stats(self):
         """Update cache statistics"""
@@ -567,82 +658,8 @@ class UnifiedCache:
         self.stats.entry_count = len(self.memory_cache.keys()) + len(self.file_cache.keys())
 
 
-class CachePerformanceAnalyzer:
-    """Analyzes cache performance and provides optimization recommendations"""
-    
-    def __init__(self, cache: UnifiedCache):
-        self.cache = cache
-        self._performance_history: List[Dict[str, Any]] = []
-        self._start_time = time.time()
-    
-    def analyze(self) -> Dict[str, Any]:
-        """Perform comprehensive performance analysis"""
-        stats = self.cache.get_stats()
-        
-        analysis = {
-            'hit_rate': stats['unified']['hit_rate'],
-            'memory_utilization': stats['memory']['size_bytes'] / stats['memory']['max_size'],
-            'file_utilization': stats['file']['size_bytes'] / stats['file']['max_size'],
-            'recommendations': self._generate_recommendations(stats),
-            'efficiency_score': self._calculate_efficiency_score(stats)
-        }
-        
-        # Record performance history
-        self._performance_history.append({
-            'timestamp': time.time(),
-            'analysis': analysis.copy()
-        })
-        
-        # Keep only recent history (last 100 entries)
-        self._performance_history = self._performance_history[-100:]
-        
-        return analysis
-    
-    def get_analysis(self) -> Dict[str, Any]:
-        """Get current performance analysis"""
-        if not self._performance_history:
-            return self.analyze()
-        return self._performance_history[-1]['analysis']
-    
-    def _generate_recommendations(self, stats: Dict[str, Any]) -> List[str]:
-        """Generate performance optimization recommendations"""
-        recommendations = []
-        
-        hit_rate = stats['unified']['hit_rate']
-        memory_util = stats['memory']['size_bytes'] / stats['memory']['max_size']
-        file_util = stats['file']['size_bytes'] / stats['file']['max_size']
-        
-        if hit_rate < 0.5:
-            recommendations.append("Low hit rate detected. Consider increasing cache sizes or reviewing access patterns.")
-        
-        if memory_util > 0.9:
-            recommendations.append("Memory cache nearly full. Consider increasing memory cache size.")
-        
-        if file_util > 0.9:
-            recommendations.append("File cache nearly full. Consider increasing file cache size or implementing more aggressive eviction.")
-        
-        if hit_rate > 0.9 and memory_util < 0.3:
-            recommendations.append("High hit rate with low memory utilization. Consider reducing memory cache size.")
-        
-        return recommendations
-    
-    def _calculate_efficiency_score(self, stats: Dict[str, Any]) -> float:
-        """Calculate overall cache efficiency score (0-100)"""
-        hit_rate = stats['unified']['hit_rate']
-        memory_util = stats['memory']['size_bytes'] / stats['memory']['max_size']
-        
-        # Base score from hit rate (0-70 points)
-        base_score = hit_rate * 70
-        
-        # Bonus points for optimal memory utilization (0-30 points)
-        optimal_util = 0.7  # Target 70% utilization
-        util_score = 30 * (1 - abs(memory_util - optimal_util) / optimal_util)
-        util_score = max(0, util_score)
-        
-        return min(100, base_score + util_score)
+# ===== GLOBAL CACHE INSTANCE =====
 
-
-# Global cache instance
 _global_cache: Optional[UnifiedCache] = None
 
 
@@ -654,11 +671,11 @@ def get_cache() -> UnifiedCache:
     return _global_cache
 
 
-def clear_cache() -> None:
+def clear_cache(pattern: Optional[str] = None) -> None:
     """Clear global cache"""
     global _global_cache
     if _global_cache:
-        _global_cache.clear()
+        _global_cache.clear(pattern)
 
 
 def get_cache_stats() -> Dict[str, Any]:
@@ -666,6 +683,44 @@ def get_cache_stats() -> Dict[str, Any]:
     return get_cache().get_stats()
 
 
-def optimize_cache() -> Dict[str, Any]:
-    """Optimize global cache performance"""
-    return get_cache().optimize() 
+# ===== SIMPLE CACHE INTERFACE FOR BAG MANAGER =====
+
+class BagCacheManager:
+    """
+    Simple interface for bag-specific caching operations
+    Used by BagManager to handle bag analysis and message caching
+    """
+    
+    def __init__(self, cache: Optional[UnifiedCache] = None):
+        self.cache = cache or get_cache()
+        self.logger = get_logger("bag_cache")
+    
+    def get_analysis(self, bag_path: Path) -> Optional[BagCacheEntry]:
+        """Get cached bag analysis"""
+        return self.cache.get_bag_analysis(bag_path)
+    
+    def put_analysis(self, bag_path: Path, bag_info: Any, 
+                    cached_messages: Optional[Dict[str, List[CachedMessageData]]] = None) -> None:
+        """Store bag analysis in cache"""
+        self.cache.put_bag_analysis(bag_path, bag_info, cached_messages)
+    
+    def get_messages(self, bag_path: Path, topic: str) -> Optional[List[CachedMessageData]]:
+        """Get cached messages for a topic"""
+        return self.cache.get_bag_messages(bag_path, topic)
+    
+    def put_messages(self, bag_path: Path, topic: str, messages: List[CachedMessageData]) -> None:
+        """Store messages for a topic"""
+        self.cache.put_bag_messages(bag_path, topic, messages)
+    
+    def clear(self, bag_path: Optional[Path] = None) -> None:
+        """Clear bag cache"""
+        self.cache.clear_bag_cache(bag_path)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        return self.cache.get_stats()
+
+
+def create_bag_cache_manager() -> BagCacheManager:
+    """Create a new bag cache manager instance"""
+    return BagCacheManager() 
