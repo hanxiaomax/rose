@@ -336,14 +336,11 @@ class BagManager:
             loop = asyncio.get_event_loop()
             
             if options.show_fields or options.sort_by == "size":
-                # Need full analysis with optional message caching
-                cache_messages = True  # Enable message caching for potential future use
+                # Need full analysis
                 bag_details, analysis_time = await loop.run_in_executor(
                     self.executor,
                     self.parser.analyze_bag_full,
-                    str(bag_path),
-                    cache_messages,
-                    1000  # max messages per topic
+                    str(bag_path)
                 )
             else:
                 # Quick analysis is sufficient

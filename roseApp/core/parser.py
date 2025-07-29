@@ -83,6 +83,9 @@ class ComprehensiveBagInfo:
     total_messages: Optional[int] = None
     total_size: Optional[int] = None
     
+    # Cached messages data (optional)
+    cached_messages: Optional[Dict[str, List[Any]]] = None
+    
     def has_quick_analysis(self) -> bool:
         """Check if quick analysis data is available"""
         return (self.analysis_level.value in ['quick', 'full'] and 
@@ -100,6 +103,10 @@ class ComprehensiveBagInfo:
         """Check if message field analysis data is available"""
         return (self.message_definitions is not None and 
                 self.message_fields is not None)
+    
+    def has_cached_messages(self) -> bool:
+        """Check if cached messages data is available"""
+        return self.cached_messages is not None and len(self.cached_messages) > 0
     
     def get_topic_fields(self, topic: str) -> Optional[Dict[str, Any]]:
         """Get field structure for a specific topic"""
@@ -230,19 +237,11 @@ class BagParser:
         """
         start_time = time.time()
         
-        # Use cached data if available
-        if self._is_cache_valid(bag_path) and self._current_bag_info is not None:
-            elapsed = time.time() - start_time
-            return self._current_bag_info.get_meta(), elapsed
-        
-        # Need at least quick analysis
-        if not self._current_bag_info or not self._current_bag_info.has_quick_analysis():
-            self.analyze_bag_quick(bag_path)
+        # Perform quick analysis (handles caching internally)
+        bag_info, _ = self.analyze_bag_quick(bag_path)
         
         elapsed = time.time() - start_time
-        # At this point _current_bag_info is guaranteed to be not None
-        assert self._current_bag_info is not None
-        return self._current_bag_info.get_meta(), elapsed
+        return bag_info.get_meta(), elapsed
     
     def get_topics(self, bag_path: str) -> List[str]:
         """
@@ -262,16 +261,11 @@ class BagParser:
         """
         start_time = time.time()
         
-        # Ensure we have full analysis
-        if (not self._is_cache_valid(bag_path) or 
-            self._current_bag_info is None or 
-            not self._current_bag_info.has_full_analysis()):
-            self.analyze_bag_full(bag_path)
+        # Perform full analysis (handles caching internally)
+        bag_info, _ = self.analyze_bag_full(bag_path)
         
         elapsed = time.time() - start_time
-        # At this point _current_bag_info is guaranteed to be not None
-        assert self._current_bag_info is not None
-        return self._current_bag_info, elapsed
+        return bag_info, elapsed
     
 
     
@@ -294,7 +288,7 @@ class BagParser:
             self._current_bag_info is not None and
             self._current_bag_info.has_quick_analysis()):
             elapsed = time.time() - start_time
-            _logger.debug(f"Using cached quick analysis for {bag_path}")
+            _logger.info(f"Using cached quick analysis for {bag_path}")
             return self._current_bag_info, elapsed
         
         _logger.info(f"Performing quick analysis for {bag_path}")
@@ -369,16 +363,13 @@ class BagParser:
             self._current_bag_info is not None and
             self._current_bag_info.has_full_analysis()):
             elapsed = time.time() - start_time
-            _logger.debug(f"Using cached full analysis for {bag_path}")
+            _logger.info(f"Using cached full analysis for {bag_path}")
             return self._current_bag_info, elapsed
         
         _logger.info(f"Performing full analysis for {bag_path}")
         
-        # Ensure we have quick analysis first
-        if (not self._is_cache_valid(bag_path) or 
-            self._current_bag_info is None or
-            not self._current_bag_info.has_quick_analysis()):
-            self.analyze_bag_quick(bag_path)
+        # Ensure we have quick analysis first (handles caching internally)
+        self.analyze_bag_quick(bag_path)
         
         try:
             self._initialize_typestore()
