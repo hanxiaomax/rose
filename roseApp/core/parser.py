@@ -54,36 +54,43 @@ class ExtractOption:
 @dataclass
 class ComprehensiveBagInfo:
     """
-    Comprehensive bag information data structure supporting progressive filling
+    Comprehensive bag information data structure organized by analysis level
     
-    This structure is designed to be filled incrementally:
-    1. Basic metadata (file_path, analysis_level) - always present
-    2. Quick analysis data (topics, connections, time_range) - filled by analyze_bag_quick
-    3. Full analysis data (message_counts, topic_stats, etc.) - filled by analyze_bag_full
+    Fields are grouped by the analysis level required to obtain them:
+    - Basic metadata: Always available
+    - Quick analysis: Topics, connections, time info, field structures  
+    - Full analysis: Message counts, sizes, detailed statistics
     """
-    # Always present
+    
+    # === BASIC METADATA (always present) ===
     file_path: str
     analysis_level: AnalysisLevel = AnalysisLevel.NONE
     last_updated: float = field(default_factory=time.time)
     
-    # Quick analysis data (filled by analyze_bag_quick)
+    # === QUICK ANALYSIS DATA ===
+    # Topic and connection information
     topics: Optional[List[str]] = None
     connections: Optional[Dict[str, str]] = None  # topic -> message_type
+    
+    # Time information
     time_range: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
     duration_seconds: Optional[float] = None
     
-    # Message field structures (filled by analyze_bag_quick from connection metadata)
+    # Message structure information (from connection metadata)
     message_definitions: Optional[Dict[str, str]] = None  # message_type -> definition
     message_fields: Optional[Dict[str, Dict[str, Any]]] = None  # message_type -> field_structure
     
-    # Full analysis data (filled by analyze_bag_full)
+    # === FULL ANALYSIS DATA (requires message traversal) ===
+    # Message statistics
     message_counts: Optional[Dict[str, int]] = None
     topic_sizes: Optional[Dict[str, int]] = None
-    topic_stats: Optional[Dict[str, Dict[str, int]]] = None  # includes count, size, avg_size, min_size, max_size
+    topic_stats: Optional[Dict[str, Dict[str, int]]] = None  # detailed per-topic stats
+    
+    # Overall statistics
     total_messages: Optional[int] = None
     total_size: Optional[int] = None
     
-    # Cached messages data (optional)
+    # === OPTIONAL CACHED DATA ===
     cached_messages: Optional[Dict[str, List[Any]]] = None
     
     def has_quick_analysis(self) -> bool:
@@ -137,7 +144,7 @@ class ComprehensiveBagInfo:
         return paths
     
     def get_meta(self) -> Dict[str, Any]:
-        """Get basic metadata"""
+        """Get basic metadata dictionary"""
         meta = {
             'file_path': self.file_path,
             'analysis_level': self.analysis_level.value,
@@ -165,10 +172,13 @@ class BagParser:
     """
     Singleton high-performance ROS bag parser using rosbags library
     
-    Provides progressive analysis capabilities with intelligent caching:
-    - Quick analysis: metadata without message traversal
-    - Full analysis: detailed statistics with message traversal
-    - Extract: topic filtering with flexible options
+    Public Interface:
+    - get_bag_summary(): Get bag information with smart analysis level selection
+    - get_bag_details(): Get bag information with smart analysis level selection
+    - extract(): Extract topics from bag file
+    
+    The parser automatically chooses between quick and full analysis based on
+    the required information and caching status.
     """
     
     _instance = None
@@ -197,247 +207,35 @@ class BagParser:
         BagParser._initialized = True
         _logger.debug("Initialized singleton BagParser")
     
-    def _initialize_typestore(self):
-        """Initialize optimized typestore for better performance"""
-        if self._typestore is None:
-            try:
-                from rosbags.typesys import get_typestore, Stores
-                try:
-                    self._typestore = get_typestore(Stores.ROS1_NOETIC)
-                    _logger.debug("Initialized typestore for ROS1_NOETIC")
-                except:
-                    self._typestore = get_typestore(Stores.LATEST)
-                    _logger.debug("Initialized typestore with LATEST")
-            except Exception as e:
-                _logger.warning(f"Could not initialize typestore: {e}")
-                self._typestore = None
-    
-    def _is_cache_valid(self, bag_path: str) -> bool:
-        """Check if current cache is valid for the given bag path"""
-        if self._current_bag_info is None:
-            return False
-        
-        if self._current_bag_info.file_path != bag_path:
-            return False
-        
-        if time.time() - self._current_bag_info.last_updated > self._cache_ttl:
-            return False
-        
-        return True
-    
-    def get_meta(self, bag_path: str) -> Tuple[Dict[str, Any], float]:
+    def get_bag_summary(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """
-        Get basic metadata for the bag file
+        Get bag summary with intelligent analysis level selection
         
         Args:
             bag_path: Path to the bag file
-            
-        Returns:
-            Tuple of (metadata_dict, elapsed_time_seconds)
-        """
-        start_time = time.time()
-        
-        # Perform quick analysis (handles caching internally)
-        bag_info, _ = self.analyze_bag_quick(bag_path)
-        
-        elapsed = time.time() - start_time
-        return bag_info.get_meta(), elapsed
     
-    def get_topics(self, bag_path: str) -> List[str]:
-        """
-        Get topics from the bag file
-        """
-        return self.analyze_bag_quick(bag_path)[0].topics
-    
-    def get_bag_details(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
-        """
-        Get complete bag information
-        
-        Args:
-            bag_path: Path to the bag file
-            
         Returns:
             Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
         """
         start_time = time.time()
-        
-        # Perform full analysis (handles caching internally)
-        bag_info, _ = self.analyze_bag_full(bag_path)
-        
+        bag_info, _ = self._analyze_bag_quick(bag_path)
         elapsed = time.time() - start_time
         return bag_info, elapsed
     
+    def get_bag_details(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+        """
+        Get bag details with intelligent analysis level selection
+        
+        Args:
+            bag_path: Path to the bag file
 
-    
-    def analyze_bag_quick(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
-        """
-        Perform quick analysis without message traversal
-        
-        Gets basic metadata: topics, connections, time range, duration
-        
-        Args:
-            bag_path: Path to the bag file
-            
         Returns:
             Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
         """
         start_time = time.time()
-        
-        # Check if we already have quick analysis for this bag
-        if (self._is_cache_valid(bag_path) and 
-            self._current_bag_info is not None and
-            self._current_bag_info.has_quick_analysis()):
-            elapsed = time.time() - start_time
-            _logger.info(f"Using cached quick analysis for {bag_path}")
-            return self._current_bag_info, elapsed
-        
-        _logger.info(f"Performing quick analysis for {bag_path}")
-        
-        try:
-            self._initialize_typestore()
-            
-            reader_args = [Path(bag_path)]
-            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
-            
-            with AnyReader(reader_args, **reader_kwargs) as reader:
-                # Extract basic information without message traversal
-                topics = [conn.topic for conn in reader.connections]
-                connections = {conn.topic: conn.msgtype for conn in reader.connections}
-                
-                # Extract time range
-                start_ns = reader.start_time
-                end_ns = reader.end_time
-                start_time_tuple = (int(start_ns // 1_000_000_000), int(start_ns % 1_000_000_000))
-                end_time_tuple = (int(end_ns // 1_000_000_000), int(end_ns % 1_000_000_000))
-                time_range = (start_time_tuple, end_time_tuple)
-                
-                # Calculate duration
-                duration_seconds = (end_ns - start_ns) / 1_000_000_000
-                
-                # Create or update bag info
-                if (self._current_bag_info is None or 
-                    self._current_bag_info.file_path != bag_path):
-                    self._current_bag_info = ComprehensiveBagInfo(file_path=bag_path)
-                
-                # Fill quick analysis data
-                self._current_bag_info.analysis_level = AnalysisLevel.QUICK
-                self._current_bag_info.topics = topics
-                self._current_bag_info.connections = connections
-                self._current_bag_info.time_range = time_range
-                self._current_bag_info.duration_seconds = duration_seconds
-                self._current_bag_info.last_updated = time.time()
-                
-                # Extract message field structures from connection metadata
-                self._current_bag_info.message_definitions = {}
-                self._current_bag_info.message_fields = {}
-                for connection in reader.connections:
-                    if connection.msgtype:
-                        self._current_bag_info.message_definitions[connection.msgtype] = connection.msgdef
-                        self._current_bag_info.message_fields[connection.msgtype] = self._parse_message_definition(connection.msgdef)
-                
-                elapsed = time.time() - start_time
-                _logger.info(f"Quick analysis completed in {elapsed:.3f}s - {len(topics)} topics")
-                
-                return self._current_bag_info, elapsed
-                
-        except Exception as e:
-            _logger.error(f"Error in quick analysis for {bag_path}: {e}")
-            raise Exception(f"Error in quick analysis: {e}")
-    
-    def analyze_bag_full(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
-        """
-        Perform full analysis with message traversal
-        
-        Gets complete statistics: message counts, sizes, frequencies
-        
-        Args:
-            bag_path: Path to the bag file
-            
-        Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
-        """
-        start_time = time.time()
-        
-        # Check if we already have full analysis for this bag
-        if (self._is_cache_valid(bag_path) and 
-            self._current_bag_info is not None and
-            self._current_bag_info.has_full_analysis()):
-            elapsed = time.time() - start_time
-            _logger.info(f"Using cached full analysis for {bag_path}")
-            return self._current_bag_info, elapsed
-        
-        _logger.info(f"Performing full analysis for {bag_path}")
-        
-        # Ensure we have quick analysis first (handles caching internally)
-        self.analyze_bag_quick(bag_path)
-        
-        try:
-            self._initialize_typestore()
-            
-            reader_args = [Path(bag_path)]
-            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
-            
-            with AnyReader(reader_args, **reader_kwargs) as reader:
-                # Calculate comprehensive statistics with message traversal
-                topic_stats = {}
-                total_messages = 0
-                total_size = 0
-                
-                _logger.debug(f"Calculating statistics for {len(reader.connections)} topics")
-                
-                for connection in reader.connections:
-                    count = 0
-                    connection_size = 0
-                    min_size = float('inf')
-                    max_size = 0
-                    
-                    # Stream messages efficiently to avoid memory buildup
-                    for (_, _, rawdata) in reader.messages([connection]):
-                        count += 1
-                        msg_size = len(rawdata)
-                        connection_size += msg_size
-                        min_size = min(min_size, msg_size)
-                        max_size = max(max_size, msg_size)
-                    
-                    # Calculate derived statistics
-                    avg_size = connection_size // count if count > 0 else 0
-                    min_size = min_size if min_size != float('inf') else 0
-                    
-                    topic_stats[connection.topic] = {
-                        'count': count,
-                        'size': connection_size,
-                        'avg_size': avg_size,
-                        'min_size': min_size,
-                        'max_size': max_size
-                    }
-                    
-                    total_messages += count
-                    total_size += connection_size
-                
-                # Extract simplified dictionaries for convenience
-                message_counts = {topic: stats['count'] for topic, stats in topic_stats.items()}
-                topic_sizes = {topic: stats['size'] for topic, stats in topic_stats.items()}
-                
-                # Update bag info with full analysis data
-                # At this point _current_bag_info is guaranteed to be not None
-                assert self._current_bag_info is not None
-                self._current_bag_info.analysis_level = AnalysisLevel.FULL
-                self._current_bag_info.message_counts = message_counts
-                self._current_bag_info.topic_sizes = topic_sizes
-                self._current_bag_info.topic_stats = topic_stats
-                self._current_bag_info.total_messages = total_messages
-                self._current_bag_info.total_size = total_size
-                self._current_bag_info.last_updated = time.time()
-                
-                elapsed = time.time() - start_time
-                topics_count = len(self._current_bag_info.topics) if self._current_bag_info.topics else 0
-                _logger.info(f"Full analysis completed in {elapsed:.3f}s - {total_messages} messages from {topics_count} topics")
-                
-                return self._current_bag_info, elapsed
-                
-        except Exception as e:
-            _logger.error(f"Error in full analysis for {bag_path}: {e}")
-            raise Exception(f"Error in full analysis: {e}")
+        bag_info, _ = self._analyze_bag_full(bag_path)
+        elapsed = time.time() - start_time
+        return bag_info, elapsed
     
     def extract(self, input_bag: str, output_bag: str, extract_option: ExtractOption,
                 progress_callback: Optional[Callable] = None) -> Tuple[str, float]:
@@ -513,7 +311,206 @@ class BagParser:
         
         return "Internal information cleared", elapsed
     
-    # Helper methods
+    # === PRIVATE METHODS ===
+    
+    def _initialize_typestore(self):
+        """Initialize optimized typestore for better performance"""
+        if self._typestore is None:
+            try:
+                from rosbags.typesys import get_typestore, Stores
+                try:
+                    self._typestore = get_typestore(Stores.ROS1_NOETIC)
+                    _logger.debug("Initialized typestore for ROS1_NOETIC")
+                except:
+                    self._typestore = get_typestore(Stores.LATEST)
+                    _logger.debug("Initialized typestore with LATEST")
+            except Exception as e:
+                _logger.warning(f"Could not initialize typestore: {e}")
+                self._typestore = None
+    
+    def _is_cache_valid(self, bag_path: str) -> bool:
+        """Check if current cache is valid for the given bag path"""
+        if self._current_bag_info is None:
+            return False
+        
+        if self._current_bag_info.file_path != bag_path:
+            return False
+        
+        if time.time() - self._current_bag_info.last_updated > self._cache_ttl:
+            return False
+        
+        return True
+    
+    def _analyze_bag_quick(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+        """
+        Perform quick analysis without message traversal
+        
+        Gets basic metadata: topics, connections, time range, duration
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+        """
+        start_time = time.time()
+        
+        # Check if we already have quick analysis for this bag
+        if (self._is_cache_valid(bag_path) and 
+            self._current_bag_info is not None and
+            self._current_bag_info.has_quick_analysis()):
+            elapsed = time.time() - start_time
+            _logger.info(f"Using cached quick analysis for {bag_path}")
+            return self._current_bag_info, elapsed
+        
+        _logger.info(f"Performing quick analysis for {bag_path}")
+        
+        try:
+            self._initialize_typestore()
+            
+            reader_args = [Path(bag_path)]
+            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
+            
+            with AnyReader(reader_args, **reader_kwargs) as reader:
+                # Extract basic information without message traversal
+                topics = [conn.topic for conn in reader.connections]
+                connections = {conn.topic: conn.msgtype for conn in reader.connections}
+                
+                # Extract time range
+                start_ns = reader.start_time
+                end_ns = reader.end_time
+                start_time_tuple = (int(start_ns // 1_000_000_000), int(start_ns % 1_000_000_000))
+                end_time_tuple = (int(end_ns // 1_000_000_000), int(end_ns % 1_000_000_000))
+                time_range = (start_time_tuple, end_time_tuple)
+                
+                # Calculate duration
+                duration_seconds = (end_ns - start_ns) / 1_000_000_000
+                
+                # Create or update bag info
+                if (self._current_bag_info is None or 
+                    self._current_bag_info.file_path != bag_path):
+                    self._current_bag_info = ComprehensiveBagInfo(file_path=bag_path)
+                
+                # Fill quick analysis data
+                self._current_bag_info.analysis_level = AnalysisLevel.QUICK
+                self._current_bag_info.topics = topics
+                self._current_bag_info.connections = connections
+                self._current_bag_info.time_range = time_range
+                self._current_bag_info.duration_seconds = duration_seconds
+                self._current_bag_info.last_updated = time.time()
+                
+                # Extract message field structures from connection metadata
+                self._current_bag_info.message_definitions = {}
+                self._current_bag_info.message_fields = {}
+                for connection in reader.connections:
+                    if connection.msgtype:
+                        self._current_bag_info.message_definitions[connection.msgtype] = connection.msgdef
+                        self._current_bag_info.message_fields[connection.msgtype] = self._parse_message_definition(connection.msgdef)
+                
+                elapsed = time.time() - start_time
+                _logger.info(f"Quick analysis completed in {elapsed:.3f}s - {len(topics)} topics")
+                
+                return self._current_bag_info, elapsed
+                
+        except Exception as e:
+            _logger.error(f"Error in quick analysis for {bag_path}: {e}")
+            raise Exception(f"Error in quick analysis: {e}")
+    
+    def _analyze_bag_full(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+        """
+        Perform full analysis with message traversal
+        
+        Gets complete statistics: message counts, sizes, frequencies
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+        """
+        start_time = time.time()
+        
+        # Check if we already have full analysis for this bag
+        if (self._is_cache_valid(bag_path) and 
+            self._current_bag_info is not None and
+            self._current_bag_info.has_full_analysis()):
+            elapsed = time.time() - start_time
+            _logger.info(f"Using cached full analysis for {bag_path}")
+            return self._current_bag_info, elapsed
+        
+        _logger.info(f"Performing full analysis for {bag_path}")
+        
+        # Ensure we have quick analysis first (handles caching internally)
+        self._analyze_bag_quick(bag_path)
+        
+        try:
+            self._initialize_typestore()
+            
+            reader_args = [Path(bag_path)]
+            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
+            
+            with AnyReader(reader_args, **reader_kwargs) as reader:
+                # Calculate comprehensive statistics with message traversal
+                topic_stats = {}
+                total_messages = 0
+                total_size = 0
+                
+                _logger.debug(f"Calculating statistics for {len(reader.connections)} topics")
+                
+                for connection in reader.connections:
+                    count = 0
+                    connection_size = 0
+                    min_size = float('inf')
+                    max_size = 0
+                    
+                    # Stream messages efficiently to avoid memory buildup
+                    for (_, _, rawdata) in reader.messages([connection]):
+                        count += 1
+                        msg_size = len(rawdata)
+                        connection_size += msg_size
+                        min_size = min(min_size, msg_size)
+                        max_size = max(max_size, msg_size)
+                    
+                    # Calculate derived statistics
+                    avg_size = connection_size // count if count > 0 else 0
+                    min_size = min_size if min_size != float('inf') else 0
+                    
+                    topic_stats[connection.topic] = {
+                        'count': count,
+                        'size': connection_size,
+                        'avg_size': avg_size,
+                        'min_size': min_size,
+                        'max_size': max_size
+                    }
+                    
+                    total_messages += count
+                    total_size += connection_size
+                
+                # Extract simplified dictionaries for convenience
+                message_counts = {topic: stats['count'] for topic, stats in topic_stats.items()}
+                topic_sizes = {topic: stats['size'] for topic, stats in topic_stats.items()}
+                
+                # Update bag info with full analysis data
+                # At this point _current_bag_info is guaranteed to be not None
+                assert self._current_bag_info is not None
+                self._current_bag_info.analysis_level = AnalysisLevel.FULL
+                self._current_bag_info.message_counts = message_counts
+                self._current_bag_info.topic_sizes = topic_sizes
+                self._current_bag_info.topic_stats = topic_stats
+                self._current_bag_info.total_messages = total_messages
+                self._current_bag_info.total_size = total_size
+                self._current_bag_info.last_updated = time.time()
+                
+                elapsed = time.time() - start_time
+                topics_count = len(self._current_bag_info.topics) if self._current_bag_info.topics else 0
+                _logger.info(f"Full analysis completed in {elapsed:.3f}s - {total_messages} messages from {topics_count} topics")
+                
+                return self._current_bag_info, elapsed
+                
+        except Exception as e:
+            _logger.error(f"Error in full analysis for {bag_path}: {e}")
+            raise Exception(f"Error in full analysis: {e}")
+    
     def _validate_compression(self, compression: str) -> None:
         """Validate compression type"""
         from roseApp.core.util import validate_compression_type

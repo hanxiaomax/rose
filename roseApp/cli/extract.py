@@ -114,16 +114,12 @@ def _extract_topics_impl(
         # Get topic list using lightweight method
         console.print(f"[dim]Analyzing bag file...[/dim]")
         
-        # Use parser.get_meta for lightweight topic discovery
-        meta, _ = manager.parser.get_meta(str(input_path))
-        
-        # If we don't have topics from meta, fall back to quick analysis
-        if not manager.parser._current_bag_info or not manager.parser._current_bag_info.topics:
-            manager.parser.analyze_bag_quick(str(input_path))
+        # Use parser.get_bag_summary for lightweight topic discovery
+        bag_info, _ = manager.parser.get_bag_summary(str(input_path))
         
         # Get topic list
-        if manager.parser._current_bag_info and manager.parser._current_bag_info.topics:
-            all_topics = manager.parser._current_bag_info.topics
+        if bag_info and bag_info.topics:
+            all_topics = bag_info.topics
         else:
             console.print("[red]Error: Unable to read topics from bag file[/red]")
             raise typer.Exit(1)

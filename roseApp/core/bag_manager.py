@@ -335,19 +335,19 @@ class BagManager:
             # Get bag details using parser - run in executor for non-blocking
             loop = asyncio.get_event_loop()
             
-            if options.show_fields or options.sort_by == "size":
-                # Need full analysis
-                bag_details, analysis_time = await loop.run_in_executor(
-                    self.executor,
-                    self.parser.analyze_bag_full,
-                    str(bag_path)
-                )
-            else:
-                # Quick analysis is sufficient
+            # Determine if full analysis is needed
+            need_full_analysis = options.show_fields or options.sort_by == "size"
+            if need_full_analysis:
                 bag_details, analysis_time = await loop.run_in_executor(
                     self.executor,
                     self.parser.get_bag_details,
-                    str(bag_path)
+                    str(bag_path),
+                )
+            else:
+                bag_details, analysis_time = await loop.run_in_executor(
+                    self.executor,
+                    self.parser.get_bag_summary,
+                    str(bag_path),
                 )
             
             # Cache the result using our unified cache manager
@@ -457,81 +457,6 @@ class BagManager:
         
         return inspection_result
     
-    async def list_topics(
-        self,
-        bag_path: Union[str, Path],
-        patterns: Optional[List[str]] = None,
-        exact_match: bool = False,
-        progress_callback: Optional[Callable[[float], None]] = None,
-        no_cache: bool = False
-    ) -> Dict[str, Any]:
-        """
-        List topics in a ROS bag file with optional filtering
-        
-        Args:
-            bag_path: Path to the bag file
-            patterns: Optional list of topic patterns to match
-            exact_match: If True, use exact matching instead of fuzzy matching
-            progress_callback: Optional progress callback
-            no_cache: If True, bypass cache
-            
-        Returns:
-            Dictionary containing topic listing results
-        """
-        bag_path = Path(bag_path)
-        
-        if not bag_path.exists():
-            raise FileNotFoundError(f"Bag file not found: {bag_path}")
-        
-        # Clear cache if requested
-        if no_cache:
-            self.cache_manager.clear(bag_path)
-        
-        # Get bag details
-        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
-        
-        all_topics = bag_details.topics or []
-        
-        # Apply filtering if patterns are provided
-        if patterns:
-            if exact_match:
-                filtered_topics = [topic for topic in all_topics if topic in patterns]
-            else:
-                # Use the same fuzzy matching logic as _filter_topics
-                filtered_topics = self._filter_topics(all_topics, patterns, None)
-        else:
-            filtered_topics = all_topics
-        
-        # Build topic listing results
-        listing_result = {
-            'bag_info': {
-                'file_name': bag_path.name,
-                'file_path': str(bag_path),
-                'total_topics': len(all_topics),
-                'filtered_topics': len(filtered_topics),
-                'analysis_time': analysis_time
-            },
-            'topics': [],
-            'filtering': {
-            'patterns': patterns or [],
-            'exact_match': exact_match,
-                'matched_topics': len(filtered_topics)
-            }
-        }
-        
-        # Add topic information
-        for topic in filtered_topics:
-            message_type = bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown'
-            message_count = bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0
-            
-            topic_info = {
-                'name': topic,
-                'message_type': message_type,
-                'message_count': message_count
-            }
-            listing_result['topics'].append(topic_info)
-        
-        return listing_result
     
     async def extract_bag(
         self,
@@ -637,7 +562,7 @@ class BagManager:
         loop = asyncio.get_event_loop()
         bag_details, _ = await loop.run_in_executor(
             self.executor,
-            self.parser.analyze_bag_quick,
+            self.parser.get_bag_summary,
             str(bag_path)
         )
         
@@ -751,135 +676,7 @@ class BagManager:
             
         return extraction_result
     
-    async def profile_bag(
-        self,
-        bag_path: Union[str, Path],
-        options: Optional[ProfileOptions] = None
-    ) -> Dict[str, Any]:
-        """
-        Profile a ROS bag file to analyze performance characteristics
-        
-        Args:
-            bag_path: Path to the bag file
-            options: Profiling options
-            
-        Returns:
-            Dictionary containing profiling results
-        """
-        if options is None:
-            options = ProfileOptions()
-            
-        # Get bag details for profiling
-        bag_details, analysis_time = self.parser.get_bag_details(str(bag_path))
-        
-        # Apply topic filtering
-        topics_to_profile = self._filter_topics(
-            bag_details.topics or [],
-            options.topics,
-            None
-        )
-        
-        # Calculate average rate
-        total_messages = sum(bag_details.message_counts.values()) if bag_details.message_counts else 0
-        average_rate = total_messages / bag_details.duration_seconds if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0
-        
-        # Build profiling results
-        profile_result = {
-            'bag_info': {
-                'file_name': Path(bag_path).name,
-                'total_topics': len(topics_to_profile),
-                'total_messages': sum(bag_details.message_counts.get(topic, 0) for topic in topics_to_profile) if bag_details.message_counts else 0,
-                'duration_seconds': bag_details.duration_seconds or 0.0,
-                'average_rate': average_rate
-            },
-            'topic_statistics': [],
-            'performance_metrics': {
-                'analysis_time': analysis_time,
-                'cached': bag_details.analysis_level.value != "none",
-                'cache_hit_rate': self._get_cache_hit_rate()
-            }
-        }
-        
-        # Calculate topic statistics
-        for topic in topics_to_profile:
-            message_count = bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0
-            frequency = message_count / bag_details.duration_seconds if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0
-            
-            topic_stats = {
-                'topic': topic,
-                'message_type': bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown',
-                'message_count': message_count,
-                'frequency': frequency,
-                'percentage': (message_count / total_messages) * 100 if total_messages > 0 else 0
-            }
-            
-            profile_result['topic_statistics'].append(topic_stats)
-        
-        return profile_result
     
-    async def diagnose_bag(
-        self,
-        bag_path: Union[str, Path],
-        options: Optional[DiagnoseOptions] = None
-    ) -> Dict[str, Any]:
-        """
-        Diagnose a ROS bag file for potential issues
-        
-        Args:
-            bag_path: Path to the bag file
-            options: Diagnosis options
-            
-        Returns:
-            Dictionary containing diagnosis results
-        """
-        if options is None:
-            options = DiagnoseOptions()
-            
-        bag_path = Path(bag_path)
-        
-        # Get bag details for diagnosis
-        bag_details, _ = self.parser.get_bag_details(str(bag_path))
-        
-        diagnosis_result = {
-            'bag_info': {
-                'file_name': bag_path.name,
-                'file_path': str(bag_path),
-                'file_exists': bag_path.exists(),
-                'file_size': bag_path.stat().st_size if bag_path.exists() else 0
-            },
-            'checks': [],
-            'issues': [],
-            'warnings': [],
-            'summary': {
-                'total_checks': 0,
-                'passed_checks': 0,
-                'failed_checks': 0,
-                'warnings_count': 0
-            }
-        }
-        
-        # Perform various diagnostic checks
-        checks = [
-            self._check_file_integrity(bag_path, bag_details),
-            self._check_timestamps(bag_details),
-            self._check_message_counts(bag_details)
-        ]
-        
-        # Process check results
-        for check in checks:
-            diagnosis_result['checks'].append(check)
-            diagnosis_result['summary']['total_checks'] += 1
-            
-            if check['passed']:
-                diagnosis_result['summary']['passed_checks'] += 1
-            else:
-                diagnosis_result['summary']['failed_checks'] += 1
-                diagnosis_result['issues'].append({
-                    'check': check['name'],
-                    'message': check['message']
-                })
-        
-        return diagnosis_result
     
     async def get_messages(
         self,
