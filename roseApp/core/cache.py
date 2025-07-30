@@ -44,7 +44,6 @@ class CacheEntry:
             self.tags = set()
         if self.last_access == 0:
             self.last_access = self.timestamp
-    
     def is_expired(self) -> bool:
         """Check if the cache entry has expired"""
         if self.ttl is None:

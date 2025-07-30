@@ -1,6 +1,7 @@
 import os
 import time
-from typing import Optional, List, Tuple
+import asyncio
+from typing import Optional, List, Tuple, Dict
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
@@ -11,7 +12,7 @@ from InquirerPy.validator import PathValidator
 import concurrent.futures
 import threading
 import queue
-from ..core.parser import create_parser
+from ..core.bag_manager import BagManager, InspectOptions, ExtractOptions
 from ..core.util import get_logger, get_preferred_parser_type
 from ..core.ui_control import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 
@@ -30,12 +31,82 @@ app = typer.Typer(help="ROS Bag Filter Tool")
 class CliTool:
     def __init__(self):
         self.console = Console()
-        # Auto-select best parser (always RosbagsBagParser)
-        self.parser = create_parser()
-        logger.debug("Using rosbags parser for enhanced performance and LZ4 support")
+        # Use new BagManager instead of parser
+        self.bag_manager = BagManager(max_workers=WORKERS)
+        logger.debug("Using BagManager with unified interface for enhanced performance")
         self.topics = None
         self.connections = None
         self.time_range = None
+    
+    def _run_async(self, coro):
+        """Helper to run async coroutines in sync context"""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    
+    def _load_bag_sync(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
+        """Synchronous wrapper for bag loading using inspect_bag"""
+        async def _load():
+            options = InspectOptions(show_fields=False, verbose=False)
+            result = await self.bag_manager.inspect_bag(bag_path, options)
+            
+            # Extract data in the format expected by CLI
+            topics = []
+            connections = {}
+            time_range = None
+            
+            if 'topics' in result:
+                for topic_info in result['topics']:
+                    topic_name = topic_info.get('name', '')
+                    message_type = topic_info.get('message_type', 'unknown')
+                    topics.append(topic_name)
+                    connections[topic_name] = message_type
+            
+            if 'time_range' in result:
+                time_range = result['time_range']
+            
+            return topics, connections, time_range
+        
+        return self._run_async(_load())
+    
+    def _filter_bag_sync(self, input_bag: str, output_bag: str, whitelist: List[str], 
+                        progress_callback=None, compression="none", overwrite=False) -> Dict:
+        """Synchronous wrapper for bag filtering using extract_bag"""
+        async def _filter():
+            from pathlib import Path
+            options = ExtractOptions(
+                topics=whitelist,
+                output_path=Path(output_bag),
+                compression=compression,
+                overwrite=overwrite,
+                dry_run=False
+            )
+            
+            result = await self.bag_manager.extract_bag(input_bag, options, progress_callback)
+            return result
+        
+        return self._run_async(_filter())
+    
+    def _load_whitelist_sync(self, whitelist_path: str) -> List[str]:
+        """Load whitelist from file - simple file reading"""
+        try:
+            with open(whitelist_path, 'r') as f:
+                lines = f.readlines()
+            
+            # Filter out comments and empty lines
+            topics = []
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    topics.append(line)
+            
+            return topics
+        except Exception as e:
+            logger.error(f"Error loading whitelist {whitelist_path}: {str(e)}")
+            return []
  
     def ask_for_bag(self, message: str = "Enter bag file path:") -> Optional[str]:
         """Ask user to input a bag file path"""
@@ -44,8 +115,7 @@ class CliTool:
                 message=message,
                 validate=PathValidator(is_file=True, message="File does not exist"),
                 filter=lambda x: x if x.endswith('.bag') else None,
-                invalid_message="File must be a .bag file",
-                style=theme.get_inquirer_style()
+                invalid_message="File must be a .bag file"
             ).execute()
             
             if input_bag is None:  # User cancelled
@@ -67,8 +137,7 @@ class CliTool:
             output_bag = inquirer.filepath(
                 message="Enter output bag file path:",
                 default=default_path,
-                validate=lambda x: x.endswith('.bag') or "File must be a .bag file",
-                style=theme.get_inquirer_style()
+                validate=lambda x: x.endswith('.bag') or "File must be a .bag file"
             ).execute()
             
             if not output_bag:  # User cancelled
@@ -79,8 +148,7 @@ class CliTool:
                 # Ask user if they want to overwrite
                 overwrite = inquirer.confirm(
                     message=f"Output file '{output_bag}' already exists. Do you want to overwrite it?",
-                    default=False,
-                    style=theme.get_inquirer_style()
+                    default=False
                 ).execute()
                 
                 if overwrite:
@@ -109,8 +177,7 @@ class CliTool:
                         Choice(value="filter", name="1. Bag Editor - View and filter bag files"),
                         Choice(value="whitelist", name="2. Whitelist - Manage topic whitelists"),
                         Choice(value="exit", name="3. Exit")
-                    ],
-                    style=theme.get_inquirer_style()
+                    ]
                 ).execute()
                 
                 if action == "exit":
@@ -132,8 +199,7 @@ class CliTool:
             # Ask for input bag file or directory
             input_path = inquirer.filepath(
                 message="Load Bag file(s):\n • Please specify the bag file or a directory to search \n • Leave blank to return to main menu\nFilename/Directory:",
-                validate=lambda x: os.path.exists(x) or "Path does not exist",
-                style=theme.get_inquirer_style()
+                validate=lambda x: os.path.exists(x) or "Path does not exist"
             ).execute()
             
             if not input_path:
@@ -158,8 +224,7 @@ class CliTool:
                     choices=[
                         Choice(value="continue", name="1. Process more files"),
                         Choice(value="main", name="2. Return to main menu")
-                    ],
-                    style=theme.get_inquirer_style()
+                    ]
                 ).execute()
                 
                 if continue_action == "main":
@@ -177,8 +242,7 @@ class CliTool:
                 Choice(value="whitelist", name="1. Use whitelist"),
                 Choice(value="manual", name="2. Select topics manually"),
                 Choice(value="back", name="3. Back")
-            ],
-            style=theme.get_inquirer_style()
+            ]
         ).execute()
     
     def handle_single_bag_interactive(self, bag_path: str):
@@ -190,7 +254,7 @@ class CliTool:
         # Load bag info
         with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
-            self.topics, self.connections, self.time_range = self.parser.load_bag(bag_path)
+            self.topics, self.connections, self.time_range = self._load_bag_sync(bag_path)
         
         # Create a loop for bag operations
         while True:
@@ -201,14 +265,13 @@ class CliTool:
                     Choice(value="info", name="1. Show bag information"),
                     Choice(value="filter", name="2. Filter bag file"),
                     Choice(value="back", name="3. Back to file selection")
-                ],
-                style=theme.get_inquirer_style()
+                ]
             ).execute()
             
             if next_action == "back":
                 break  # Go back to input selection
             elif next_action == "info":
-                print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range, parser=self.parser)
+                print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range, parser=self.bag_manager.parser)
                 continue  # Stay in the current menu
             elif next_action == "filter":
                 # Get output bag with overwrite handling
@@ -260,8 +323,7 @@ class CliTool:
             instruction="",
             validate=lambda result: len(result) > 0,
             invalid_message="Please select at least one file",
-            transformer=bag_list_transformer,
-            style=theme.get_inquirer_style()
+            transformer=bag_list_transformer
         ).execute()
         
         if not selected_files:
@@ -301,8 +363,7 @@ class CliTool:
         compression = inquirer.select(
             message="Choose compression type:",
             choices=compression_choices,
-            default="none",
-            style=theme.get_inquirer_style()
+            default="none"
         ).execute()
         
         if compression is None:
@@ -311,8 +372,7 @@ class CliTool:
         # Process bag files in parallel
         confirm = inquirer.confirm(
             message="Are you sure you want to process these bag files?",
-            default=False,
-            style=theme.get_inquirer_style()
+            default=False
         ).execute()
         if not confirm:
             return  # Go back to input selection
@@ -335,8 +395,7 @@ class CliTool:
         # Select whitelist to use
         selected = inquirer.select(
             message="Select whitelist to use:",
-            choices=whitelists,
-            style=theme.get_inquirer_style()
+            choices=whitelists
         ).execute()
         
         if not selected:
@@ -344,7 +403,7 @@ class CliTool:
             
         # Load selected whitelist
         whitelist_path = os.path.join(whitelist_dir, selected)
-        return self.parser.load_whitelist(whitelist_path)
+        return self._load_whitelist_sync(whitelist_path)
 
     def _get_filter_topics_from_manual_selection(self, selected_files: List[str]) -> Optional[List[str]]:
         """Get topics from manual selection
@@ -362,7 +421,7 @@ class CliTool:
             for i, bag_file in enumerate(selected_files):
                 progress.update(task, description=f"Loading {i+1}/{len(selected_files)}: {os.path.basename(bag_file)}")
                 try:
-                    topics, connections, _ = self.parser.load_bag(bag_file)
+                    topics, connections, _ = self._load_bag_sync(bag_file)
                     all_topics.update(topics)
                     all_connections.update(connections)
                     progress.advance(task)
@@ -379,7 +438,7 @@ class CliTool:
         # Use the first bag file for statistics display (as an example)
         bag_path_for_stats = selected_files[0] if selected_files else None
         
-        return ask_topics(self.console, list(all_topics), parser=self.parser, bag_path=bag_path_for_stats)
+        return ask_topics(self.console, list(all_topics), parser=None, bag_path=bag_path_for_stats)
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist, compression="none"):
@@ -441,10 +500,7 @@ class CliTool:
                     output_bag = f"{base_name}_filtered_{batch_timestamp}.bag"
                     
                     # Process file with the selected whitelist
-                    # We need to create a new parser instance for each thread
-                    if not hasattr(thread_local, 'parser'):
-                        # Use RosbagsBagParser for all threads
-                            thread_local.parser = create_parser()
+                    # BagManager handles thread safety internally
                     
                     # Initialize progress to 30% to indicate preparation complete
                     progress.update(task, description=f"Processing: {display_path}", style=theme.ACCENT, completed=0)
@@ -459,7 +515,7 @@ class CliTool:
                     
                     # Use progress callback for filtering
                     try:
-                        thread_local.parser.filter_bag(
+                        result = self._filter_bag_sync(
                             bag_file, 
                             output_bag, 
                             whitelist,
@@ -467,17 +523,9 @@ class CliTool:
                             compression=compression,
                             overwrite=True  # For batch processing, always overwrite
                         )
-                    except FileExistsError:
-                        # This should not happen since we use overwrite=True
-                        # but handle it just in case
-                        thread_local.parser.filter_bag(
-                            bag_file, 
-                            output_bag, 
-                            whitelist,
-                            progress_callback=update_progress,
-                            compression=compression,
-                            overwrite=True
-                        )
+                    except Exception as e:
+                        # Handle any filtering errors
+                        raise e
                     
                     # Update task status to complete, showing green success mark
                     progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
@@ -544,7 +592,7 @@ class CliTool:
         # Load bag information
         with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
-            self.topics, self.connections, self.time_range = self.parser.load_bag(input_bag)
+            self.topics, self.connections, self.time_range = self._load_bag_sync(input_bag)
         
         # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
@@ -562,8 +610,7 @@ class CliTool:
             # Select whitelist to use
             selected = inquirer.select(
                 message="Select whitelist to use:",
-                choices=whitelists,
-                style=theme.get_inquirer_style()
+                choices=whitelists
             ).execute()
             
             if not selected:
@@ -571,12 +618,12 @@ class CliTool:
                 
             # Load selected whitelist
             whitelist_path = os.path.join(whitelist_dir, selected)
-            whitelist = self.parser.load_whitelist(whitelist_path)
+            whitelist = self._load_whitelist_sync(whitelist_path)
             if not whitelist:
                 return
                 
         elif filter_method == "manual":
-            whitelist = ask_topics(self.console, self.topics, parser=self.parser, bag_path=input_bag)
+            whitelist = ask_topics(self.console, self.topics, parser=None, bag_path=input_bag)
             if not whitelist:
                 return
 
@@ -596,8 +643,7 @@ class CliTool:
         compression = inquirer.select(
             message="Choose compression type:",
             choices=compression_choices,
-            default="none",
-            style=theme.get_inquirer_style()
+            default="none"
         ).execute()
         
         if compression is None:
@@ -618,7 +664,7 @@ class CliTool:
                 progress.update(task_id, description=f"Filtering: {display_name}", completed=percent)
             
             # Execute filtering with progress callback
-            result = self.parser.filter_bag(
+            result = self._filter_bag_sync(
                 input_bag, 
                 output_bag, 
                 whitelist,
@@ -644,8 +690,7 @@ class CliTool:
                     Choice(value="view", name="2. View whitelist"),
                     Choice(value="delete", name="3. Delete whitelist"),
                     Choice(value="back", name="4. Back")
-                ],
-                style=theme.get_inquirer_style()
+                ]
             ).execute()
             
             if action == "back":
@@ -667,10 +712,10 @@ class CliTool:
         # Load bag file
         with LoadingAnimation("Loading bag file...",dismiss=True) as progress:
             progress.add_task(description="Loading...")
-            topics, connections, _ = self.parser.load_bag(input_bag)
+            topics, connections, _ = self._load_bag_sync(input_bag)
         
         # Select topics
-        selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
+        selected_topics = ask_topics(self.console, topics, parser=None, bag_path=input_bag)
         if not selected_topics:
             return
             
@@ -680,8 +725,7 @@ class CliTool:
         
         use_default = inquirer.confirm(
             message=f"Use default path? ({default_path})",
-            default=True,
-            style=theme.get_inquirer_style()
+            default=True
         ).execute()
         
         if use_default:
@@ -690,8 +734,7 @@ class CliTool:
             output = inquirer.filepath(
                 message="Enter save path:",
                 default="whitelists/my_whitelist.txt",
-                validate=lambda x: x.endswith('.txt') or "File must be a .txt file",
-                style=theme.get_inquirer_style()
+                validate=lambda x: x.endswith('.txt') or "File must be a .txt file"
             ).execute()
             
             if not output:
@@ -714,8 +757,7 @@ class CliTool:
             choices=[
                 Choice(value="continue", name="1. Create another whitelist"),
                 Choice(value="back", name="2. Back")
-            ],
-            style=theme.get_inquirer_style()
+            ]
         ).execute()
         
         if next_action == "continue":
@@ -737,8 +779,7 @@ class CliTool:
         # Select whitelist to view
         selected = inquirer.select(
             message="Select whitelist to view:",
-            choices=whitelists,
-            style=theme.get_inquirer_style()
+            choices=whitelists
         ).execute()
         
         if not selected:
@@ -772,8 +813,7 @@ class CliTool:
         # Select whitelist to delete
         selected = inquirer.select(
             message="Select whitelist to delete:",
-            choices=whitelists,
-            style=theme.get_inquirer_style()
+            choices=whitelists
         ).execute()
         
         if not selected:
@@ -782,8 +822,7 @@ class CliTool:
         # Confirm deletion
         if not inquirer.confirm(
             message=f"Are you sure you want to delete '{selected}'?",
-            default=False,
-            style=theme.get_inquirer_style()
+            default=False
         ).execute():
             return
             

@@ -104,8 +104,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             choices=[
                 Choice(value="filter", name="1. Filter topics (fuzzy search)"),
                 Choice(value="back", name="2. Back")
-            ],
-            style=theme.get_inquirer_style()
+            ]
         ).execute()
         
         if action == "back":
@@ -297,7 +296,6 @@ def ask_topics_with_fuzzy(
         marker="● ",
         border=True,
         cycle=True,
-        style=theme.get_inquirer_style(),
         default=preselected
     ).execute()
     
