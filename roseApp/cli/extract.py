@@ -115,7 +115,7 @@ def _extract_topics_impl(
         manager = BagManager()
         
         # Get topic list using lightweight method
-        ui.show_analyzing_status()
+        ui.show_operation_status("Analyzing bag file...")
         
         # Use parser.get_bag_summary for lightweight topic discovery
         bag_info, _ = manager.parser.get_bag_summary(str(input_path))
@@ -139,15 +139,15 @@ def _extract_topics_impl(
             operation_desc = f"Including topics matching: {', '.join(topics)}"
         
         if not topics_to_extract:
-            ui.show_no_matching_topics(topics, all_topics, reverse)
+            ui.show_no_matching_items(topics, all_topics, reverse, "topics")
             raise typer.Exit(1)
         
         # Show operation description using unified UI
-        ui.show_extraction_operation(operation_desc, topics_to_extract)
+        ui.show_operation_description(operation_desc, topics_to_extract, "topics")
         
         # If dry run, show preview and return
         if dry_run:
-            ui.show_dry_run_preview(len(topics_to_extract), topics_to_extract, output_path)
+            ui.show_dry_run_preview(len(topics_to_extract), topics_to_extract, output_path, "extract")
             return
         
         # Perform the actual extraction
@@ -273,13 +273,16 @@ def _extract_topics_impl(
             raise typer.Exit(1)
         
         # Show success message using unified UI
-        ui.show_extraction_success(len(topics_to_extract), output_path, extraction_time)
+        ui.show_operation_success("extracted", len(topics_to_extract), output_path, extraction_time)
         
         # Show verbose details if requested
         if verbose:
             # Show extraction details
             output_size = output_path.stat().st_size if output_path.exists() else None
-            ui.show_extraction_details(input_path, output_path, compression, extraction_time, output_size)
+            additional_info = {"Compression": compression}
+            if output_size is not None:
+                additional_info["Output size"] = f"{output_size / 1024 / 1024:.1f} MB"
+            ui.show_operation_details("extraction", input_path, output_path, extraction_time, additional_info)
             
             # Show topic selection summary
             if reverse:
@@ -289,18 +292,18 @@ def _extract_topics_impl(
                 excluded_topics = [t for t in all_topics if t not in topics_to_extract]
                 excluded_count = len(excluded_topics)
             
-            ui.show_topic_selection_summary(len(all_topics), len(topics_to_extract), excluded_count)
+            ui.show_items_selection_summary(len(all_topics), len(topics_to_extract), excluded_count, "topics")
             
             # Show topic lists
             if reverse:
                 excluded_topics_matching = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
-                ui.show_topic_lists(topics_to_extract, excluded_topics_matching, reverse_mode=True)
+                ui.show_items_lists(topics_to_extract, excluded_topics_matching, reverse_mode=True, item_type="topics")
             else:
                 excluded_topics_non_matching = [t for t in all_topics if t not in topics_to_extract]
-                ui.show_topic_lists(topics_to_extract, excluded_topics_non_matching, reverse_mode=False)
+                ui.show_items_lists(topics_to_extract, excluded_topics_non_matching, reverse_mode=False, item_type="topics")
             
             # Show pattern matching summary
-            ui.show_pattern_matching_summary(topics, reverse, all_topics)
+            ui.show_pattern_matching_summary(topics, reverse, all_topics, "topics")
         
         manager.cleanup()
         

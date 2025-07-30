@@ -16,6 +16,8 @@ from rich.table import Table
 from rich.text import Text
 
 from ..core.cache import get_cache
+from ..core.ui_control import UIControl
+from ..core.theme_config import UnifiedThemeManager, ComponentType
 
 app = typer.Typer(name="tools", help="Utility tools for cache management, diagnostics, and system info")
 
@@ -73,7 +75,8 @@ def _show_cache_status_and_info(cache, console):
     # Display cache summary
     panel_content = Text()
     panel_content.append(f"Cache Type: {type(cache).__name__}\n")
-    panel_content.append(f"Hit Rate: {unified_stats.get('hit_rate', 0) * 100:.1f}%\n", style="bold green")
+    # Display cache statistics using unified colors
+    panel_content.append(f"Hit Rate: {unified_stats.get('hit_rate', 0) * 100:.1f}%\n", style=UnifiedThemeManager.get_color(ComponentType.CLI, 'success', 'bold'))
     
     total_requests = unified_stats.get('hits', 0) + unified_stats.get('misses', 0)
     panel_content.append(f"Total Requests: {total_requests:,}\n")
@@ -87,12 +90,12 @@ def _show_cache_status_and_info(cache, console):
         panel_content.append(f"\nDisk Usage: {_format_size(file_stats.get('size_bytes', 0))}")
         panel_content.append(f" / {_format_size(file_stats.get('max_size', 0))}")
     
-    panel = Panel(
+    cache_panel = Panel(
         panel_content,
-        title="Cache Status",
-        border_style="blue"
+        title="Cache Statistics",
+        border_style=UnifiedThemeManager.get_color(ComponentType.CLI, 'info')
     )
-    console.print(panel)
+    console.print(cache_panel)
     
     # Show cache entries with index numbers
     memory_entries = memory_stats.get('entry_count', 0)

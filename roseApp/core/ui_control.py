@@ -78,6 +78,47 @@ class ThemeColors:
         "#4f46e5", "#14b8a6", "#f59e0b", "#ec4899", "#22c55e"
     ])
     
+    # Rich console color names (for backward compatibility)
+    @property
+    def rich_primary(self) -> str:
+        """Primary color as rich color name"""
+        return "blue"
+    
+    @property
+    def rich_secondary(self) -> str:
+        """Secondary color as rich color name"""
+        return "cyan"
+    
+    @property
+    def rich_accent(self) -> str:
+        """Accent color as rich color name"""
+        return "yellow"
+    
+    @property
+    def rich_success(self) -> str:
+        """Success color as rich color name"""
+        return "green"
+    
+    @property
+    def rich_warning(self) -> str:
+        """Warning color as rich color name"""
+        return "yellow"
+    
+    @property
+    def rich_error(self) -> str:
+        """Error color as rich color name"""
+        return "red"
+    
+    @property
+    def rich_info(self) -> str:
+        """Info color as rich color name"""
+        return "blue"
+    
+    @property
+    def rich_muted(self) -> str:
+        """Muted color as rich color name"""
+        return "dim white"
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
@@ -95,6 +136,63 @@ class ThemeColors:
             'muted': self.muted,
             'chart_colors': self.chart_colors
         }
+    
+    def get_style(self, color_name: str, modifier: str = "") -> str:
+        """Get styled color string for rich console
+        
+        Args:
+            color_name: Name of the color (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Formatted style string for rich console
+        """
+        color_map = {
+            'primary': self.primary,
+            'secondary': self.secondary,
+            'accent': self.accent,
+            'success': self.success,
+            'warning': self.warning,
+            'error': self.error,
+            'info': self.info,
+            'muted': self.muted,
+            'foreground': self.foreground,
+            'background': self.background,
+            'border': self.border
+        }
+        
+        color = color_map.get(color_name, self.foreground)
+        
+        if modifier:
+            return f"{modifier} {color}"
+        return color
+    
+    def get_rich_style(self, color_name: str, modifier: str = "") -> str:
+        """Get rich color name for console styling
+        
+        Args:
+            color_name: Name of the color (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Rich color name string
+        """
+        rich_color_map = {
+            'primary': self.rich_primary,
+            'secondary': self.rich_secondary,
+            'accent': self.rich_accent,
+            'success': self.rich_success,
+            'warning': self.rich_warning,
+            'error': self.rich_error,
+            'info': self.rich_info,
+            'muted': self.rich_muted
+        }
+        
+        color = rich_color_map.get(color_name, "white")
+        
+        if modifier:
+            return f"{modifier} {color}"
+        return color
 
 
 @dataclass
@@ -319,6 +417,79 @@ class UIControl:
             "disabled": f"fg:{colors.muted} italic"
         }
     
+    @classmethod
+    def get_color(cls, color_name: str, modifier: str = "") -> str:
+        """Get unified color for any component
+        
+        Args:
+            color_name: Color name (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Styled color string
+        """
+        return cls._theme_colors.get_style(color_name, modifier)
+    
+    @classmethod
+    def get_rich_color(cls, color_name: str, modifier: str = "") -> str:
+        """Get rich color name for console styling
+        
+        Args:
+            color_name: Color name (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Rich color name string
+        """
+        return cls._theme_colors.get_rich_style(color_name, modifier)
+    
+    @classmethod
+    def style_text(cls, text: str, color_name: str, modifier: str = "") -> str:
+        """Apply unified styling to text
+        
+        Args:
+            text: Text to style
+            color_name: Color name (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Styled text for rich console
+        """
+        style = cls.get_color(color_name, modifier)
+        return f"[{style}]{text}[/{style}]"
+    
+    @classmethod
+    def get_component_color(cls, component_type: str, color_name: str, modifier: str = "") -> str:
+        """Get color for specific component type using UnifiedThemeManager
+        
+        Args:
+            component_type: Type of component (cli, tui, plot, etc.)
+            color_name: Name of the color (primary, success, error, etc.)
+            modifier: Style modifier (bold, dim, italic, etc.)
+        
+        Returns:
+            Formatted color string appropriate for the component
+        """
+        try:
+            # Import here to avoid circular imports
+            from .theme_config import UnifiedThemeManager, ComponentType
+            
+            # Map string to ComponentType enum
+            component_map = {
+                'cli': ComponentType.CLI,
+                'tui': ComponentType.TUI,
+                'plot': ComponentType.PLOT,
+                'progress': ComponentType.PROGRESS,
+                'table': ComponentType.TABLE,
+                'panel': ComponentType.PANEL
+            }
+            
+            comp_type = component_map.get(component_type.lower(), ComponentType.CLI)
+            return UnifiedThemeManager.get_color(comp_type, color_name, modifier)
+        except ImportError:
+            # Fallback to regular color method if theme_config is not available
+            return cls.get_color(color_name, modifier)
+    
     # ========================================================================
     # Progress Bar Methods
     # ========================================================================
@@ -451,9 +622,9 @@ class UIControl:
             console.clear()
             
             # Line 1: Current topic being processed
-            console.print(f"[bold white]{operation_title}[/bold white]")
+            console.print(f"[{cls.get_color('primary', 'bold')}]{operation_title}[/{cls.get_color('primary', 'bold')}]")
             console.print()
-            console.print(f"[cyan]📁 Processing:[/cyan] [yellow]{current_topic}[/yellow]")
+            console.print(f"[{cls.get_color('info')}]📁 Processing:[/{cls.get_color('info')}] [{cls.get_color('accent')}]{current_topic}[/{cls.get_color('accent')}]")
             
             # Line 2: Progress bar with details
             if total_topics > 0:
@@ -464,21 +635,21 @@ class UIControl:
                 bar = "█" * filled + "░" * (bar_width - filled)
                 
                 # Format details
-                format_text = f"[dim]Format:[/dim] [green]{current_format}[/green]" if current_format else ""
-                count_text = f"[dim]Topics:[/dim] [cyan]{processed_topics}/{total_topics}[/cyan]"
-                percent_text = f"[dim]Progress:[/dim] [yellow]{progress_percent:.1f}%[/yellow]"
+                format_text = f"[{cls.get_color('muted', 'dim')}]Format:[/{cls.get_color('muted', 'dim')}] [{cls.get_color('success')}]{current_format}[/{cls.get_color('success')}]" if current_format else ""
+                count_text = f"[{cls.get_color('muted', 'dim')}]Topics:[/{cls.get_color('muted', 'dim')}] [{cls.get_color('info')}]{processed_topics}/{total_topics}[/{cls.get_color('info')}]"
+                percent_text = f"[{cls.get_color('muted', 'dim')}]Progress:[/{cls.get_color('muted', 'dim')}] [{cls.get_color('accent')}]{progress_percent:.1f}%[/{cls.get_color('accent')}]"
                 
-                console.print(f"[blue]{bar}[/blue] {format_text} {count_text} {percent_text}")
+                console.print(f"[{cls.get_color('primary')}]{bar}[/{cls.get_color('primary')}] {format_text} {count_text} {percent_text}")
             else:
                 # Simple progress for unknown total
                 spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
                 frame_index = int(current_progress / 10) % len(spinner_frames)
                 spinner = spinner_frames[frame_index]
                 
-                format_text = f"[dim]Format:[/dim] [green]{current_format}[/green]" if current_format else ""
-                percent_text = f"[dim]Progress:[/dim] [yellow]{current_progress:.1f}%[/yellow]"
+                format_text = f"[{cls.get_color('muted', 'dim')}]Format:[/{cls.get_color('muted', 'dim')}] [{cls.get_color('success')}]{current_format}[/{cls.get_color('success')}]" if current_format else ""
+                percent_text = f"[{cls.get_color('muted', 'dim')}]Progress:[/{cls.get_color('muted', 'dim')}] [{cls.get_color('accent')}]{current_progress:.1f}%[/{cls.get_color('accent')}]"
                 
-                console.print(f"[blue]{spinner}[/blue] {format_text} {percent_text}")
+                console.print(f"[{cls.get_color('primary')}]{spinner}[/{cls.get_color('primary')}] {format_text} {percent_text}")
             
             console.print()
         
@@ -509,7 +680,7 @@ class UIControl:
         finally:
             # Clear and show completion
             console.clear()
-            console.print(f"[bold green]✓ {operation_title} complete[/bold green]")
+            console.print(f"[{cls.get_color('success', 'bold')}]✓ Analysis complete[/{cls.get_color('success', 'bold')}]")
             console.print()
     
     # ========================================================================
@@ -551,16 +722,16 @@ class UIControl:
             table = Table(
                 title=title,
                 show_header=True,
-                header_style="bold magenta",
+                header_style=cls.get_color('accent', 'bold'),
                 expand=True,
                 box=None
             )
             
-            table.add_column("Status", style="bold", width=8, justify="center")
-            table.add_column("Topic", style="cyan", no_wrap=False)
+            table.add_column("Status", style=cls.get_color('primary', 'bold'), width=8, justify="center")
+            table.add_column("Topic", style=cls.get_color('info'), no_wrap=False)
             table.add_column("Progress", width=30)
             table.add_column("Messages", justify="right", width=12)
-            table.add_column("Phase", style="yellow", width=15)
+            table.add_column("Phase", style=cls.get_color('accent'), width=15)
             
             return table
         
@@ -617,13 +788,13 @@ class UIControl:
                 
                 # Topic name with styling
                 if status_info['status'] == 'processing':
-                    topic_display = f"[bold yellow]{topic_name}[/bold yellow]"
+                    topic_display = f"[{cls.get_color('accent', 'bold')}]{topic_name}[/{cls.get_color('accent', 'bold')}]"
                 elif status_info['status'] == 'completed':
-                    topic_display = f"[green]{topic_name}[/green]"
+                    topic_display = f"[{cls.get_color('success')}]{topic_name}[/{cls.get_color('success')}]"
                 elif status_info['status'] == 'skipped':
-                    topic_display = f"[dim blue]{topic_name}[/dim blue]"
+                    topic_display = f"[{cls.get_color('info', 'dim')}]{topic_name}[/{cls.get_color('info', 'dim')}]"
                 else:
-                    topic_display = f"[dim]{topic_name}[/dim]"
+                    topic_display = f"[{cls.get_color('muted', 'dim')}]{topic_name}[/{cls.get_color('muted', 'dim')}]"
                 
                 table.add_row(
                     f"[{status_style}]{status_icon}[/{status_style}]",
@@ -664,7 +835,7 @@ class UIControl:
             total_count = len(topic_status)
             
             console.print()
-            console.print(f"[bold green]✅ Processing Complete![/bold green]")
+            console.print(f"[{cls.get_color('success', 'bold')}]✅ Processing Complete![/{cls.get_color('success', 'bold')}]")
             console.print(f"Topics: {completed_count} completed, {skipped_count} skipped, {total_count} total")
     
     @classmethod
@@ -705,14 +876,14 @@ class UIControl:
             table = Table(
                 title=title,
                 show_header=True,
-                header_style="bold white",
+                header_style=cls.get_color('primary', 'bold'),
                 expand=True,
                 box=None,
                 padding=(0, 1)
             )
             
-            table.add_column("", style="bold", width=3, justify="center")
-            table.add_column("Topic", style="white", no_wrap=False)
+            table.add_column("", style=cls.get_color('primary', 'bold'), width=3, justify="center")
+            table.add_column("Topic", style=cls.get_color('foreground'), no_wrap=False)
             table.add_column("Messages", justify="right", width=15)
             table.add_column("Status", width=12)
             
@@ -802,9 +973,9 @@ class UIControl:
             total_count = len(topic_status)
             
             if completed_count == total_count:
-                console.print(f"[bold green]✓ Successfully processed all {total_count} topics[/bold green]")
+                console.print(f"[{cls.get_color('success', 'bold')}]✓ Successfully processed all {total_count} topics[/{cls.get_color('success', 'bold')}]")
             else:
-                console.print(f"[yellow]Processed {completed_count}/{total_count} topics[/yellow]")
+                console.print(f"[{cls.get_color('warning')}]Processed {completed_count}/{total_count} topics[/{cls.get_color('warning')}]")
     
     @classmethod
     @contextmanager  
@@ -874,9 +1045,9 @@ class UIControl:
             
             # Clear and show current status
             console.clear()
-            console.print(f"[bold white]{title}[/bold white]")
+            console.print(f"[{cls.get_color('primary', 'bold')}]{title}[/{cls.get_color('primary', 'bold')}]")
             console.print()
-            console.print(f"[yellow]{spinner}[/yellow] {current_description}")
+            console.print(f"[{cls.get_color('accent')}]{spinner}[/{cls.get_color('accent')}] {current_description}")
             console.print()
         
         def update_progress(percent: float = None, description: str = None):
@@ -950,31 +1121,31 @@ class UIControl:
             todo_text = Text()
             
             # Main header
-            todo_text.append("⏺ ", style="cyan bold")
-            todo_text.append(f"Analyzing {bag_name}\n", style="cyan bold")
+            todo_text.append("⏺ ", style=cls.get_color('info', 'bold'))
+            todo_text.append(f"Analyzing {bag_name}\n", style=cls.get_color('info', 'bold'))
             
             for i, task in enumerate(tasks):
                 # Indentation and connector
                 if i == 0:
-                    todo_text.append("  ⎿  ", style="dim")  # First item connector
+                    todo_text.append("  ⎿  ", style=cls.get_color('muted', 'dim'))  # First item connector
                 else:
-                    todo_text.append("     ", style="dim")  # Regular indentation
+                    todo_text.append("     ", style=cls.get_color('muted', 'dim'))  # Regular indentation
                 
                 # Status icon and task
                 if task_status[i] == "completed":
-                    todo_text.append("✓ ", style="green bold")
-                    todo_text.append(f"{task}\n", style="green")
+                    todo_text.append("✓ ", style=cls.get_color('success', 'bold'))
+                    todo_text.append(f"{task}\n", style=cls.get_color('success'))
                 elif task_status[i] == "in_progress":
-                    todo_text.append("⠋ ", style="yellow bold")
-                    todo_text.append(f"{task}\n", style="yellow bold")
+                    todo_text.append("⠋ ", style=cls.get_color('accent', 'bold'))
+                    todo_text.append(f"{task}\n", style=cls.get_color('accent', 'bold'))
                 else:  # pending
-                    todo_text.append("○ ", style="dim")
-                    todo_text.append(f"{task}\n", style="dim")
+                    todo_text.append("○ ", style=cls.get_color('muted', 'dim'))
+                    todo_text.append(f"{task}\n", style=cls.get_color('muted', 'dim'))
             
             return Panel(
                 Align.left(todo_text),
-                title=f"[bold cyan]Analysis Progress[/bold cyan]",
-                border_style="cyan",
+                title=f"[{cls.get_color('info', 'bold')}]Analysis Progress[/{cls.get_color('info', 'bold')}]",
+                border_style=cls.get_color('info'),
                 padding=(1, 2)
             )
         
@@ -1066,65 +1237,65 @@ class UIControl:
             todo_text = Text()
             
             # Main header
-            todo_text.append("⏺ ", style="cyan bold")
-            todo_text.append(f"{operation} {bag_name}\n", style="cyan bold")
+            todo_text.append("⏺ ", style=cls.get_color('info', 'bold'))
+            todo_text.append(f"{operation} {bag_name}\n", style=cls.get_color('info', 'bold'))
             
             for i, task in enumerate(tasks):
                 # Indentation and connector
                 if i == 0:
-                    todo_text.append("  ⎿  ", style="dim")  # First item connector
+                    todo_text.append("  ⎿  ", style=cls.get_color('muted', 'dim'))  # First item connector
                 else:
-                    todo_text.append("     ", style="dim")  # Regular indentation
+                    todo_text.append("     ", style=cls.get_color('muted', 'dim'))  # Regular indentation
                 
                 # Status icon and task name
                 if task_status[i] == "completed":
-                    todo_text.append("✓ ", style="green bold")
-                    todo_text.append(f"{task['name']}", style="green")
+                    todo_text.append("✓ ", style=cls.get_color('success', 'bold'))
+                    todo_text.append(f"{task['name']}", style=cls.get_color('success'))
                     
                     # Show completion time
                     if task_timings[i]["duration"] is not None:
-                        todo_text.append(f" ({task_timings[i]['duration']:.1f}s)", style="green dim")
+                        todo_text.append(f" ({task_timings[i]['duration']:.1f}s)", style=cls.get_color('success', 'dim'))
                     
                     # Show completion details if available
                     if task_timings[i]["details"]:
-                        todo_text.append(f" - {task_timings[i]['details']}", style="green dim")
+                        todo_text.append(f" - {task_timings[i]['details']}", style=cls.get_color('success', 'dim'))
                     
                     todo_text.append("\n")
                     
                 elif task_status[i] == "in_progress":
-                    todo_text.append("⠋ ", style="yellow bold")
-                    todo_text.append(f"{task['name']}", style="yellow bold")
+                    todo_text.append("⠋ ", style=cls.get_color('accent', 'bold'))
+                    todo_text.append(f"{task['name']}", style=cls.get_color('accent', 'bold'))
                     
                     # Show current progress and timing
                     current_time = time.time()
                     if task_timings[i]["start"] is not None:
                         elapsed = current_time - task_timings[i]["start"]
-                        todo_text.append(f" ({elapsed:.1f}s)", style="yellow dim")
+                        todo_text.append(f" ({elapsed:.1f}s)", style=cls.get_color('accent', 'dim'))
                     
                     # Show progress details if available
                     if task_timings[i]["progress"] is not None:
-                        todo_text.append(f" - {task_timings[i]['progress']:.0f}%", style="yellow")
+                        todo_text.append(f" - {task_timings[i]['progress']:.0f}%", style=cls.get_color('accent'))
                     
                     # Show task-specific details
                     if task_timings[i]["details"]:
-                        todo_text.append(f" - {task_timings[i]['details']}", style="yellow dim")
+                        todo_text.append(f" - {task_timings[i]['details']}", style=cls.get_color('accent', 'dim'))
                     
                     todo_text.append("\n")
                     
                 else:  # pending
-                    todo_text.append("○ ", style="dim")
-                    todo_text.append(f"{task['name']}\n", style="dim")
+                    todo_text.append("○ ", style=cls.get_color('muted', 'dim'))
+                    todo_text.append(f"{task['name']}\n", style=cls.get_color('muted', 'dim'))
             
             # Add overall timing info
             total_elapsed = time.time() - overall_start_time
-            todo_text.append(f"\nTotal elapsed: {total_elapsed:.1f}s", style="cyan dim")
+            todo_text.append(f"\nTotal elapsed: {total_elapsed:.1f}s", style=cls.get_color('info', 'dim'))
             
             # Add current status if extraction is in progress
             if current_status['topics_total'] > 0:
-                todo_text.append(f" • Topics: {current_status['topics_processed']}/{current_status['topics_total']}", style="blue dim")
+                todo_text.append(f" • Topics: {current_status['topics_processed']}/{current_status['topics_total']}", style=cls.get_color('primary', 'dim'))
             
             if current_status['bag_format'] != 'ROS Bag':
-                todo_text.append(f" • Format: {current_status['bag_format']}", style="blue dim")
+                todo_text.append(f" • Format: {current_status['bag_format']}", style=cls.get_color('primary', 'dim'))
             
             # Add progress bar
             todo_text.append("\n\n")
@@ -1137,18 +1308,18 @@ class UIControl:
                 bar = "█" * filled + "░" * (bar_width - filled)
                 
                 # Progress bar with percentage
-                todo_text.append(f"{bar}", style="blue dim")
-                todo_text.append(f" {progress_percent:.1f}%", style="cyan bold")
+                todo_text.append(f"{bar}", style=cls.get_color('primary', 'dim'))
+                todo_text.append(f" {progress_percent:.1f}%", style=cls.get_color('info', 'bold'))
                 
                 # Add current phase info if available
                 if current_status.get('phase'):
                     phase_display = current_status['phase'].title()
-                    todo_text.append(f" • {phase_display}", style="yellow dim")
+                    todo_text.append(f" • {phase_display}", style=cls.get_color('accent', 'dim'))
             
             return Panel(
                 Align.left(todo_text),
-                title=f"[bold cyan]Extraction Progress[/bold cyan]",
-                border_style="cyan",
+                title=f"[{cls.get_color('info', 'bold')}]Extraction Progress[/{cls.get_color('info', 'bold')}]",
+                border_style=cls.get_color('info'),
                 padding=(1, 2)
             )
         
@@ -1382,8 +1553,8 @@ class UIControl:
         # Create results panel
         results_panel = Panel(
             combined_content,
-            title=f"[bold green]Analysis Results[/bold green]",
-            border_style="green",
+            title=f"[{cls.get_color('success', 'bold')}]Analysis Results[/{cls.get_color('success', 'bold')}]",
+            border_style=cls.get_color('success'),
             padding=(1, 2)
         )
         
@@ -1485,28 +1656,28 @@ class UIControl:
         """Display success message"""
         if console is None:
             console = cls.get_console()
-        console.print(f"✓ [green]{message}[/green]")
+        console.print(f"✓ [{cls.get_color('success')}]{message}[/{cls.get_color('success')}]")
     
     @classmethod
     def show_error(cls, message: str, console: Optional[Console] = None):
         """Display error message"""
         if console is None:
             console = cls.get_console()
-        console.print(f"✗ [red]{message}[/red]")
+        console.print(f"✗ [{cls.get_color('error')}]{message}[/{cls.get_color('error')}]")
     
     @classmethod
     def show_warning(cls, message: str, console: Optional[Console] = None):
         """Display warning message"""
         if console is None:
             console = cls.get_console()
-        console.print(f"⚠ [yellow]{message}[/yellow]")
+        console.print(f"⚠ [{cls.get_color('warning')}]{message}[/{cls.get_color('warning')}]")
     
     @classmethod
     def show_info(cls, message: str, console: Optional[Console] = None):
         """Display info message"""
         if console is None:
             console = cls.get_console()
-        console.print(f"ℹ [blue]{message}[/blue]")
+        console.print(f"ℹ [{cls.get_color('info')}]{message}[/{cls.get_color('info')}]")
     
     @classmethod
     def show_operation_cancelled(cls, console: Optional[Console] = None):
@@ -1516,97 +1687,99 @@ class UIControl:
         console.print("Operation cancelled.", style=cls._theme_colors.muted)
     
     @classmethod
-    def show_analyzing_status(cls, console: Optional[Console] = None):
-        """Display analyzing bag file status"""
+    def show_operation_status(cls, message: str, console: Optional[Console] = None):
+        """Display general operation status (unified for analyzing, processing, etc.)"""
         if console is None:
             console = cls.get_console()
-        console.print("Analyzing bag file...", style=f"dim {cls._theme_colors.primary}")
+        console.print(message, style=f"dim {cls._theme_colors.primary}")
     
     @classmethod
-    def show_extraction_operation(cls, operation_desc: str, topics_to_extract: List[str], console: Optional[Console] = None):
-        """Display extraction operation description and topics"""
+    def show_operation_description(cls, operation_desc: str, items: List[str], item_type: str = "topics", console: Optional[Console] = None):
+        """Display operation description and items (unified for extraction, inspection, etc.)"""
         if console is None:
             console = cls.get_console()
         console.print(f"\n{operation_desc}", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"Topics to extract: {', '.join(topics_to_extract)}", style=cls._theme_colors.foreground)
+        console.print(f"{item_type.capitalize()} to process: {', '.join(items)}", style=cls._theme_colors.foreground)
     
     @classmethod
-    def show_dry_run_preview(cls, topics_count: int, topics_to_extract: List[str], output_path: Path, console: Optional[Console] = None):
-        """Display dry run preview"""
+    def show_dry_run_preview(cls, items_count: int, items: List[str], output_path: Path, operation: str = "extract", console: Optional[Console] = None):
+        """Display dry run preview (unified for different operations)"""
         if console is None:
             console = cls.get_console()
-        console.print(f"\nDry run - would extract {topics_count} topics:", style=f"bold {cls._theme_colors.warning}")
-        for topic in topics_to_extract:
-            console.print(f"  • {topic}", style=cls._theme_colors.foreground)
+        console.print(f"\nDry run - would {operation} {items_count} items:", style=f"bold {cls._theme_colors.warning}")
+        for item in items:
+            console.print(f"  • {item}", style=cls._theme_colors.foreground)
         console.print(f"\nOutput would be saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
-        console.print("Dry run completed - no files were created", style=f"bold {cls._theme_colors.warning}")
+        console.print(f"Dry run completed - no files were created", style=f"bold {cls._theme_colors.warning}")
     
     @classmethod
-    def show_extraction_success(cls, topics_count: int, output_path: Path, extraction_time: float, console: Optional[Console] = None):
-        """Display extraction success message"""
+    def show_operation_success(cls, operation: str, items_count: int, output_path: Path, processing_time: float, console: Optional[Console] = None):
+        """Display operation success message (unified for extraction, inspection, etc.)"""
         if console is None:
             console = cls.get_console()
-        console.print(f"\n✓ Successfully extracted {topics_count} topics", style=f"bold {cls._theme_colors.success}")
+        console.print(f"\n✓ Successfully {operation} {items_count} items", style=f"bold {cls._theme_colors.success}")
         console.print(f"Output saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
-        console.print(f"Extraction completed in {extraction_time:.2f}s", style=f"dim {cls._theme_colors.muted}")
+        console.print(f"Operation completed in {processing_time:.2f}s", style=f"dim {cls._theme_colors.muted}")
     
     @classmethod
-    def show_extraction_details(cls, input_path: Path, output_path: Path, compression: str, 
-                               extraction_time: float, output_size: Optional[int] = None, console: Optional[Console] = None):
-        """Display detailed extraction information"""
+    def show_operation_details(cls, operation: str, input_path: Path, output_path: Path, 
+                              processing_time: float, additional_info: Dict[str, Any] = None, console: Optional[Console] = None):
+        """Display detailed operation information (unified for extraction, inspection, etc.)"""
         if console is None:
             console = cls.get_console()
         
-        console.print(f"\nExtraction Details:", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"\n{operation.capitalize()} Details:", style=f"bold {cls._theme_colors.primary}")
         console.print(f"  Input file: {input_path}", style=cls._theme_colors.foreground)
         console.print(f"  Output file: {output_path}", style=cls._theme_colors.foreground)
-        console.print(f"  Compression: {compression}", style=cls._theme_colors.foreground)
-        console.print(f"  Extraction time: {extraction_time:.2f}s", style=cls._theme_colors.foreground)
+        console.print(f"  Processing time: {processing_time:.2f}s", style=cls._theme_colors.foreground)
         
-        if output_size is not None:
-            console.print(f"  Output size: {output_size / 1024 / 1024:.1f} MB", style=cls._theme_colors.foreground)
+        if additional_info:
+            for key, value in additional_info.items():
+                console.print(f"  {key}: {value}", style=cls._theme_colors.foreground)
     
     @classmethod
-    def show_topic_selection_summary(cls, total_topics: int, extracted_topics: int, excluded_topics: int = None, console: Optional[Console] = None):
-        """Display topic selection summary"""
+    def show_items_selection_summary(cls, total_items: int, selected_items: int, excluded_items: int = None, 
+                                    item_type: str = "topics", console: Optional[Console] = None):
+        """Display item selection summary (unified for topics, files, etc.)"""
         if console is None:
             console = cls.get_console()
         
-        console.print(f"\nTopic Selection:", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"  Total topics in bag: {total_topics}", style=cls._theme_colors.foreground)
-        console.print(f"  Topics extracted: {extracted_topics}", style=cls._theme_colors.foreground)
+        console.print(f"\n{item_type.capitalize()} Selection:", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"  Total {item_type} available: {total_items}", style=cls._theme_colors.foreground)
+        console.print(f"  {item_type.capitalize()} selected: {selected_items}", style=cls._theme_colors.foreground)
         
-        if excluded_topics is not None:
-            console.print(f"  Topics excluded: {excluded_topics}", style=cls._theme_colors.foreground)
+        if excluded_items is not None:
+            console.print(f"  {item_type.capitalize()} excluded: {excluded_items}", style=cls._theme_colors.foreground)
     
     @classmethod
-    def show_topic_lists(cls, kept_topics: List[str], excluded_topics: List[str] = None, 
-                        reverse_mode: bool = False, console: Optional[Console] = None):
-        """Display kept and excluded topic lists"""
+    def show_items_lists(cls, kept_items: List[str], excluded_items: List[str] = None, 
+                        reverse_mode: bool = False, item_type: str = "topics", console: Optional[Console] = None):
+        """Display kept and excluded item lists (unified for topics, files, etc.)"""
         if console is None:
             console = cls.get_console()
         
-        if reverse_mode and excluded_topics:
-            console.print(f"\nExcluded Topics (matching patterns):", style=f"bold {cls._theme_colors.primary}")
-            for topic in excluded_topics:
-                console.print(f"    ✗ {topic}", style=cls._theme_colors.error)
+        if reverse_mode and excluded_items:
+            console.print(f"\nExcluded {item_type.capitalize()} (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            for item in excluded_items:
+                console.print(f"    ✗ {item}", style=cls._theme_colors.error)
             
-            console.print(f"\nKept Topics (remaining):", style=f"bold {cls._theme_colors.primary}")
-            for topic in kept_topics:
-                console.print(f"    ✓ {topic}", style=cls._theme_colors.success)
+            console.print(f"\nKept {item_type.capitalize()} (remaining):", style=f"bold {cls._theme_colors.primary}")
+            for item in kept_items:
+                console.print(f"    ✓ {item}", style=cls._theme_colors.success)
         else:
-            console.print(f"\nKept Topics (matching patterns):", style=f"bold {cls._theme_colors.primary}")
-            for topic in kept_topics:
-                console.print(f"    ✓ {topic}", style=cls._theme_colors.success)
+            console.print(f"\nKept {item_type.capitalize()} (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            for item in kept_items:
+                console.print(f"    ✓ {item}", style=cls._theme_colors.success)
             
-            if excluded_topics:
-                console.print(f"\nExcluded Topics (not matching):", style=f"bold {cls._theme_colors.primary}")
-                for topic in excluded_topics:
-                    console.print(f"    ○ {topic}", style=f"dim {cls._theme_colors.muted}")
+            if excluded_items:
+                console.print(f"\nExcluded {item_type.capitalize()} (not matching):", style=f"bold {cls._theme_colors.primary}")
+                for item in excluded_items:
+                    console.print(f"    ○ {item}", style=f"dim {cls._theme_colors.muted}")
     
     @classmethod
-    def show_pattern_matching_summary(cls, patterns: List[str], reverse_mode: bool, all_topics: List[str], console: Optional[Console] = None):
-        """Display pattern matching summary"""
+    def show_pattern_matching_summary(cls, patterns: List[str], reverse_mode: bool, all_items: List[str], 
+                                     item_type: str = "topics", console: Optional[Console] = None):
+        """Display pattern matching summary (unified for topics, files, etc.)"""
         if console is None:
             console = cls.get_console()
         
@@ -1614,32 +1787,33 @@ class UIControl:
         console.print(f"  Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
         console.print(f"  Matching mode: {'Exclude matching' if reverse_mode else 'Include matching'}", style=cls._theme_colors.foreground)
         
-        # Show which patterns matched which topics
+        # Show which patterns matched which items
         for pattern in patterns:
             # Use more precise matching logic similar to _filter_topics
-            exact_matches = [t for t in all_topics if t == pattern]
+            exact_matches = [item for item in all_items if item == pattern]
             if exact_matches:
-                matched_topics = exact_matches
+                matched_items = exact_matches
             else:
                 # Fall back to fuzzy matching
-                matched_topics = [t for t in all_topics if pattern.lower() in t.lower()]
+                matched_items = [item for item in all_items if pattern.lower() in item.lower()]
             
-            if matched_topics:
-                console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_topics)}", style=cls._theme_colors.foreground)
+            if matched_items:
+                console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_items)}", style=cls._theme_colors.foreground)
             else:
                 console.print(f"  Pattern '{pattern}' matched: none", style=f"dim {cls._theme_colors.muted}")
     
     @classmethod
-    def show_no_matching_topics(cls, patterns: List[str], available_topics: List[str], reverse_mode: bool = False, console: Optional[Console] = None):
-        """Display no matching topics warning"""
+    def show_no_matching_items(cls, patterns: List[str], available_items: List[str], reverse_mode: bool = False, 
+                              item_type: str = "topics", console: Optional[Console] = None):
+        """Display no matching items warning (unified for topics, files, etc.)"""
         if console is None:
             console = cls.get_console()
         
         if reverse_mode:
-            cls.show_warning("All topics would be excluded. No topics to extract.", console)
+            cls.show_warning(f"All {item_type} would be excluded. No {item_type} to process.", console)
         else:
-            cls.show_warning("No matching topics found.", console)
-            console.print(f"Available topics: {', '.join(available_topics[:5])}{'...' if len(available_topics) > 5 else ''}", style=cls._theme_colors.foreground)
+            cls.show_warning(f"No matching {item_type} found.", console)
+            console.print(f"Available {item_type}: {', '.join(available_items[:5])}{'...' if len(available_items) > 5 else ''}", style=cls._theme_colors.foreground)
             console.print(f"Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
     
     @classmethod
@@ -1681,6 +1855,50 @@ class UIControl:
         
         console.print()  # Add spacing
         console.print(fields_panel)
+    
+    # ========================================================================
+    # Backward Compatibility Methods (Deprecated - use unified methods above)
+    # ========================================================================
+    
+    @classmethod
+    def show_analyzing_status(cls, console: Optional[Console] = None):
+        """DEPRECATED: Use show_operation_status('Analyzing bag file...') instead"""
+        cls.show_operation_status("Analyzing bag file...", console)
+    
+    @classmethod
+    def show_extraction_operation(cls, operation_desc: str, topics_to_extract: List[str], console: Optional[Console] = None):
+        """DEPRECATED: Use show_operation_description() instead"""
+        cls.show_operation_description(operation_desc, topics_to_extract, "topics", console)
+    
+    @classmethod
+    def show_extraction_success(cls, topics_count: int, output_path: Path, extraction_time: float, console: Optional[Console] = None):
+        """DEPRECATED: Use show_operation_success('extracted', ...) instead"""
+        cls.show_operation_success("extracted", topics_count, output_path, extraction_time, console)
+    
+    @classmethod
+    def show_extraction_details(cls, input_path: Path, output_path: Path, compression: str, 
+                               extraction_time: float, output_size: Optional[int] = None, console: Optional[Console] = None):
+        """DEPRECATED: Use show_operation_details() instead"""
+        additional_info = {"Compression": compression}
+        if output_size is not None:
+            additional_info["Output size"] = f"{output_size / 1024 / 1024:.1f} MB"
+        cls.show_operation_details("extraction", input_path, output_path, extraction_time, additional_info, console)
+    
+    @classmethod
+    def show_topic_selection_summary(cls, total_topics: int, extracted_topics: int, excluded_topics: int = None, console: Optional[Console] = None):
+        """DEPRECATED: Use show_items_selection_summary() instead"""
+        cls.show_items_selection_summary(total_topics, extracted_topics, excluded_topics, "topics", console)
+    
+    @classmethod
+    def show_topic_lists(cls, kept_topics: List[str], excluded_topics: List[str] = None, 
+                        reverse_mode: bool = False, console: Optional[Console] = None):
+        """DEPRECATED: Use show_items_lists() instead"""
+        cls.show_items_lists(kept_topics, excluded_topics, reverse_mode, "topics", console)
+    
+    @classmethod
+    def show_no_matching_topics(cls, patterns: List[str], available_topics: List[str], reverse_mode: bool = False, console: Optional[Console] = None):
+        """DEPRECATED: Use show_no_matching_items() instead"""
+        cls.show_no_matching_items(patterns, available_topics, reverse_mode, "topics", console)
     
     # ========================================================================
     # Private Implementation Methods - Progress Bars
@@ -1856,7 +2074,7 @@ class UIControl:
     def _display_bag_summary(cls, bag_info: Dict[str, Any], config: DisplayConfig, console: Console):
         """Display bag summary information"""
         if config.verbose:
-            console.print("\n[bold]Bag File Summary[/bold]")
+            console.print(f"\n[{cls.get_color('primary', 'bold')}]Bag File Summary[/{cls.get_color('primary', 'bold')}]")
             console.print(f"File: {bag_info.get('file_name', 'Unknown')}")
             console.print(f"Path: {bag_info.get('file_path', 'Unknown')}")
             console.print(f"Analysis Time: {bag_info.get('analysis_time', 0):.3f}s")
@@ -1881,14 +2099,14 @@ class UIControl:
         table = Table(
             title=f"Topics in {bag_info.get('file_name', 'Unknown')}",
             show_header=True,
-            header_style="bold magenta",
+            header_style=cls.get_color('accent', 'bold'),
             expand=config.full_width
         )
         
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Count", justify="right", style="green")
-        table.add_column("Size", justify="right", style="yellow")
-        table.add_column("Frequency", justify="right", style="blue")
+        table.add_column("Topic", style=cls.get_color('info'), no_wrap=True)
+        table.add_column("Count", justify="right", style=cls.get_color('success'))
+        table.add_column("Size", justify="right", style=cls.get_color('accent'))
+        table.add_column("Frequency", justify="right", style=cls.get_color('primary'))
         
         # Add topic rows
         for topic_info in topics:
@@ -1919,16 +2137,16 @@ class UIControl:
         summary_text = Text()
         
         # File information
-        summary_text.append("File Information:\n", style="bold cyan")
-        summary_text.append(f"  Input:  {result.get('input_file', 'Unknown')}\n", style="green")
-        summary_text.append(f"  Output: {result.get('output_file', 'Unknown')}\n", style="blue")
+        summary_text.append("File Information:\n", style=cls.get_color('info', 'bold'))
+        summary_text.append(f"  Input:  {result.get('input_file', 'Unknown')}\n", style=cls.get_color('success'))
+        summary_text.append(f"  Output: {result.get('output_file', 'Unknown')}\n", style=cls.get_color('primary'))
         summary_text.append(f"  Compression: {result.get('compression', 'none')}\n")
         
         # Statistics
         stats = result.get('statistics', {})
         bag_info = result.get('bag_info', {})
         
-        summary_text.append("\nStatistics:\n", style="bold cyan")
+        summary_text.append("\nStatistics:\n", style=cls.get_color('info', 'bold'))
         
         if result.get('success') and not result.get('dry_run'):
             # Show actual results with before → after format
@@ -1954,7 +2172,7 @@ class UIControl:
         # Performance information
         if result.get('performance') and config.show_performance:
             perf = result['performance']
-            summary_text.append("\nPerformance:\n", style="bold cyan")
+            summary_text.append("\nPerformance:\n", style=cls.get_color('info', 'bold'))
             summary_text.append(f"  Extraction Time: {perf.get('extraction_time', 0):.3f}s\n")
             if perf.get('messages_per_sec', 0) > 0:
                 summary_text.append(f"  Processing Rate: {perf.get('messages_per_sec', 0):.0f} messages/sec\n")
@@ -1962,16 +2180,16 @@ class UIControl:
         # Validation information
         validation = result.get('validation')
         if validation:
-            summary_text.append("\nValidation Results:\n", style="bold cyan")
+            summary_text.append("\nValidation Results:\n", style=cls.get_color('info', 'bold'))
             
             # Overall validation status
             if validation.get('is_valid', False):
-                summary_text.append("  Status: ", style="bold cyan")
-                summary_text.append(" PASSED", style="bold green")
+                summary_text.append("  Status: ", style=cls.get_color('info', 'bold'))
+                summary_text.append(" PASSED", style=cls.get_color('success', 'bold'))
                 summary_text.append(f" ({validation.get('validation_time', 0):.3f}s)\n")
             else:
-                summary_text.append("  Status: ", style="bold cyan")
-                summary_text.append(" FAILED", style="bold red")
+                summary_text.append("  Status: ", style=cls.get_color('info', 'bold'))
+                summary_text.append(" FAILED", style=cls.get_color('error', 'bold'))
                 summary_text.append(f" ({validation.get('validation_time', 0):.3f}s)\n")
             
             # Validation details
@@ -1989,33 +2207,33 @@ class UIControl:
             # Show errors if any
             errors = validation.get('errors', [])
             if errors:
-                summary_text.append("  Errors:\n", style="bold red")
+                summary_text.append("  Errors:\n", style=cls.get_color('error', 'bold'))
                 for error in errors[:3]:  # Show first 3 errors
-                    summary_text.append(f"    • {error}\n", style="red")
+                    summary_text.append(f"    • {error}\n", style=cls.get_color('error'))
                 if len(errors) > 3:
-                    summary_text.append(f"    • ... and {len(errors) - 3} more errors\n", style="red")
+                    summary_text.append(f"    • ... and {len(errors) - 3} more errors\n", style=cls.get_color('error'))
             
             # Show warnings if any
             warnings = validation.get('warnings', [])
             if warnings:
-                summary_text.append("  Warnings:\n", style="bold yellow")
+                summary_text.append("  Warnings:\n", style=cls.get_color('warning', 'bold'))
                 for warning in warnings[:2]:  # Show first 2 warnings
-                    summary_text.append(f"    • {warning}\n", style="yellow")
+                    summary_text.append(f"    • {warning}\n", style=cls.get_color('warning'))
                 if len(warnings) > 2:
-                    summary_text.append(f"    • ... and {len(warnings) - 2} more warnings\n", style="yellow")
+                    summary_text.append(f"    • ... and {len(warnings) - 2} more warnings\n", style=cls.get_color('warning'))
         
         # Add topics overview
-        summary_text.append("\nTopics Overview:\n", style="bold cyan")
+        summary_text.append("\nTopics Overview:\n", style=cls.get_color('info', 'bold'))
         summary_text.append(f"  Keeping {stats.get('selected_topics', 0)}, Excluding {stats.get('excluded_topics', 0)}\n")
         
         # Add topics table
         summary_text.append("\n")
         
         # Create topics table with full width
-        table = Table(show_header=True, header_style="bold magenta", box=None, expand=config.full_width)
-        table.add_column("Status", style="bold", width=8, justify="center")
-        table.add_column("Topic", style="cyan")
-        table.add_column("Count", style="yellow", justify="right", width=10)
+        table = Table(show_header=True, header_style=cls.get_color('accent', 'bold'), box=None, expand=config.full_width)
+        table.add_column("Status", style=cls.get_color('primary', 'bold'), width=8, justify="center")
+        table.add_column("Topic", style=cls.get_color('info'))
+        table.add_column("Count", style=cls.get_color('accent'), justify="right", width=10)
         
         topics_to_extract = result.get('topics_to_extract', [])
         
@@ -2031,7 +2249,7 @@ class UIControl:
             else:
                 status = "○"
                 status_style = "red dim"
-                topic_name = f"[dim]{topic_name}[/dim]"
+                topic_name = f"[{cls.get_color('muted', 'dim')}]{topic_name}[/{cls.get_color('muted', 'dim')}]"
             
             table.add_row(
                 f"[{status_style}]{status}[/{status_style}]",
@@ -2041,8 +2259,8 @@ class UIControl:
         
         # Create legend
         legend_text = Text()
-        legend_text.append("● = Keep (included in output)  ", style="green")
-        legend_text.append("○ = Drop (excluded from output)", style="red dim")
+        legend_text.append("● = Keep (included in output)  ", style=cls.get_color('success'))
+        legend_text.append("○ = Drop (excluded from output)", style=cls.get_color('error', 'dim'))
         
         # Create combined content
         combined_content = Group(
@@ -2060,7 +2278,7 @@ class UIControl:
         panel = Panel(
             combined_content,
             title=panel_title,
-            border_style="cyan"
+            border_style=cls.get_color('info')
         )
         console.print(panel)
     
@@ -2090,13 +2308,13 @@ class UIControl:
         table = Table(
             title=options.title or f"Topics in {bag_info.get('file_name', 'Unknown')}",
             show_header=True,
-            header_style="bold magenta"
+            header_style=cls.get_color('accent', 'bold')
         )
         
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Count", justify="right", style="green")
-        table.add_column("Size", justify="right", style="yellow")
-        table.add_column("Frequency", justify="right", style="blue")
+        table.add_column("Topic", style=cls.get_color('info'), no_wrap=True)
+        table.add_column("Count", justify="right", style=cls.get_color('success'))
+        table.add_column("Size", justify="right", style=cls.get_color('accent'))
+        table.add_column("Frequency", justify="right", style=cls.get_color('primary'))
         
 
         # Add topic rows
@@ -2135,7 +2353,7 @@ class UIControl:
                 fields_panel = Panel(
                     fields_content,
                     title=f"[bold magenta]Field Analysis Details[/bold magenta]",
-                    border_style="magenta",
+                    border_style=cls.get_color('accent'),
                     padding=(1, 2)
                 )
                 
@@ -2160,11 +2378,11 @@ class UIControl:
             count = topic_info.get('message_count', 0)
             frequency = topic_info.get('frequency', 0)
             
-            parts = [f"[bold]{name}[/bold]"]
-            parts.append(f"[green]{count:,} msgs[/green]")
+            parts = [f"[{cls.get_color('primary', 'bold')}]{name}[/{cls.get_color('primary', 'bold')}]"]
+            parts.append(f"[{cls.get_color('success')}]{count:,} msgs[/{cls.get_color('success')}]")
             
             if frequency > 0:
-                parts.append(f"[blue]{frequency:.1f} Hz[/blue]")
+                parts.append(f"[{cls.get_color('info')}]{frequency:.1f} Hz[/{cls.get_color('info')}]")
             
             console.print(" | ".join(parts))
         
@@ -2194,7 +2412,7 @@ class UIControl:
     def _render_yaml(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
         """Render result as YAML"""
         if not YAML_AVAILABLE:
-            console.print("[red]YAML library not available. Install with: pip install pyyaml[/red]")
+            console.print(f"[{cls.get_color('error')}]YAML library not available. Install with: pip install pyyaml[/{cls.get_color('error')}]")
             return ""
         
         yaml_result = cls._prepare_serializable_result(result)
@@ -2278,9 +2496,9 @@ class UIControl:
         console.print(f"Messages: {stats.get('selected_messages', 0):,}/{stats.get('total_messages', 0):,} selected")
         
         if result.get('topics_to_extract'):
-            console.print(f"\n[bold]Selected Topics:[/bold]")
+            console.print(f"\n[{cls.get_color('primary', 'bold')}]Selected Topics:[/{cls.get_color('primary', 'bold')}]")
             for topic_name in result['topics_to_extract']:
-                console.print(f"  • [green]{topic_name}[/green]")
+                console.print(f"  • [{cls.get_color('success')}]{topic_name}[/{cls.get_color('success')}]")
         
         return ""
     
@@ -2583,7 +2801,7 @@ class UIControl:
         from rich.text import Text
         
         summary_text = Text()
-        summary_text.append("Summary\n", style="bold blue")
+        summary_text.append("Summary\n", style=cls.get_color('primary', 'bold'))
         
         # File information
         file_name = bag_info.get('file_name', 'Unknown')
@@ -2592,15 +2810,15 @@ class UIControl:
         total_messages = bag_info.get('total_messages', 0)
         duration = bag_info.get('duration_seconds', 0)
         
-        summary_text.append(f"  File: {file_name}\n", style="cyan")
-        summary_text.append(f"  Topics: {topics_count}\n", style="cyan")
-        summary_text.append(f"  Messages: {total_messages:,}\n", style="cyan")
-        summary_text.append(f"  File Size: {file_size}\n", style="cyan")
-        summary_text.append(f"  Duration: {duration:.1f}s\n", style="cyan")
+        summary_text.append(f"  File: {file_name}\n", style=cls.get_color('info'))
+        summary_text.append(f"  Topics: {topics_count}\n", style=cls.get_color('info'))
+        summary_text.append(f"  Messages: {total_messages:,}\n", style=cls.get_color('info'))
+        summary_text.append(f"  File Size: {file_size}\n", style=cls.get_color('info'))
+        summary_text.append(f"  Duration: {duration:.1f}s\n", style=cls.get_color('info'))
         
         if duration > 0 and total_messages > 0:
             avg_rate = total_messages / duration
-            summary_text.append(f"  Avg Rate: {avg_rate:.1f} Hz\n", style="cyan")
+            summary_text.append(f"  Avg Rate: {avg_rate:.1f} Hz\n", style=cls.get_color('info'))
         
         # Analysis information
         analysis_time = bag_info.get('analysis_time', 0)
@@ -2616,15 +2834,15 @@ class UIControl:
         table = Table(
             title=f"Topics ({len(topics)})",
             show_header=True,
-            header_style="bold magenta",
+            header_style=cls.get_color('accent', 'bold'),
             expand=config.full_width,
             box=None
         )
         
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Count", justify="right", style="green")
-        table.add_column("Size", justify="right", style="yellow")
-        table.add_column("Frequency", justify="right", style="blue")
+        table.add_column("Topic", style=cls.get_color('info'), no_wrap=True)
+        table.add_column("Count", justify="right", style=cls.get_color('success'))
+        table.add_column("Size", justify="right", style=cls.get_color('accent'))
+        table.add_column("Frequency", justify="right", style=cls.get_color('primary'))
         
         # Add topic rows
         for topic_info in topics:
@@ -2658,8 +2876,8 @@ class UIControl:
             total_requests = cache_stats.get('total_requests', 0)
             
             cache_text = Text()
-            cache_text.append("Cache Performance\n", style="bold blue")
-            cache_text.append(f"  Hit Rate: {hit_rate:.1f}% ({total_requests} requests)", style="cyan")
+            cache_text.append("Cache Performance\n", style=cls.get_color('primary', 'bold'))
+            cache_text.append(f"  Hit Rate: {hit_rate:.1f}% ({total_requests} requests)", style=cls.get_color('info'))
             
             return cache_text
         return Text("")
@@ -2678,19 +2896,19 @@ class UIControl:
                 field_paths = analysis.get('field_paths', [])
                 if field_paths:
                     topic_text = Text()
-                    topic_text.append(f"{topic}", style="bold cyan")
-                    topic_text.append(f" ({analysis.get('message_type', 'Unknown')})", style="dim")
+                    topic_text.append(f"{topic}", style=cls.get_color('info', 'bold'))
+                    topic_text.append(f" ({analysis.get('message_type', 'Unknown')})", style=cls.get_color('muted', 'dim'))
                     content_parts.append(topic_text)
                     
                     fields_text = Text()
                     # Display fields as simple list with dot notation
                     for field_path in sorted(field_paths):
                         if '.' in field_path:
-                            # Nested field - show with yellow color
-                            fields_text.append(f"  • {field_path}\n", style="yellow")
+                            # Nested field - show with accent color
+                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('accent'))
                         else:
-                            # Top-level field - show with green color
-                            fields_text.append(f"  • {field_path}\n", style="green")
+                            # Top-level field - show with success color
+                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('success'))
                     
                     content_parts.append(fields_text)
                     content_parts.append("")  # Add spacing between topics
@@ -2704,19 +2922,19 @@ class UIControl:
                     field_paths = topic_info['field_paths']
                     
                     topic_text = Text()
-                    topic_text.append(f"{topic_name}", style="bold cyan")
-                    topic_text.append(f" ({message_type})", style="dim")
+                    topic_text.append(f"{topic_name}", style=cls.get_color('info', 'bold'))
+                    topic_text.append(f" ({message_type})", style=cls.get_color('muted', 'dim'))
                     content_parts.append(topic_text)
                     
                     fields_text = Text()
                     # Display fields as simple list with dot notation
                     for field_path in sorted(field_paths):
                         if '.' in field_path:
-                            # Nested field - show with yellow color
-                            fields_text.append(f"  • {field_path}\n", style="yellow")
+                            # Nested field - show with accent color
+                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('accent'))
                         else:
-                            # Top-level field - show with green color
-                            fields_text.append(f"  • {field_path}\n", style="green")
+                            # Top-level field - show with success color
+                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('success'))
                     
                     content_parts.append(fields_text)
                     content_parts.append("")  # Add spacing between topics
@@ -2749,31 +2967,55 @@ class CompatibilityTheme:
     
     @property
     def PRIMARY(self) -> str:
-        return self.colors.primary
+        """Primary color (use UIControl.get_rich_color('primary') instead)"""
+        return UIControl.get_rich_color('primary')
     
     @property
     def SECONDARY(self) -> str:
-        return self.colors.secondary
+        """Secondary color (use UIControl.get_rich_color('secondary') instead)"""
+        return UIControl.get_rich_color('secondary')
     
     @property
     def ACCENT(self) -> str:
-        return self.colors.accent
+        """Accent color (use UIControl.get_rich_color('accent') instead)"""
+        return UIControl.get_rich_color('accent')
     
     @property
     def SUCCESS(self) -> str:
-        return self.colors.success
+        """Success color (use UIControl.get_rich_color('success') instead)"""
+        return UIControl.get_rich_color('success')
     
     @property
     def WARNING(self) -> str:
-        return self.colors.warning
+        """Warning color (use UIControl.get_rich_color('warning') instead)"""
+        return UIControl.get_rich_color('warning')
     
     @property
     def ERROR(self) -> str:
-        return self.colors.error
+        """Error color (use UIControl.get_rich_color('error') instead)"""
+        return UIControl.get_rich_color('error')
+    
+    @property
+    def INFO(self) -> str:
+        """Info color (use UIControl.get_rich_color('info') instead)"""
+        return UIControl.get_rich_color('info')
+    
+    @property
+    def MUTED(self) -> str:
+        """Muted color (use UIControl.get_rich_color('muted') instead)"""
+        return UIControl.get_rich_color('muted')
     
     def get_inquirer_style(self) -> Dict[str, str]:
-        """Get InquirerPy style configuration"""
+        """Get InquirerPy style configuration (deprecated - use UIControl.get_inquirer_style() instead)"""
         return UIControl.get_inquirer_style()
+    
+    def get_color(self, color_name: str, modifier: str = "") -> str:
+        """Get unified color (deprecated - use UIControl.get_color() instead)"""
+        return UIControl.get_color(color_name, modifier)
+    
+    def style_text(self, text: str, color_name: str, modifier: str = "") -> str:
+        """Style text (deprecated - use UIControl.style_text() instead)"""
+        return UIControl.style_text(text, color_name, modifier)
 
 # Progress Manager compatibility
 class ProgressManager:
