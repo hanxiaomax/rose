@@ -1508,6 +1508,180 @@ class UIControl:
             console = cls.get_console()
         console.print(f"ℹ [blue]{message}[/blue]")
     
+    @classmethod
+    def show_operation_cancelled(cls, console: Optional[Console] = None):
+        """Display operation cancelled message"""
+        if console is None:
+            console = cls.get_console()
+        console.print("Operation cancelled.", style=cls._theme_colors.muted)
+    
+    @classmethod
+    def show_analyzing_status(cls, console: Optional[Console] = None):
+        """Display analyzing bag file status"""
+        if console is None:
+            console = cls.get_console()
+        console.print("Analyzing bag file...", style=f"dim {cls._theme_colors.primary}")
+    
+    @classmethod
+    def show_extraction_operation(cls, operation_desc: str, topics_to_extract: List[str], console: Optional[Console] = None):
+        """Display extraction operation description and topics"""
+        if console is None:
+            console = cls.get_console()
+        console.print(f"\n{operation_desc}", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"Topics to extract: {', '.join(topics_to_extract)}", style=cls._theme_colors.foreground)
+    
+    @classmethod
+    def show_dry_run_preview(cls, topics_count: int, topics_to_extract: List[str], output_path: Path, console: Optional[Console] = None):
+        """Display dry run preview"""
+        if console is None:
+            console = cls.get_console()
+        console.print(f"\nDry run - would extract {topics_count} topics:", style=f"bold {cls._theme_colors.warning}")
+        for topic in topics_to_extract:
+            console.print(f"  • {topic}", style=cls._theme_colors.foreground)
+        console.print(f"\nOutput would be saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
+        console.print("Dry run completed - no files were created", style=f"bold {cls._theme_colors.warning}")
+    
+    @classmethod
+    def show_extraction_success(cls, topics_count: int, output_path: Path, extraction_time: float, console: Optional[Console] = None):
+        """Display extraction success message"""
+        if console is None:
+            console = cls.get_console()
+        console.print(f"\n✓ Successfully extracted {topics_count} topics", style=f"bold {cls._theme_colors.success}")
+        console.print(f"Output saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
+        console.print(f"Extraction completed in {extraction_time:.2f}s", style=f"dim {cls._theme_colors.muted}")
+    
+    @classmethod
+    def show_extraction_details(cls, input_path: Path, output_path: Path, compression: str, 
+                               extraction_time: float, output_size: Optional[int] = None, console: Optional[Console] = None):
+        """Display detailed extraction information"""
+        if console is None:
+            console = cls.get_console()
+        
+        console.print(f"\nExtraction Details:", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"  Input file: {input_path}", style=cls._theme_colors.foreground)
+        console.print(f"  Output file: {output_path}", style=cls._theme_colors.foreground)
+        console.print(f"  Compression: {compression}", style=cls._theme_colors.foreground)
+        console.print(f"  Extraction time: {extraction_time:.2f}s", style=cls._theme_colors.foreground)
+        
+        if output_size is not None:
+            console.print(f"  Output size: {output_size / 1024 / 1024:.1f} MB", style=cls._theme_colors.foreground)
+    
+    @classmethod
+    def show_topic_selection_summary(cls, total_topics: int, extracted_topics: int, excluded_topics: int = None, console: Optional[Console] = None):
+        """Display topic selection summary"""
+        if console is None:
+            console = cls.get_console()
+        
+        console.print(f"\nTopic Selection:", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"  Total topics in bag: {total_topics}", style=cls._theme_colors.foreground)
+        console.print(f"  Topics extracted: {extracted_topics}", style=cls._theme_colors.foreground)
+        
+        if excluded_topics is not None:
+            console.print(f"  Topics excluded: {excluded_topics}", style=cls._theme_colors.foreground)
+    
+    @classmethod
+    def show_topic_lists(cls, kept_topics: List[str], excluded_topics: List[str] = None, 
+                        reverse_mode: bool = False, console: Optional[Console] = None):
+        """Display kept and excluded topic lists"""
+        if console is None:
+            console = cls.get_console()
+        
+        if reverse_mode and excluded_topics:
+            console.print(f"\nExcluded Topics (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            for topic in excluded_topics:
+                console.print(f"    ✗ {topic}", style=cls._theme_colors.error)
+            
+            console.print(f"\nKept Topics (remaining):", style=f"bold {cls._theme_colors.primary}")
+            for topic in kept_topics:
+                console.print(f"    ✓ {topic}", style=cls._theme_colors.success)
+        else:
+            console.print(f"\nKept Topics (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            for topic in kept_topics:
+                console.print(f"    ✓ {topic}", style=cls._theme_colors.success)
+            
+            if excluded_topics:
+                console.print(f"\nExcluded Topics (not matching):", style=f"bold {cls._theme_colors.primary}")
+                for topic in excluded_topics:
+                    console.print(f"    ○ {topic}", style=f"dim {cls._theme_colors.muted}")
+    
+    @classmethod
+    def show_pattern_matching_summary(cls, patterns: List[str], reverse_mode: bool, all_topics: List[str], console: Optional[Console] = None):
+        """Display pattern matching summary"""
+        if console is None:
+            console = cls.get_console()
+        
+        console.print(f"\nPattern Matching:", style=f"bold {cls._theme_colors.primary}")
+        console.print(f"  Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
+        console.print(f"  Matching mode: {'Exclude matching' if reverse_mode else 'Include matching'}", style=cls._theme_colors.foreground)
+        
+        # Show which patterns matched which topics
+        for pattern in patterns:
+            # Use more precise matching logic similar to _filter_topics
+            exact_matches = [t for t in all_topics if t == pattern]
+            if exact_matches:
+                matched_topics = exact_matches
+            else:
+                # Fall back to fuzzy matching
+                matched_topics = [t for t in all_topics if pattern.lower() in t.lower()]
+            
+            if matched_topics:
+                console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_topics)}", style=cls._theme_colors.foreground)
+            else:
+                console.print(f"  Pattern '{pattern}' matched: none", style=f"dim {cls._theme_colors.muted}")
+    
+    @classmethod
+    def show_no_matching_topics(cls, patterns: List[str], available_topics: List[str], reverse_mode: bool = False, console: Optional[Console] = None):
+        """Display no matching topics warning"""
+        if console is None:
+            console = cls.get_console()
+        
+        if reverse_mode:
+            cls.show_warning("All topics would be excluded. No topics to extract.", console)
+        else:
+            cls.show_warning("No matching topics found.", console)
+            console.print(f"Available topics: {', '.join(available_topics[:5])}{'...' if len(available_topics) > 5 else ''}", style=cls._theme_colors.foreground)
+            console.print(f"Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
+    
+    @classmethod
+    def show_unsupported_format_error(cls, format_name: str, supported_formats: List[str], console: Optional[Console] = None):
+        """Display unsupported output format error"""
+        if console is None:
+            console = cls.get_console()
+        cls.show_error(f"Unsupported output format '{format_name}'. Supported: {', '.join(supported_formats)}")
+    
+    @classmethod
+    def show_export_failed_error(cls, console: Optional[Console] = None):
+        """Display export failed error"""
+        if console is None:
+            console = cls.get_console()
+        cls.show_error("Export failed")
+    
+    @classmethod
+    def show_fields_panel(cls, field_analysis: Dict[str, Any], topics: List[Dict[str, Any]], console: Optional[Console] = None):
+        """Display field analysis panel for inspect command"""
+        if console is None:
+            console = cls.get_console()
+        
+        # Create fields content using existing method
+        fields_content = cls._create_fields_content(field_analysis, topics)
+        
+        # Create fields panel with themed styling
+        from rich.panel import Panel
+        from rich.text import Text
+        
+        # Create styled title
+        title = Text("Field Analysis Details", style=f"bold {cls._theme_colors.accent}")
+        
+        fields_panel = Panel(
+            fields_content,
+            title=title,
+            border_style=cls._theme_colors.accent,
+            padding=(1, 2)
+        )
+        
+        console.print()  # Add spacing
+        console.print(fields_panel)
+    
     # ========================================================================
     # Private Implementation Methods - Progress Bars
     # ========================================================================

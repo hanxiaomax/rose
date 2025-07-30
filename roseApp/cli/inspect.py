@@ -7,13 +7,11 @@ from pathlib import Path
 from typing import Optional, List
 
 import typer
-from rich.console import Console
 from ..core.bag_manager import BagManager, InspectOptions
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
 
 app = typer.Typer(help="Inspect ROS bag files")
-console = Console()
 
 
 @app.command()
@@ -36,17 +34,21 @@ def inspect(
     
     This command uses the unified ResultHandler for all rendering and export operations.
     """
+    # Use UIControl for unified output management
+    ui = UIControl()
+    console = ui.get_console()
+    
     # Validate bag file exists
     if not bag_path.exists():
-        console.print(f"[red]Error: Bag file not found: {bag_path}[/red]")
+        ui.show_error(f"Bag file not found: {bag_path}")
         raise typer.Exit(1)
     
     # Convert string format to enum
     try:
         output_format = OutputFormat(as_format.lower())
     except ValueError:
-        supported = ", ".join([fmt.value for fmt in OutputFormat])
-        console.print(f"[red]Error: Unsupported output format '{as_format}'. Supported: {supported}[/red]")
+        supported = [fmt.value for fmt in OutputFormat]
+        ui.show_unsupported_format_error(as_format, supported)
         raise typer.Exit(1)
     
     # Configure logging based on debug flag
@@ -78,6 +80,10 @@ def inspect(
 async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = False):
     """Run the bag inspection asynchronously using BagManager and ResultHandler"""
     
+    # Use UIControl for unified output management
+    ui = UIControl()
+    console = ui.get_console()
+    
     # Create BagManager
     manager = BagManager()
     
@@ -98,7 +104,7 @@ async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = Fa
             
             success = UIControl.export_result(result, export_options)
             if not success:
-                console.print("[red]Export failed[/red]")
+                ui.show_export_failed_error()
                 raise typer.Exit(1)
         else:
             # Display results in panel
@@ -116,23 +122,11 @@ async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = Fa
                 field_analysis = result.get('field_analysis', {})
                 topics = result.get('topics', [])
                 if field_analysis or any('field_paths' in topic for topic in topics):
-                    # Create fields content
-                    fields_content = UIControl._create_fields_content(field_analysis, topics)
-                    
-                    # Create fields panel
-                    from rich.panel import Panel
-                    fields_panel = Panel(
-                        fields_content,
-                        title=f"[bold magenta]Field Analysis Details[/bold magenta]",
-                        border_style="magenta",
-                        padding=(1, 2)
-                    )
-                    
-                    console.print()  # Add spacing
-                    console.print(fields_panel)
+                    # Use unified UI method for field panel display
+                    ui.show_fields_panel(field_analysis, topics)
             
     except Exception as e:
-        console.print(f"[red]Error during bag inspection: {e}[/red]")
+        ui.show_error(f"Error during bag inspection: {e}")
         raise typer.Exit(1)
     finally:
         pass

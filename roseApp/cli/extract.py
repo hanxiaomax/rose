@@ -75,23 +75,26 @@ def _extract_topics_impl(
     Simplified topic extraction - focus on core functionality
     """
     import time
-    console = Console()
+    
+    # Use UIControl for unified output management
+    ui = UIControl()
+    console = ui.get_console()
     
     try:
         # Validate input arguments
         input_path = Path(input_bag)
         if not input_path.exists():
-            console.print(f"[red]Error: Input bag file not found: {input_bag}[/red]")
+            ui.show_error(f"Input bag file not found: {input_bag}")
             raise typer.Exit(1)
         
         if not topics:
-            console.print("[red]Error: No topics specified. Use --topics to specify topics[/red]")
+            ui.show_error("No topics specified. Use --topics to specify topics")
             raise typer.Exit(1)
         
         # Validate compression option
         valid_compression = ["none", "bz2", "lz4"]
         if compression not in valid_compression:
-            console.print(f"[red]Error: Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}[/red]")
+            ui.show_error(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}")
             raise typer.Exit(1)
         
         # Generate output path if not specified
@@ -105,14 +108,14 @@ def _extract_topics_impl(
         # Check if output file exists and handle overwrite
         if output_path.exists() and not yes:
             if not typer.confirm(f"Output file '{output_path}' already exists. Overwrite?"):
-                console.print("Operation cancelled.")
+                ui.show_operation_cancelled()
                 raise typer.Exit(0)
         
         # Create BagManager
         manager = BagManager()
         
         # Get topic list using lightweight method
-        console.print(f"[dim]Analyzing bag file...[/dim]")
+        ui.show_analyzing_status()
         
         # Use parser.get_bag_summary for lightweight topic discovery
         bag_info, _ = manager.parser.get_bag_summary(str(input_path))
@@ -121,7 +124,7 @@ def _extract_topics_impl(
         if bag_info and bag_info.topics:
             all_topics = bag_info.topics
         else:
-            console.print("[red]Error: Unable to read topics from bag file[/red]")
+            ui.show_error("Unable to read topics from bag file")
             raise typer.Exit(1)
         
         # Apply topic filtering using BagManager's _filter_topics method
@@ -136,25 +139,15 @@ def _extract_topics_impl(
             operation_desc = f"Including topics matching: {', '.join(topics)}"
         
         if not topics_to_extract:
-            if reverse:
-                console.print(f"[yellow]All topics would be excluded. No topics to extract.[/yellow]")
-            else:
-                console.print(f"[yellow]No matching topics found.[/yellow]")
-                console.print(f"Available topics: {', '.join(all_topics[:5])}{'...' if len(all_topics) > 5 else ''}")
-                console.print(f"Requested patterns: {', '.join(topics)}")
+            ui.show_no_matching_topics(topics, all_topics, reverse)
             raise typer.Exit(1)
         
-        # Show operation description
-        console.print(f"\n[bold]{operation_desc}[/bold]")
-        console.print(f"Topics to extract: {', '.join(topics_to_extract)}")
+        # Show operation description using unified UI
+        ui.show_extraction_operation(operation_desc, topics_to_extract)
         
         # If dry run, show preview and return
         if dry_run:
-            console.print(f"\n[yellow]Dry run - would extract {len(topics_to_extract)} topics:[/yellow]")
-            for topic in topics_to_extract:
-                console.print(f"  • {topic}")
-            console.print(f"\n[dim]Output would be saved to: {output_path}[/dim]")
-            console.print(f"[yellow]Dry run completed - no files were created[/yellow]")
+            ui.show_dry_run_preview(len(topics_to_extract), topics_to_extract, output_path)
             return
         
         # Perform the actual extraction
@@ -276,80 +269,43 @@ def _extract_topics_impl(
         
         # Check if extraction was successful
         if not result.get('success', False):
-            console.print(f"\n[red]Extraction failed: {result.get('error', 'Unknown error')}[/red]")
+            ui.show_error(f"Extraction failed: {result.get('error', 'Unknown error')}")
             raise typer.Exit(1)
         
-        # Show simple success message
-        console.print(f"\n[green]✓[/green] Successfully extracted {len(topics_to_extract)} topics")
-        console.print(f"[dim]Output saved to: {output_path}[/dim]")
-        console.print(f"[dim]Extraction completed in {extraction_time:.2f}s[/dim]")
+        # Show success message using unified UI
+        ui.show_extraction_success(len(topics_to_extract), output_path, extraction_time)
         
         # Show verbose details if requested
         if verbose:
-            console.print(f"\n[bold]Extraction Details:[/bold]")
-            console.print(f"  Input file: {input_path}")
-            console.print(f"  Output file: {output_path}")
-            console.print(f"  Compression: {compression}")
-            console.print(f"  Extraction time: {extraction_time:.2f}s")
+            # Show extraction details
+            output_size = output_path.stat().st_size if output_path.exists() else None
+            ui.show_extraction_details(input_path, output_path, compression, extraction_time, output_size)
             
-            if output_path.exists():
-                output_size = output_path.stat().st_size
-                console.print(f"  Output size: {output_size / 1024 / 1024:.1f} MB")
-            
-            # Show topic selection details
-            console.print(f"\n[bold]Topic Selection:[/bold]")
-            console.print(f"  Total topics in bag: {len(all_topics)}")
-            console.print(f"  Topics extracted: {len(topics_to_extract)}")
-            
+            # Show topic selection summary
             if reverse:
                 excluded_topics = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
-                kept_topics = topics_to_extract
-                console.print(f"  Topics excluded: {len(excluded_topics)}")
-                
-                console.print(f"\n[bold]Excluded Topics (matching patterns):[/bold]")
-                for topic in excluded_topics:
-                    console.print(f"    [red]✗[/red] {topic}")
-                
-                console.print(f"\n[bold]Kept Topics (remaining):[/bold]")
-                for topic in kept_topics:
-                    console.print(f"    [green]✓[/green] {topic}")
+                excluded_count = len(excluded_topics)
             else:
-                kept_topics = topics_to_extract
                 excluded_topics = [t for t in all_topics if t not in topics_to_extract]
-                
-                console.print(f"\n[bold]Kept Topics (matching patterns):[/bold]")
-                for topic in kept_topics:
-                    console.print(f"    [green]✓[/green] {topic}")
-                
-                if excluded_topics:
-                    console.print(f"\n[bold]Excluded Topics (not matching):[/bold]")
-                    for topic in excluded_topics:
-                        console.print(f"    [dim]○[/dim] {topic}")
-        
-            # Show pattern matching summary
-            console.print(f"\n[bold]Pattern Matching:[/bold]")
-            console.print(f"  Requested patterns: {', '.join(topics)}")
-            console.print(f"  Matching mode: {'Exclude matching' if reverse else 'Include matching'}")
+                excluded_count = len(excluded_topics)
             
-            # Show which patterns matched which topics
-            for pattern in topics:
-                # Use more precise matching logic similar to _filter_topics
-                exact_matches = [t for t in all_topics if t == pattern]
-                if exact_matches:
-                    matched_topics = exact_matches
-                else:
-                    # Fall back to fuzzy matching
-                    matched_topics = [t for t in all_topics if pattern.lower() in t.lower()]
-                
-                if matched_topics:
-                    console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_topics)}")
-                else:
-                    console.print(f"  Pattern '{pattern}' matched: [dim]none[/dim]")
+            ui.show_topic_selection_summary(len(all_topics), len(topics_to_extract), excluded_count)
+            
+            # Show topic lists
+            if reverse:
+                excluded_topics_matching = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
+                ui.show_topic_lists(topics_to_extract, excluded_topics_matching, reverse_mode=True)
+            else:
+                excluded_topics_non_matching = [t for t in all_topics if t not in topics_to_extract]
+                ui.show_topic_lists(topics_to_extract, excluded_topics_non_matching, reverse_mode=False)
+            
+            # Show pattern matching summary
+            ui.show_pattern_matching_summary(topics, reverse, all_topics)
         
         manager.cleanup()
         
     except Exception as e:
-        console.print(f"[red]Error during extraction: {e}[/red]")
+        ui.show_error(f"Error during extraction: {e}")
         logger.error(f"Extraction error: {e}", exc_info=True)
         raise typer.Exit(1)
 
