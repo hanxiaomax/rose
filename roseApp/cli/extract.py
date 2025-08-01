@@ -163,7 +163,6 @@ def _extract_topics_impl(
         
         # Track extraction timing
         extraction_start_time = time.time()
-        
         # Show realistic extraction progress with actual phases
         with UIControl.todo_extraction_progress(
             input_path.name,

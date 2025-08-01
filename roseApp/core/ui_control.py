@@ -5,24 +5,12 @@ Provides static methods for consistent UI operations across the application
 
 import asyncio
 import time
-import json
-import csv
-import xml.etree.ElementTree as ET
-import re
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Dict, Any, Optional, List, Callable, Union, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from io import StringIO
 import logging
-from datetime import datetime
-
-try:
-    import yaml
-    YAML_AVAILABLE = True
-except ImportError:
-    YAML_AVAILABLE = False
 
 from rich.console import Console, Group
 from rich.progress import (
@@ -33,250 +21,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.align import Align
-from rich.markdown import Markdown
 from rich.live import Live
 
 from .util import get_logger
+from .theme_manager import ThemeManager, ThemeMode, ThemeColors, ThemeTypography, ThemeSpacing, CompatibilityTheme
+from .export_manager import ExportManager, OutputFormat, RenderOptions, ExportOptions
 
 _logger = get_logger("ui_control")
-
-
-# ============================================================================
-# Theme System
-# ============================================================================
-
-class ThemeMode(Enum):
-    """Theme mode options"""
-    LIGHT = "light"
-    DARK = "dark"
-    AUTO = "auto"
-
-
-@dataclass
-class ThemeColors:
-    """Theme color definitions"""
-    # Core colors
-    background: str = "#ffffff"
-    foreground: str = "#000000"
-    primary: str = "#4f46e5"
-    secondary: str = "#14b8a6"
-    accent: str = "#f59e0b"
-    
-    # Status colors
-    success: str = "#22c55e"
-    warning: str = "#f59e0b"
-    error: str = "#ef4444"
-    info: str = "#3b82f6"
-    
-    # UI colors
-    border: str = "#e5e7eb"
-    input: str = "#f3f4f6"
-    muted: str = "#6b7280"
-    
-    # Chart colors
-    chart_colors: List[str] = field(default_factory=lambda: [
-        "#4f46e5", "#14b8a6", "#f59e0b", "#ec4899", "#22c55e"
-    ])
-    
-    # Rich console color names (for backward compatibility)
-    @property
-    def rich_primary(self) -> str:
-        """Primary color as rich color name"""
-        return "blue"
-    
-    @property
-    def rich_secondary(self) -> str:
-        """Secondary color as rich color name"""
-        return "cyan"
-    
-    @property
-    def rich_accent(self) -> str:
-        """Accent color as rich color name"""
-        return "yellow"
-    
-    @property
-    def rich_success(self) -> str:
-        """Success color as rich color name"""
-        return "green"
-    
-    @property
-    def rich_warning(self) -> str:
-        """Warning color as rich color name"""
-        return "yellow"
-    
-    @property
-    def rich_error(self) -> str:
-        """Error color as rich color name"""
-        return "red"
-    
-    @property
-    def rich_info(self) -> str:
-        """Info color as rich color name"""
-        return "blue"
-    
-    @property
-    def rich_muted(self) -> str:
-        """Muted color as rich color name"""
-        return "dim white"
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return {
-            'background': self.background,
-            'foreground': self.foreground,
-            'primary': self.primary,
-            'secondary': self.secondary,
-            'accent': self.accent,
-            'success': self.success,
-            'warning': self.warning,
-            'error': self.error,
-            'info': self.info,
-            'border': self.border,
-            'input': self.input,
-            'muted': self.muted,
-            'chart_colors': self.chart_colors
-        }
-    
-    def get_style(self, color_name: str, modifier: str = "") -> str:
-        """Get styled color string for rich console
-        
-        Args:
-            color_name: Name of the color (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Formatted style string for rich console
-        """
-        color_map = {
-            'primary': self.primary,
-            'secondary': self.secondary,
-            'accent': self.accent,
-            'success': self.success,
-            'warning': self.warning,
-            'error': self.error,
-            'info': self.info,
-            'muted': self.muted,
-            'foreground': self.foreground,
-            'background': self.background,
-            'border': self.border
-        }
-        
-        color = color_map.get(color_name, self.foreground)
-        
-        if modifier:
-            return f"{modifier} {color}"
-        return color
-    
-    def get_rich_style(self, color_name: str, modifier: str = "") -> str:
-        """Get rich color name for console styling
-        
-        Args:
-            color_name: Name of the color (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Rich color name string
-        """
-        rich_color_map = {
-            'primary': self.rich_primary,
-            'secondary': self.rich_secondary,
-            'accent': self.rich_accent,
-            'success': self.rich_success,
-            'warning': self.rich_warning,
-            'error': self.rich_error,
-            'info': self.rich_info,
-            'muted': self.rich_muted
-        }
-        
-        color = rich_color_map.get(color_name, "white")
-        
-        if modifier:
-            return f"{modifier} {color}"
-        return color
-
-
-@dataclass
-class ThemeTypography:
-    """Typography settings"""
-    font_family: str = "system-ui, sans-serif"
-    font_size_base: str = "14px"
-    font_size_small: str = "12px"
-    font_size_large: str = "16px"
-    font_weight_normal: str = "400"
-    font_weight_bold: str = "600"
-    line_height: str = "1.5"
-    
-    def to_dict(self) -> Dict[str, str]:
-        """Convert to dictionary"""
-        return {
-            'font_family': self.font_family,
-            'font_size_base': self.font_size_base,
-            'font_size_small': self.font_size_small,
-            'font_size_large': self.font_size_large,
-            'font_weight_normal': self.font_weight_normal,
-            'font_weight_bold': self.font_weight_bold,
-            'line_height': self.line_height
-        }
-
-
-@dataclass
-class ThemeSpacing:
-    """Spacing and layout settings"""
-    base_unit: str = "4px"
-    small: str = "8px"
-    medium: str = "16px"
-    large: str = "24px"
-    xlarge: str = "32px"
-    
-    def to_dict(self) -> Dict[str, str]:
-        """Convert to dictionary"""
-        return {
-            'base_unit': self.base_unit,
-            'small': self.small,
-            'medium': self.medium,
-            'large': self.large,
-            'xlarge': self.xlarge
-        }
-
-
-# ============================================================================
-# Output Formats and Options
-# ============================================================================
-
-class OutputFormat(Enum):
-    """Supported output formats"""
-    TABLE = "table"
-    LIST = "list"
-    SUMMARY = "summary"
-    JSON = "json"
-    YAML = "yaml"
-    CSV = "csv"
-    XML = "xml"
-    HTML = "html"
-    MARKDOWN = "markdown"
-
-
-@dataclass
-class RenderOptions:
-    """Options for result rendering"""
-    format: OutputFormat = OutputFormat.TABLE
-    verbose: bool = False
-    show_fields: bool = False
-    show_cache_stats: bool = True
-    show_summary: bool = True
-    color: bool = True
-    width: Optional[int] = None
-    title: Optional[str] = None
-
-
-@dataclass
-class ExportOptions:
-    """Options for result export"""
-    format: OutputFormat = OutputFormat.JSON
-    output_file: Optional[Path] = None
-    pretty: bool = True
-    include_metadata: bool = True
-    compress: bool = False
 
 
 # ============================================================================
@@ -341,10 +92,6 @@ class UIControl:
     """
     
     _default_console = None
-    _theme_colors = ThemeColors()
-    _theme_typography = ThemeTypography()
-    _theme_spacing = ThemeSpacing()
-    _current_theme_mode = ThemeMode.LIGHT
     
     @classmethod
     def get_console(cls) -> Console:
@@ -359,136 +106,53 @@ class UIControl:
         cls._default_console = console
     
     # ========================================================================
-    # Theme Management Methods
+    # Theme Management Methods (Delegated to ThemeManager)
     # ========================================================================
     
     @classmethod
     def set_theme_mode(cls, mode: ThemeMode):
         """Set current theme mode"""
-        cls._current_theme_mode = mode
-        
-        if mode == ThemeMode.DARK:
-            cls._theme_colors = ThemeColors(
-                background="#1a1a1a",
-                foreground="#ffffff",
-                primary="#818cf8",
-                secondary="#2dd4bf",
-                accent="#fcd34d",
-                success="#4ade80",
-                warning="#fcd34d",
-                error="#f87171",
-                info="#60a5fa",
-                border="#374151",
-                input="#374151",
-                muted="#9ca3af"
-            )
-        else:
-            cls._theme_colors = ThemeColors()  # Default light theme
+        ThemeManager.set_theme_mode(mode)
     
     @classmethod
     def get_theme_colors(cls) -> ThemeColors:
         """Get current theme colors"""
-        return cls._theme_colors
+        return ThemeManager.get_theme_colors()
     
     @classmethod
     def get_theme_typography(cls) -> ThemeTypography:
         """Get current theme typography"""
-        return cls._theme_typography
+        return ThemeManager.get_theme_typography()
     
     @classmethod
     def get_theme_spacing(cls) -> ThemeSpacing:
         """Get current theme spacing"""
-        return cls._theme_spacing
+        return ThemeManager.get_theme_spacing()
     
     @classmethod
     def get_inquirer_style(cls) -> Dict[str, str]:
         """Get InquirerPy style configuration"""
-        colors = cls._theme_colors
-        return {
-            "questionmark": f"fg:{colors.accent} bold",
-            "question": "bold",
-            "answer": f"fg:{colors.primary} bold",
-            "pointer": f"fg:{colors.accent} bold",
-            "highlighted": f"fg:{colors.accent} bold",
-            "selected": f"fg:{colors.success}",
-            "separator": f"fg:{colors.muted}",
-            "instruction": f"fg:{colors.muted}",
-            "text": "",
-            "disabled": f"fg:{colors.muted} italic"
-        }
+        return ThemeManager.get_inquirer_style()
     
     @classmethod
     def get_color(cls, color_name: str, modifier: str = "") -> str:
-        """Get unified color for any component
-        
-        Args:
-            color_name: Color name (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Styled color string
-        """
-        return cls._theme_colors.get_style(color_name, modifier)
+        """Get unified color for any component"""
+        return ThemeManager.get_color(color_name, modifier)
     
     @classmethod
     def get_rich_color(cls, color_name: str, modifier: str = "") -> str:
-        """Get rich color name for console styling
-        
-        Args:
-            color_name: Color name (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Rich color name string
-        """
-        return cls._theme_colors.get_rich_style(color_name, modifier)
+        """Get rich color name for console styling"""
+        return ThemeManager.get_rich_color(color_name, modifier)
     
     @classmethod
     def style_text(cls, text: str, color_name: str, modifier: str = "") -> str:
-        """Apply unified styling to text
-        
-        Args:
-            text: Text to style
-            color_name: Color name (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Styled text for rich console
-        """
-        style = cls.get_color(color_name, modifier)
-        return f"[{style}]{text}[/{style}]"
+        """Apply unified styling to text"""
+        return ThemeManager.style_text(text, color_name, modifier)
     
     @classmethod
     def get_component_color(cls, component_type: str, color_name: str, modifier: str = "") -> str:
-        """Get color for specific component type using UnifiedThemeManager
-        
-        Args:
-            component_type: Type of component (cli, tui, plot, etc.)
-            color_name: Name of the color (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Formatted color string appropriate for the component
-        """
-        try:
-            # Import here to avoid circular imports
-            from .theme_config import UnifiedThemeManager, ComponentType
-            
-            # Map string to ComponentType enum
-            component_map = {
-                'cli': ComponentType.CLI,
-                'tui': ComponentType.TUI,
-                'plot': ComponentType.PLOT,
-                'progress': ComponentType.PROGRESS,
-                'table': ComponentType.TABLE,
-                'panel': ComponentType.PANEL
-            }
-            
-            comp_type = component_map.get(component_type.lower(), ComponentType.CLI)
-            return UnifiedThemeManager.get_color(comp_type, color_name, modifier)
-        except ImportError:
-            # Fallback to regular color method if theme_config is not available
-            return cls.get_color(color_name, modifier)
+        """Get color for specific component type"""
+        return ThemeManager.get_component_color(component_type, color_name, modifier)
     
     # ========================================================================
     # Progress Bar Methods
@@ -1572,80 +1236,38 @@ class UIControl:
         cls._display_extraction_summary(result, config, console)
     
     # ========================================================================
-    # Result Rendering and Export Methods
+    # Result Rendering and Export Methods (Delegated to ExportManager)
     # ========================================================================
     
     @classmethod
     def render_result(cls, result: Dict[str, Any], options: Optional[RenderOptions] = None,
                      console: Optional[Console] = None) -> str:
-        """
-        Render result in specified format
-        
-        Args:
-            result: Analysis result from BagManager or extraction result
-            options: Rendering options
-            console: Console instance
-            
-        Returns:
-            Rendered string (for non-console formats)
-        """
+        """Render result in specified format"""
         if console is None:
             console = cls.get_console()
-        if options is None:
-            options = RenderOptions()
         
-        # Check if this is an extraction result
-        if result.get('operation') == 'extract_topics':
-            return cls._render_extraction_result(result, options, console)
+        # Check if this is a table/list/summary format that needs UIControl rendering
+        if options and options.format in [OutputFormat.TABLE, OutputFormat.LIST, OutputFormat.SUMMARY]:
+            # Handle these formats locally for UI display
+            if options.format == OutputFormat.TABLE:
+                return cls._render_table(result, options, console)
+            elif options.format == OutputFormat.LIST:
+                return cls._render_list(result, options, console)
+            elif options.format == OutputFormat.SUMMARY:
+                return cls._render_summary(result, options, console)
         
-        # Route to appropriate renderer for inspection results
-        if options.format == OutputFormat.TABLE:
-            return cls._render_table(result, options, console)
-        elif options.format == OutputFormat.LIST:
-            return cls._render_list(result, options, console)
-        elif options.format == OutputFormat.SUMMARY:
-            return cls._render_summary(result, options, console)
-        elif options.format == OutputFormat.JSON:
-            return cls._render_json(result, options, console)
-        elif options.format == OutputFormat.YAML:
-            return cls._render_yaml(result, options, console)
-        elif options.format == OutputFormat.MARKDOWN:
-            return cls._render_markdown(result, options, console)
-        else:
-            _logger.warning(f"Unsupported render format: {options.format}")
-            return cls._render_table(result, options, console)  # Fallback to table
+        # Delegate other formats to ExportManager
+        return ExportManager.render_result(result, options, console)
     
     @classmethod
     def export_result(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """
-        Export result to file in specified format
-        
-        Args:
-            result: Analysis result from BagManager
-            options: Export options
-            
-        Returns:
-            True if export successful, False otherwise
-        """
-        try:
-            if options.format == OutputFormat.JSON:
-                return cls._export_json(result, options)
-            elif options.format == OutputFormat.YAML:
-                return cls._export_yaml(result, options)
-            elif options.format == OutputFormat.CSV:
-                return cls._export_csv(result, options)
-            elif options.format == OutputFormat.XML:
-                return cls._export_xml(result, options)
-            elif options.format == OutputFormat.HTML:
-                return cls._export_html(result, options)
-            elif options.format == OutputFormat.MARKDOWN:
-                return cls._export_markdown(result, options)
-            else:
-                _logger.error(f"Unsupported export format: {options.format}")
-                return False
-        except Exception as e:
-            _logger.error(f"Export failed: {e}")
-            return False
+        """Export result to file in specified format"""
+        success = ExportManager.export_result(result, options)
+        if success:
+            cls.show_success(f"Results exported to {options.output_file}")
+        else:
+            cls.show_error("Export failed")
+        return success
     
     # ========================================================================
     # Status and Message Methods
@@ -1684,42 +1306,42 @@ class UIControl:
         """Display operation cancelled message"""
         if console is None:
             console = cls.get_console()
-        console.print("Operation cancelled.", style=cls._theme_colors.muted)
+        console.print("Operation cancelled.", style=cls.get_color('muted'))
     
     @classmethod
     def show_operation_status(cls, message: str, console: Optional[Console] = None):
         """Display general operation status (unified for analyzing, processing, etc.)"""
         if console is None:
             console = cls.get_console()
-        console.print(message, style=f"dim {cls._theme_colors.primary}")
+        console.print(message, style=cls.get_color('primary', 'dim'))
     
     @classmethod
     def show_operation_description(cls, operation_desc: str, items: List[str], item_type: str = "topics", console: Optional[Console] = None):
         """Display operation description and items (unified for extraction, inspection, etc.)"""
         if console is None:
             console = cls.get_console()
-        console.print(f"\n{operation_desc}", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"{item_type.capitalize()} to process: {', '.join(items)}", style=cls._theme_colors.foreground)
+        console.print(f"\n{operation_desc}", style=cls.get_color('primary', 'bold'))
+        console.print(f"{item_type.capitalize()} to process: {', '.join(items)}", style=cls.get_color('foreground'))
     
     @classmethod
     def show_dry_run_preview(cls, items_count: int, items: List[str], output_path: Path, operation: str = "extract", console: Optional[Console] = None):
         """Display dry run preview (unified for different operations)"""
         if console is None:
             console = cls.get_console()
-        console.print(f"\nDry run - would {operation} {items_count} items:", style=f"bold {cls._theme_colors.warning}")
+        console.print(f"\nDry run - would {operation} {items_count} items:", style=cls.get_color('warning', 'bold'))
         for item in items:
-            console.print(f"  • {item}", style=cls._theme_colors.foreground)
-        console.print(f"\nOutput would be saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
-        console.print(f"Dry run completed - no files were created", style=f"bold {cls._theme_colors.warning}")
+            console.print(f"  • {item}", style=cls.get_color('foreground'))
+        console.print(f"\nOutput would be saved to: {output_path}", style=cls.get_color('muted', 'dim'))
+        console.print(f"Dry run completed - no files were created", style=cls.get_color('warning', 'bold'))
     
     @classmethod
     def show_operation_success(cls, operation: str, items_count: int, output_path: Path, processing_time: float, console: Optional[Console] = None):
         """Display operation success message (unified for extraction, inspection, etc.)"""
         if console is None:
             console = cls.get_console()
-        console.print(f"\n✓ Successfully {operation} {items_count} items", style=f"bold {cls._theme_colors.success}")
-        console.print(f"Output saved to: {output_path}", style=f"dim {cls._theme_colors.muted}")
-        console.print(f"Operation completed in {processing_time:.2f}s", style=f"dim {cls._theme_colors.muted}")
+        console.print(f"\n✓ Successfully {operation} {items_count} items", style=cls.get_color('success', 'bold'))
+        console.print(f"Output saved to: {output_path}", style=cls.get_color('muted', 'dim'))
+        console.print(f"Operation completed in {processing_time:.2f}s", style=cls.get_color('muted', 'dim'))
     
     @classmethod
     def show_operation_details(cls, operation: str, input_path: Path, output_path: Path, 
@@ -1728,14 +1350,14 @@ class UIControl:
         if console is None:
             console = cls.get_console()
         
-        console.print(f"\n{operation.capitalize()} Details:", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"  Input file: {input_path}", style=cls._theme_colors.foreground)
-        console.print(f"  Output file: {output_path}", style=cls._theme_colors.foreground)
-        console.print(f"  Processing time: {processing_time:.2f}s", style=cls._theme_colors.foreground)
+        console.print(f"\n{operation.capitalize()} Details:", style=cls.get_color('primary', 'bold'))
+        console.print(f"  Input file: {input_path}", style=cls.get_color('foreground'))
+        console.print(f"  Output file: {output_path}", style=cls.get_color('foreground'))
+        console.print(f"  Processing time: {processing_time:.2f}s", style=cls.get_color('foreground'))
         
         if additional_info:
             for key, value in additional_info.items():
-                console.print(f"  {key}: {value}", style=cls._theme_colors.foreground)
+                console.print(f"  {key}: {value}", style=cls.get_color('foreground'))
     
     @classmethod
     def show_items_selection_summary(cls, total_items: int, selected_items: int, excluded_items: int = None, 
@@ -1744,12 +1366,12 @@ class UIControl:
         if console is None:
             console = cls.get_console()
         
-        console.print(f"\n{item_type.capitalize()} Selection:", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"  Total {item_type} available: {total_items}", style=cls._theme_colors.foreground)
-        console.print(f"  {item_type.capitalize()} selected: {selected_items}", style=cls._theme_colors.foreground)
+        console.print(f"\n{item_type.capitalize()} Selection:", style=cls.get_color('primary', 'bold'))
+        console.print(f"  Total {item_type} available: {total_items}", style=cls.get_color('foreground'))
+        console.print(f"  {item_type.capitalize()} selected: {selected_items}", style=cls.get_color('foreground'))
         
         if excluded_items is not None:
-            console.print(f"  {item_type.capitalize()} excluded: {excluded_items}", style=cls._theme_colors.foreground)
+            console.print(f"  {item_type.capitalize()} excluded: {excluded_items}", style=cls.get_color('foreground'))
     
     @classmethod
     def show_items_lists(cls, kept_items: List[str], excluded_items: List[str] = None, 
@@ -1759,22 +1381,22 @@ class UIControl:
             console = cls.get_console()
         
         if reverse_mode and excluded_items:
-            console.print(f"\nExcluded {item_type.capitalize()} (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            console.print(f"\nExcluded {item_type.capitalize()} (matching patterns):", style=cls.get_color('primary', 'bold'))
             for item in excluded_items:
-                console.print(f"    ✗ {item}", style=cls._theme_colors.error)
+                console.print(f"    ✗ {item}", style=cls.get_color('error'))
             
-            console.print(f"\nKept {item_type.capitalize()} (remaining):", style=f"bold {cls._theme_colors.primary}")
+            console.print(f"\nKept {item_type.capitalize()} (remaining):", style=cls.get_color('primary', 'bold'))
             for item in kept_items:
-                console.print(f"    ✓ {item}", style=cls._theme_colors.success)
+                console.print(f"    ✓ {item}", style=cls.get_color('success'))
         else:
-            console.print(f"\nKept {item_type.capitalize()} (matching patterns):", style=f"bold {cls._theme_colors.primary}")
+            console.print(f"\nKept {item_type.capitalize()} (matching patterns):", style=cls.get_color('primary', 'bold'))
             for item in kept_items:
-                console.print(f"    ✓ {item}", style=cls._theme_colors.success)
+                console.print(f"    ✓ {item}", style=cls.get_color('success'))
             
             if excluded_items:
-                console.print(f"\nExcluded {item_type.capitalize()} (not matching):", style=f"bold {cls._theme_colors.primary}")
+                console.print(f"\nExcluded {item_type.capitalize()} (not matching):", style=cls.get_color('primary', 'bold'))
                 for item in excluded_items:
-                    console.print(f"    ○ {item}", style=f"dim {cls._theme_colors.muted}")
+                    console.print(f"    ○ {item}", style=cls.get_color('muted', 'dim'))
     
     @classmethod
     def show_pattern_matching_summary(cls, patterns: List[str], reverse_mode: bool, all_items: List[str], 
@@ -1783,9 +1405,9 @@ class UIControl:
         if console is None:
             console = cls.get_console()
         
-        console.print(f"\nPattern Matching:", style=f"bold {cls._theme_colors.primary}")
-        console.print(f"  Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
-        console.print(f"  Matching mode: {'Exclude matching' if reverse_mode else 'Include matching'}", style=cls._theme_colors.foreground)
+        console.print(f"\nPattern Matching:", style=cls.get_color('primary', 'bold'))
+        console.print(f"  Requested patterns: {', '.join(patterns)}", style=cls.get_color('foreground'))
+        console.print(f"  Matching mode: {'Exclude matching' if reverse_mode else 'Include matching'}", style=cls.get_color('foreground'))
         
         # Show which patterns matched which items
         for pattern in patterns:
@@ -1798,9 +1420,9 @@ class UIControl:
                 matched_items = [item for item in all_items if pattern.lower() in item.lower()]
             
             if matched_items:
-                console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_items)}", style=cls._theme_colors.foreground)
+                console.print(f"  Pattern '{pattern}' matched: {', '.join(matched_items)}", style=cls.get_color('foreground'))
             else:
-                console.print(f"  Pattern '{pattern}' matched: none", style=f"dim {cls._theme_colors.muted}")
+                console.print(f"  Pattern '{pattern}' matched: none", style=cls.get_color('muted', 'dim'))
     
     @classmethod
     def show_no_matching_items(cls, patterns: List[str], available_items: List[str], reverse_mode: bool = False, 
@@ -1813,8 +1435,8 @@ class UIControl:
             cls.show_warning(f"All {item_type} would be excluded. No {item_type} to process.", console)
         else:
             cls.show_warning(f"No matching {item_type} found.", console)
-            console.print(f"Available {item_type}: {', '.join(available_items[:5])}{'...' if len(available_items) > 5 else ''}", style=cls._theme_colors.foreground)
-            console.print(f"Requested patterns: {', '.join(patterns)}", style=cls._theme_colors.foreground)
+            console.print(f"Available {item_type}: {', '.join(available_items[:5])}{'...' if len(available_items) > 5 else ''}", style=cls.get_color('foreground'))
+            console.print(f"Requested patterns: {', '.join(patterns)}", style=cls.get_color('foreground'))
     
     @classmethod
     def show_unsupported_format_error(cls, format_name: str, supported_formats: List[str], console: Optional[Console] = None):
@@ -1844,12 +1466,12 @@ class UIControl:
         from rich.text import Text
         
         # Create styled title
-        title = Text("Field Analysis Details", style=f"bold {cls._theme_colors.accent}")
+        title = Text("Field Analysis Details", style=cls.get_color('accent', 'bold'))
         
         fields_panel = Panel(
             fields_content,
             title=title,
-            border_style=cls._theme_colors.accent,
+            border_style=cls.get_color('accent'),
             padding=(1, 2)
         )
         
@@ -2395,390 +2017,17 @@ class UIControl:
         cls._display_bag_summary(bag_info, DisplayConfig(verbose=options.verbose), console)
         return ""
     
-    @classmethod
-    def _render_json(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render result as JSON"""
-        json_result = cls._prepare_serializable_result(result)
-        json_str = json.dumps(json_result, indent=2 if options.verbose else None, default=str)
-        
-        if options.color:
-            console.print_json(data=json_result)
-        else:
-            console.print(json_str)
-        
-        return json_str
-    
-    @classmethod
-    def _render_yaml(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render result as YAML"""
-        if not YAML_AVAILABLE:
-            console.print(f"[{cls.get_color('error')}]YAML library not available. Install with: pip install pyyaml[/{cls.get_color('error')}]")
-            return ""
-        
-        yaml_result = cls._prepare_serializable_result(result)
-        yaml_str = yaml.dump(yaml_result, default_flow_style=False, indent=2)
-        
-        console.print(f"```yaml\n{yaml_str}```")
-        return yaml_str
-    
-    @classmethod
-    def _render_markdown(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render result as Markdown"""
-        bag_info = result.get('bag_info', {})
-        topics = result.get('topics', [])
-        
-        md_content = f"""# Bag Analysis Report
 
-## Summary
-- **File**: {bag_info.get('file_name', 'Unknown')}
-- **Topics**: {bag_info.get('topics_count', 0)}
-- **Messages**: {bag_info.get('total_messages', 0):,}
-- **Duration**: {bag_info.get('duration_seconds', 0):.1f}s
-- **File Size**: {cls._format_size(bag_info.get('file_size', 0))}
-
-## Topics
-
-| Topic | Message Type | Count | Frequency |
-|-------|--------------|-------|-----------|
-"""
-        
-        for topic_info in topics:
-            name = topic_info.get('name', '')
-            msg_type = topic_info.get('message_type', '')
-            count = topic_info.get('message_count', 0)
-            frequency = topic_info.get('frequency', 0)
-            
-            md_content += f"| `{name}` | {msg_type} | {count:,} | {frequency:.1f} Hz |\n"
-        
-        markdown = Markdown(md_content)
-        console.print(markdown)
-        
-        return md_content
     
-    @classmethod
-    def _render_extraction_result(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render extraction result in specified format"""
-        if options.format == OutputFormat.SUMMARY:
-            return cls._render_extraction_summary(result, options, console)
-        elif options.format == OutputFormat.TABLE:
-            return cls._render_extraction_table(result, options, console)
-        elif options.format == OutputFormat.LIST:
-            return cls._render_extraction_list(result, options, console)
-        elif options.format == OutputFormat.JSON:
-            return cls._render_json(result, options, console)
-        elif options.format == OutputFormat.YAML:
-            return cls._render_yaml(result, options, console)
-        elif options.format == OutputFormat.MARKDOWN:
-            return cls._render_extraction_markdown(result, options, console)
-        else:
-            return cls._render_extraction_summary(result, options, console)  # Fallback
-    
-    @classmethod
-    def _render_extraction_summary(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render extraction result as summary panel"""
-        config = DisplayConfig(verbose=options.verbose, full_width=True)
-        cls._display_extraction_summary(result, config, console)
-        return ""
-    
-    @classmethod
-    def _render_extraction_table(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render extraction result as table format"""
-        cls._render_extraction_summary(result, options, console)
-        return ""
-    
-    @classmethod
-    def _render_extraction_list(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render extraction result as list format"""
-        stats = result.get('statistics', {})
-        
-        console.print(f"\n[bold]Extraction Operation[/bold]")
-        console.print(f"Topics: {stats.get('selected_topics', 0)}/{stats.get('total_topics', 0)} selected")
-        console.print(f"Messages: {stats.get('selected_messages', 0):,}/{stats.get('total_messages', 0):,} selected")
-        
-        if result.get('topics_to_extract'):
-            console.print(f"\n[{cls.get_color('primary', 'bold')}]Selected Topics:[/{cls.get_color('primary', 'bold')}]")
-            for topic_name in result['topics_to_extract']:
-                console.print(f"  • [{cls.get_color('success')}]{topic_name}[/{cls.get_color('success')}]")
-        
-        return ""
-    
-    @classmethod
-    def _render_extraction_markdown(cls, result: Dict[str, Any], options: RenderOptions, console: Console) -> str:
-        """Render extraction result as Markdown"""
-        stats = result.get('statistics', {})
-        bag_info = result.get('bag_info', {})
-        
-        md_content = f"""# ROS Bag Extraction Report
 
-## Operation Summary
-- **Input File**: {result.get('input_file', 'Unknown')}
-- **Output File**: {result.get('output_file', 'Unknown')}
-- **Compression**: {result.get('compression', 'none')}
-- **Operation**: {'Dry Run' if result.get('dry_run') else 'Extraction'}
-- **Status**: {'Success' if result.get('success') else 'Failed'}
-
-## Statistics
-- **Topics**: {stats.get('selected_topics', 0)} / {stats.get('total_topics', 0)} ({stats.get('selection_percentage', 0):.1f}%)
-- **Messages**: {stats.get('selected_messages', 0):,} / {stats.get('total_messages', 0):,} ({stats.get('message_percentage', 0):.1f}%)
-- **Duration**: {bag_info.get('duration_seconds', 0):.1f}s
-
-## Selected Topics
-
-| Topic | Message Count | Status |
-|-------|---------------|--------|
-"""
-        
-        topics_to_extract = result.get('topics_to_extract', [])
-        for topic in result.get('all_topics', []):
-            topic_name = topic['name']
-            count = topic['message_count']
-            status = "✓ Keep" if topic_name in topics_to_extract else "✗ Drop"
-            md_content += f"| `{topic_name}` | {count:,} | {status} |\n"
-        
-        if result.get('performance'):
-            perf = result['performance']
-            md_content += f"""
-## Performance
-- **Extraction Time**: {perf.get('extraction_time', 0):.3f}s
-- **Processing Rate**: {perf.get('messages_per_sec', 0):.0f} messages/sec
-- **Analysis Time**: {perf.get('analysis_time', 0):.3f}s
-- **Total Time**: {perf.get('total_time', 0):.3f}s
-"""
-        
-        markdown = Markdown(md_content)
-        console.print(markdown)
-        
-        return md_content
     
     # ========================================================================
-    # Private Implementation Methods - Export
+    # Private Implementation Methods - Rendering (Local formats only)
     # ========================================================================
-    
-    @classmethod
-    def _export_json(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as JSON file"""
-        if options.output_file is None:
-            return False
-            
-        json_result = cls._prepare_serializable_result(result)
-        
-        with open(options.output_file, 'w', encoding='utf-8') as f:
-            json.dump(
-                json_result, 
-                f, 
-                indent=2 if options.pretty else None, 
-                ensure_ascii=False,
-                default=str
-            )
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
-    
-    @classmethod
-    def _export_yaml(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as YAML file"""
-        if not YAML_AVAILABLE:
-            cls.show_error("YAML library not available")
-            return False
-            
-        if options.output_file is None:
-            return False
-        
-        yaml_result = cls._prepare_serializable_result(result)
-        
-        with open(options.output_file, 'w', encoding='utf-8') as f:
-            yaml.dump(
-                yaml_result, 
-                f, 
-                default_flow_style=False, 
-                indent=2,
-                allow_unicode=True
-            )
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
-    
-    @classmethod
-    def _export_csv(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as CSV file"""
-        if options.output_file is None:
-            return False
-            
-        topics = result.get('topics', [])
-        
-        with open(options.output_file, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = ['topic', 'message_type', 'message_count', 'frequency']
-            if any('field_paths' in topic for topic in topics):
-                fieldnames.append('field_count')
-            
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            
-            for topic_info in topics:
-                row = {
-                    'topic': topic_info.get('name', ''),
-                    'message_type': topic_info.get('message_type', ''),
-                    'message_count': topic_info.get('message_count', 0),
-                    'frequency': topic_info.get('frequency', 0)
-                }
-                
-                if 'field_count' in fieldnames:
-                    row['field_count'] = len(topic_info.get('field_paths', []))
-                
-                writer.writerow(row)
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
-    
-    @classmethod
-    def _export_xml(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as XML file"""
-        if options.output_file is None:
-            return False
-            
-        root = ET.Element("bag_analysis")
-        
-        # Add bag info
-        bag_info_elem = ET.SubElement(root, "bag_info")
-        for key, value in result.get('bag_info', {}).items():
-            elem = ET.SubElement(bag_info_elem, key)
-            elem.text = str(value)
-        
-        # Add topics
-        topics_elem = ET.SubElement(root, "topics")
-        for topic_info in result.get('topics', []):
-            topic_elem = ET.SubElement(topics_elem, "topic")
-            for key, value in topic_info.items():
-                if key == 'field_paths':
-                    fields_elem = ET.SubElement(topic_elem, "field_paths")
-                    for field in value:
-                        field_elem = ET.SubElement(fields_elem, "field")
-                        field_elem.text = field
-                else:
-                    elem = ET.SubElement(topic_elem, key)
-                    elem.text = str(value)
-        
-        # Write to file
-        tree = ET.ElementTree(root)
-        ET.indent(tree, space="  ", level=0)  # Pretty print
-        tree.write(options.output_file, encoding='utf-8', xml_declaration=True)
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
-    
-    @classmethod
-    def _export_html(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as HTML file"""
-        if options.output_file is None:
-            return False
-            
-        bag_info = result.get('bag_info', {})
-        topics = result.get('topics', [])
-        
-        html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROS Bag Analysis Report - {bag_info.get('file_name', 'Unknown')}</title>
-    <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 2rem; }}
-        .header {{ border-bottom: 2px solid #007acc; padding-bottom: 1rem; margin-bottom: 2rem; }}
-        .summary {{ margin-bottom: 2rem; background: #f8f9fa; padding: 1rem; border-radius: 5px; }}
-        .topics {{ margin-bottom: 2rem; }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{ padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd; }}
-        th {{ background-color: #007acc; color: white; font-weight: 600; }}
-        .topic {{ font-family: monospace; }}
-        .count {{ text-align: right; }}
-        .frequency {{ text-align: right; }}
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>ROS Bag Analysis Report</h1>
-        <p>{bag_info.get('file_name', 'Unknown')} • Generated at {cls._get_timestamp()}</p>
-    </div>
-    
-    <div class="summary">
-        <h2>Summary</h2>
-        <p><strong>Topics:</strong> {bag_info.get('topics_count', 0)}</p>
-        <p><strong>Messages:</strong> {bag_info.get('total_messages', 0):,}</p>
-        <p><strong>File Size:</strong> {cls._format_size(bag_info.get('file_size', 0))}</p>
-        <p><strong>Duration:</strong> {bag_info.get('duration_seconds', 0):.1f}s</p>
-        <p><strong>Analysis Time:</strong> {bag_info.get('analysis_time', 0):.3f}s</p>
-        <p><strong>Cached:</strong> {'Yes' if bag_info.get('cached', False) else 'No'}</p>
-    </div>
-    
-    <div class="topics">
-        <h2>Topics ({len(topics)})</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Topic</th>
-                    <th>Message Type</th>
-                    <th>Count</th>
-                    <th>Frequency</th>
-                </tr>
-            </thead>
-            <tbody>"""
-        
-        for topic_info in topics:
-            html_content += f"""
-                <tr>
-                    <td class="topic">{topic_info.get('name', '')}</td>
-                    <td>{topic_info.get('message_type', '')}</td>
-                    <td class="count">{topic_info.get('message_count', 0):,}</td>
-                    <td class="frequency">{topic_info.get('frequency', 0):.1f} Hz</td>
-                </tr>"""
-        
-        html_content += """
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>"""
-        
-        with open(options.output_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
-    
-    @classmethod
-    def _export_markdown(cls, result: Dict[str, Any], options: ExportOptions) -> bool:
-        """Export result as Markdown file"""
-        if options.output_file is None:
-            return False
-            
-        md_content = cls._render_markdown(result, RenderOptions(show_fields=True), cls.get_console())
-        
-        with open(options.output_file, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
-        cls.show_success(f"Results exported to {options.output_file}")
-        return True
     
     # ========================================================================
     # Helper Methods
     # ========================================================================
-    
-    @classmethod
-    def _prepare_serializable_result(cls, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare result for JSON/YAML serialization"""
-        def make_serializable(obj):
-            if isinstance(obj, dict):
-                return {key: make_serializable(value) for key, value in obj.items()}
-            elif isinstance(obj, list):
-                return [make_serializable(item) for item in obj]
-            elif isinstance(obj, Path):
-                return str(obj)
-            elif hasattr(obj, '__dict__'):
-                return make_serializable(obj.__dict__)
-            else:
-                return obj
-        
-        return make_serializable(result)
     
     @classmethod
     def _format_size(cls, size_bytes: int) -> str:
@@ -2789,11 +2038,6 @@ class UIControl:
                 return f"{size:.1f} {unit}"
             size /= 1024.0
         return f"{size:.1f} TB"
-    
-    @classmethod
-    def _get_timestamp(cls) -> str:
-        """Get current timestamp for reports"""
-        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     @classmethod
     def _create_bag_summary_content(cls, bag_info: Dict[str, Any], config: DisplayConfig):
@@ -2957,66 +2201,6 @@ get_current_colors = UIControl.get_theme_colors
 get_current_typography = UIControl.get_theme_typography
 get_current_spacing = UIControl.get_theme_spacing
 
-# Theme compatibility
-class CompatibilityTheme:
-    """Compatibility layer for legacy theme usage in CLI modules"""
-    
-    @property
-    def colors(self) -> ThemeColors:
-        return UIControl.get_theme_colors()
-    
-    @property
-    def PRIMARY(self) -> str:
-        """Primary color (use UIControl.get_rich_color('primary') instead)"""
-        return UIControl.get_rich_color('primary')
-    
-    @property
-    def SECONDARY(self) -> str:
-        """Secondary color (use UIControl.get_rich_color('secondary') instead)"""
-        return UIControl.get_rich_color('secondary')
-    
-    @property
-    def ACCENT(self) -> str:
-        """Accent color (use UIControl.get_rich_color('accent') instead)"""
-        return UIControl.get_rich_color('accent')
-    
-    @property
-    def SUCCESS(self) -> str:
-        """Success color (use UIControl.get_rich_color('success') instead)"""
-        return UIControl.get_rich_color('success')
-    
-    @property
-    def WARNING(self) -> str:
-        """Warning color (use UIControl.get_rich_color('warning') instead)"""
-        return UIControl.get_rich_color('warning')
-    
-    @property
-    def ERROR(self) -> str:
-        """Error color (use UIControl.get_rich_color('error') instead)"""
-        return UIControl.get_rich_color('error')
-    
-    @property
-    def INFO(self) -> str:
-        """Info color (use UIControl.get_rich_color('info') instead)"""
-        return UIControl.get_rich_color('info')
-    
-    @property
-    def MUTED(self) -> str:
-        """Muted color (use UIControl.get_rich_color('muted') instead)"""
-        return UIControl.get_rich_color('muted')
-    
-    def get_inquirer_style(self) -> Dict[str, str]:
-        """Get InquirerPy style configuration (deprecated - use UIControl.get_inquirer_style() instead)"""
-        return UIControl.get_inquirer_style()
-    
-    def get_color(self, color_name: str, modifier: str = "") -> str:
-        """Get unified color (deprecated - use UIControl.get_color() instead)"""
-        return UIControl.get_color(color_name, modifier)
-    
-    def style_text(self, text: str, color_name: str, modifier: str = "") -> str:
-        """Style text (deprecated - use UIControl.style_text() instead)"""
-        return UIControl.style_text(text, color_name, modifier)
-
 # Progress Manager compatibility
 class ProgressManager:
     """Backward compatibility wrapper for UIControl progress methods"""
@@ -3092,5 +2276,5 @@ class ProgressManager:
         with UIControl.progress_bar(config, console) as (progress, task, callback):
             yield progress, task, callback
 
-# Create global instances for backward compatibility
-theme = CompatibilityTheme() 
+# Import theme from theme_manager for backward compatibility
+from .theme_manager import theme 
