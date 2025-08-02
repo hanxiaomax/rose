@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 from typing import Optional, List, Tuple, Dict
+from pathlib import Path
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from rich.console import Console
@@ -12,7 +13,10 @@ from InquirerPy.validator import PathValidator
 import concurrent.futures
 import threading
 import queue
-# from ..core.bag_manager import BagManager, InspectOptions, ExtractOptions
+# Import parser and cache related modules
+from ..core.parser import create_parser, ExtractOption
+from ..core.cache import create_bag_cache_manager
+from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
 from ..core.ui_control import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 
@@ -31,12 +35,13 @@ app = typer.Typer(help="ROS Bag Filter Tool")
 class CliTool:
     def __init__(self):
         self.console = Console()
-        # Use new BagManager instead of parser
-        self.bag_manager = BagManager(max_workers=WORKERS)
-        logger.debug("Using BagManager with unified interface for enhanced performance")
-        self.topics = None
-        self.connections = None
-        self.time_range = None
+        # Use parser directly instead of BagManager
+        self.parser = create_parser()
+        self.cache_manager = create_bag_cache_manager()
+        logger.debug("Using BagParser with cache for enhanced performance")
+        # Cache for current bag info
+        self.current_bag_info: Optional[ComprehensiveBagInfo] = None
+        self.current_bag_path: Optional[str] = None
     
     def _run_async(self, coro):
         """Helper to run async coroutines in sync context"""
@@ -48,25 +53,32 @@ class CliTool:
         return loop.run_until_complete(coro)
     
     def _load_bag_sync(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
-        """Synchronous wrapper for bag loading using inspect_bag"""
+        """Synchronous wrapper for bag loading using parser.load_bag_async"""
         async def _load():
-            options = InspectOptions(show_fields=False, verbose=False)
-            result = await self.bag_manager.inspect_bag(bag_path, options)
+            # Try to get from cache first
+            cached_entry = self.cache_manager.get_analysis(Path(bag_path))
+            if cached_entry and cached_entry.is_valid(Path(bag_path)):
+                logger.debug(f"Using cached bag info for {bag_path}")
+                bag_info = cached_entry.bag_info
+            else:
+                # Load using parser with progress callback
+                def progress_callback(phase: str, percent: float):
+                    logger.debug(f"Loading {bag_path}: {phase} ({percent:.1f}%)")
+                
+                bag_info, _ = await self.parser.load_bag_async(
+                    bag_path, 
+                    full_analysis=False,  # Use quick analysis for CLI
+                    progress_callback=progress_callback
+                )
+            
+            # Cache the current bag info for later use
+            self.current_bag_info = bag_info
+            self.current_bag_path = bag_path
             
             # Extract data in the format expected by CLI
-            topics = []
-            connections = {}
-            time_range = None
-            
-            if 'topics' in result:
-                for topic_info in result['topics']:
-                    topic_name = topic_info.get('name', '')
-                    message_type = topic_info.get('message_type', 'unknown')
-                    topics.append(topic_name)
-                    connections[topic_name] = message_type
-            
-            if 'time_range' in result:
-                time_range = result['time_range']
+            topics = bag_info.topics or []
+            connections = bag_info.connections or {}
+            time_range = bag_info.time_range
             
             return topics, connections, time_range
         
@@ -74,21 +86,31 @@ class CliTool:
     
     def _filter_bag_sync(self, input_bag: str, output_bag: str, whitelist: List[str], 
                         progress_callback=None, compression="none", overwrite=False) -> Dict:
-        """Synchronous wrapper for bag filtering using extract_bag"""
-        async def _filter():
-            from pathlib import Path
-            options = ExtractOptions(
+        """Synchronous wrapper for bag filtering using parser.extract"""
+        def _filter():
+            extract_option = ExtractOption(
                 topics=whitelist,
-                output_path=Path(output_bag),
                 compression=compression,
-                overwrite=overwrite,
-                dry_run=False
+                overwrite=overwrite
             )
             
-            result = await self.bag_manager.extract_bag(input_bag, options, progress_callback)
-            return result
+            result_message, elapsed_time = self.parser.extract(
+                input_bag, 
+                output_bag, 
+                extract_option,
+                progress_callback
+            )
+            
+            return {
+                'message': result_message,
+                'elapsed_time': elapsed_time,
+                'input_file': input_bag,
+                'output_file': output_bag,
+                'topics': whitelist,
+                'compression': compression
+            }
         
-        return self._run_async(_filter())
+        return _filter()
     
     def _load_whitelist_sync(self, whitelist_path: str) -> List[str]:
         """Load whitelist from file - simple file reading"""
@@ -271,7 +293,16 @@ class CliTool:
             if next_action == "back":
                 break  # Go back to input selection
             elif next_action == "info":
-                print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range, parser=self.bag_manager.parser)
+                # Use cached bag info if available
+                if self.current_bag_info and self.current_bag_path == bag_path:
+                    print_bag_info(self.console, bag_path, 
+                                 self.current_bag_info.topics or [], 
+                                 self.current_bag_info.connections or {}, 
+                                 self.current_bag_info.time_range, 
+                                 parser=self.parser)
+                else:
+                    # Fallback to loaded data
+                    print_bag_info(self.console, bag_path, self.topics, self.connections, self.time_range, parser=self.parser)
                 continue  # Stay in the current menu
             elif next_action == "filter":
                 # Get output bag with overwrite handling
@@ -438,7 +469,7 @@ class CliTool:
         # Use the first bag file for statistics display (as an example)
         bag_path_for_stats = selected_files[0] if selected_files else None
         
-        return ask_topics(self.console, list(all_topics), parser=None, bag_path=bag_path_for_stats)
+        return ask_topics(self.console, list(all_topics), parser=self.parser, bag_path=bag_path_for_stats)
 
 
     def _process_bags_in_parallel(self, selected_files, input_path, whitelist, compression="none"):
@@ -623,7 +654,12 @@ class CliTool:
                 return
                 
         elif filter_method == "manual":
-            whitelist = ask_topics(self.console, self.topics, parser=None, bag_path=input_bag)
+            # Use cached bag info if available
+            topics_to_use = self.topics
+            if self.current_bag_info and self.current_bag_path == input_bag:
+                topics_to_use = self.current_bag_info.topics or self.topics
+            
+            whitelist = ask_topics(self.console, topics_to_use, parser=self.parser, bag_path=input_bag)
             if not whitelist:
                 return
 
@@ -715,7 +751,7 @@ class CliTool:
             topics, connections, _ = self._load_bag_sync(input_bag)
         
         # Select topics
-        selected_topics = ask_topics(self.console, topics, parser=None, bag_path=input_bag)
+        selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
         if not selected_topics:
             return
             
