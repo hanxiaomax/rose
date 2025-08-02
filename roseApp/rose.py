@@ -16,6 +16,7 @@ from roseApp.cli.inspect import app as inspect_app
 from roseApp.cli.plot import app as plot_app
 from roseApp.cli.tools import app as tools_app
 from roseApp.cli.cli_tool import app as cli_tool_app
+from roseApp.cli.load import load as load_main
 # from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
 from roseApp.tui.tui import app as tui_app
 
@@ -74,6 +75,7 @@ def callback(
 
 
 # Add subcommands
+app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
 app.add_typer(inspect_app)
 app.add_typer(plot_app)

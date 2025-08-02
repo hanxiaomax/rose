@@ -7,6 +7,7 @@ and memory optimization using the rosbags library.
 
 import os
 import time
+import asyncio
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Callable, Any, Union, TYPE_CHECKING
 from dataclasses import dataclass, field
@@ -53,6 +54,7 @@ class BagParser:
     Public Interface:
     - get_bag_summary(): Get bag information with smart analysis level selection
     - get_bag_details(): Get bag information with smart analysis level selection
+    - load_bag_async(): Async load bag into cache with configurable analysis level
     - extract(): Extract topics from bag file
     
     The parser automatically chooses between quick and full analysis based on
@@ -114,6 +116,73 @@ class BagParser:
         bag_info, _ = self._analyze_bag_full(bag_path)
         elapsed = time.time() - start_time
         return bag_info, elapsed
+    
+    async def load_bag_async(
+        self, 
+        bag_path: str, 
+        full_analysis: bool = True,
+        progress_callback: Optional[Callable[[str, float], None]] = None
+    ) -> Tuple[ComprehensiveBagInfo, float]:
+        """
+        Asynchronously load bag into cache with configurable analysis level
+        
+        Args:
+            bag_path: Path to the bag file
+            full_analysis: Whether to perform full analysis (True) or quick analysis (False)
+            progress_callback: Optional callback for progress updates (phase, progress_pct)
+            
+        Returns:
+            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+        """
+        start_time = time.time()
+        
+        # Run analysis in executor to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        
+        if progress_callback:
+            progress_callback("Starting analysis...", 10.0)
+        
+        try:
+            if full_analysis:
+                if progress_callback:
+                    progress_callback("Performing full analysis...", 30.0)
+                
+                bag_info, analysis_time = await loop.run_in_executor(
+                    None,
+                    self._analyze_bag_full,
+                    bag_path
+                )
+            else:
+                if progress_callback:
+                    progress_callback("Performing quick analysis...", 30.0)
+                
+                bag_info, analysis_time = await loop.run_in_executor(
+                    None,
+                    self._analyze_bag_quick,
+                    bag_path
+                )
+            
+            if progress_callback:
+                progress_callback("Caching results...", 80.0)
+            
+            # Cache the result
+            from .cache import create_bag_cache_manager
+            cache_manager = create_bag_cache_manager()
+            cache_manager.put_analysis(Path(bag_path), bag_info)
+            
+            if progress_callback:
+                progress_callback("Complete", 100.0)
+            
+            elapsed = time.time() - start_time
+            _logger.info(f"Async load completed in {elapsed:.3f}s for {bag_path}")
+            
+            return bag_info, elapsed
+            
+        except Exception as e:
+            if progress_callback:
+                progress_callback("Error", 0.0)
+            _logger.error(f"Error in async load for {bag_path}: {e}")
+            raise
     
     def extract(self, input_bag: str, output_bag: str, extract_option: ExtractOption,
                 progress_callback: Optional[Callable] = None) -> Tuple[str, float]:

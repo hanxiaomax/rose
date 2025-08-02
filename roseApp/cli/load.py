@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from rich.table import Table
 
-from ..core.bag_manager import BagManager, InspectOptions
+from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
 
@@ -38,8 +38,8 @@ def await_sync(coro):
     return loop.run_until_complete(coro)
 
 
-async def load_single_bag(bag_path: Path, bag_manager: BagManager, verbose: bool = False, progress_callback=None) -> dict:
-    """Load a single bag file into cache"""
+async def load_single_bag(bag_path: Path, parser, verbose: bool = False, full_analysis: bool = True, progress_callback=None) -> dict:
+    """Load a single bag file into cache using parser directly"""
     try:
         # Check if already cached
         cache_manager = create_bag_cache_manager()
@@ -54,19 +54,23 @@ async def load_single_bag(bag_path: Path, bag_manager: BagManager, verbose: bool
                 'message': 'Already in cache'
             }
         
-        # Load bag analysis with progress callback
-        options = InspectOptions(show_fields=True, verbose=verbose)
-        result = await bag_manager.inspect_bag(str(bag_path), options, progress_callback=progress_callback)
+        # Load bag using parser's async load function
+        bag_info, elapsed_time = await parser.load_bag_async(
+            str(bag_path), 
+            full_analysis=full_analysis,
+            progress_callback=progress_callback
+        )
         
         if verbose:
-            logger.info(f"Successfully loaded {bag_path} into cache")
+            logger.info(f"Successfully loaded {bag_path} into cache in {elapsed_time:.3f}s")
         
         return {
             'path': str(bag_path),
             'status': 'loaded',
             'message': 'Successfully loaded into cache',
-            'topics_count': len(result.get('topics', [])),
-            'duration': result.get('duration', 0)
+            'topics_count': len(bag_info.topics) if bag_info.topics else 0,
+            'duration': bag_info.duration_seconds if bag_info.duration_seconds else 0,
+            'elapsed_time': elapsed_time
         }
         
     except Exception as e:
@@ -122,7 +126,8 @@ def load(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed loading information"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     list_cached: bool = typer.Option(False, "--list", "-l", help="List currently cached bags"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading")
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
+    full_analysis: bool = typer.Option(True, "--full-analysis/--quick-analysis", help="Perform full analysis (default) or quick analysis only")
 ):
     """
     Load ROS bag files into cache for faster operations.
@@ -138,6 +143,7 @@ def load(
         rose load --list                        # Show currently cached bags
         rose load "*.bag" --force               # Force reload even if cached
         rose load "*.bag" --dry-run             # Preview what would be loaded
+        rose load "*.bag" --quick-analysis      # Use quick analysis only
     """
     console = Console()
     
@@ -173,10 +179,11 @@ def load(
     if workers is None:
         workers = max(1, os.cpu_count() - 2)
     
-    console.print(f"\n[bold cyan]Loading {len(valid_bags)} bag file(s) with {workers} worker(s)...[/bold cyan]")
+    analysis_type = "full" if full_analysis else "quick"
+    console.print(f"\n[bold cyan]Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type} analysis)...[/bold cyan]")
     
-    # Initialize bag manager
-    bag_manager = BagManager(max_workers=workers)
+    # Initialize parser
+    parser = BagParser()
     
     # If force reload, clear cache for these bags
     if force:
@@ -219,7 +226,7 @@ def load(
                 progress_callback = create_progress_callback(bag_path, task_id)
                 future = executor.submit(
                     await_sync, 
-                    load_single_bag(bag_path, bag_manager, verbose, progress_callback)
+                    load_single_bag(bag_path, parser, verbose, full_analysis, progress_callback)
                 )
                 future_to_bag[future] = bag_path
             

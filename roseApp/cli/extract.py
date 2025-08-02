@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
 from rich.console import Console
-from ..core.bag_manager import BagManager, ExtractOptions
+from ..core.parser import BagParser, ExtractOption
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
@@ -34,6 +34,62 @@ def await_sync(coro):
         asyncio.set_event_loop(loop)
     
     return loop.run_until_complete(coro)
+
+
+def filter_topics(all_topics: List[str], patterns: List[str], topic_filter: Optional[str] = None) -> List[str]:
+    """
+    Filter topics based on patterns and optional topic filter
+    
+    Args:
+        all_topics: List of all available topics
+        patterns: List of patterns to match (supports fuzzy matching)
+        topic_filter: Optional additional filter pattern
+        
+    Returns:
+        List of matching topics
+    """
+    if not patterns:
+        return all_topics
+    
+    import re
+    matching_topics = set()
+    
+    for pattern in patterns:
+        # Exact match first
+        if pattern in all_topics:
+            matching_topics.add(pattern)
+            continue
+        
+        # Fuzzy matching - if pattern is a substring of topic name
+        for topic in all_topics:
+            if pattern.lower() in topic.lower():
+                matching_topics.add(topic)
+        
+        # Regex matching if pattern looks like a regex
+        try:
+            regex = re.compile(pattern)
+            for topic in all_topics:
+                if regex.search(topic):
+                    matching_topics.add(topic)
+        except re.error:
+            # Not a valid regex, skip
+            pass
+    
+    # Apply additional topic filter if provided
+    if topic_filter:
+        filtered_topics = set()
+        try:
+            filter_regex = re.compile(topic_filter)
+            for topic in matching_topics:
+                if filter_regex.search(topic):
+                    filtered_topics.add(topic)
+            matching_topics = filtered_topics
+        except re.error:
+            # If regex is invalid, use substring matching
+            filtered_topics = {topic for topic in matching_topics if topic_filter.lower() in topic.lower()}
+            matching_topics = filtered_topics
+    
+    return sorted(list(matching_topics))
 
 
 @app.command()
@@ -123,29 +179,26 @@ def _extract_topics_impl(
                 ui.show_operation_cancelled()
                 raise typer.Exit(0)
         
-        # Create BagManager
-        manager = BagManager()
-        
         # Get topic list from cached bag info
         ui.show_operation_status("Using cached bag analysis...")
         
         # Extract topic list from cached bag info
         bag_info = cached_entry.bag_info
         if bag_info and hasattr(bag_info, 'topics') and bag_info.topics:
-            all_topics = [topic.name for topic in bag_info.topics]
+            all_topics = bag_info.topics if isinstance(bag_info.topics[0], str) else [topic.name for topic in bag_info.topics]
         else:
             ui.show_error("No topics found in cached bag analysis")
             raise typer.Exit(1)
         
-        # Apply topic filtering using BagManager's _filter_topics method
+        # Apply topic filtering using our filter function
         if reverse:
             # Reverse selection: exclude topics that match the patterns
-            topics_to_exclude = manager._filter_topics(all_topics, topics, None)
+            topics_to_exclude = filter_topics(all_topics, topics, None)
             topics_to_extract = [t for t in all_topics if t not in topics_to_exclude]
             operation_desc = f"Excluding topics matching: {', '.join(topics)}"
         else:
             # Normal selection: include topics that match the patterns
-            topics_to_extract = manager._filter_topics(all_topics, topics, None)
+            topics_to_extract = filter_topics(all_topics, topics, None)
             operation_desc = f"Including topics matching: {', '.join(topics)}"
         
         if not topics_to_extract:
@@ -160,125 +213,40 @@ def _extract_topics_impl(
             ui.show_dry_run_preview(len(topics_to_extract), topics_to_extract, output_path, "extract")
             return
         
-        # Perform the actual extraction
-        options = ExtractOptions(
+        # Perform the actual extraction using parser
+        extract_option = ExtractOption(
             topics=topics_to_extract,
-            output_path=output_path,
             compression=compression,
-            overwrite=yes,
-            dry_run=dry_run,
-            reverse=reverse,
-            no_cache=False  # Always use cache since we require cached bags
+            overwrite=yes
         )
         
         # Track extraction timing
         extraction_start_time = time.time()
-        # Show realistic extraction progress with actual phases
-        with UIControl.todo_extraction_progress(
-            input_path.name,
-            "Extracting from",
-            console
-        ) as update_progress:
-            
-            # Phase tracking
-            phase_start_time = extraction_start_time
-            
-            # Phase 1: Initialize extraction
-            update_progress(
-                topic="Initializing extraction...",
-                progress=0.0,
-                bag_format=compression.upper() if compression != "none" else "Uncompressed"
+        
+        # Initialize parser for extraction
+        parser = BagParser()
+        
+        # Show extraction progress
+        console.print(f"Extracting {len(topics_to_extract)} topic(s) to {output_path}...")
+        
+        try:
+            # Execute extraction using parser
+            result_message, extraction_time = parser.extract(
+                str(input_path),
+                str(output_path),
+                extract_option
             )
             
-            # Create enhanced progress callback that tracks real phases
-            def realistic_progress_callback(topic_index: int, topic: str, messages_processed: int = 0,
-                                       total_messages_in_topic: int = 0, phase: str = "processing"):
-                nonlocal phase_start_time
-                current_time = time.time()
-                phase_duration = current_time - phase_start_time
-                
-                # Calculate overall progress based on actual extraction phases
-                if phase == "analyzing":
-                    # Phase 1: Reading bag metadata (5%)
-                    progress = 5.0
-                    current_topic = f"Reading bag metadata... ({phase_duration:.1f}s)"
-                elif phase == "filtering":
-                    # Phase 2: Filtering connections (10%)
-                    progress = 10.0
-                    phase_start_time = current_time  # Reset for next phase
-                    current_topic = f"Filtering connections for {len(topics_to_extract)} topics... ({phase_duration:.1f}s)"
-                elif phase == "collecting":
-                    # Phase 3: Collecting messages (10-60%)
-                    base_progress = 10.0
-                    collect_progress = 50.0 * (messages_processed / max(total_messages_in_topic, 1))
-                    progress = base_progress + collect_progress
-                    current_topic = f"Collecting messages ({messages_processed:,} collected)... ({phase_duration:.1f}s)"
-                elif phase == "sorting":
-                    # Phase 4: Sorting chronologically (60-70%)
-                    progress = 70.0
-                    phase_start_time = current_time  # Reset for next phase
-                    current_topic = f"Sorting {messages_processed:,} messages chronologically... ({phase_duration:.1f}s)"
-                elif phase == "writing":
-                    # Phase 5: Writing to output (70-95%)
-                    base_progress = 70.0
-                    write_progress = 25.0 * (messages_processed / max(total_messages_in_topic, 1))
-                    progress = base_progress + write_progress
-                    current_topic = f"Writing messages to output ({messages_processed:,} written)... ({phase_duration:.1f}s)"
-                elif phase == "finalizing":
-                    # Phase 6: Finalizing (95-100%)
-                    progress = 95.0
-                    phase_start_time = current_time  # Reset for final phase
-                    current_topic = f"Finalizing output file... ({phase_duration:.1f}s)"
-                elif phase == "completed":
-                    # Phase 7: Completed (100%)
-                    progress = 100.0
-                    total_duration = current_time - extraction_start_time
-                    current_topic = f"Extraction completed ({messages_processed:,} messages in {total_duration:.2f}s)"
-                else:
-                    # Default processing
-                    progress = 50.0 + (topic_index / len(topics_to_extract)) * 40.0
-                    current_topic = f"Processing {topic}... ({phase_duration:.1f}s)"
-                
-                # Calculate topics processed based on phase and progress
-                if phase == "analyzing":
-                    topics_processed_count = 0
-                elif phase == "filtering":
-                    topics_processed_count = 0
-                elif phase == "collecting":
-                    # During collection, we're processing topics
-                    topics_processed_count = min(1, len(topics_to_extract))
-                elif phase == "sorting":
-                    # During sorting, we've collected all topics
-                    topics_processed_count = len(topics_to_extract)
-                elif phase == "writing":
-                    # During writing, we're processing all topics
-                    topics_processed_count = len(topics_to_extract)
-                elif phase == "finalizing" or phase == "completed":
-                    # All topics processed
-                    topics_processed_count = len(topics_to_extract)
-                else:
-                    # Default based on progress
-                    topics_processed_count = min(int(progress / 100 * len(topics_to_extract)), len(topics_to_extract))
-                
-                # Update the display with realistic information
-                update_progress(
-                    topic=current_topic,
-                    progress=progress,
-                    topics_total=len(topics_to_extract),
-                    topics_processed=topics_processed_count,
-                    bag_format=compression.upper() if compression != "none" else "Uncompressed"
-                )
-            
-            # Execute extraction with realistic progress tracking
-            result = await_sync(manager.extract_bag(input_path, options, progress_callback=realistic_progress_callback))
-        
-        # Calculate extraction timing
-        extraction_end_time = time.time()
-        extraction_time = extraction_end_time - extraction_start_time
+            success = True
+        except Exception as e:
+            logger.error(f"Extraction failed: {e}")
+            result_message = str(e)
+            extraction_time = time.time() - extraction_start_time
+            success = False
         
         # Check if extraction was successful
-        if not result.get('success', False):
-            ui.show_error(f"Extraction failed: {result.get('error', 'Unknown error')}")
+        if not success:
+            ui.show_error(f"Extraction failed: {result_message}")
             raise typer.Exit(1)
         
         # Show success message using unified UI
@@ -295,7 +263,7 @@ def _extract_topics_impl(
             
             # Show topic selection summary
             if reverse:
-                excluded_topics = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
+                excluded_topics = [t for t in all_topics if t in filter_topics(all_topics, topics, None)]
                 excluded_count = len(excluded_topics)
             else:
                 excluded_topics = [t for t in all_topics if t not in topics_to_extract]
@@ -305,7 +273,7 @@ def _extract_topics_impl(
             
             # Show topic lists
             if reverse:
-                excluded_topics_matching = [t for t in all_topics if t in manager._filter_topics(all_topics, topics, None)]
+                excluded_topics_matching = [t for t in all_topics if t in filter_topics(all_topics, topics, None)]
                 ui.show_items_lists(topics_to_extract, excluded_topics_matching, reverse_mode=True, item_type="topics")
             else:
                 excluded_topics_non_matching = [t for t in all_topics if t not in topics_to_extract]
@@ -313,8 +281,6 @@ def _extract_topics_impl(
             
             # Show pattern matching summary
             ui.show_pattern_matching_summary(topics, reverse, all_topics, "topics")
-        
-        manager.cleanup()
         
     except Exception as e:
         ui.show_error(f"Error during extraction: {e}")

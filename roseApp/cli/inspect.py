@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, List
 
 import typer
-from ..core.bag_manager import BagManager, InspectOptions
+from ..core.model import AnalysisLevel
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
@@ -70,38 +70,81 @@ def inspect(
         logging.getLogger('cache').setLevel(logging.CRITICAL)
         logging.getLogger('root').setLevel(logging.CRITICAL)
     
-    # Create options object
-    options = InspectOptions(
-        topics=topics,
-        topic_filter=topic_filter,
-        show_fields=show_fields,
-        sort_by=sort_by,
-        reverse_sort=reverse_sort,
-        limit=limit,
-        output_format=output_format,
-        output_file=output,
-        verbose=verbose,
-        no_cache=False  # Always use cache since we require cached bags
-    )
+    # Create options object (simplified since we're using cache directly)
+    class SimpleInspectOptions:
+        def __init__(self):
+            self.topics = topics
+            self.topic_filter = topic_filter
+            self.show_fields = show_fields
+            self.sort_by = sort_by
+            self.reverse_sort = reverse_sort
+            self.limit = limit
+            self.output_format = output_format
+            self.output_file = output
+            self.verbose = verbose
+    
+    options = SimpleInspectOptions()
     
     # Run the async inspection
     asyncio.run(_run_inspect(bag_path, options, debug))
 
 
-async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = False):
+async def _run_inspect(bag_path: Path, options, debug: bool = False):
     """Run the bag inspection asynchronously using BagManager and ResultHandler"""
     
     # Use UIControl for unified output management
     ui = UIControl()
     console = ui.get_console()
     
-    # Create BagManager
-    manager = BagManager()
+    # No longer need BagManager - we use cache directly
     
     try:
-        # Use cached bag analysis directly - no progress bars needed
+        # Get cached bag analysis directly
+        cache_manager = create_bag_cache_manager()
+        cached_entry = cache_manager.get_analysis(bag_path)
+        
+        if not cached_entry or not cached_entry.is_valid(bag_path):
+            ui.show_error(f"Bag file '{bag_path}' is not loaded in cache.")
+            console.print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
+            raise typer.Exit(1)
+        
         console.print("[dim]Using cached bag analysis...[/dim]")
-        result = await manager.inspect_bag(bag_path, options, progress_callback=None)
+        
+        # Convert cached bag info to result format expected by UI
+        bag_info = cached_entry.bag_info
+        result = {
+            'file_path': str(bag_path),
+            'topics': [],
+            'duration': bag_info.duration_seconds or 0,
+            'analysis_level': bag_info.analysis_level.value if bag_info.analysis_level else 'none'
+        }
+        
+        # Convert topics to expected format
+        if bag_info.topics:
+            for i, topic_name in enumerate(bag_info.topics):
+                topic_info = {
+                    'name': topic_name,
+                    'message_type': bag_info.connections.get(topic_name, 'unknown') if bag_info.connections else 'unknown',
+                    'message_count': bag_info.message_counts.get(topic_name, 0) if bag_info.message_counts else 0,
+                    'frequency': 0.0,  # Calculate if needed
+                    'size_bytes': bag_info.topic_sizes.get(topic_name, 0) if bag_info.topic_sizes else 0
+                }
+                
+                # Calculate frequency if we have duration and message count
+                if bag_info.duration_seconds and topic_info['message_count'] > 0:
+                    topic_info['frequency'] = topic_info['message_count'] / bag_info.duration_seconds
+                
+                # Add field analysis if available
+                if options.show_fields and bag_info.message_fields:
+                    msg_type = topic_info['message_type']
+                    if msg_type in bag_info.message_fields:
+                        topic_info['field_paths'] = bag_info.message_fields[msg_type]
+                
+                result['topics'].append(topic_info)
+        
+        # Add field analysis if requested
+        if options.show_fields and bag_info.message_fields:
+            result['field_analysis'] = bag_info.message_fields
         
         # Determine if we should export to file or render to console
         if options.output_file:
