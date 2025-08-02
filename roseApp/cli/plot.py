@@ -292,9 +292,9 @@ async def _run_plot(
         else:
             # Show analysis progress
             console.print("[cyan]Analyzing bag file...[/cyan]")
-            bag_details, _ = parser.get_bag_details(str(input_path))
-            # Cache the result
-            cache_manager.put_analysis(input_path, bag_details)
+            # bag_details, _ = parser.get_bag_details(str(input_path))
+            # # Cache the result
+            # cache_manager.put_analysis(input_path, bag_details)
         
         # Convert to expected format
         bag_info = {
@@ -436,9 +436,9 @@ async def _run_overview_plot(
         else:
             # Show analysis progress
             console.print("[cyan]Analyzing bag file...[/cyan]")
-            bag_details, _ = parser.get_bag_details(str(input_path))
-            # Cache the result
-            cache_manager.put_analysis(input_path, bag_details)
+            # bag_details, _ = parser.get_bag_details(str(input_path))
+            # # Cache the result
+            # cache_manager.put_analysis(input_path, bag_details)
         
         # Convert to expected format
         bag_info = {

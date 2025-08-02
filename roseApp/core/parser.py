@@ -52,8 +52,6 @@ class BagParser:
     Singleton high-performance ROS bag parser using rosbags library
     
     Public Interface:
-    - get_bag_summary(): Get bag information with smart analysis level selection
-    - get_bag_details(): Get bag information with smart analysis level selection
     - load_bag_async(): Async load bag into cache with configurable analysis level
     - extract(): Extract topics from bag file
     
@@ -86,36 +84,6 @@ class BagParser:
         
         BagParser._initialized = True
         _logger.debug("Initialized singleton BagParser")
-    
-    def get_bag_summary(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
-        """
-        Get bag summary with intelligent analysis level selection
-        
-        Args:
-            bag_path: Path to the bag file
-    
-        Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
-        """
-        start_time = time.time()
-        bag_info, _ = self._analyze_bag_quick(bag_path)
-        elapsed = time.time() - start_time
-        return bag_info, elapsed
-    
-    def get_bag_details(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
-        """
-        Get bag details with intelligent analysis level selection
-        
-        Args:
-            bag_path: Path to the bag file
-
-        Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
-        """
-        start_time = time.time()
-        bag_info, _ = self._analyze_bag_full(bag_path)
-        elapsed = time.time() - start_time
-        return bag_info, elapsed
     
     async def load_bag_async(
         self, 
