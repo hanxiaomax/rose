@@ -12,7 +12,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import time
 
-from .parser import BagParser, ComprehensiveBagInfo, ExtractOption, AnalysisLevel
+from .parser import BagParser, ExtractOption
+from .model import ComprehensiveBagInfo, AnalysisLevel
 from .ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions
 from .cache import BagCacheManager, CachedMessageData
 

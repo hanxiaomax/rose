@@ -23,6 +23,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 from roseApp.core.util import get_logger
+from .model import ComprehensiveBagInfo
 
 _logger = get_logger("cache")
 
@@ -97,7 +98,7 @@ class CachedMessageData:
 @dataclass
 class BagCacheEntry:
     """Complete bag cache entry with metadata and message data"""
-    bag_info: Any  # ComprehensiveBagInfo - avoiding circular import
+    bag_info: ComprehensiveBagInfo
     cached_messages: Dict[str, List[CachedMessageData]]  # topic -> messages
     cache_timestamp: float
     file_mtime: float

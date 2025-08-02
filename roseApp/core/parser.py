@@ -14,6 +14,7 @@ from enum import Enum
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag1 import Writer as Rosbag1Writer
 from roseApp.core.util import get_logger
+from .model import ComprehensiveBagInfo, AnalysisLevel
 
 _logger = get_logger("parser")
 
@@ -21,13 +22,6 @@ _logger = get_logger("parser")
 class FileExistsError(Exception):
     """Custom exception for file existence errors"""
     pass
-
-
-class AnalysisLevel(Enum):
-    """Analysis level enumeration"""
-    NONE = "none"
-    QUICK = "quick"  # Basic metadata without message traversal
-    FULL = "full"    # Full statistics with message traversal
 
 
 @dataclass
@@ -50,122 +44,6 @@ class ExtractOption:
         if self.memory_limit_mb <= 0:
             raise ValueError("Memory limit must be positive")
 
-
-@dataclass
-class ComprehensiveBagInfo:
-    """
-    Comprehensive bag information data structure organized by analysis level
-    
-    Fields are grouped by the analysis level required to obtain them:
-    - Basic metadata: Always available
-    - Quick analysis: Topics, connections, time info, field structures  
-    - Full analysis: Message counts, sizes, detailed statistics
-    """
-    
-    # === BASIC METADATA (always present) ===
-    file_path: str
-    analysis_level: AnalysisLevel = AnalysisLevel.NONE
-    last_updated: float = field(default_factory=time.time)
-    
-    # === QUICK ANALYSIS DATA ===
-    # Topic and connection information
-    topics: Optional[List[str]] = None
-    connections: Optional[Dict[str, str]] = None  # topic -> message_type
-    
-    # Time information
-    time_range: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
-    duration_seconds: Optional[float] = None
-    
-    # Message structure information (from connection metadata)
-    message_definitions: Optional[Dict[str, str]] = None  # message_type -> definition
-    message_fields: Optional[Dict[str, Dict[str, Any]]] = None  # message_type -> field_structure
-    
-    # === FULL ANALYSIS DATA (requires message traversal) ===
-    # Message statistics
-    message_counts: Optional[Dict[str, int]] = None
-    topic_sizes: Optional[Dict[str, int]] = None
-    topic_stats: Optional[Dict[str, Dict[str, int]]] = None  # detailed per-topic stats
-    
-    # Overall statistics
-    total_messages: Optional[int] = None
-    total_size: Optional[int] = None
-    
-    # === OPTIONAL CACHED DATA ===
-    cached_messages: Optional[Dict[str, List[Any]]] = None
-    
-    def has_quick_analysis(self) -> bool:
-        """Check if quick analysis data is available"""
-        return (self.analysis_level.value in ['quick', 'full'] and 
-                self.topics is not None and 
-                self.connections is not None and 
-                self.time_range is not None)
-    
-    def has_full_analysis(self) -> bool:
-        """Check if full analysis data is available"""
-        return (self.analysis_level == AnalysisLevel.FULL and 
-                self.message_counts is not None and 
-                self.topic_stats is not None)
-    
-    def has_field_analysis(self) -> bool:
-        """Check if message field analysis data is available"""
-        return (self.message_definitions is not None and 
-                self.message_fields is not None)
-    
-    def has_cached_messages(self) -> bool:
-        """Check if cached messages data is available"""
-        return self.cached_messages is not None and len(self.cached_messages) > 0
-    
-    def get_topic_fields(self, topic: str) -> Optional[Dict[str, Any]]:
-        """Get field structure for a specific topic"""
-        if not self.has_field_analysis() or not self.connections:
-            return None
-        
-        message_type = self.connections.get(topic)
-        if message_type and self.message_fields:
-            return self.message_fields.get(message_type)
-        return None
-    
-    def get_topic_field_paths(self, topic: str) -> List[str]:
-        """Get flattened field paths for a specific topic"""
-        fields = self.get_topic_fields(topic)
-        if not fields:
-            return []
-        
-        paths = []
-        def extract_paths(field_dict, prefix=""):
-            for field_name, field_info in field_dict.items():
-                current_path = f"{prefix}.{field_name}" if prefix else field_name
-                paths.append(current_path)
-                
-                if isinstance(field_info, dict) and 'fields' in field_info:
-                    extract_paths(field_info['fields'], current_path)
-        
-        extract_paths(fields)
-        return paths
-    
-    def get_meta(self) -> Dict[str, Any]:
-        """Get basic metadata dictionary"""
-        meta = {
-            'file_path': self.file_path,
-            'analysis_level': self.analysis_level.value,
-            'last_updated': self.last_updated
-        }
-        
-        if self.has_quick_analysis():
-            meta.update({
-                'topic_count': len(self.topics) if self.topics else 0,
-                'duration_seconds': self.duration_seconds,
-                'time_range': self.time_range,
-                'has_field_analysis': self.has_field_analysis()
-            })
-        
-        if self.has_full_analysis():
-            meta.update({
-                'total_messages': self.total_messages,
-                'total_size': self.total_size
-            })
-        
-        return meta
 
 
 class BagParser:
