@@ -12,7 +12,8 @@ import typer
 from rich.console import Console
 
 # Import unified theme system and UI control
-from ..core.bag_manager import BagManager, InspectOptions
+from ..core.parser import BagParser
+from ..core.cache import create_bag_cache_manager
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.parser import create_parser
@@ -278,13 +279,46 @@ async def _run_plot(
     # Configure theme
     UIControl.set_theme_mode(theme_mode)
     
-    # Create BagManager
-    manager = BagManager()
+    # Create parser and cache manager
+    parser = BagParser()
+    cache_manager = create_bag_cache_manager()
     
     try:
-        # Show analysis progress
-        with UIControl.todo_analysis_progress(input_path.name, False, console) as analysis_update:
-            bag_info = await manager.inspect_bag(input_path, progress_callback=analysis_update)
+        # Check cache first
+        cached_entry = cache_manager.get_analysis(input_path)
+        if cached_entry and cached_entry.is_valid(input_path):
+            console.print("[dim]Using cached bag analysis...[/dim]")
+            bag_details = cached_entry.bag_info
+        else:
+            # Show analysis progress
+            console.print("[cyan]Analyzing bag file...[/cyan]")
+            bag_details, _ = parser.get_bag_details(str(input_path))
+            # Cache the result
+            cache_manager.put_analysis(input_path, bag_details)
+        
+        # Convert to expected format
+        bag_info = {
+            'bag_info': {
+                'file_name': input_path.name,
+                'file_path': str(input_path),
+                'topics_count': len(bag_details.topics) if bag_details.topics else 0,
+                'total_messages': sum(bag_details.message_counts.values()) if bag_details.message_counts else 0,
+                'duration_seconds': bag_details.duration_seconds or 0.0
+            },
+            'topics': []
+        }
+        
+        # Build topic information
+        if bag_details.topics:
+            for topic in bag_details.topics:
+                topic_info = {
+                    'name': topic,
+                    'message_type': bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown',
+                    'message_count': bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0,
+                    'frequency': (bag_details.message_counts.get(topic, 0) / bag_details.duration_seconds) if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0,
+                    'size_bytes': bag_details.topic_sizes.get(topic, 0) if bag_details.topic_sizes else 0
+                }
+                bag_info['topics'].append(topic_info)
         
         # Extract time series data with progress tracking
         console.print("[cyan]Extracting time series data...[/cyan]")
@@ -389,17 +423,46 @@ async def _run_overview_plot(
 ):
     """Run overview plot creation with async processing"""
     
-    # Create BagManager
-    manager = BagManager()
+    # Create parser and cache manager
+    parser = BagParser()
+    cache_manager = create_bag_cache_manager()
     
     try:
-        # Show analysis progress
-        with UIControl.todo_analysis_progress(input_path.name, True, console) as analysis_update:
-            bag_info = await manager.inspect_bag(
-                input_path, 
-                InspectOptions(verbose=True),
-                progress_callback=analysis_update
-            )
+        # Check cache first
+        cached_entry = cache_manager.get_analysis(input_path)
+        if cached_entry and cached_entry.is_valid(input_path):
+            console.print("[dim]Using cached bag analysis...[/dim]")
+            bag_details = cached_entry.bag_info
+        else:
+            # Show analysis progress
+            console.print("[cyan]Analyzing bag file...[/cyan]")
+            bag_details, _ = parser.get_bag_details(str(input_path))
+            # Cache the result
+            cache_manager.put_analysis(input_path, bag_details)
+        
+        # Convert to expected format
+        bag_info = {
+            'bag_info': {
+                'file_name': input_path.name,
+                'file_path': str(input_path),
+                'topics_count': len(bag_details.topics) if bag_details.topics else 0,
+                'total_messages': sum(bag_details.message_counts.values()) if bag_details.message_counts else 0,
+                'duration_seconds': bag_details.duration_seconds or 0.0
+            },
+            'topics': []
+        }
+        
+        # Build topic information
+        if bag_details.topics:
+            for topic in bag_details.topics:
+                topic_info = {
+                    'name': topic,
+                    'message_type': bag_details.connections.get(topic, 'Unknown') if bag_details.connections else 'Unknown',
+                    'message_count': bag_details.message_counts.get(topic, 0) if bag_details.message_counts else 0,
+                    'frequency': (bag_details.message_counts.get(topic, 0) / bag_details.duration_seconds) if bag_details.duration_seconds and bag_details.duration_seconds > 0 else 0,
+                    'size_bytes': bag_details.topic_sizes.get(topic, 0) if bag_details.topic_sizes else 0
+                }
+                bag_info['topics'].append(topic_info)
         
         # Create overview plot
         console.print(f"[cyan]Creating {plot_type} overview plot...[/cyan]")

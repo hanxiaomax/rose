@@ -12,7 +12,7 @@ from InquirerPy.validator import PathValidator
 import concurrent.futures
 import threading
 import queue
-from ..core.bag_manager import BagManager, InspectOptions, ExtractOptions
+# from ..core.bag_manager import BagManager, InspectOptions, ExtractOptions
 from ..core.util import get_logger, get_preferred_parser_type
 from ..core.ui_control import theme  # Import unified theme
 from .util import (LoadingAnimation, build_banner, 

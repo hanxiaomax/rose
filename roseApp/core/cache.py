@@ -701,7 +701,7 @@ def get_cache_stats() -> Dict[str, Any]:
 class BagCacheManager:
     """
     Simple interface for bag-specific caching operations
-    Used by BagManager to handle bag analysis and message caching
+    Used by CLI commands to handle bag analysis and message caching
     """
     
     def __init__(self, cache: Optional[UnifiedCache] = None):
