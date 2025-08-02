@@ -120,7 +120,7 @@ class BagParser:
     async def load_bag_async(
         self, 
         bag_path: str, 
-        full_analysis: bool = True,
+        full_analysis: bool = False,
         progress_callback: Optional[Callable[[str, float], None]] = None
     ) -> Tuple[ComprehensiveBagInfo, float]:
         """

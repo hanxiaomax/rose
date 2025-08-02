@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Optional
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from rich.table import Table
 
 from ..core.parser import BagParser
@@ -38,7 +38,7 @@ def await_sync(coro):
     return loop.run_until_complete(coro)
 
 
-async def load_single_bag(bag_path: Path, parser, verbose: bool = False, full_analysis: bool = True, progress_callback=None) -> dict:
+async def load_single_bag(bag_path: Path, parser, verbose: bool = False, full_analysis: bool = False, progress_callback=None) -> dict:
     """Load a single bag file into cache using parser directly"""
     try:
         # Check if already cached
@@ -125,9 +125,8 @@ def load(
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count - 2)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed loading information"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
-    list_cached: bool = typer.Option(False, "--list", "-l", help="List currently cached bags"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
-    full_analysis: bool = typer.Option(True, "--full-analysis/--quick-analysis", help="Perform full analysis (default) or quick analysis only")
+    full_analysis: bool = typer.Option(False, "--full-analysis/--quick-analysis", help="Perform full analysis (default) or quick analysis only")
 ):
     """
     Load ROS bag files into cache for faster operations.
@@ -140,7 +139,6 @@ def load(
         rose load bag1.bag bag2.bag             # Load specific bag files
         rose load "test_.*\.bag"                # Load bags matching regex pattern
         rose load "*.bag" --workers 4           # Use 4 parallel workers
-        rose load --list                        # Show currently cached bags
         rose load "*.bag" --force               # Force reload even if cached
         rose load "*.bag" --dry-run             # Preview what would be loaded
         rose load "*.bag" --quick-analysis      # Use quick analysis only
@@ -199,6 +197,7 @@ def load(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         MofNCompleteColumn(),
+        TimeElapsedColumn(),
         console=console
     ) as progress:
         
