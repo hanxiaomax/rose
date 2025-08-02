@@ -294,19 +294,6 @@ class ThemeManager:
         return cls._theme_colors.get_style(color_name, modifier)
     
     @classmethod
-    def get_rich_color(cls, color_name: str, modifier: str = "") -> str:
-        """Get rich color name for console styling
-        
-        Args:
-            color_name: Color name (primary, success, error, etc.)
-            modifier: Style modifier (bold, dim, italic, etc.)
-        
-        Returns:
-            Rich color name string
-        """
-        return cls._theme_colors.get_rich_style(color_name, modifier)
-    
-    @classmethod
     def style_text(cls, text: str, color_name: str, modifier: str = "") -> str:
         """Apply unified styling to text
         
@@ -408,70 +395,6 @@ class ThemeManager:
 # ============================================================================
 # Backward Compatibility
 # ============================================================================
-
-# Theme compatibility
-class CompatibilityTheme:
-    """Compatibility layer for legacy theme usage in CLI modules"""
-    
-    @property
-    def colors(self) -> ThemeColors:
-        return ThemeManager.get_theme_colors()
-    
-    @property
-    def PRIMARY(self) -> str:
-        """Primary color (use ThemeManager.get_rich_color('primary') instead)"""
-        return ThemeManager.get_rich_color('primary')
-    
-    @property
-    def SECONDARY(self) -> str:
-        """Secondary color (use ThemeManager.get_rich_color('secondary') instead)"""
-        return ThemeManager.get_rich_color('secondary')
-    
-    @property
-    def ACCENT(self) -> str:
-        """Accent color (use ThemeManager.get_rich_color('accent') instead)"""
-        return ThemeManager.get_rich_color('accent')
-    
-    @property
-    def SUCCESS(self) -> str:
-        """Success color (use ThemeManager.get_rich_color('success') instead)"""
-        return ThemeManager.get_rich_color('success')
-    
-    @property
-    def WARNING(self) -> str:
-        """Warning color (use ThemeManager.get_rich_color('warning') instead)"""
-        return ThemeManager.get_rich_color('warning')
-    
-    @property
-    def ERROR(self) -> str:
-        """Error color (use ThemeManager.get_rich_color('error') instead)"""
-        return ThemeManager.get_rich_color('error')
-    
-    @property
-    def INFO(self) -> str:
-        """Info color (use ThemeManager.get_rich_color('info') instead)"""
-        return ThemeManager.get_rich_color('info')
-    
-    @property
-    def MUTED(self) -> str:
-        """Muted color (use ThemeManager.get_rich_color('muted') instead)"""
-        return ThemeManager.get_rich_color('muted')
-    
-    def get_inquirer_style(self) -> Dict[str, str]:
-        """Get InquirerPy style configuration (deprecated - use ThemeManager.get_inquirer_style() instead)"""
-        return ThemeManager.get_inquirer_style()
-    
-    def get_color(self, color_name: str, modifier: str = "") -> str:
-        """Get unified color (deprecated - use ThemeManager.get_color() instead)"""
-        return ThemeManager.get_color(color_name, modifier)
-    
-    def style_text(self, text: str, color_name: str, modifier: str = "") -> str:
-        """Style text (deprecated - use ThemeManager.style_text() instead)"""
-        return ThemeManager.style_text(text, color_name, modifier)
-
-
-# Create global instances for backward compatibility
-theme = CompatibilityTheme()
 
 # Create aliases for backward compatibility
 get_theme = ThemeManager.get_theme_colors

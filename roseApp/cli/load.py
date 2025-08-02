@@ -17,6 +17,7 @@ from rich.table import Table
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.ui_control import UIControl, Message
 
 # Set to CLI mode
 set_app_mode(AppMode.CLI)
@@ -148,27 +149,26 @@ def load(
 
     # Check if input patterns are provided when not using --list
     if not input:
-        console.print("[red]Error: No bag files specified. Provide bag file patterns [/red]")
-        console.print("[dim]Example: rose load '*.bag' or rose load 'test_.*\\.bag'[/dim]")
+        Message("Error: No bag files specified. Provide bag file patterns", "error").render(console)
         raise typer.Exit(1)
     
     # Find bag files using patterns
     valid_bags = find_bag_files(input)
     
     if not valid_bags:
-        console.print("[red]No bag files found matching the specified patterns[/red]")
+        Message("No bag files found matching the specified patterns", "error").render(console)  
         for pattern in input:
-            console.print(f"[dim]  Pattern: {pattern}[/dim]")
+            Message(f"  Pattern: {pattern}", "info").render(console)
         raise typer.Exit(1)
     
     # Show found files
-    console.print(f"\n[bold cyan]Found {len(valid_bags)} bag file(s):[/bold cyan]")
+    Message(f"Found {len(valid_bags)} bag file(s):", "info").render(console)
     for bag in valid_bags:
-        console.print(f"  [dim]{bag}[/dim]")
+        Message(f"  {bag}", "info").render(console)
     
     # Handle dry run
     if dry_run:
-        console.print(f"\n[bold yellow]DRY RUN - Would load {len(valid_bags)} bag file(s)[/bold yellow]")
+        Message(f"DRY RUN - Would load {len(valid_bags)} bag file(s)", "warning").render(console)
 
         return
     
@@ -178,7 +178,7 @@ def load(
         workers = max(1, os.cpu_count() - 2)
     
     analysis_type = "full" if full_analysis else "quick"
-    console.print(f"\n[bold cyan]Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type} analysis)...[/bold cyan]")
+    Message(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type} analysis)...", "info").render(console)
     
     # Initialize parser
     parser = BagParser()
@@ -271,31 +271,31 @@ def load(
     cached_count = sum(1 for r in results if r['status'] == 'already_cached')
     error_count = sum(1 for r in results if r['status'] == 'error')
     
-    console.print(f"\n[bold cyan]Loading Summary[/bold cyan]")
+    Message("Loading Summary", "info").render(console)
     
     # Simple text-based summary
     summary_lines = []
     if loaded_count > 0:
-        summary_lines.append(f"[green]{loaded_count} bag(s) newly loaded into cache[/green]")
+        summary_lines.append(f"{loaded_count} bag(s) newly loaded into cache")
     if cached_count > 0:
-        summary_lines.append(f"[yellow]{cached_count} bag(s) already in cache[/yellow]")
+        summary_lines.append(f"{cached_count} bag(s) already in cache")
     if error_count > 0:
-        summary_lines.append(f"[red]{error_count} bag(s) failed to load[/red]")
+        summary_lines.append(f"{error_count} bag(s) failed to load")
     
     for line in summary_lines:
         console.print(f"  {line}")
     
     # Show errors if any
     if error_count > 0:
-        console.print(f"\n[bold red]Errors:[/bold red]")
+        Message("Errors:", "error").render(console)
         for result in results:
             if result['status'] == 'error':
-                console.print(f"  [red]{result['path']}: {result['message']}[/red]")
+                Message(f"  {result['path']}: {result['message']}", "error").render(console)
     
     # Show success message
     total_ready = loaded_count + cached_count
     if total_ready > 0:
-        console.print(f"\n[bold green]Ready: {total_ready} bag(s) available for inspect and extract commands[/bold green]")
+        Message(f"Ready: {total_ready} bag(s) available for inspect and extract commands", "success").render(console)
     
     if error_count > 0:
         raise typer.Exit(1)

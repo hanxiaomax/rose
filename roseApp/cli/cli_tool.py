@@ -18,7 +18,7 @@ from ..core.parser import create_parser, ExtractOption
 from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
-from ..core.ui_control import theme  # Import unified theme
+from ..core.ui_control import UIControl, Message
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -210,10 +210,10 @@ class CliTool:
                     self.whitelist_manager()
                 
         except KeyboardInterrupt:
-            self.console.print("\nOperation cancelled by user", style=theme.WARNING)
+            Message("\nOperation cancelled by user", "warning").render(self.console)
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
-            self.console.print(f"\nError: {str(e)}", style=theme.ERROR)
+            Message(f"\nError: {str(e)}", "error").render(self.console)
 
     def interactive_filter(self):
         """Run interactive filter workflow"""
@@ -231,7 +231,7 @@ class CliTool:
             if os.path.isfile(input_path):
                 # Single bag file processing
                 if not input_path.endswith('.bag'):
-                    self.console.print("File must be a .bag file", style=theme.ERROR)
+                    Message("File must be a .bag file", "error").render(self.console)
                     continue
                 
                 # Process single bag file
@@ -332,7 +332,7 @@ class CliTool:
         # Find and select bag files
         bag_files = collect_bag_files(directory_path)
         if not bag_files:
-            self.console.print("No bag files found in directory", style=theme.ERROR)
+            Message("No bag files found in directory", "error").render(self.console)
             return  # Go back to input selection
             
         # Create file selection choices
@@ -415,12 +415,12 @@ class CliTool:
     def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=theme.WARNING)
+            Message("No whitelists found", "warning").render(self.console)
             return None
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style=theme.WARNING)
+            Message("No whitelists found", "warning").render(self.console)
             return None
             
         # Select whitelist to use
@@ -457,14 +457,14 @@ class CliTool:
                     all_connections.update(connections)
                     progress.advance(task)
                 except Exception as e:
-                    self.console.print(f"Error loading {bag_file}: {str(e)}", style=theme.ERROR)
+                    Message(f"Error loading {bag_file}: {str(e)}", "error").render(self.console)
                     # Continue with other files
         
         if not all_topics:
-            self.console.print("No topics found in selected bag files", style=theme.ERROR)
+            Message("No topics found in selected bag files", "error").render(self.console)
             return None
         
-        self.console.print(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", style=theme.SUCCESS)
+        Message(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", "success").render(self.console)
         
         # Use the first bag file for statistics display (as an example)
         bag_path_for_stats = selected_files[0] if selected_files else None
@@ -520,7 +520,7 @@ class CliTool:
                         f"Processing: {display_path}",
                         total=100,
                         completed=0,
-                        style=theme.ACCENT
+                        style=UIControl.get_color("accent")
                     )
                     tasks[bag_file] = task
                     active_files.add(bag_file)
@@ -534,14 +534,14 @@ class CliTool:
                     # BagManager handles thread safety internally
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {display_path}", style=theme.ACCENT, completed=0)
+                    progress.update(task, description=f"Processing: {display_path}", style=UIControl.get_color("accent"), completed=0)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         progress.update(task, 
                                        description=f"Processing: {display_path}", 
-                                       style=theme.ACCENT, 
+                                        style=UIControl.get_color("accent"), 
                                        completed=percent)
                     
                     # Use progress callback for filtering
