@@ -112,11 +112,37 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
         
         # Convert cached bag info to result format expected by UI
         bag_info = cached_entry.bag_info
+        
+        # Calculate total messages from message_counts
+        total_messages = 0
+        if bag_info.message_counts:
+            total_messages = sum(bag_info.message_counts.values())
+        elif bag_info.total_messages:
+            total_messages = bag_info.total_messages
+        
+        # Get file size
+        file_size = 0
+        try:
+            file_size = bag_path.stat().st_size
+        except:
+            pass
+        
+        # Create the result structure expected by UIControl
         result = {
             'file_path': str(bag_path),
             'topics': [],
             'duration': bag_info.duration_seconds or 0,
-            'analysis_level': bag_info.analysis_level.value if bag_info.analysis_level else 'none'
+            'analysis_level': bag_info.analysis_level.value if bag_info.analysis_level else 'none',
+            'bag_info': {
+                'file_name': bag_path.name,
+                'file_path': str(bag_path),
+                'file_size': file_size,
+                'topics_count': len(bag_info.topics) if bag_info.topics else 0,
+                'total_messages': total_messages,
+                'duration_seconds': bag_info.duration_seconds or 0,
+                'analysis_time': 0.0,  # From cache, so analysis time is 0
+                'cached': True
+            }
         }
         
         # Convert topics to expected format
@@ -143,8 +169,28 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
                 result['topics'].append(topic_info)
         
         # Add field analysis if requested
-        if options.show_fields and bag_info.message_fields:
-            result['field_analysis'] = bag_info.message_fields
+        if options.show_fields and bag_info.message_fields and bag_info.connections:
+            # Convert message_fields structure to topic-based field_analysis
+            field_analysis = {}
+            for topic_name, msg_type in bag_info.connections.items():
+                if msg_type in bag_info.message_fields:
+                    # Extract field paths from the message fields structure
+                    field_paths = []
+                    msg_fields = bag_info.message_fields[msg_type]
+                    
+                    # Get top-level fields (non-MSG type fields)
+                    for field_name, field_info in msg_fields.items():
+                        if isinstance(field_info, dict) and field_info.get('type') != 'MSG:':
+                            field_paths.append(field_name)
+                    
+                    if field_paths:
+                        field_analysis[topic_name] = {
+                            'message_type': msg_type,
+                            'field_paths': sorted(field_paths)
+                        }
+            
+            if field_analysis:
+                result['field_analysis'] = field_analysis
         
         # Determine if we should export to file or render to console
         if options.output_file:

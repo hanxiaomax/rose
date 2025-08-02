@@ -103,10 +103,15 @@ class BagCacheEntry:
     cache_timestamp: float
     file_mtime: float
     file_size: int
+    original_path: str  # Store original absolute path for validation
     
     def is_valid(self, bag_path: Path) -> bool:
         """Check if cache entry is still valid"""
         if not bag_path.exists():
+            return False
+        
+        # Check if the path matches (convert both to absolute paths for comparison)
+        if str(bag_path.absolute()) != self.original_path:
             return False
         
         stat = bag_path.stat()
@@ -562,11 +567,18 @@ class UnifiedCache:
         cached_data = self.get(cache_key)
         
         if cached_data and isinstance(cached_data, BagCacheEntry):
+            # Check for backward compatibility - if original_path is missing, recreate entry
+            if not hasattr(cached_data, 'original_path'):
+                _logger.debug(f"Cache entry missing original_path, removing: {bag_path}")
+                self.delete(cache_key)
+                return None
+            
             if cached_data.is_valid(bag_path):
                 _logger.debug(f"Using cached bag analysis for {bag_path}")
                 return cached_data
             else:
                 # Remove invalid cache
+                _logger.debug(f"Cache entry invalid, removing: {bag_path}")
                 self.delete(cache_key)
         
         return None
@@ -585,7 +597,8 @@ class UnifiedCache:
             cached_messages=cached_messages or {},
             cache_timestamp=time.time(),
             file_mtime=stat.st_mtime,
-            file_size=stat.st_size
+            file_size=stat.st_size,
+            original_path=str(bag_path.absolute())
         )
         
         self.put(cache_key, cache_entry, tags={'bag_analysis'})
