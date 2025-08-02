@@ -2145,14 +2145,19 @@ class UIControl:
                     content_parts.append(topic_text)
                     
                     fields_text = Text()
-                    # Display fields as simple list with dot notation
-                    for field_path in sorted(field_paths):
-                        if '.' in field_path:
-                            # Nested field - show with accent color
-                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('accent'))
+                    # Display fields with hierarchical structure (preserving indentation)
+                    for field_path in field_paths:
+                        # Count leading spaces to determine nesting level
+                        leading_spaces = len(field_path) - len(field_path.lstrip())
+                        field_name = field_path.strip()
+                        
+                        if leading_spaces > 0:
+                            # Nested field - show with accent color and preserve indentation
+                            indent = "  " * (leading_spaces // 2 + 1)  # Convert spaces to proper indentation
+                            fields_text.append(f"{indent}• {field_name}\n", style=cls.get_color('accent'))
                         else:
                             # Top-level field - show with success color
-                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('success'))
+                            fields_text.append(f"  • {field_name}\n", style=cls.get_color('success'))
                     
                     content_parts.append(fields_text)
                     content_parts.append("")  # Add spacing between topics
@@ -2171,14 +2176,19 @@ class UIControl:
                     content_parts.append(topic_text)
                     
                     fields_text = Text()
-                    # Display fields as simple list with dot notation
-                    for field_path in sorted(field_paths):
-                        if '.' in field_path:
-                            # Nested field - show with accent color
-                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('accent'))
+                    # Display fields with hierarchical structure (preserving indentation)
+                    for field_path in field_paths:
+                        # Count leading spaces to determine nesting level
+                        leading_spaces = len(field_path) - len(field_path.lstrip())
+                        field_name = field_path.strip()
+                        
+                        if leading_spaces > 0:
+                            # Nested field - show with accent color and preserve indentation
+                            indent = "  " * (leading_spaces // 2 + 1)  # Convert spaces to proper indentation
+                            fields_text.append(f"{indent}• {field_name}\n", style=cls.get_color('accent'))
                         else:
                             # Top-level field - show with success color
-                            fields_text.append(f"  • {field_path}\n", style=cls.get_color('success'))
+                            fields_text.append(f"  • {field_name}\n", style=cls.get_color('success'))
                     
                     content_parts.append(fields_text)
                     content_parts.append("")  # Add spacing between topics

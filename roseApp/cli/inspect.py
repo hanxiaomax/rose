@@ -174,14 +174,8 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
             field_analysis = {}
             for topic_name, msg_type in bag_info.connections.items():
                 if msg_type in bag_info.message_fields:
-                    # Extract field paths from the message fields structure
-                    field_paths = []
-                    msg_fields = bag_info.message_fields[msg_type]
-                    
-                    # Get top-level fields (non-MSG type fields)
-                    for field_name, field_info in msg_fields.items():
-                        if isinstance(field_info, dict) and field_info.get('type') != 'MSG:':
-                            field_paths.append(field_name)
+                    # Extract hierarchical field paths from the message fields structure
+                    field_paths = _build_hierarchical_field_paths(bag_info.message_fields, msg_type)
                     
                     if field_paths:
                         field_analysis[topic_name] = {
@@ -230,6 +224,127 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
         raise typer.Exit(1)
     finally:
         pass
+
+
+def _build_hierarchical_field_paths(message_fields, msg_type):
+    """
+    Build hierarchical field paths with dot notation from message field definitions
+    
+    The message_fields structure contains flattened field definitions where:
+    - Top-level fields belong directly to the message type
+    - Nested complex types are stored as separate entries with type names as keys
+    - We need to reconstruct the hierarchy by following type relationships
+    
+    Args:
+        message_fields: Dictionary of message field definitions (flattened)
+        msg_type: Message type to analyze
+    
+    Returns:
+        List of hierarchical field paths
+    """
+    if msg_type not in message_fields:
+        return []
+    
+    # Get all fields for this message type
+    msg_fields = message_fields[msg_type]
+    
+    # Build a mapping of which fields belong to which complex types
+    # This helps us understand the structure
+    type_field_map = {}
+    
+    # First pass: identify all the type definitions and their fields
+    for field_name, field_info in msg_fields.items():
+        if not isinstance(field_info, dict):
+            continue
+        
+        field_type = field_info.get('type', '')
+        
+        # Skip MSG type markers - these indicate complex type definitions
+        if field_type == 'MSG:':
+            # This field_name is actually a type name, not a field
+            type_field_map[field_name] = []
+            continue
+        
+        # This is an actual field
+        is_builtin = field_info.get('is_builtin', True)
+        is_complex = field_info.get('is_complex', False)
+        
+        # Determine which type this field belongs to
+        # Fields that come after a MSG: type definition belong to that type
+        belongs_to_type = msg_type  # Default to main message type
+        
+        # Look backwards to find the most recent MSG: type definition
+        field_items = list(msg_fields.items())
+        field_index = field_items.index((field_name, field_info))
+        
+        for i in range(field_index - 1, -1, -1):
+            prev_name, prev_info = field_items[i]
+            if isinstance(prev_info, dict) and prev_info.get('type') == 'MSG:':
+                belongs_to_type = prev_name
+                break
+        
+        if belongs_to_type not in type_field_map:
+            type_field_map[belongs_to_type] = []
+        
+        type_field_map[belongs_to_type].append({
+            'name': field_name,
+            'type': field_type,
+            'is_builtin': is_builtin,
+            'is_complex': is_complex,
+            'info': field_info
+        })
+    
+    # Second pass: build hierarchical paths
+    def build_paths_for_type(type_name, prefix="", visited=None):
+        if visited is None:
+            visited = set()
+        
+        if type_name in visited:
+            return []
+        
+        visited.add(type_name)
+        paths = []
+        
+        if type_name not in type_field_map:
+            return paths
+        
+        for field in type_field_map[type_name]:
+            field_name = field['name']
+            field_type = field['type']
+            is_builtin = field['is_builtin']
+            is_complex = field['is_complex']
+            
+            current_path = f"{prefix}.{field_name}" if prefix else field_name
+            paths.append(current_path)
+            
+            # If it's a complex type, try to expand it
+            if is_complex and not is_builtin:
+                # Handle array types
+                base_type = field_type.replace('[]', '')
+                
+                # Look for this type in our type_field_map
+                matching_type = None
+                if base_type in type_field_map:
+                    matching_type = base_type
+                else:
+                    # Try to find by suffix matching
+                    for type_key in type_field_map.keys():
+                        if type_key.endswith(f'/{base_type}') or type_key.endswith(f'/msg/{base_type}'):
+                            matching_type = type_key
+                            break
+                        # Also try exact name matching for common types
+                        if type_key.split('/')[-1] == base_type:
+                            matching_type = type_key
+                            break
+                
+                if matching_type and matching_type != type_name:
+                    sub_paths = build_paths_for_type(matching_type, current_path, visited.copy())
+                    paths.extend(sub_paths)
+        
+        return paths
+    
+    # Start with the main message type
+    return build_paths_for_type(msg_type)
 
 
 if __name__ == "__main__":
