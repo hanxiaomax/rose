@@ -45,29 +45,6 @@ class ExtractOptions:
     reverse: bool = False
     no_cache: bool = False
 
-
-@dataclass
-class ProfileOptions:
-    """Options for bag profiling"""
-    topics: Optional[List[str]] = None
-    time_window: float = 1.0
-    show_statistics: bool = True
-    show_timeline: bool = False
-    output_format: OutputFormat = OutputFormat.TABLE
-    output_file: Optional[Path] = None
-
-
-@dataclass
-class DiagnoseOptions:
-    """Options for bag diagnosis"""
-    check_integrity: bool = True
-    check_timestamps: bool = True
-    check_message_counts: bool = True
-    check_duplicates: bool = False
-    detailed: bool = False
-    output_format: OutputFormat = OutputFormat.TABLE
-
-
 class BagManager:
     """
     Unified manager for all ROS bag operations

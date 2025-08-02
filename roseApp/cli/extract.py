@@ -13,6 +13,7 @@ from rich.console import Console
 from ..core.bag_manager import BagManager, ExtractOptions
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.cache import create_bag_cache_manager
 
 
 # Set to CLI mode
@@ -45,19 +46,22 @@ def extract(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be extracted without doing it"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache and reparse the bag file")
+
 ):
     """
     Extract specific topics from a ROS bag file
     
+    NOTE: The bag file must be loaded into cache first using 'rose load <bag_file>'
+    
     Examples:
+        rose load input.bag                                         # Load bag into cache first
         rose extract input.bag --topics gps imu                    # Keep topics matching 'gps' or 'imu'
         rose extract input.bag --topics /gps/fix -o output.bag     # Keep exact topic /gps/fix
         rose extract input.bag --topics tf --reverse               # Remove topics matching 'tf' 
         rose extract input.bag --topics gps --compression lz4      # Use LZ4 compression
         rose extract input.bag --topics gps --dry-run              # Preview without extraction
     """
-    _extract_topics_impl(input_bag, topics, output, reverse, compression, dry_run, yes, verbose, no_cache)
+    _extract_topics_impl(input_bag, topics, output, reverse, compression, dry_run, yes, verbose)
 
 
 def _extract_topics_impl(
@@ -68,8 +72,7 @@ def _extract_topics_impl(
     compression: str,
     dry_run: bool,
     yes: bool,
-    verbose: bool,
-    no_cache: bool
+    verbose: bool
 ):
     """
     Simplified topic extraction - focus on core functionality
@@ -89,6 +92,15 @@ def _extract_topics_impl(
         
         if not topics:
             ui.show_error("No topics specified. Use --topics to specify topics")
+            raise typer.Exit(1)
+        
+        # Check if bag is loaded in cache
+        cache_manager = create_bag_cache_manager()
+        cached_entry = cache_manager.get_analysis(input_path)
+        
+        if not cached_entry or not cached_entry.is_valid(input_path):
+            ui.show_error(f"Bag file '{input_bag}' is not loaded in cache.")
+            console.print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {input_bag}[/bold]")
             raise typer.Exit(1)
         
         # Validate compression option
@@ -114,17 +126,15 @@ def _extract_topics_impl(
         # Create BagManager
         manager = BagManager()
         
-        # Get topic list using lightweight method
-        ui.show_operation_status("Analyzing bag file...")
+        # Get topic list from cached bag info
+        ui.show_operation_status("Using cached bag analysis...")
         
-        # Use parser.get_bag_summary for lightweight topic discovery
-        bag_info, _ = manager.parser.get_bag_summary(str(input_path))
-        
-        # Get topic list
-        if bag_info and bag_info.topics:
-            all_topics = bag_info.topics
+        # Extract topic list from cached bag info
+        bag_info = cached_entry.bag_info
+        if bag_info and hasattr(bag_info, 'topics') and bag_info.topics:
+            all_topics = [topic.name for topic in bag_info.topics]
         else:
-            ui.show_error("Unable to read topics from bag file")
+            ui.show_error("No topics found in cached bag analysis")
             raise typer.Exit(1)
         
         # Apply topic filtering using BagManager's _filter_topics method
@@ -158,7 +168,7 @@ def _extract_topics_impl(
             overwrite=yes,
             dry_run=dry_run,
             reverse=reverse,
-            no_cache=no_cache
+            no_cache=False  # Always use cache since we require cached bags
         )
         
         # Track extraction timing

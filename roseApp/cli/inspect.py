@@ -10,6 +10,7 @@ import typer
 from ..core.bag_manager import BagManager, InspectOptions
 from ..core.ui_control import UIControl, OutputFormat, RenderOptions, ExportOptions, UITheme, DisplayConfig
 from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.cache import create_bag_cache_manager
 
 app = typer.Typer(help="Inspect ROS bag files")
 
@@ -27,20 +28,30 @@ def inspect(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache and reparse the bag file")
+
 ):
     """
     Inspect a ROS bag file and display comprehensive analysis
     
-    This command uses the unified ResultHandler for all rendering and export operations.
+    NOTE: The bag file must be loaded into cache first using 'rose load <bag_file>'
+    
+    This command uses cached bag analysis for fast inspection without progress bars.
     """
     # Use UIControl for unified output management
     ui = UIControl()
-    console = ui.get_console()
     
     # Validate bag file exists
     if not bag_path.exists():
         ui.show_error(f"Bag file not found: {bag_path}")
+        raise typer.Exit(1)
+    
+    # Check if bag is loaded in cache
+    cache_manager = create_bag_cache_manager()
+    cached_entry = cache_manager.get_analysis(bag_path)
+    
+    if not cached_entry or not cached_entry.is_valid(bag_path):
+        ui.show_error(f"Bag file '{bag_path}' is not loaded in cache.")
+        ui.get_console().print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
         raise typer.Exit(1)
     
     # Convert string format to enum
@@ -70,7 +81,7 @@ def inspect(
         output_format=output_format,
         output_file=output,
         verbose=verbose,
-        no_cache=no_cache
+        no_cache=False  # Always use cache since we require cached bags
     )
     
     # Run the async inspection
@@ -88,9 +99,9 @@ async def _run_inspect(bag_path: Path, options: InspectOptions, debug: bool = Fa
     manager = BagManager()
     
     try:
-        # Show responsive real-time analysis status using UIControl
-        with UIControl.todo_analysis_progress(bag_path.name, options.show_fields, console) as update_progress:
-            result = await manager.inspect_bag(bag_path, options, progress_callback=update_progress)
+        # Use cached bag analysis directly - no progress bars needed
+        console.print("[dim]Using cached bag analysis...[/dim]")
+        result = await manager.inspect_bag(bag_path, options, progress_callback=None)
         
         # Determine if we should export to file or render to console
         if options.output_file:

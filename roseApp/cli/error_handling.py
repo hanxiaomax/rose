@@ -63,10 +63,11 @@ def show_available_commands() -> None:
     console.print(f"\n[bold cyan]Available commands:[/bold cyan]")
     
     commands = [
-        ("filter-bag", "Filter ROS bag files by topics", "rose filter-bag input.bag output/"),
-        ("inspect", "Inspect ROS bag file contents", "rose inspect input.bag"),
+        ("load", "Load ROS bag files into cache", "rose load *.bag"),
+        ("extract", "Extract topics from cached bags", "rose extract input.bag --topics gps"),
+        ("inspect", "Inspect cached bag file contents", "rose inspect input.bag"),
         ("plot", "Plot data from ROS bag files", "rose plot input.bag --series /topic:field --output plot.png"),
-        ("prune", "Manage analysis cache", "rose prune --clear"),
+        ("tools", "Cache management and diagnostics", "rose tools cache status"),
         ("cli", "Interactive CLI tool", "rose cli"),
         ("tui", "Text-based user interface", "rose tui")
     ]

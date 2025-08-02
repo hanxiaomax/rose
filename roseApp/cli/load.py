@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""
+Load command for ROS bag files - Load bags into cache for faster operations
+"""
+
+import asyncio
+import concurrent.futures
+import glob
+import re
+from pathlib import Path
+from typing import List, Optional
+import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
+from rich.table import Table
+
+from ..core.bag_manager import BagManager, InspectOptions
+from ..core.cache import get_cache, create_bag_cache_manager
+from ..core.util import set_app_mode, AppMode, get_logger
+
+# Set to CLI mode
+set_app_mode(AppMode.CLI)
+
+# Initialize logger
+logger = get_logger(__name__)
+
+app = typer.Typer(help="Load ROS bag files into cache for faster operations")
+
+
+def await_sync(coro):
+    """Helper to run async function in sync context"""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    return loop.run_until_complete(coro)
+
+
+async def load_single_bag(bag_path: Path, bag_manager: BagManager, verbose: bool = False, progress_callback=None) -> dict:
+    """Load a single bag file into cache"""
+    try:
+        # Check if already cached
+        cache_manager = create_bag_cache_manager()
+        cached_entry = cache_manager.get_analysis(bag_path)
+        
+        if cached_entry and cached_entry.is_valid(bag_path):
+            if verbose:
+                logger.info(f"Bag {bag_path} already cached, skipping")
+            return {
+                'path': str(bag_path),
+                'status': 'already_cached',
+                'message': 'Already in cache'
+            }
+        
+        # Load bag analysis with progress callback
+        options = InspectOptions(show_fields=True, verbose=verbose)
+        result = await bag_manager.inspect_bag(str(bag_path), options, progress_callback=progress_callback)
+        
+        if verbose:
+            logger.info(f"Successfully loaded {bag_path} into cache")
+        
+        return {
+            'path': str(bag_path),
+            'status': 'loaded',
+            'message': 'Successfully loaded into cache',
+            'topics_count': len(result.get('topics', [])),
+            'duration': result.get('duration', 0)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to load {bag_path}: {e}")
+        return {
+            'path': str(bag_path),
+            'status': 'error',
+            'message': str(e)
+        }
+
+
+def find_bag_files(input_patterns: List[str]) -> List[Path]:
+    """Find bag files using glob patterns and regex"""
+    bag_files = []
+    
+    for pattern in input_patterns:
+        # First try as glob pattern
+        glob_matches = glob.glob(pattern)
+        if glob_matches:
+            for match in glob_matches:
+                path = Path(match)
+                if path.exists() and path.suffix == '.bag':
+                    bag_files.append(path)
+        else:
+            # Try as regex pattern in current directory
+            try:
+                regex = re.compile(pattern)
+                current_dir = Path('.')
+                for bag_file in current_dir.glob('*.bag'):
+                    if regex.search(bag_file.name):
+                        bag_files.append(bag_file)
+            except re.error:
+                # If regex is invalid, treat as literal filename
+                path = Path(pattern)
+                if path.exists() and path.suffix == '.bag':
+                    bag_files.append(path)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_bags = []
+    for bag in bag_files:
+        if bag not in seen:
+            seen.add(bag)
+            unique_bags.append(bag)
+    
+    return unique_bags
+
+
+@app.command()
+def load(
+    input: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
+    workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count - 2)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed loading information"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
+    list_cached: bool = typer.Option(False, "--list", "-l", help="List currently cached bags"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading")
+):
+    """
+    Load ROS bag files into cache for faster operations.
+    
+    This command processes bag files and stores their analysis in cache,
+    making subsequent inspect and extract operations much faster.
+    
+    Examples:
+        rose load "*.bag"                       # Load all bag files in current directory
+        rose load bag1.bag bag2.bag             # Load specific bag files
+        rose load "test_.*\.bag"                # Load bags matching regex pattern
+        rose load "*.bag" --workers 4           # Use 4 parallel workers
+        rose load --list                        # Show currently cached bags
+        rose load "*.bag" --force               # Force reload even if cached
+        rose load "*.bag" --dry-run             # Preview what would be loaded
+    """
+    console = Console()
+    
+
+    # Check if input patterns are provided when not using --list
+    if not input:
+        console.print("[red]Error: No bag files specified. Provide bag file patterns [/red]")
+        console.print("[dim]Example: rose load '*.bag' or rose load 'test_.*\\.bag'[/dim]")
+        raise typer.Exit(1)
+    
+    # Find bag files using patterns
+    valid_bags = find_bag_files(input)
+    
+    if not valid_bags:
+        console.print("[red]No bag files found matching the specified patterns[/red]")
+        for pattern in input:
+            console.print(f"[dim]  Pattern: {pattern}[/dim]")
+        raise typer.Exit(1)
+    
+    # Show found files
+    console.print(f"\n[bold cyan]Found {len(valid_bags)} bag file(s):[/bold cyan]")
+    for bag in valid_bags:
+        console.print(f"  [dim]{bag}[/dim]")
+    
+    # Handle dry run
+    if dry_run:
+        console.print(f"\n[bold yellow]DRY RUN - Would load {len(valid_bags)} bag file(s)[/bold yellow]")
+
+        return
+    
+    # Determine number of workers
+    import os
+    if workers is None:
+        workers = max(1, os.cpu_count() - 2)
+    
+    console.print(f"\n[bold cyan]Loading {len(valid_bags)} bag file(s) with {workers} worker(s)...[/bold cyan]")
+    
+    # Initialize bag manager
+    bag_manager = BagManager(max_workers=workers)
+    
+    # If force reload, clear cache for these bags
+    if force:
+        cache_manager = create_bag_cache_manager()
+        for bag_path in valid_bags:
+            cache_manager.clear(bag_path)
+    
+    # Load bags with individual progress bars
+    results = []
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console
+    ) as progress:
+        
+        # Create individual progress tasks for each bag
+        bag_tasks = {}
+        for bag in valid_bags:
+            task_id = progress.add_task(f"Loading {bag.name}...", total=100)
+            bag_tasks[bag] = task_id
+        
+        # Function to create progress callback for individual bags
+        def create_progress_callback(bag_path: Path, task_id):
+            def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                if progress_pct > 0:
+                    progress.update(task_id, completed=min(progress_pct, 100))
+                if phase:
+                    progress.update(task_id, description=f"Loading {bag_path.name}: {phase}")
+            return progress_callback
+        
+        # Use ThreadPoolExecutor for parallel loading
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            # Submit all tasks with individual progress callbacks
+            future_to_bag = {}
+            for bag_path in valid_bags:
+                task_id = bag_tasks[bag_path]
+                progress_callback = create_progress_callback(bag_path, task_id)
+                future = executor.submit(
+                    await_sync, 
+                    load_single_bag(bag_path, bag_manager, verbose, progress_callback)
+                )
+                future_to_bag[future] = bag_path
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_bag):
+                bag_path = future_to_bag[future]
+                task_id = bag_tasks[bag_path]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    
+                    # Complete the progress bar
+                    progress.update(task_id, completed=100)
+                    
+                    # Update description based on result
+                    status_desc = {
+                        'loaded': f"{bag_path.name} - Loaded",
+                        'already_cached': f"{bag_path.name} - Already cached",
+                        'error': f"{bag_path.name} - Error"
+                    }.get(result['status'], f"{bag_path.name} - Unknown")
+                    
+                    progress.update(task_id, description=status_desc)
+                    
+                    if verbose:
+                        status_color = {
+                            'loaded': 'green',
+                            'already_cached': 'yellow', 
+                            'error': 'red'
+                        }.get(result['status'], 'white')
+                        console.print(f"[{status_color}]{result['path']}: {result['message']}[/{status_color}]")
+                        
+                except Exception as e:
+                    logger.error(f"Unexpected error loading {bag_path}: {e}")
+                    results.append({
+                        'path': str(bag_path),
+                        'status': 'error',
+                        'message': f"Unexpected error: {e}"
+                    })
+                    progress.update(task_id, completed=100, description=f"{bag_path.name} - Error")
+    
+    # Show summary
+    loaded_count = sum(1 for r in results if r['status'] == 'loaded')
+    cached_count = sum(1 for r in results if r['status'] == 'already_cached')
+    error_count = sum(1 for r in results if r['status'] == 'error')
+    
+    console.print(f"\n[bold cyan]Loading Summary[/bold cyan]")
+    
+    # Simple text-based summary
+    summary_lines = []
+    if loaded_count > 0:
+        summary_lines.append(f"[green]{loaded_count} bag(s) newly loaded into cache[/green]")
+    if cached_count > 0:
+        summary_lines.append(f"[yellow]{cached_count} bag(s) already in cache[/yellow]")
+    if error_count > 0:
+        summary_lines.append(f"[red]{error_count} bag(s) failed to load[/red]")
+    
+    for line in summary_lines:
+        console.print(f"  {line}")
+    
+    # Show errors if any
+    if error_count > 0:
+        console.print(f"\n[bold red]Errors:[/bold red]")
+        for result in results:
+            if result['status'] == 'error':
+                console.print(f"  [red]{result['path']}: {result['message']}[/red]")
+    
+    # Show success message
+    total_ready = loaded_count + cached_count
+    if total_ready > 0:
+        console.print(f"\n[bold green]Ready: {total_ready} bag(s) available for inspect and extract commands[/bold green]")
+    
+    if error_count > 0:
+        raise typer.Exit(1)
+
+
+# Register load as the default command
+app.command()(load)
+
+if __name__ == "__main__":
+    app()
