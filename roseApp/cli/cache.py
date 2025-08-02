@@ -22,9 +22,7 @@ from rich.tree import Tree
 from rich.json import JSON
 
 from ..core.cache import get_cache, BagCacheEntry
-from ..core.ui_control import UIControl
 from ..core.theme_config import UnifiedThemeManager, ComponentType
-from ..core.model import ComprehensiveBagInfo
 
 app = typer.Typer(name="cache", help="Cache management and analysis commands")
 
@@ -33,22 +31,11 @@ app = typer.Typer(name="cache", help="Cache management and analysis commands")
 # Main Cache Commands
 # =============================================================================
 
-@app.command("status")
-def cache_status():
-    """Show cache status and basic information"""
-    console = Console()
-    
-    try:
-        cache = get_cache()
-        _show_cache_status_and_info(cache, console)
-    except Exception as e:
-        console.print(f"[red]Error showing cache status: {e}[/red]")
-
 
 @app.command("list")
 def cache_list(
     show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content"),
-    format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, yaml")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed cache content")
 ):
     """
     List all cache entries
@@ -62,33 +49,9 @@ def cache_list(
     
     try:
         cache = get_cache()
-        _print_cache_entries(cache, console, None, None, show_content, format)
+        _print_cache_entries(cache, console, None, None, show_content, verbose)
     except Exception as e:
         console.print(f"[red]Error listing cache: {e}[/red]")
-
-
-@app.command("show")
-def cache_show(
-    name: Optional[str] = typer.Argument(None, help="Cache key or bag file name to show"),
-    bag_path: Optional[str] = typer.Option(None, "--bag", "-b", help="Original bag file path to find cache for"),
-    show_content: bool = typer.Option(True, "--content/--no-content", help="Show detailed cache content"),
-    format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, yaml")
-):
-    """
-    Show specific cache entry details
-    
-    Examples:
-        rose cache show cache_key           # Show specific cache entry
-        rose cache show --bag /path/to.bag  # Show cache for specific bag
-        rose cache show --format json       # Output as JSON
-    """
-    console = Console()
-    
-    try:
-        cache = get_cache()
-        _print_cache_entries(cache, console, name, bag_path, show_content, format)
-    except Exception as e:
-        console.print(f"[red]Error showing cache: {e}[/red]")
 
 
 @app.command("export")
@@ -639,7 +602,7 @@ def _delete_cache_entries(cache, console, indices, skip_confirm):
         console.print(f"[red]✗ Failed to delete {failed_count} cache entries[/red]")
 
 
-def _print_cache_entries(cache, console, name, bag_path, show_content, format):
+def _print_cache_entries(cache, console, name, bag_path, show_content, verbose):
     """Print cache entries with filtering and formatting options"""
     all_entries = _get_all_cache_entries(cache)
     
@@ -655,13 +618,15 @@ def _print_cache_entries(cache, console, name, bag_path, show_content, format):
             return
         all_entries = filtered_entries
     
-    # Output in requested format
-    if format == "json":
+    if verbose:
         _print_cache_as_json(cache, console, all_entries, show_content)
-    elif format == "yaml":
-        _print_cache_as_yaml(cache, console, all_entries, show_content)
     else:
-        _print_cache_as_table(cache, console, all_entries, show_content)
+        console.print(f"Total cache entries: {len(all_entries)}")
+        for key, cache_type in all_entries:
+            _cache = cache.get(key)
+            if _cache:
+                console.print(f"{[key]} {_cache.bag_info.file_path}")
+
 
 
 def _export_cache_entries(cache, console, output_file, name, bag_path, format, include_messages):
@@ -756,47 +721,6 @@ def _filter_cache_entries(cache, all_entries, name, bag_path):
     return filtered
 
 
-def _print_cache_as_table(cache, console, all_entries, show_content):
-    """Print cache entries as a formatted table"""
-    table = Table(title=f"Cache Entries ({len(all_entries)} total)")
-    table.add_column("Index", style="dim", width=6)
-    table.add_column("Type", style="cyan", width=8)
-    table.add_column("Key", style="bold")
-    table.add_column("Size", style="green", width=10)
-    
-    if show_content:
-        table.add_column("Content Preview", style="dim")
-    
-    for i, (key, cache_type) in enumerate(all_entries, 1):
-        try:
-            # Get cache entry
-            if cache_type == 'memory':
-                entry = cache.memory_cache.get(key)
-            else:
-                entry = cache.file_cache.get(key)
-            
-            # Format size
-            size_str = "Unknown"
-            if entry and hasattr(entry, 'size'):
-                size_str = _format_size(entry.size)
-            
-            # Prepare row data
-            row_data = [str(i), cache_type, key[:50] + "..." if len(key) > 50 else key, size_str]
-            
-            if show_content:
-                content_preview = _get_content_preview(entry.value if entry else None)
-                row_data.append(content_preview)
-            
-            table.add_row(*row_data)
-            
-        except Exception as e:
-            row_data = [str(i), cache_type, key[:50] + "..." if len(key) > 50 else key, "Error"]
-            if show_content:
-                row_data.append(f"Error: {e}")
-            table.add_row(*row_data)
-    
-    console.print(table)
-
 
 def _print_cache_as_json(cache, console, all_entries, show_content):
     """Print cache entries as JSON"""
@@ -804,11 +728,6 @@ def _print_cache_as_json(cache, console, all_entries, show_content):
     console.print(JSON.from_data(export_data))
 
 
-def _print_cache_as_yaml(cache, console, all_entries, show_content):
-    """Print cache entries as YAML"""
-    export_data = _prepare_export_data(cache, all_entries, show_content)
-    yaml_str = yaml.dump(export_data, default_flow_style=False)
-    console.print(yaml_str)
 
 
 def _prepare_export_data(cache, all_entries, include_messages):
