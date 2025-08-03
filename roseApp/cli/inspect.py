@@ -11,7 +11,7 @@ from ..core.model import AnalysisLevel
 from ..core.ui_control import UIControl, OutputFormat, ExportOptions, DisplayConfig, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-
+from ..core.ui_control import Message
 app = typer.Typer(help="Inspect ROS bag files")
 
 
@@ -86,10 +86,10 @@ def inspect(
     options = SimpleInspectOptions()
     
     # Run the async inspection
-    asyncio.run(_run_inspect(bag_path, options, debug))
+    asyncio.run(_run_inspect(cached_entry, options, debug))
 
 
-async def _run_inspect(bag_path: Path, options, debug: bool = False):
+async def _run_inspect(cached_entry, options, debug: bool = False):
     """Run the bag inspection asynchronously using BagManager and ResultHandler"""
     
     # Use UIControl for unified output management
@@ -99,89 +99,60 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
     # No longer need BagManager - we use cache directly
     
     try:
-        # Get cached bag analysis directly
-        cache_manager = create_bag_cache_manager()
-        cached_entry = cache_manager.get_analysis(bag_path)
-        
-        if not cached_entry or not cached_entry.is_valid(bag_path):
-            ui.show_error(f"Bag file '{bag_path}' is not loaded in cache.")
-            console.print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
-            raise typer.Exit(1)
-        
-        console.print("[dim]Using cached bag analysis...[/dim]")
-        
+        Message(f"Load {cached_entry.bag_info.file_path} from cache").render(console)
         # Convert cached bag info to result format expected by UI
         bag_info = cached_entry.bag_info
         
-        # Calculate total messages from message_counts
-        total_messages = 0
-        if bag_info.message_counts:
-            total_messages = sum(bag_info.message_counts.values())
-        elif bag_info.total_messages:
-            total_messages = bag_info.total_messages
-        
-        # Get file size
-        file_size = 0
-        try:
-            file_size = bag_path.stat().st_size
-        except:
-            pass
-        
         # Create the result structure expected by UIControl
         result = {
-            'file_path': str(bag_path),
             'topics': [],
-            'duration': bag_info.duration_seconds or 0,
-            'analysis_level': bag_info.analysis_level.value if bag_info.analysis_level else 'none',
-            'bag_info': {
-                'file_name': bag_path.name,
-                'file_path': str(bag_path),
-                'file_size': file_size,
-                'topics_count': len(bag_info.topics) if bag_info.topics else 0,
-                'total_messages': total_messages,
-                'duration_seconds': bag_info.duration_seconds or 0,
-                'analysis_time': 0.0,  # From cache, so analysis time is 0
-                'cached': True
-            }
+            'file_path': bag_info.file_path,
+            'total_messages': bag_info.total_messages,
+            'total_size': bag_info.total_size,
+            'duration_seconds': bag_info.duration_seconds,
+            'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None
         }
         
-        # Convert topics to expected format
+        # Convert topics to expected format using new TopicInfo structure
         if bag_info.topics:
-            for i, topic_name in enumerate(bag_info.topics):
+            for topic_name, topic_info_obj in bag_info.topics.items():
                 topic_info = {
                     'name': topic_name,
-                    'message_type': bag_info.connections.get(topic_name, 'unknown') if bag_info.connections else 'unknown',
-                    'message_count': bag_info.message_counts.get(topic_name, 0) if bag_info.message_counts else 0,
-                    'frequency': 0.0,  # Calculate if needed
-                    'size_bytes': bag_info.topic_sizes.get(topic_name, 0) if bag_info.topic_sizes else 0
+                    'message_type': topic_info_obj.message_type,
+                    'message_count': topic_info_obj.message_count or 0,
+                    'frequency': topic_info_obj.message_frequency or 0.0,
+                    'size_bytes': topic_info_obj.total_size_bytes or 0
                 }
                 
-                # Calculate frequency if we have duration and message count
-                if bag_info.duration_seconds and topic_info['message_count'] > 0:
-                    topic_info['frequency'] = topic_info['message_count'] / bag_info.duration_seconds
-                
-                # Add field analysis if available
-                if options.show_fields and bag_info.message_fields:
-                    msg_type = topic_info['message_type']
-                    if msg_type in bag_info.message_fields:
-                        topic_info['field_paths'] = bag_info.message_fields[msg_type]
+                # Add field analysis if available from MessageTypeInfo
+                if options.show_fields and bag_info.message_types:
+                    msg_type = topic_info_obj.message_type
+                    if msg_type in bag_info.message_types:
+                        msg_type_info = bag_info.message_types[msg_type]
+                        if msg_type_info.fields:
+                            # Convert MessageFieldInfo objects to field paths
+                            field_paths = _extract_field_paths_from_message_type(msg_type_info)
+                            topic_info['field_paths'] = field_paths
                 
                 result['topics'].append(topic_info)
         
-        # Add field analysis if requested
-        if options.show_fields and bag_info.message_fields and bag_info.connections:
-            # Convert message_fields structure to topic-based field_analysis
+        # Add field analysis if requested using new MessageTypeInfo structure
+        if options.show_fields and bag_info.message_types and bag_info.topics:
+            # Convert MessageTypeInfo structure to topic-based field_analysis
             field_analysis = {}
-            for topic_name, msg_type in bag_info.connections.items():
-                if msg_type in bag_info.message_fields:
-                    # Extract hierarchical field paths from the message fields structure
-                    field_paths = _build_hierarchical_field_paths(bag_info.message_fields, msg_type)
-                    
-                    if field_paths:
-                        field_analysis[topic_name] = {
-                            'message_type': msg_type,
-                            'field_paths': sorted(field_paths)
-                        }
+            for topic_name, topic_info_obj in bag_info.topics.items():
+                msg_type = topic_info_obj.message_type
+                if msg_type in bag_info.message_types:
+                    msg_type_info = bag_info.message_types[msg_type]
+                    if msg_type_info.fields:
+                        # Extract hierarchical field paths from MessageFieldInfo objects
+                        field_paths = _extract_field_paths_from_message_type(msg_type_info)
+                        
+                        if field_paths:
+                            field_analysis[topic_name] = {
+                                'message_type': msg_type,
+                                'field_paths': sorted(field_paths)
+                            }
             
             if field_analysis:
                 result['field_analysis'] = field_analysis
@@ -210,6 +181,7 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
                 full_width=True
             )
             UIControl.display_inspection_result(result, display_config, console)
+
             
             # Handle fields display separately if requested
             if options.show_fields:
@@ -226,125 +198,40 @@ async def _run_inspect(bag_path: Path, options, debug: bool = False):
         pass
 
 
-def _build_hierarchical_field_paths(message_fields, msg_type):
+def _extract_field_paths_from_message_type(msg_type_info):
     """
-    Build hierarchical field paths with dot notation from message field definitions
-    
-    The message_fields structure contains flattened field definitions where:
-    - Top-level fields belong directly to the message type
-    - Nested complex types are stored as separate entries with type names as keys
-    - We need to reconstruct the hierarchy by following type relationships
+    Extract field paths from MessageTypeInfo structure
     
     Args:
-        message_fields: Dictionary of message field definitions (flattened)
-        msg_type: Message type to analyze
+        msg_type_info: MessageTypeInfo object containing fields as MessageFieldInfo objects
     
     Returns:
-        List of hierarchical field paths
+        List of field paths
     """
-    if msg_type not in message_fields:
+    if not msg_type_info.fields:
         return []
     
-    # Get all fields for this message type
-    msg_fields = message_fields[msg_type]
+    field_paths = []
+    for field_name, field_info in msg_type_info.fields.items():
+        # Add the basic field path
+        field_paths.append(field_name)
+        
+        # If it's a complex type, we could expand it further
+        # For now, we'll keep it simple and just show the top-level fields
+        # TODO: Add nested field expansion for complex types
     
-    # Build a mapping of which fields belong to which complex types
-    # This helps us understand the structure
-    type_field_map = {}
+    return field_paths
+
+
+def _build_hierarchical_field_paths(message_fields, msg_type):
+    """
+    DEPRECATED: This function is no longer used with the new MessageTypeInfo structure.
+    Use _extract_field_paths_from_message_type() instead.
     
-    # First pass: identify all the type definitions and their fields
-    for field_name, field_info in msg_fields.items():
-        if not isinstance(field_info, dict):
-            continue
-        
-        field_type = field_info.get('type', '')
-        
-        # Skip MSG type markers - these indicate complex type definitions
-        if field_type == 'MSG:':
-            # This field_name is actually a type name, not a field
-            type_field_map[field_name] = []
-            continue
-        
-        # This is an actual field
-        is_builtin = field_info.get('is_builtin', True)
-        is_complex = field_info.get('is_complex', False)
-        
-        # Determine which type this field belongs to
-        # Fields that come after a MSG: type definition belong to that type
-        belongs_to_type = msg_type  # Default to main message type
-        
-        # Look backwards to find the most recent MSG: type definition
-        field_items = list(msg_fields.items())
-        field_index = field_items.index((field_name, field_info))
-        
-        for i in range(field_index - 1, -1, -1):
-            prev_name, prev_info = field_items[i]
-            if isinstance(prev_info, dict) and prev_info.get('type') == 'MSG:':
-                belongs_to_type = prev_name
-                break
-        
-        if belongs_to_type not in type_field_map:
-            type_field_map[belongs_to_type] = []
-        
-        type_field_map[belongs_to_type].append({
-            'name': field_name,
-            'type': field_type,
-            'is_builtin': is_builtin,
-            'is_complex': is_complex,
-            'info': field_info
-        })
-    
-    # Second pass: build hierarchical paths
-    def build_paths_for_type(type_name, prefix="", visited=None):
-        if visited is None:
-            visited = set()
-        
-        if type_name in visited:
-            return []
-        
-        visited.add(type_name)
-        paths = []
-        
-        if type_name not in type_field_map:
-            return paths
-        
-        for field in type_field_map[type_name]:
-            field_name = field['name']
-            field_type = field['type']
-            is_builtin = field['is_builtin']
-            is_complex = field['is_complex']
-            
-            current_path = f"{prefix}.{field_name}" if prefix else field_name
-            paths.append(current_path)
-            
-            # If it's a complex type, try to expand it
-            if is_complex and not is_builtin:
-                # Handle array types
-                base_type = field_type.replace('[]', '')
-                
-                # Look for this type in our type_field_map
-                matching_type = None
-                if base_type in type_field_map:
-                    matching_type = base_type
-                else:
-                    # Try to find by suffix matching
-                    for type_key in type_field_map.keys():
-                        if type_key.endswith(f'/{base_type}') or type_key.endswith(f'/msg/{base_type}'):
-                            matching_type = type_key
-                            break
-                        # Also try exact name matching for common types
-                        if type_key.split('/')[-1] == base_type:
-                            matching_type = type_key
-                            break
-                
-                if matching_type and matching_type != type_name:
-                    sub_paths = build_paths_for_type(matching_type, current_path, visited.copy())
-                    paths.extend(sub_paths)
-        
-        return paths
-    
-    # Start with the main message type
-    return build_paths_for_type(msg_type)
+    This function was used with the old flattened message_fields structure.
+    """
+    # This function is deprecated and should not be used
+    return []
 
 
 if __name__ == "__main__":

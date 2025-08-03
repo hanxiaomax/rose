@@ -21,6 +21,7 @@ from rich.live import Live
 from .util import get_logger
 from .theme_manager import ThemeManager, ThemeMode, ThemeColors, ThemeTypography, ThemeSpacing
 from .export_manager import ExportManager, OutputFormat, RenderOptions, ExportOptions
+from .model import TopicInfo
 
 _logger = get_logger("ui_control")
 
@@ -151,7 +152,7 @@ class UIControl:
         
         # Create topics table
         if config.show_details:
-            topics_table = cls._create_topics_table_content(topics, bag_info, config)
+            topics_table = cls.create_topics_table_content(topics, config)
             content_parts.append(topics_table)
         
         # Show cache stats if requested
@@ -172,7 +173,8 @@ class UIControl:
         )
         
         console.print(results_panel)
-    
+
+
 
     @classmethod
     def render_result(cls, result: Dict[str, Any], options: Optional[RenderOptions] = None,
@@ -787,7 +789,7 @@ class UIControl:
         return summary_text
     
     @classmethod
-    def _create_topics_table_content(cls, topics: List[Dict[str, Any]], bag_info: Dict[str, Any], config: DisplayConfig):
+    def create_topics_table_content(cls, topics: List[TopicInfo],config: DisplayConfig):
         """Create topics table content for panel display"""
         table = Table(
             title=f"Topics ({len(topics)})",
@@ -796,6 +798,7 @@ class UIControl:
             expand=config.full_width,
             box=None
         )
+        # print(topics)
         
         table.add_column("Topic", style=cls.get_color('info'), no_wrap=True)
         table.add_column("Count", justify="right", style=cls.get_color('success'))
@@ -804,20 +807,22 @@ class UIControl:
         
         # Add topic rows
         for topic_info in topics:
-            frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
-            
-            # Format size
-            size_bytes = topic_info.get('size_bytes', 0)
-            if size_bytes > 1024 * 1024:
-                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
-            elif size_bytes > 1024:
-                size_str = f"{size_bytes / 1024:.1f} KB"
+            # Handle both dict and object formats
+            if isinstance(topic_info, dict):
+                frequency_str = str(topic_info.get('frequency', 0.0))
+                size_str = str(topic_info.get('size_bytes', 0))
+                name = topic_info.get('name', 'Unknown')
+                count = str(topic_info.get('message_count', 0))
             else:
-                size_str = f"{size_bytes} B"
+                # Object format
+                frequency_str = topic_info.frequency
+                size_str = topic_info.size
+                name = topic_info.name
+                count = topic_info.count
             
             table.add_row(
-                topic_info.get('name', ''),
-                f"{topic_info.get('message_count', 0):,}",
+                name,
+                count,
                 size_str,
                 frequency_str
             )

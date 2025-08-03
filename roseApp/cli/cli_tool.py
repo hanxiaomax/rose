@@ -76,7 +76,8 @@ class CliTool:
             self.current_bag_path = bag_path
             
             # Extract data in the format expected by CLI
-            topics = bag_info.topics or []
+            # Convert topics dictionary to list of topic names
+            topics = list(bag_info.topics.keys()) if bag_info.topics else []
             connections = bag_info.connections or {}
             time_range = bag_info.time_range
             
@@ -295,8 +296,10 @@ class CliTool:
             elif next_action == "info":
                 # Use cached bag info if available
                 if self.current_bag_info and self.current_bag_path == bag_path:
+                    # Convert topics dictionary to list of topic names
+                    topics_list = list(self.current_bag_info.topics.keys()) if self.current_bag_info.topics else []
                     print_bag_info(self.console, bag_path, 
-                                 self.current_bag_info.topics or [], 
+                                 topics_list, 
                                  self.current_bag_info.connections or {}, 
                                  self.current_bag_info.time_range, 
                                  parser=self.parser)

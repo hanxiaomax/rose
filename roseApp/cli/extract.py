@@ -174,10 +174,13 @@ def _extract_topics_impl(
             output_path = Path(output)
         
         # Check if output file exists and handle overwrite
+        should_overwrite = yes  # Start with the --yes flag value
         if output_path.exists() and not yes:
             if not typer.confirm(f"Output file '{output_path}' already exists. Overwrite?"):
                 ui.show_operation_cancelled()
                 raise typer.Exit(0)
+            else:
+                should_overwrite = True  # User confirmed overwrite
         
         # Get topic list from cached bag info
         ui.show_operation_status("Using cached bag analysis...")
@@ -217,7 +220,7 @@ def _extract_topics_impl(
         extract_option = ExtractOption(
             topics=topics_to_extract,
             compression=compression,
-            overwrite=yes
+            overwrite=should_overwrite
         )
         
         # Track extraction timing

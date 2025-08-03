@@ -15,7 +15,7 @@ from enum import Enum
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag1 import Writer as Rosbag1Writer
 from roseApp.core.util import get_logger
-from .model import ComprehensiveBagInfo, AnalysisLevel
+from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
 _logger = get_logger("parser")
 
@@ -287,43 +287,76 @@ class BagParser:
             reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
             
             with AnyReader(reader_args, **reader_kwargs) as reader:
-                # Extract basic information without message traversal
-                topics = [conn.topic for conn in reader.connections]
-                connections = {conn.topic: conn.msgtype for conn in reader.connections}
-                
-                # Extract time range
+                # Extract time range using new TimeRange structure
                 start_ns = reader.start_time
                 end_ns = reader.end_time
                 start_time_tuple = (int(start_ns // 1_000_000_000), int(start_ns % 1_000_000_000))
                 end_time_tuple = (int(end_ns // 1_000_000_000), int(end_ns % 1_000_000_000))
-                time_range = (start_time_tuple, end_time_tuple)
+                time_range = TimeRange(start_time=start_time_tuple, end_time=end_time_tuple)
                 
                 # Calculate duration
-                duration_seconds = (end_ns - start_ns) / 1_000_000_000
+                duration_seconds = time_range.get_duration_seconds()
+                
+                # Create topic info dictionary and connections dictionary
+                topics_dict = {}
+                connections = {}
+                message_types = {}
+                
+                for connection in reader.connections:
+                    topic_name = connection.topic
+                    message_type = connection.msgtype
+                    
+                    # Create TopicInfo object
+                    topic_info = TopicInfo(
+                        name=topic_name,
+                        message_type=message_type,
+                        first_message_time=start_time_tuple,
+                        last_message_time=end_time_tuple,
+                        connection_id=str(connection.id) if hasattr(connection, 'id') else None
+                    )
+                    topics_dict[topic_name] = topic_info
+                    
+                    # Fill connections dictionary for backward compatibility
+                    connections[topic_name] = message_type
+                    
+                    # Create MessageTypeInfo object
+                    if message_type and message_type not in message_types:
+                        message_type_info = MessageTypeInfo(
+                            message_type=message_type,
+                            definition=connection.msgdef if hasattr(connection, 'msgdef') else None
+                        )
+                        
+                        # Parse message fields if available
+                        if hasattr(connection, 'msgdef') and connection.msgdef:
+                            try:
+                                fields = self._parse_message_definition_to_fields(connection.msgdef)
+                                message_type_info.fields = fields
+                            except Exception as e:
+                                _logger.warning(f"Failed to parse message definition for {message_type}: {e}")
+                        
+                        message_types[message_type] = message_type_info
                 
                 # Create or update bag info
                 if (self._current_bag_info is None or 
                     self._current_bag_info.file_path != bag_path):
-                    self._current_bag_info = ComprehensiveBagInfo(file_path=bag_path)
+                    file_size = os.path.getsize(bag_path)
+                    self._current_bag_info = ComprehensiveBagInfo(
+                        file_path=bag_path,
+                        file_size=file_size
+                    )
                 
-                # Fill quick analysis data
+                # Fill quick analysis data using new structure
                 self._current_bag_info.analysis_level = AnalysisLevel.QUICK
-                self._current_bag_info.topics = topics
+                self._current_bag_info.topics = topics_dict
                 self._current_bag_info.connections = connections
+                self._current_bag_info.message_types = message_types
                 self._current_bag_info.time_range = time_range
                 self._current_bag_info.duration_seconds = duration_seconds
                 self._current_bag_info.last_updated = time.time()
-                
-                # Extract message field structures from connection metadata
-                self._current_bag_info.message_definitions = {}
-                self._current_bag_info.message_fields = {}
-                for connection in reader.connections:
-                    if connection.msgtype:
-                        self._current_bag_info.message_definitions[connection.msgtype] = connection.msgdef
-                        self._current_bag_info.message_fields[connection.msgtype] = self._parse_message_definition(connection.msgdef)
+                # file_size is already set during creation
                 
                 elapsed = time.time() - start_time
-                _logger.info(f"Quick analysis completed in {elapsed:.3f}s - {len(topics)} topics")
+                _logger.info(f"Quick analysis completed in {elapsed:.3f}s - {len(topics_dict)} topics")
                 
                 return self._current_bag_info, elapsed
                 
@@ -404,6 +437,20 @@ class BagParser:
                 # Extract simplified dictionaries for convenience
                 message_counts = {topic: stats['count'] for topic, stats in topic_stats.items()}
                 topic_sizes = {topic: stats['size'] for topic, stats in topic_stats.items()}
+                
+                # Update TopicInfo objects with full analysis statistics
+                if self._current_bag_info.topics:
+                    for topic_name, topic_info in self._current_bag_info.topics.items():
+                        if topic_name in topic_stats:
+                            stats = topic_stats[topic_name]
+                            topic_info.message_count = stats['count']
+                            topic_info.total_size_bytes = stats['size']
+                            topic_info.average_message_size = float(stats['avg_size'])
+                            # Calculate frequency if we have time range
+                            if self._current_bag_info.time_range:
+                                duration = self._current_bag_info.time_range.get_duration_seconds()
+                                if duration > 0:
+                                    topic_info.message_frequency = stats['count'] / duration
                 
                 # Update bag info with full analysis data
                 # At this point _current_bag_info is guaranteed to be not None
@@ -651,6 +698,73 @@ class BagParser:
             'int64', 'uint64', 'float32', 'float64', 'string', 'time', 'duration'
         }
         return type_name in builtin_types
+    
+    def _parse_message_definition_to_fields(self, msgdef: str) -> Dict[str, MessageFieldInfo]:
+        """
+        Parse ROS message definition string into MessageFieldInfo objects
+        
+        Args:
+            msgdef: Message definition string from connection metadata
+            
+        Returns:
+            Dictionary mapping field names to MessageFieldInfo objects
+        """
+        if not msgdef:
+            return {}
+        
+        fields = {}
+        lines = msgdef.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            
+            # Skip constant definitions (contain '=')
+            if '=' in line:
+                continue
+            
+            # Parse field definition: "type name" or "type[] name"
+            parts = line.split()
+            if len(parts) >= 2:
+                field_type_raw = parts[0]
+                field_name = parts[1]
+                
+                # Check if it's an array
+                is_array = '[]' in field_type_raw
+                field_type = field_type_raw.replace('[]', '')
+                
+                # Determine array size (None for dynamic arrays)
+                array_size = None
+                if '[' in field_type_raw and ']' in field_type_raw:
+                    # Extract array size if specified like [10]
+                    try:
+                        start = field_type_raw.find('[')
+                        end = field_type_raw.find(']')
+                        size_str = field_type_raw[start+1:end]
+                        if size_str:
+                            array_size = int(size_str)
+                    except (ValueError, IndexError):
+                        pass  # Keep array_size as None for dynamic arrays
+                
+                # Check if it's a builtin type
+                is_builtin = self._is_builtin_type(field_type)
+                
+                # Create MessageFieldInfo object
+                field_info = MessageFieldInfo(
+                    field_name=field_name,
+                    field_type=field_type,
+                    is_array=is_array,
+                    array_size=array_size,
+                    is_builtin=is_builtin,
+                    nested_fields=None  # TODO: Parse nested fields for complex types
+                )
+                
+                fields[field_name] = field_info
+        
+        return fields
 
 
 def create_parser() -> BagParser:
