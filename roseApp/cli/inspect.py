@@ -212,27 +212,19 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
 
 def _extract_field_paths_from_message_type(msg_type_info):
     """
-    Extract field paths from MessageTypeInfo structure (optimized version)
+    Extract hierarchical field paths from MessageTypeInfo structure
     
     Args:
         msg_type_info: MessageTypeInfo object containing fields as List of MessageFieldInfo objects
     
     Returns:
-        List of field paths
+        List of hierarchical field paths (e.g., ['header.seq', 'header.stamp', 'header.frame_id', ...])
     """
     if not msg_type_info.fields:
         return []
     
-    field_paths = []
-    for field_info in msg_type_info.fields:  # Iterate over list instead of dict
-        # Add the basic field path
-        field_paths.append(field_info.field_name)
-        
-        # If it's a complex type, we could expand it further
-        # For now, we'll keep it simple and just show the top-level fields
-        # TODO: Add nested field expansion for complex types
-    
-    return field_paths
+    # Use the built-in method to get all flattened field paths
+    return msg_type_info.get_all_field_paths()
 
 
 def _build_hierarchical_field_paths(message_fields, msg_type):

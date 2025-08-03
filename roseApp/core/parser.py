@@ -682,19 +682,59 @@ class BagParser:
     
     def _parse_message_definition_to_fields(self, msgdef: str) -> List[MessageFieldInfo]:
         """
-        Parse ROS message definition string into MessageFieldInfo objects
+        Parse ROS message definition string into MessageFieldInfo objects with nested structure
         
         Args:
             msgdef: Message definition string from connection metadata
             
         Returns:
-            List of MessageFieldInfo objects (optimized structure)
+            List of MessageFieldInfo objects with proper nesting
         """
         if not msgdef:
             return []
         
+        # Split the message definition by MSG: separators to handle nested types
+        sections = msgdef.split('================================================================================')
+        
+        # Parse the main message (first section)
+        main_section = sections[0] if sections else msgdef
+        main_fields = self._parse_message_section(main_section)
+        
+        # Parse nested message types (additional sections)
+        nested_types = {}
+        for i in range(1, len(sections)):
+            section = sections[i].strip()
+            if section.startswith('MSG:'):
+                # Extract message type name
+                lines = section.split('\n')
+                if len(lines) > 0:
+                    msg_line = lines[0].strip()
+                    if msg_line.startswith('MSG:'):
+                        msg_type = msg_line[4:].strip()  # Remove 'MSG: ' prefix
+                        # Parse fields for this nested type
+                        nested_content = '\n'.join(lines[1:])
+                        nested_fields = self._parse_message_section(nested_content)
+                        nested_types[msg_type] = nested_fields
+        
+        # Now link nested fields to their parent fields
+        for field in main_fields:
+            if not field.is_builtin:
+                # Try exact match first
+                if field.field_type in nested_types:
+                    field.nested_fields = nested_types[field.field_type]
+                else:
+                    # Try partial match (e.g., 'Header' matches 'std_msgs/Header')
+                    for nested_type_name, nested_fields in nested_types.items():
+                        if nested_type_name.endswith('/' + field.field_type) or nested_type_name == field.field_type:
+                            field.nested_fields = nested_fields
+                            break
+        
+        return main_fields
+    
+    def _parse_message_section(self, section: str) -> List[MessageFieldInfo]:
+        """Parse a single message section into fields"""
         fields = []
-        lines = msgdef.strip().split('\n')
+        lines = section.strip().split('\n')
         
         for line in lines:
             line = line.strip()
@@ -703,6 +743,10 @@ class BagParser:
             if not line or line.startswith('#'):
                 continue
             
+            # Skip MSG: lines
+            if line.startswith('MSG:'):
+                continue
+                
             # Skip constant definitions (contain '=')
             if '=' in line:
                 continue
@@ -740,10 +784,10 @@ class BagParser:
                     is_array=is_array,
                     array_size=array_size,
                     is_builtin=is_builtin,
-                    nested_fields=None  # TODO: Parse nested fields for complex types
+                    nested_fields=None  # Will be populated later if it's a complex type
                 )
                 
-                fields.append(field_info)  # Append to list instead of dict
+                fields.append(field_info)
         
         return fields
 
