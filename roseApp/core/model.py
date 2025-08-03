@@ -1,6 +1,6 @@
 """
-Core data models for ROS bag processing
-Contains the primary data structures used throughout the application
+Optimized core data models for ROS bag processing
+Reduces dictionary usage and improves direct member access
 """
 import json
 import pickle
@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any, Tuple, Set
+from typing import List, Optional, Union, Any, Tuple, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,25 +29,24 @@ class TopicInfo:
     message_count: Optional[int] = None
     message_frequency: Optional[float] = None  # Hz
     total_size_bytes: Optional[int] = None
-    average_message_size: Optional[float] = None  # Average message size in bytes
+    average_message_size: Optional[int] = None
     first_message_time: Optional[Tuple[int, int]] = None  # (sec, nsec)
     last_message_time: Optional[Tuple[int, int]] = None   # (sec, nsec)
-    connection_id: Optional[str] = None  # Connection identifier for rosbag connections
-    
+    connection_id: Optional[str] = None
     
     @property
-    def count(self) -> str:
-        """Get message count"""
+    def count_str(self) -> str:
+        """Get message count as string"""
         return f"{self.message_count or 'N.A'}"
     
     @property
-    def frequency(self) -> str:
-        """Get message frequency"""
+    def frequency_str(self) -> str:
+        """Get message frequency as string"""
         return f"{self.message_frequency or 'N.A'} Hz"
     
     @property
-    def size(self) -> str:
-        """Get total size in bytes"""
+    def size_str(self) -> str:
+        """Get total size as string"""
         return f"{self.total_size_bytes or 'N.A'} bytes"
     
     def get_duration_seconds(self) -> Optional[float]:
@@ -66,26 +65,6 @@ class TopicInfo:
             self.message_frequency = self.message_count / duration
             return self.message_frequency
         return None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
-        return {
-            'name': self.name,
-            'message_type': self.message_type,
-            'message_count': self.message_count,
-            'message_frequency': self.message_frequency,
-            'total_size_bytes': self.total_size_bytes,
-            'average_message_size': self.average_message_size,
-            'first_message_time': self.first_message_time,
-            'last_message_time': self.last_message_time,
-            'connection_id': self.connection_id,
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TopicInfo':
-        """Create from dictionary"""
-        return cls(**data)
-
 
 
 @dataclass
@@ -96,42 +75,7 @@ class MessageFieldInfo:
     is_array: bool = False
     array_size: Optional[int] = None  # None for dynamic arrays
     is_builtin: bool = True
-    nested_fields: Optional[Dict[str, 'MessageFieldInfo']] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
-        result = {
-            'field_name': self.field_name,
-            'field_type': self.field_type,
-            'is_array': self.is_array,
-            'array_size': self.array_size,
-            'is_builtin': self.is_builtin
-        }
-        
-        if self.nested_fields:
-            result['nested_fields'] = {
-                k: v.to_dict() for k, v in self.nested_fields.items()
-            }
-        
-        return result
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MessageFieldInfo':
-        """Create from dictionary"""
-        nested_fields = None
-        if 'nested_fields' in data and data['nested_fields']:
-            nested_fields = {
-                k: cls.from_dict(v) for k, v in data['nested_fields'].items()
-            }
-        
-        return cls(
-            field_name=data['field_name'],
-            field_type=data['field_type'],
-            is_array=data.get('is_array', False),
-            array_size=data.get('array_size'),
-            is_builtin=data.get('is_builtin', True),
-            nested_fields=nested_fields
-        )
+    nested_fields: Optional[List['MessageFieldInfo']] = None  # Changed from Dict to List
     
     def get_flattened_paths(self, prefix: str = '') -> List[str]:
         """Get all flattened field paths"""
@@ -139,7 +83,7 @@ class MessageFieldInfo:
         paths = [current_path]
         
         if self.nested_fields:
-            for nested_field in self.nested_fields.values():
+            for nested_field in self.nested_fields:
                 paths.extend(nested_field.get_flattened_paths(current_path))
         
         return paths
@@ -151,38 +95,7 @@ class MessageTypeInfo:
     message_type: str
     definition: Optional[str] = None
     md5sum: Optional[str] = None
-    fields: Optional[Dict[str, MessageFieldInfo]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
-        result = {
-            'message_type': self.message_type,
-            'definition': self.definition,
-            'md5sum': self.md5sum
-        }
-        
-        if self.fields:
-            result['fields'] = {
-                k: v.to_dict() for k, v in self.fields.items()
-            }
-        
-        return result
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MessageTypeInfo':
-        """Create from dictionary"""
-        fields = None
-        if 'fields' in data and data['fields']:
-            fields = {
-                k: MessageFieldInfo.from_dict(v) for k, v in data['fields'].items()
-            }
-        
-        return cls(
-            message_type=data['message_type'],
-            definition=data.get('definition'),
-            md5sum=data.get('md5sum'),
-            fields=fields
-        )
+    fields: Optional[List[MessageFieldInfo]] = None  # Changed from Dict to List
     
     def get_all_field_paths(self) -> List[str]:
         """Get all flattened field paths for this message type"""
@@ -190,10 +103,20 @@ class MessageTypeInfo:
             return []
         
         paths = []
-        for field in self.fields.values():
+        for field in self.fields:
             paths.extend(field.get_flattened_paths())
         
         return paths
+    
+    def find_field(self, field_name: str) -> Optional[MessageFieldInfo]:
+        """Find a field by name"""
+        if not self.fields:
+            return None
+        
+        for field in self.fields:
+            if field.field_name == field_name:
+                return field
+        return None
 
 
 @dataclass
@@ -223,49 +146,36 @@ class TimeRange:
         ts_ns = timestamp[0] * 1_000_000_000 + timestamp[1]
         return self.get_start_ns() <= ts_ns <= self.get_end_ns()
     
-    def to_tuple(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-        """Convert to tuple format for backward compatibility"""
-        return (self.start_time, self.end_time)
-    
-    @classmethod
-    def from_tuple(cls, time_range: Tuple[Tuple[int, int], Tuple[int, int]]) -> 'TimeRange':
-        """Create from tuple format"""
-        return cls(start_time=time_range[0], end_time=time_range[1])
-    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             'start_time': self.start_time,
             'end_time': self.end_time
         }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TimeRange':
-        """Create from dictionary"""
-        return cls(
-            start_time=data['start_time'],
-            end_time=data['end_time']
-        )
+
+
+@dataclass
+class TopicStatistics:
+    """Statistics for a single topic"""
+    topic_name: str
+    message_count: int = 0
+    total_size_bytes: int = 0
+    average_message_size: int = 0
+    min_message_size: int = 0
+    max_message_size: int = 0
 
 
 @dataclass
 class ComprehensiveBagInfo:
     """
-    Comprehensive bag information data structure organized by analysis level
+    Optimized comprehensive bag information data structure
     
-    This is the core data structure for the entire application. Every bag operation
-    (parsing, caching, extraction, export) uses this as the single source of truth.
-    
-    Features:
-    - Hierarchical analysis levels (NONE -> QUICK -> FULL)
-    - Persistent storage support (JSON/pickle)
-    - Memory management for efficient caching
-    - Extensible field structure for future enhancements
-    
-    Fields are grouped by the analysis level required to obtain them:
-    - Basic metadata: Always available
-    - Quick analysis: Topics, connections, time info, field structures  
-    - Full analysis: Message counts, sizes, detailed statistics
+    Key improvements:
+    - Reduced dictionary usage, prefer lists and direct member access
+    - Simplified initialization from parser
+    - Better type safety and IDE support
+    - More efficient memory usage
+    - Direct member access without getters/setters
     """
     
     # === BASIC METADATA (always present) ===
@@ -275,33 +185,23 @@ class ComprehensiveBagInfo:
     last_updated: float = field(default_factory=time.time)
     
     # === QUICK ANALYSIS DATA ===
-    # Enhanced topic and connection information
-    topics: Optional[Dict[str, TopicInfo]] = None  # topic_name -> TopicInfo
-    connections: Optional[Dict[str, str]] = None  
-    message_types: Optional[Dict[str, MessageTypeInfo]] = None  # message_type -> MessageTypeInfo
+    # Use lists instead of dictionaries for better performance and simpler access
+    topics: List[TopicInfo] = field(default_factory=list)
+    message_types: List[MessageTypeInfo] = field(default_factory=list)
     
     # Time information
     time_range: Optional[TimeRange] = None
     duration_seconds: Optional[float] = None
     
-    # Legacy compatibility fields (deprecated, use structured fields above)
-    _legacy_topics: Optional[List[str]] = field(default=None, init=False)  # For backward compatibility
-    _legacy_connections: Optional[Dict[str, str]] = field(default=None, init=False)  # For backward compatibility
-    _legacy_message_definitions: Optional[Dict[str, str]] = field(default=None, init=False)  # For backward compatibility
-    _legacy_message_fields: Optional[Dict[str, Dict[str, Any]]] = field(default=None, init=False)  # For backward compatibility
-    
-    # === FULL ANALYSIS DATA (requires message traversal) ===
-    # Message statistics
-    message_counts: Optional[Dict[str, int]] = None
-    topic_sizes: Optional[Dict[str, int]] = None
-    topic_stats: Optional[Dict[str, Dict[str, int]]] = None  # detailed per-topic stats
-    
-    # Overall statistics
+    # === FULL ANALYSIS DATA ===
+    # Statistics organized as list of objects instead of nested dictionaries
+    topic_statistics: List[TopicStatistics] = field(default_factory=list)
     total_messages: Optional[int] = None
     total_size: Optional[int] = None
     
     # === OPTIONAL CACHED DATA ===
-    cached_messages: Optional[Dict[str, List[Any]]] = None
+    # Keep this as simple structure since it's optional
+    cached_message_topics: List[str] = field(default_factory=list)
     
     # === METADATA FOR PERSISTENCE AND MEMORY MANAGEMENT ===
     _memory_footprint: Optional[int] = field(default=None, init=False)
@@ -313,13 +213,18 @@ class ComprehensiveBagInfo:
         self._calculate_memory_footprint()
         self._last_accessed = time.time()
     
+    
+    @property
+    def file_size_mb(self) -> float:
+        """Get file size in MB"""
+        return self.file_size / (1024 * 1024)
+    
     # === ANALYSIS LEVEL CHECKS ===
     
     def has_quick_analysis(self) -> bool:
         """Check if quick analysis data is available"""
         return (self.analysis_level.value in ['quick', 'full'] and 
-                self.topics is not None and 
-                self.connections is not None and 
+                len(self.topics) > 0 and 
                 self.time_range is not None)
     
     def has_full_analysis(self) -> bool:
@@ -330,303 +235,111 @@ class ComprehensiveBagInfo:
     
     def has_field_analysis(self) -> bool:
         """Check if message field analysis data is available"""
-        return self.message_types is not None and len(self.message_types) > 0
+        return len(self.message_types) > 0
     
     def has_cached_messages(self) -> bool:
         """Check if cached messages data is available"""
-        return self.cached_messages is not None and len(self.cached_messages) > 0
+        return len(self.cached_message_topics) > 0
     
-    # === NEW STRUCTURED DATA ACCESS METHODS ===
+    # === CONVENIENT ACCESS METHODS ===
     
-    def get_topic_names(self) -> List[str]:
-        """Get list of topic names"""
-        self._record_access()
-        return list(self.topics.keys()) if self.topics else []
-    
-    def get_topic_info(self, topic_name: str) -> Optional[TopicInfo]:
-        """Get detailed information for a specific topic"""
-        self._record_access()
-        return self.topics.get(topic_name) if self.topics else None
-    
-    def get_message_types(self) -> List[str]:
-        """Get list of message types used in the bag"""
-        self._record_access()
-        return list(self.message_types.keys()) if self.message_types else []
-    
-    def get_message_type_info(self, message_type: str) -> Optional[MessageTypeInfo]:
-        """Get detailed information for a specific message type"""
-        self._record_access()
-        return self.message_types.get(message_type) if self.message_types else None
-    
-    def get_topics_by_message_type(self, message_type: str) -> List[str]:
-        """Get all topics that use a specific message type"""
-        self._record_access()
-        if not self.topics:
-            return []
-        
-        return [
-            topic_name for topic_name, topic_info in self.topics.items()
-            if topic_info.message_type == message_type
-        ]
-    
-    def get_connection_by_topic(self, topic_name: str) -> Optional[Dict[str, str]]:
-        """Get connection information for a specific topic"""
-        self._record_access()
-        if not self.topics or not self.connections:
-            return None
-        
-        topic_info = self.topics.get(topic_name)
-        if topic_info and topic_info.connection_id is not None:
-            return self.connections.get(topic_info.connection_id)
+    def find_topic(self, topic_name: str) -> Optional[TopicInfo]:
+        """Find a topic by name"""
+        for topic in self.topics:
+            if topic.name == topic_name:
+                return topic
         return None
     
-    def get_topic_statistics(self) -> Dict[str, Dict[str, Any]]:
-        """Get comprehensive statistics for all topics"""
+    def find_message_type(self, message_type: str) -> Optional[MessageTypeInfo]:
+        """Find a message type by name"""
+        for msg_type in self.message_types:
+            if msg_type.message_type == message_type:
+                return msg_type
+        return None
+    
+    def find_topic_statistics(self, topic_name: str) -> Optional[TopicStatistics]:
+        """Find statistics for a topic"""
+        for stats in self.topic_statistics:
+            if stats.topic_name == topic_name:
+                return stats
+        return None
+    
+    def get_topics(self) -> List[TopicInfo]:
+        """Get list of topics"""
+        return self.topics
+    
+    def get_topic_names(self) -> List[str]:
+        """Get list of all topic names"""
         self._record_access()
-        if not self.topics:
-            return {}
-        
-        stats = {}
-        for topic_name, topic_info in self.topics.items():
-            stats[topic_name] = {
-                'message_type': topic_info.message_type,
-                'message_count': topic_info.message_count,
-                'message_frequency': topic_info.message_frequency,
-                'total_size_bytes': topic_info.total_size_bytes,
-                'average_message_size': topic_info.average_message_size,
-                'duration_seconds': topic_info.get_duration_seconds()
-            }
-        
-        return stats
+        return [topic.name for topic in self.topics]
     
-    # === DATA ACCESS METHODS ===
+    def get_message_type_names(self) -> List[str]:
+        """Get list of all message type names"""
+        self._record_access()
+        return [msg_type.message_type for msg_type in self.message_types]
     
-    def get_topic_fields(self, topic: str) -> Optional[Dict[str, MessageFieldInfo]]:
+    def get_topic_fields(self, topic_name: str) -> Optional[List[MessageFieldInfo]]:
         """Get field structure for a specific topic"""
         self._record_access()
         
-        if not self.has_field_analysis() or not self.topics:
+        topic = self.find_topic(topic_name)
+        if not topic:
             return None
         
-        topic_info = self.topics.get(topic)
-        if topic_info and self.message_types:
-            message_type_info = self.message_types.get(topic_info.message_type)
-            if message_type_info:
-                return message_type_info.fields
+        message_type_info = self.find_message_type(topic.message_type)
+        if message_type_info:
+            return message_type_info.fields
         return None
     
-    def get_topic_field_paths(self, topic: str) -> List[str]:
+    def get_topic_field_paths(self, topic_name: str) -> List[str]:
         """Get flattened field paths for a specific topic"""
         self._record_access()
         
-        fields = self.get_topic_fields(topic)
+        fields = self.get_topic_fields(topic_name)
         if not fields:
             return []
         
         paths = []
-        for field in fields.values():
+        for field in fields:
             paths.extend(field.get_flattened_paths())
         
         return paths
     
-    def get_meta(self) -> Dict[str, Any]:
-        """Get basic metadata dictionary"""
-        self._record_access()
-        
-        meta = {
-            'file_path': self.file_path,
-            'analysis_level': self.analysis_level.value,
-            'last_updated': self.last_updated
-        }
-        
-        if self.has_quick_analysis():
-            meta.update({
-                'topic_count': len(self.topics) if self.topics else 0,
-                'duration_seconds': self.duration_seconds,
-                'time_range': self.time_range,
-                'has_field_analysis': self.has_field_analysis()
-            })
-        
-        if self.has_full_analysis():
-            meta.update({
-                'total_messages': self.total_messages,
-                'total_size': self.total_size
-            })
-        
-        return meta
+    # === BUILDER METHODS FOR PARSER ===
     
-    # === PERSISTENCE METHODS ===
+    def add_topic(self, topic_info: TopicInfo) -> None:
+        """Add a topic (used by parser during initialization)"""
+        # Check if topic already exists, replace if so
+        for i, existing_topic in enumerate(self.topics):
+            if existing_topic.name == topic_info.name:
+                self.topics[i] = topic_info
+                return
+        self.topics.append(topic_info)
     
-    def to_json(self, include_cached_messages: bool = False) -> str:
-        """
-        Serialize to JSON string
-        
-        Args:
-            include_cached_messages: Whether to include cached message data
-        
-        Returns:
-            JSON string representation
-        """
-        self._record_access()
-        
-        data = {
-            'file_path': self.file_path,
-            'analysis_level': self.analysis_level.value,
-            'last_updated': self.last_updated,
-            'topics': {k: v.to_dict() for k, v in self.topics.items()} if self.topics else None,
-            'connections': self.connections,
-            'message_types': {k: v.to_dict() for k, v in self.message_types.items()} if self.message_types else None,
-            'time_range': self.time_range.to_dict() if self.time_range else None,
-            'duration_seconds': self.duration_seconds,
-            'message_counts': self.message_counts,
-            'topic_sizes': self.topic_sizes,
-            'topic_stats': self.topic_stats,
-            'total_messages': self.total_messages,
-            'total_size': self.total_size,
-            '_access_count': self._access_count,
-            '_last_accessed': self._last_accessed
-        }
-        
-        if include_cached_messages:
-            # Convert cached messages to serializable format
-            if self.cached_messages:
-                serializable_messages = {}
-                for topic, messages in self.cached_messages.items():
-                    # Convert messages to dict format for JSON serialization
-                    serializable_messages[topic] = [
-                        msg if isinstance(msg, dict) else str(msg) 
-                        for msg in messages
-                    ]
-                data['cached_messages'] = serializable_messages
-        
-        return json.dumps(data, indent=2, default=str)
+    def add_message_type(self, message_type_info: MessageTypeInfo) -> None:
+        """Add a message type (used by parser during initialization)"""
+        # Check if message type already exists, replace if so
+        for i, existing_type in enumerate(self.message_types):
+            if existing_type.message_type == message_type_info.message_type:
+                self.message_types[i] = message_type_info
+                return
+        self.message_types.append(message_type_info)
     
-    @classmethod
-    def from_json(cls, json_str: str) -> 'ComprehensiveBagInfo':
-        """
-        Deserialize from JSON string
-        
-        Args:
-            json_str: JSON string representation
-        
-        Returns:
-            ComprehensiveBagInfo instance
-        """
-        data = json.loads(json_str)
-        
-        # Convert analysis_level back to enum
-        if 'analysis_level' in data:
-            data['analysis_level'] = AnalysisLevel(data['analysis_level'])
-        
-        # Convert topics back to TopicInfo objects
-        if 'topics' in data and data['topics']:
-            topics_dict = {}
-            for topic_name, topic_data in data['topics'].items():
-                topics_dict[topic_name] = TopicInfo.from_dict(topic_data)
-            data['topics'] = topics_dict
-        
-        # Convert message_types back to MessageTypeInfo objects
-        if 'message_types' in data and data['message_types']:
-            message_types_dict = {}
-            for msg_type, msg_data in data['message_types'].items():
-                message_types_dict[msg_type] = MessageTypeInfo.from_dict(msg_data)
-            data['message_types'] = message_types_dict
-        
-        # Convert time_range back to TimeRange object
-        if 'time_range' in data and data['time_range']:
-            data['time_range'] = TimeRange.from_dict(data['time_range'])
-        
-        # Handle special fields
-        access_count = data.pop('_access_count', 0)
-        last_accessed = data.pop('_last_accessed', time.time())
-        
-        # Create instance
-        instance = cls(**data)
-        instance._access_count = access_count
-        instance._last_accessed = last_accessed
-        
-        return instance
+    def add_topic_statistics(self, stats: TopicStatistics) -> None:
+        """Add topic statistics (used by parser during full analysis)"""
+        # Check if statistics already exist, replace if so
+        for i, existing_stats in enumerate(self.topic_statistics):
+            if existing_stats.topic_name == stats.topic_name:
+                self.topic_statistics[i] = stats
+                return
+        self.topic_statistics.append(stats)
     
-    def save_to_file(self, file_path: Union[str, Path], format: str = 'json', 
-                     include_cached_messages: bool = False) -> None:
-        """
-        Save to file
-        
-        Args:
-            file_path: Target file path
-            format: 'json' or 'pickle'
-            include_cached_messages: Whether to include cached message data
-        """
-        file_path = Path(file_path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            if format.lower() == 'json':
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(self.to_json(include_cached_messages))
-            elif format.lower() == 'pickle':
-                with open(file_path, 'wb') as f:
-                    pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
-            else:
-                raise ValueError(f"Unsupported format: {format}")
-            
-            logger.debug(f"Saved ComprehensiveBagInfo to {file_path} (format: {format})")
-            
-        except Exception as e:
-            logger.error(f"Failed to save ComprehensiveBagInfo to {file_path}: {e}")
-            raise
+    def set_time_range(self, start_time: Tuple[int, int], end_time: Tuple[int, int]) -> None:
+        """Set time range (used by parser)"""
+        self.time_range = TimeRange(start_time=start_time, end_time=end_time)
+        self.duration_seconds = self.time_range.get_duration_seconds()
     
-    @classmethod
-    def load_from_file(cls, file_path: Union[str, Path], format: str = 'auto') -> 'ComprehensiveBagInfo':
-        """
-        Load from file
-        
-        Args:
-            file_path: Source file path
-            format: 'json', 'pickle', or 'auto' (detect from extension)
-        
-        Returns:
-            ComprehensiveBagInfo instance
-        """
-        file_path = Path(file_path)
-        
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-        
-        # Auto-detect format
-        if format == 'auto':
-            if file_path.suffix.lower() == '.json':
-                format = 'json'
-            elif file_path.suffix.lower() in ['.pkl', '.pickle']:
-                format = 'pickle'
-            else:
-                # Try JSON first, then pickle
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        json.load(f)
-                    format = 'json'
-                except:
-                    format = 'pickle'
-        
-        try:
-            if format.lower() == 'json':
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return cls.from_json(f.read())
-            elif format.lower() == 'pickle':
-                with open(file_path, 'rb') as f:
-                    instance = pickle.load(f)
-                    # Ensure it's the right type
-                    if not isinstance(instance, cls):
-                        raise TypeError(f"Loaded object is not ComprehensiveBagInfo: {type(instance)}")
-                    return instance
-            else:
-                raise ValueError(f"Unsupported format: {format}")
-                
-        except Exception as e:
-            logger.error(f"Failed to load ComprehensiveBagInfo from {file_path}: {e}")
-            raise
-    
-    # === MEMORY MANAGEMENT METHODS ===
+    # === MEMORY MANAGEMENT ===
     
     def _record_access(self) -> None:
         """Record access for memory management"""
@@ -645,37 +358,25 @@ class ComprehensiveBagInfo:
             footprint += sys.getsizeof(self.analysis_level)
             footprint += sys.getsizeof(self.last_updated)
             
-            # Quick analysis data
-            if self.topics:
-                footprint += sys.getsizeof(self.topics)
-                footprint += sum(sys.getsizeof(str(t)) for t in self.topics.values())
-            if self.connections:
-                footprint += sys.getsizeof(self.connections)
-                footprint += sum(sys.getsizeof(k) + sys.getsizeof(v) for k, v in self.connections.items())
-            if self.message_types:
-                footprint += sys.getsizeof(self.message_types)
-                footprint += sum(sys.getsizeof(str(mt)) for mt in self.message_types.values())
+            # Topics list
+            footprint += sys.getsizeof(self.topics)
+            footprint += sum(sys.getsizeof(topic) for topic in self.topics)
+            
+            # Message types list
+            footprint += sys.getsizeof(self.message_types)
+            footprint += sum(sys.getsizeof(msg_type) for msg_type in self.message_types)
+            
+            # Time range
             if self.time_range:
                 footprint += sys.getsizeof(self.time_range)
             
-            # Full analysis data
-            if self.message_counts:
-                footprint += sys.getsizeof(self.message_counts)
-                footprint += sum(sys.getsizeof(k) + sys.getsizeof(v) for k, v in self.message_counts.items())
-            if self.topic_sizes:
-                footprint += sys.getsizeof(self.topic_sizes)
-                footprint += sum(sys.getsizeof(k) + sys.getsizeof(v) for k, v in self.topic_sizes.items())
-            if self.topic_stats:
-                footprint += sys.getsizeof(self.topic_stats)
-                footprint += sum(sys.getsizeof(str(v)) for v in self.topic_stats.values()) * 2
+            # Statistics
+            footprint += sys.getsizeof(self.topic_statistics)
+            footprint += sum(sys.getsizeof(stats) for stats in self.topic_statistics)
             
-            # Cached messages (can be large)
-            if self.cached_messages:
-                footprint += sys.getsizeof(self.cached_messages)
-                for topic, messages in self.cached_messages.items():
-                    footprint += sys.getsizeof(topic)
-                    footprint += sys.getsizeof(messages)
-                    footprint += sum(sys.getsizeof(str(msg)) for msg in messages)
+            # Cached message topics
+            footprint += sys.getsizeof(self.cached_message_topics)
+            footprint += sum(sys.getsizeof(topic) for topic in self.cached_message_topics)
             
             self._memory_footprint = footprint
             return footprint
@@ -691,26 +392,6 @@ class ComprehensiveBagInfo:
             return self._calculate_memory_footprint()
         return self._memory_footprint
     
-    def get_memory_info(self) -> Dict[str, Any]:
-        """Get memory management information"""
-        return {
-            'memory_footprint_bytes': self.get_memory_footprint(),
-            'memory_footprint_mb': self.get_memory_footprint() / (1024 * 1024),
-            'access_count': self._access_count,
-            'last_accessed': self._last_accessed,
-            'age_seconds': time.time() - self._last_accessed,
-            'has_cached_messages': self.has_cached_messages(),
-            'cached_message_topics': list(self.cached_messages.keys()) if self.cached_messages else []
-        }
-    
-    def clear_cached_messages(self) -> None:
-        """Clear cached messages to free memory"""
-        if self.cached_messages:
-            self.cached_messages.clear()
-            self.cached_messages = None
-            self._calculate_memory_footprint()
-            logger.debug(f"Cleared cached messages for {self.file_path}")
-    
     def is_stale(self, max_age_seconds: float = 3600) -> bool:
         """Check if the data is stale based on last access time"""
         return (time.time() - self._last_accessed) > max_age_seconds
@@ -721,15 +402,143 @@ class ComprehensiveBagInfo:
         return (self.is_stale(max_age_seconds) and 
                 self._access_count < min_access_count)
     
+    # === SERIALIZATION (SIMPLIFIED) ===
+    
+    def to_json(self) -> str:
+        """Serialize to JSON string (simplified without complex dict conversions)"""
+        self._record_access()
+        
+        # Use dataclass's built-in serialization capabilities
+        data = {
+            'file_path': self.file_path,
+            'file_size': self.file_size,
+            'analysis_level': self.analysis_level.value,
+            'last_updated': self.last_updated,
+            'duration_seconds': self.duration_seconds,
+            'total_messages': self.total_messages,
+            'total_size': self.total_size,
+            '_access_count': self._access_count,
+            '_last_accessed': self._last_accessed,
+            
+            # Serialize lists directly (much simpler than dict conversion)
+            'topics': [
+                {
+                    'name': t.name,
+                    'message_type': t.message_type,
+                    'message_count': t.message_count,
+                    'message_frequency': t.message_frequency,
+                    'total_size_bytes': t.total_size_bytes,
+                    'average_message_size': t.average_message_size,
+                    'first_message_time': t.first_message_time,
+                    'last_message_time': t.last_message_time,
+                    'connection_id': t.connection_id
+                } for t in self.topics
+            ],
+            
+            'message_types': [
+                {
+                    'message_type': mt.message_type,
+                    'definition': mt.definition,
+                    'md5sum': mt.md5sum,
+                    'fields': [
+                        {
+                            'field_name': f.field_name,
+                            'field_type': f.field_type,
+                            'is_array': f.is_array,
+                            'array_size': f.array_size,
+                            'is_builtin': f.is_builtin
+                        } for f in (mt.fields or [])
+                    ]
+                } for mt in self.message_types
+            ],
+            
+            'time_range': {
+                'start_time': self.time_range.start_time,
+                'end_time': self.time_range.end_time
+            } if self.time_range else None,
+            
+            'topic_statistics': [
+                {
+                    'topic_name': ts.topic_name,
+                    'message_count': ts.message_count,
+                    'total_size_bytes': ts.total_size_bytes,
+                    'average_message_size': ts.average_message_size,
+                    'min_message_size': ts.min_message_size,
+                    'max_message_size': ts.max_message_size
+                } for ts in self.topic_statistics
+            ],
+            
+            'cached_message_topics': self.cached_message_topics
+        }
+        
+        return json.dumps(data, indent=2, default=str)
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'ComprehensiveBagInfo':
+        """Deserialize from JSON string (simplified)"""
+        data = json.loads(json_str)
+        
+        # Create instance with basic fields
+        instance = cls(
+            file_path=data['file_path'],
+            file_size=data['file_size'],
+            analysis_level=AnalysisLevel(data['analysis_level']),
+            last_updated=data['last_updated'],
+            duration_seconds=data.get('duration_seconds'),
+            total_messages=data.get('total_messages'),
+            total_size=data.get('total_size')
+        )
+        
+        # Restore topics
+        if 'topics' in data:
+            for topic_data in data['topics']:
+                topic = TopicInfo(**topic_data)
+                instance.add_topic(topic)
+        
+        # Restore message types
+        if 'message_types' in data:
+            for mt_data in data['message_types']:
+                fields = []
+                if 'fields' in mt_data and mt_data['fields']:
+                    for field_data in mt_data['fields']:
+                        fields.append(MessageFieldInfo(**field_data))
+                
+                msg_type = MessageTypeInfo(
+                    message_type=mt_data['message_type'],
+                    definition=mt_data.get('definition'),
+                    md5sum=mt_data.get('md5sum'),
+                    fields=fields if fields else None
+                )
+                instance.add_message_type(msg_type)
+        
+        # Restore time range
+        if 'time_range' in data and data['time_range']:
+            tr_data = data['time_range']
+            instance.time_range = TimeRange(
+                start_time=tr_data['start_time'],
+                end_time=tr_data['end_time']
+            )
+        
+        # Restore statistics
+        if 'topic_statistics' in data:
+            for stats_data in data['topic_statistics']:
+                stats = TopicStatistics(**stats_data)
+                instance.add_topic_statistics(stats)
+        
+        # Restore cached message topics
+        if 'cached_message_topics' in data:
+            instance.cached_message_topics = data['cached_message_topics']
+        
+        # Restore metadata
+        instance._access_count = data.get('_access_count', 0)
+        instance._last_accessed = data.get('_last_accessed', time.time())
+        
+        return instance
+    
     # === UTILITY METHODS ===
     
-    def clone(self, include_cached_messages: bool = False) -> 'ComprehensiveBagInfo':
-        """Create a deep copy of this instance"""
-        json_str = self.to_json(include_cached_messages)
-        return self.from_json(json_str)
-    
     def upgrade_analysis_level(self, new_level: AnalysisLevel) -> None:
-        """Upgrade the analysis level (used when more detailed analysis is performed)"""
+        """Upgrade the analysis level"""
         if new_level.value in ['quick', 'full'] and self.analysis_level == AnalysisLevel.NONE:
             self.analysis_level = new_level
             self.last_updated = time.time()
@@ -739,12 +548,12 @@ class ComprehensiveBagInfo:
     
     def __str__(self) -> str:
         """String representation for debugging"""
-        return f"ComprehensiveBagInfo(file='{self.file_path}', level={self.analysis_level.value}, topics={len(self.topics) if self.topics else 0})"
+        return f"ComprehensiveBagInfo(file='{self.file_path}', level={self.analysis_level.value}, topics={len(self.topics)})"
     
     def __repr__(self) -> str:
         """Detailed representation for debugging"""
         return (f"ComprehensiveBagInfo(file_path='{self.file_path}', "
                 f"analysis_level={self.analysis_level.value}, "
-                f"topics={len(self.topics) if self.topics else 0}, "
+                f"topics={len(self.topics)}, "
                 f"memory_mb={self.get_memory_footprint() / (1024 * 1024):.2f}, "
                 f"access_count={self._access_count})")

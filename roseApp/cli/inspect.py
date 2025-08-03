@@ -113,46 +113,41 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None
         }
         
-        # Convert topics to expected format using new TopicInfo structure
-        if bag_info.topics:
-            for topic_name, topic_info_obj in bag_info.topics.items():
-                topic_info = {
-                    'name': topic_name,
-                    'message_type': topic_info_obj.message_type,
-                    'message_count': topic_info_obj.message_count or 0,
-                    'frequency': topic_info_obj.message_frequency or 0.0,
-                    'size_bytes': topic_info_obj.total_size_bytes or 0
-                }
-                
-                # Add field analysis if available from MessageTypeInfo
-                if options.show_fields and bag_info.message_types:
-                    msg_type = topic_info_obj.message_type
-                    if msg_type in bag_info.message_types:
-                        msg_type_info = bag_info.message_types[msg_type]
-                        if msg_type_info.fields:
-                            # Convert MessageFieldInfo objects to field paths
-                            field_paths = _extract_field_paths_from_message_type(msg_type_info)
-                            topic_info['field_paths'] = field_paths
-                
-                result['topics'].append(topic_info)
+        # Convert topics to expected format using optimized TopicInfo structure
+        for topic_info_obj in bag_info.topics:
+            topic_info = {
+                'name': topic_info_obj.name,
+                'message_type': topic_info_obj.message_type,
+                'message_count': topic_info_obj.message_count or 0,
+                'frequency': topic_info_obj.message_frequency or 0.0,
+                'size_bytes': topic_info_obj.total_size_bytes or 0
+            }
+            
+            # Add field analysis if available from MessageTypeInfo
+            if options.show_fields:
+                msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
+                if msg_type_info and msg_type_info.fields:
+                    # Convert MessageFieldInfo objects to field paths
+                    field_paths = _extract_field_paths_from_message_type(msg_type_info)
+                    topic_info['field_paths'] = field_paths
+            
+            result['topics'].append(topic_info)
         
-        # Add field analysis if requested using new MessageTypeInfo structure
-        if options.show_fields and bag_info.message_types and bag_info.topics:
+        # Add field analysis if requested using optimized MessageTypeInfo structure
+        if options.show_fields and len(bag_info.message_types) > 0 and len(bag_info.topics) > 0:
             # Convert MessageTypeInfo structure to topic-based field_analysis
             field_analysis = {}
-            for topic_name, topic_info_obj in bag_info.topics.items():
-                msg_type = topic_info_obj.message_type
-                if msg_type in bag_info.message_types:
-                    msg_type_info = bag_info.message_types[msg_type]
-                    if msg_type_info.fields:
-                        # Extract hierarchical field paths from MessageFieldInfo objects
-                        field_paths = _extract_field_paths_from_message_type(msg_type_info)
-                        
-                        if field_paths:
-                            field_analysis[topic_name] = {
-                                'message_type': msg_type,
-                                'field_paths': sorted(field_paths)
-                            }
+            for topic_info_obj in bag_info.topics:
+                msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
+                if msg_type_info and msg_type_info.fields:
+                    # Extract hierarchical field paths from MessageFieldInfo objects
+                    field_paths = _extract_field_paths_from_message_type(msg_type_info)
+                    
+                    if field_paths:
+                        field_analysis[topic_info_obj.name] = {
+                            'message_type': topic_info_obj.message_type,
+                            'field_paths': sorted(field_paths)
+                        }
             
             if field_analysis:
                 result['field_analysis'] = field_analysis
@@ -200,10 +195,10 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
 
 def _extract_field_paths_from_message_type(msg_type_info):
     """
-    Extract field paths from MessageTypeInfo structure
+    Extract field paths from MessageTypeInfo structure (optimized version)
     
     Args:
-        msg_type_info: MessageTypeInfo object containing fields as MessageFieldInfo objects
+        msg_type_info: MessageTypeInfo object containing fields as List of MessageFieldInfo objects
     
     Returns:
         List of field paths
@@ -212,9 +207,9 @@ def _extract_field_paths_from_message_type(msg_type_info):
         return []
     
     field_paths = []
-    for field_name, field_info in msg_type_info.fields.items():
+    for field_info in msg_type_info.fields:  # Iterate over list instead of dict
         # Add the basic field path
-        field_paths.append(field_name)
+        field_paths.append(field_info.field_name)
         
         # If it's a complex type, we could expand it further
         # For now, we'll keep it simple and just show the top-level fields
