@@ -141,8 +141,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                 msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
                 if msg_type_info and msg_type_info.fields:
                     # Convert MessageFieldInfo objects to field paths
-                    field_paths = _extract_field_paths_from_message_type(msg_type_info)
-                    topic_info['field_paths'] = field_paths
+                    topic_info['field_paths'] = msg_type_info.get_all_field_paths()
             
             result['topics'].append(topic_info)
         
@@ -225,17 +224,6 @@ def _extract_field_paths_from_message_type(msg_type_info):
     
     # Use the built-in method to get all flattened field paths
     return msg_type_info.get_all_field_paths()
-
-
-def _build_hierarchical_field_paths(message_fields, msg_type):
-    """
-    DEPRECATED: This function is no longer used with the new MessageTypeInfo structure.
-    Use _extract_field_paths_from_message_type() instead.
-    
-    This function was used with the old flattened message_fields structure.
-    """
-    # This function is deprecated and should not be used
-    return []
 
 
 if __name__ == "__main__":
