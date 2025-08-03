@@ -14,6 +14,7 @@ from ..core.parser import BagParser, ExtractOption
 from ..core.ui_control import UIControl, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
+from .util import filter_topics
 
 
 # Set to CLI mode
@@ -36,60 +37,7 @@ def await_sync(coro):
     return loop.run_until_complete(coro)
 
 
-def filter_topics(all_topics: List[str], patterns: List[str], topic_filter: Optional[str] = None) -> List[str]:
-    """
-    Filter topics based on patterns and optional topic filter
-    
-    Args:
-        all_topics: List of all available topics
-        patterns: List of patterns to match (supports fuzzy matching)
-        topic_filter: Optional additional filter pattern
-        
-    Returns:
-        List of matching topics
-    """
-    if not patterns:
-        return all_topics
-    
-    import re
-    matching_topics = set()
-    
-    for pattern in patterns:
-        # Exact match first
-        if pattern in all_topics:
-            matching_topics.add(pattern)
-            continue
-        
-        # Fuzzy matching - if pattern is a substring of topic name
-        for topic in all_topics:
-            if pattern.lower() in topic.lower():
-                matching_topics.add(topic)
-        
-        # Regex matching if pattern looks like a regex
-        try:
-            regex = re.compile(pattern)
-            for topic in all_topics:
-                if regex.search(topic):
-                    matching_topics.add(topic)
-        except re.error:
-            # Not a valid regex, skip
-            pass
-    
-    # Apply additional topic filter if provided
-    if topic_filter:
-        filtered_topics = set()
-        try:
-            filter_regex = re.compile(topic_filter)
-            for topic in matching_topics:
-                if filter_regex.search(topic):
-                    filtered_topics.add(topic)
-            matching_topics = filtered_topics
-        except re.error:
-            # If regex is invalid, use substring matching
-            filtered_topics = {topic for topic in matching_topics if topic_filter.lower() in topic.lower()}
-            matching_topics = filtered_topics
-    
-    return sorted(list(matching_topics))
+# filter_topics function is now imported from .util
 
 
 @app.command()

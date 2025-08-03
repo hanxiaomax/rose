@@ -11,7 +11,7 @@ from ..core.model import AnalysisLevel
 from ..core.ui_control import UIControl, OutputFormat, ExportOptions, DisplayConfig, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from ..core.ui_control import Message
+from .util import filter_topics
 app = typer.Typer(help="Inspect ROS bag files")
 
 
@@ -113,8 +113,21 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None
         }
         
+        # Get all topic names for filtering
+        all_topic_names = [topic.name for topic in bag_info.topics]
+        
+        # Apply topic filtering if specified
+        if options.topics:
+            filtered_topic_names = filter_topics(all_topic_names, options.topics, options.topic_filter)
+        else:
+            filtered_topic_names = all_topic_names
+        
         # Convert topics to expected format using optimized TopicInfo structure
         for topic_info_obj in bag_info.topics:
+            # Skip topics that don't match the filter
+            if topic_info_obj.name not in filtered_topic_names:
+                continue
+                
             topic_info = {
                 'name': topic_info_obj.name,
                 'message_type': topic_info_obj.message_type,
@@ -138,6 +151,10 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             # Convert MessageTypeInfo structure to topic-based field_analysis
             field_analysis = {}
             for topic_info_obj in bag_info.topics:
+                # Skip topics that don't match the filter
+                if topic_info_obj.name not in filtered_topic_names:
+                    continue
+                    
                 msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
                 if msg_type_info and msg_type_info.fields:
                     # Extract hierarchical field paths from MessageFieldInfo objects
@@ -176,7 +193,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                 full_width=True
             )
             UIControl.display_inspection_result(result, display_config, console)
-
+            
             
             # Handle fields display separately if requested
             if options.show_fields:

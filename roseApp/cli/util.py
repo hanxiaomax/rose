@@ -222,6 +222,68 @@ def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optio
         bag_path=bag_path
     )
 
+def filter_topics(all_topics: List[str], patterns: List[str], topic_filter: Optional[str] = None) -> List[str]:
+    """
+    Filter topics based on patterns and optional topic filter with fuzzy matching support
+    
+    Args:
+        all_topics: List of all available topics
+        patterns: List of patterns to match (supports fuzzy matching)
+        topic_filter: Optional additional filter pattern
+        
+    Returns:
+        List of matching topics
+        
+    Examples:
+        filter_topics(['/gps/fix', '/imu/data', '/camera/image'], ['gps']) -> ['/gps/fix']
+        filter_topics(['/gps/fix', '/imu/data'], ['gps', 'imu']) -> ['/gps/fix', '/imu/data']
+        filter_topics(['/tf', '/tf_static'], ['^/tf$']) -> ['/tf']  # regex exact match
+    """
+    if not patterns:
+        return all_topics
+    
+    import re
+    matching_topics = set()
+    
+    for pattern in patterns:
+        # Exact match first (highest priority)
+        if pattern in all_topics:
+            matching_topics.add(pattern)
+            continue
+        
+        # Fuzzy matching - if pattern is a substring of topic name (case insensitive)
+        for topic in all_topics:
+            if pattern.lower() in topic.lower():
+                matching_topics.add(topic)
+        
+        # Regex matching if pattern looks like a regex (contains regex special chars)
+        if any(char in pattern for char in ['^', '$', '*', '+', '?', '[', ']', '(', ')', '|', '\\']):
+            try:
+                regex = re.compile(pattern)
+                for topic in all_topics:
+                    if regex.search(topic):
+                        matching_topics.add(topic)
+            except re.error:
+                # Not a valid regex, skip regex matching for this pattern
+                pass
+    
+    # Apply additional topic filter if provided
+    if topic_filter:
+        filtered_topics = set()
+        try:
+            filter_regex = re.compile(topic_filter)
+            for topic in matching_topics:
+                if filter_regex.search(topic):
+                    filtered_topics.add(topic)
+            matching_topics = filtered_topics
+        except re.error:
+            # If regex is invalid, use substring matching
+            filtered_topics = {topic for topic in matching_topics if topic_filter.lower() in topic.lower()}
+            matching_topics = filtered_topics
+    
+    return sorted(list(matching_topics))
+
+
 def ask_topics_with_fuzzy(
     console: Console, 
     topics: List[str], 

@@ -37,7 +37,9 @@ class TopicInfo:
     @property
     def count_str(self) -> str:
         """Get message count as string"""
-        return f"{self.message_count or 'N.A'}"
+        if self.message_count is not None and self.message_count > 0:
+            return f"{self.message_count}"
+        return 'N.A'
     
     @property
     def frequency_str(self) -> str:
