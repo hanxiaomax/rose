@@ -13,6 +13,12 @@ from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
 from ..core.ui_control import UIControl,Message
 
+
+WARNING_COLOR = UIControl.get_color('warning')
+PRIMARY_COLOR = UIControl.get_color('primary')
+ACCENT_COLOR = UIControl.get_color('accent')
+SUCCESS_COLOR = UIControl.get_color('success')
+
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
 ██╔══██╗██╔═══██╗██╔════╝██╔════╝
@@ -35,14 +41,14 @@ def build_banner():
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {UIControl.get_color('primary')}")
+    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"dim {PRIMARY_COLOR}")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=UIControl.get_color('warning'),  
+        border_style=WARNING_COLOR,  
         highlight=True
     )
     
@@ -51,16 +57,16 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style=f"bold {UIControl.get_color('accent')}")
+    console.print("\nUsage Instructions:",style=f"bold {ACCENT_COLOR}")
     if is_fuzzy:
-        console.print(f"•  [{UIControl.get_color('accent')}]Type to search[/{UIControl.get_color('accent')}]")
+        console.print(f"•  [{ACCENT_COLOR}]Type to search[/{ACCENT_COLOR}]")
     else:
-        console.print(f"•  [{UIControl.get_color('accent')}]Space[/{UIControl.get_color('accent')}] to select/unselect") 
-    console.print(f"•  [{UIControl.get_color('accent')}]↑/↓[/{UIControl.get_color('accent')}] to navigate options")
-    console.print(f"•  [{UIControl.get_color('accent')}]Tab[/{UIControl.get_color('accent')}] to select and move to next item")
-    console.print(f"•  [{UIControl.get_color('accent')}]Shift+Tab[/{UIControl.get_color('accent')}] to select and move to previous item")
-    console.print(f"•  [{UIControl.get_color('accent')}]Ctrl+A[/{UIControl.get_color('accent')}] to select all")
-    console.print(f"•  [{UIControl.get_color('accent')}]Enter[/{UIControl.get_color('accent')}] to confirm selection\n")
+        console.print(f"•  [{ACCENT_COLOR}]Space[/{ACCENT_COLOR}] to select/unselect") 
+    console.print(f"•  [{ACCENT_COLOR}]↑/↓[/{ACCENT_COLOR}] to navigate options")
+    console.print(f"•  [{ACCENT_COLOR}]Tab[/{ACCENT_COLOR}] to select and move to next item")
+    console.print(f"•  [{ACCENT_COLOR}]Shift+Tab[/{ACCENT_COLOR}] to select and move to previous item")
+    console.print(f"•  [{ACCENT_COLOR}]Ctrl+A[/{ACCENT_COLOR}] to select all")
+    console.print(f"•  [{ACCENT_COLOR}]Enter[/{ACCENT_COLOR}] to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -80,19 +86,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {UIControl.get_color('accent')}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {UIControl.get_color('primary')}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {UIControl.get_color('primary')}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=UIControl.get_color('accent'))
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT_COLOR}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {PRIMARY_COLOR}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {PRIMARY_COLOR}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=ACCENT_COLOR)
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{UIControl.get_color('primary')}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {UIControl.get_color('primary')}")
+        bag_info.append(f"• {topic:<40}", style=f"{PRIMARY_COLOR}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {PRIMARY_COLOR}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=UIControl.get_color('accent'),
+                  border_style=ACCENT_COLOR,
                   padding=(0, 1))
     
     console.print(panel)
@@ -114,23 +120,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=UIControl.get_color('warning'))
+                console.print("No topics selected. Showing all topics.", style=WARNING_COLOR)
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {UIControl.get_color('accent')}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT_COLOR}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=UIControl.get_color('primary'))
+                filtered_info.append(f"• {topic:<40}", style=PRIMARY_COLOR)
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=UIControl.get_color('primary'),
+                                  border_style=PRIMARY_COLOR,
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -163,9 +169,9 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     
     # 添加三列，第一列较窄
-    table.add_column("", style=f"{UIControl.get_color('primary')}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{UIControl.get_color('primary')}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{UIControl.get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    table.add_column("", style=f"{PRIMARY_COLOR}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{PRIMARY_COLOR}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{PRIMARY_COLOR}", justify="left", width=20)  # 增加size列宽度以适应额外信息
     
     # 添加input行
     table.add_row(
@@ -176,13 +182,13 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     
     # 添加output行，包含缩小百分比，使用ACCENT颜色
     table.add_row(
-        f"[{UIControl.get_color('accent')}]Out[/{UIControl.get_color('accent')}]",
-        f"[{UIControl.get_color('accent')}]{os.path.basename(output_bag)}[/{UIControl.get_color('accent')}]",
-        f"[{UIControl.get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{UIControl.get_color('accent')}]"
+        f"[{ACCENT_COLOR}]Out[/{ACCENT_COLOR}]",
+        f"[{ACCENT_COLOR}]{os.path.basename(output_bag)}[/{ACCENT_COLOR}]",
+        f"[{ACCENT_COLOR}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{ACCENT_COLOR}]"
     )
     
     # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {UIControl.get_color('accent')}"))
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT_COLOR}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -201,9 +207,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=f"{UIControl.get_color('success')}")
+        console.print(summary, style=f"{SUCCESS_COLOR}")
     else:
-        console.print(summary, style=f"{UIControl.get_color('accent')}")
+        console.print(summary, style=f"{ACCENT_COLOR}")
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -330,7 +336,7 @@ class TimedPanelProgress(PanelProgress):
         # Display loading time after completion
         if self.start_time and self.end_time:
             elapsed = self.end_time - self.start_time
-            self._external_console.print(f"[{UIControl.get_color('success')}]✓ Bag file loaded in {elapsed:.2f}s[/{UIControl.get_color('success')}]")
+            self._external_console.print(f"[{SUCCESS_COLOR}]✓ Bag file loaded in {elapsed:.2f}s[/{SUCCESS_COLOR}]")
         
         return result
 

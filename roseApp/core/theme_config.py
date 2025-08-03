@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from .ui_control import UIControl, ThemeMode, ThemeColors
+from .ui_control import UIControl
 
 
 class ComponentType(Enum):
