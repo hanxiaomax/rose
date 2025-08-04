@@ -109,7 +109,16 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             'total_messages': bag_info.total_messages,
             'total_size': bag_info.total_size,
             'duration_seconds': bag_info.duration_seconds,
-            'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None
+            'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None,
+            'bag_info': {
+                'file_name': Path(bag_info.file_path).name,
+                'file_size': bag_info.file_size or 0,
+                'topics_count': len(bag_info.topics),
+                'total_messages': bag_info.total_messages or 0,
+                'duration_seconds': bag_info.duration_seconds or 0.0,
+                'analysis_time': 0.0,  # From cache, so analysis time is 0
+                'cached': True
+            }
         }
         
         # Get all topic names for filtering
