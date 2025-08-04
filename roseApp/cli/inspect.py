@@ -114,7 +114,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
         }
         
         # Get all topic names for filtering
-        all_topic_names = [topic.name for topic in bag_info.topics]
+        all_topic_names = [topic if isinstance(topic, str) else topic.name for topic in bag_info.topics]
         
         # Apply topic filtering if specified
         if options.topics:

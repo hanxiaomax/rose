@@ -34,6 +34,40 @@ class TopicInfo:
     last_message_time: Optional[Tuple[int, int]] = None   # (sec, nsec)
     connection_id: Optional[str] = None
     
+    def __lt__(self, other) -> bool:
+        """Less than comparison based on topic name"""
+        if not isinstance(other, TopicInfo):
+            return NotImplemented
+        return self.name < other.name
+    
+    def __le__(self, other) -> bool:
+        """Less than or equal comparison based on topic name"""
+        if not isinstance(other, TopicInfo):
+            return NotImplemented
+        return self.name <= other.name
+    
+    def __gt__(self, other) -> bool:
+        """Greater than comparison based on topic name"""
+        if not isinstance(other, TopicInfo):
+            return NotImplemented
+        return self.name > other.name
+    
+    def __ge__(self, other) -> bool:
+        """Greater than or equal comparison based on topic name"""
+        if not isinstance(other, TopicInfo):
+            return NotImplemented
+        return self.name >= other.name
+    
+    def __eq__(self, other) -> bool:
+        """Equality comparison based on topic name and message type"""
+        if not isinstance(other, TopicInfo):
+            return NotImplemented
+        return self.name == other.name and self.message_type == other.message_type
+    
+    def __hash__(self) -> int:
+        """Hash based on topic name and message type for use in sets and dicts"""
+        return hash((self.name, self.message_type))
+    
     @property
     def count_str(self) -> str:
         """Get message count as string"""
@@ -248,14 +282,22 @@ class ComprehensiveBagInfo:
     def find_topic(self, topic_name: str) -> Optional[TopicInfo]:
         """Find a topic by name"""
         for topic in self.topics:
-            if topic.name == topic_name:
+            if isinstance(topic, str):
+                if topic == topic_name:
+                    # Create a minimal TopicInfo for string topics
+                    return TopicInfo(name=topic, message_type="unknown")
+            elif topic.name == topic_name:
                 return topic
         return None
     
     def find_message_type(self, message_type: str) -> Optional[MessageTypeInfo]:
         """Find a message type by name"""
         for msg_type in self.message_types:
-            if msg_type.message_type == message_type:
+            if isinstance(msg_type, str):
+                if msg_type == message_type:
+                    # Create a minimal MessageTypeInfo for string message types
+                    return MessageTypeInfo(message_type=msg_type)
+            elif msg_type.message_type == message_type:
                 return msg_type
         return None
     
@@ -273,12 +315,12 @@ class ComprehensiveBagInfo:
     def get_topic_names(self) -> List[str]:
         """Get list of all topic names"""
         self._record_access()
-        return [topic.name for topic in self.topics]
+        return [topic if isinstance(topic, str) else topic.name for topic in self.topics]
     
     def get_message_type_names(self) -> List[str]:
         """Get list of all message type names"""
         self._record_access()
-        return [msg_type.message_type for msg_type in self.message_types]
+        return [msg_type if isinstance(msg_type, str) else msg_type.message_type for msg_type in self.message_types]
     
     def get_topic_fields(self, topic_name: str) -> Optional[List[MessageFieldInfo]]:
         """Get field structure for a specific topic"""

@@ -79,7 +79,12 @@ class CliTool:
             # Get topic names from optimized list structure
             topics = bag_info.get_topic_names()
             # Create connections dict for backward compatibility
-            connections = {topic.name: topic.message_type for topic in bag_info.topics}
+            connections = {}
+            for topic in bag_info.topics:
+                if isinstance(topic, str):
+                    connections[topic] = "unknown"
+                else:
+                    connections[topic.name] = topic.message_type
             time_range = bag_info.time_range
             
             return topics, connections, time_range
@@ -300,7 +305,12 @@ class CliTool:
                     # Get topic names from optimized list structure
                     topics_list = self.current_bag_info.get_topic_names()
                     # Create connections dict for backward compatibility
-                    connections_dict = {topic.name: topic.message_type for topic in self.current_bag_info.topics}
+                    connections_dict = {}
+                    for topic in self.current_bag_info.topics:
+                        if isinstance(topic, str):
+                            connections_dict[topic] = "unknown"
+                        else:
+                            connections_dict[topic.name] = topic.message_type
                     print_bag_info(self.console, bag_path, 
                                  topics_list, 
                                  connections_dict, 
@@ -663,7 +673,9 @@ class CliTool:
             # Use cached bag info if available
             topics_to_use = self.topics
             if self.current_bag_info and self.current_bag_path == input_bag:
-                topics_to_use = self.current_bag_info.topics or self.topics
+                # Convert TopicInfo objects to topic names
+                bag_topics = self.current_bag_info.get_topic_names() if self.current_bag_info.topics else []
+                topics_to_use = bag_topics or self.topics
             
             whitelist = ask_topics(self.console, topics_to_use, parser=self.parser, bag_path=input_bag)
             if not whitelist:

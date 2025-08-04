@@ -478,13 +478,7 @@ class BagParser:
         rosbags_compression = self._get_compression_format(compression)
         if rosbags_compression:
             writer.set_compression(rosbags_compression)
-            
-            if compression == 'lz4':
-                writer.set_chunk_threshold(256 * 1024)  # 256KB chunks
-                _logger.debug("Set LZ4 chunk threshold to 256KB")
-            elif compression == 'bz2':
-                writer.set_chunk_threshold(64 * 1024)   # 64KB chunks
-                _logger.debug("Set BZ2 chunk threshold to 64KB")
+            _logger.debug(f"Set compression to {compression}")
     
     def _prepare_output_file(self, output_bag: str, overwrite: bool) -> None:
         """Prepare output file, handling existence and overwrite logic"""

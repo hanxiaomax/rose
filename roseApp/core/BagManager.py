@@ -215,11 +215,13 @@ class BagManager:
             return set()
         
         # 获取第一个bag的topics作为起始点
-        common_topics = set(next(iter(self.bags.values())).info.topics)
+        first_bag = next(iter(self.bags.values()))
+        common_topics = set(first_bag.info.get_topic_names())
         
         # 与其他bag的topics取交集
         for bag in list(self.bags.values())[1:]:
-            common_topics = common_topics.intersection(bag.info.topics)
+            bag_topics = set(bag.info.get_topic_names())
+            common_topics = common_topics.intersection(bag_topics)
         
         return common_topics
     
@@ -231,7 +233,7 @@ class BagManager:
         """
         topic_counts = {}
         for bag in self.bags.values():
-            for topic in bag.info.topics:
+            for topic in bag.info.get_topic_names():
                 topic_counts[topic] = topic_counts.get(topic, 0) + 1
         return topic_counts
     
