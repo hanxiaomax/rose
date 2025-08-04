@@ -14,7 +14,7 @@ from ..core.parser import BagParser, ExtractOption
 from ..core.ui_control import UIControl, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import filter_topics
+from .util import filter_topics, check_and_load_bag_cache
 
 
 # Set to CLI mode
@@ -55,10 +55,9 @@ def extract(
     """
     Extract specific topics from a ROS bag file
     
-    NOTE: The bag file must be loaded into cache first using 'rose load <bag_file>'
+    If the bag file is not in cache, you will be prompted to load it automatically.
     
     Examples:
-        rose load input.bag                                         # Load bag into cache first
         rose extract input.bag --topics gps imu                    # Keep topics matching 'gps' or 'imu'
         rose extract input.bag --topics /gps/fix -o output.bag     # Keep exact topic /gps/fix
         rose extract input.bag --topics tf --reverse               # Remove topics matching 'tf' 
@@ -98,14 +97,14 @@ def _extract_topics_impl(
             ui.show_error("No topics specified. Use --topics to specify topics")
             raise typer.Exit(1)
         
-        # Check if bag is loaded in cache
+        # Check if bag is loaded in cache, and auto-load if user agrees
+        if not check_and_load_bag_cache(input_path, auto_load=True, verbose=verbose):
+            ui.show_error(f"Bag file '{input_bag}' is not available in cache and loading was cancelled.")
+            raise typer.Exit(1)
+        
+        # Get the cached entry (should be available now)
         cache_manager = create_bag_cache_manager()
         cached_entry = cache_manager.get_analysis(input_path)
-        
-        if not cached_entry or not cached_entry.is_valid(input_path):
-            ui.show_error(f"Bag file '{input_bag}' is not loaded in cache.")
-            console.print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {input_bag}[/bold]")
-            raise typer.Exit(1)
         
         # Validate compression option
         valid_compression = ["none", "bz2", "lz4"]

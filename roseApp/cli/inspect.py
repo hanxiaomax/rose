@@ -11,7 +11,7 @@ from ..core.model import AnalysisLevel
 from ..core.ui_control import UIControl, OutputFormat, ExportOptions, DisplayConfig, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import filter_topics
+from .util import filter_topics, check_and_load_bag_cache
 app = typer.Typer(help="Inspect ROS bag files")
 
 
@@ -33,9 +33,8 @@ def inspect(
     """
     Inspect a ROS bag file and display comprehensive analysis
     
-    NOTE: The bag file must be loaded into cache first using 'rose load <bag_file>'
-    
-    This command uses cached bag analysis for fast inspection without progress bars.
+    If the bag file is not in cache, you will be prompted to load it automatically.
+    This command uses cached bag analysis for fast inspection.
     """
     # Use UIControl for unified output management
     ui = UIControl()
@@ -45,14 +44,14 @@ def inspect(
         ui.show_error(f"Bag file not found: {bag_path}")
         raise typer.Exit(1)
     
-    # Check if bag is loaded in cache
+    # Check if bag is loaded in cache, and auto-load if user agrees
+    if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose):
+        ui.show_error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.")
+        raise typer.Exit(1)
+    
+    # Get the cached entry (should be available now)
     cache_manager = create_bag_cache_manager()
     cached_entry = cache_manager.get_analysis(bag_path)
-    
-    if not cached_entry or not cached_entry.is_valid(bag_path):
-        ui.show_error(f"Bag file '{bag_path}' is not loaded in cache.")
-        ui.get_console().print(f"[yellow]Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
-        raise typer.Exit(1)
     
     # Convert string format to enum
     try:

@@ -440,3 +440,100 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
         transient=dismiss,
     )
 
+
+def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bool = False) -> bool:
+    """
+    Check if bag is in cache, and optionally prompt user to load it if not
+    
+    Args:
+        bag_path: Path to the bag file
+        auto_load: Whether to prompt user for auto-loading
+        verbose: Whether to show verbose output
+    
+    Returns:
+        bool: True if bag is available in cache (either was already cached or was loaded), False otherwise
+    """
+    from ..core.cache import create_bag_cache_manager
+    from ..core.parser import BagParser
+    from ..core.ui_control import UIControl
+    import asyncio
+    import typer
+    
+    # Check if bag is already loaded in cache
+    cache_manager = create_bag_cache_manager()
+    cached_entry = cache_manager.get_analysis(bag_path)
+    
+    if cached_entry and cached_entry.is_valid(bag_path):
+        if verbose:
+            console = Console()
+            console.print(f"[green]✓[/green] Using cached bag analysis for [bold]{bag_path}[/bold]")
+        return True
+    
+    if not auto_load:
+        return False
+    
+    # Bag not in cache, ask user if they want to load it
+    ui = UIControl()
+    console = ui.get_console()
+    
+    console.print(f"[yellow]⚠[/yellow] Bag file [bold]{bag_path}[/bold] is not loaded in cache.")
+    
+    # Ask user for confirmation
+    should_load = typer.confirm("Would you like to load it now?", default=True)
+    
+    if not should_load:
+        console.print("[yellow]Operation cancelled. Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
+        return False
+    
+    # Load the bag
+    console.print(f"[blue]Loading bag file into cache...[/blue]")
+    
+    try:
+        # Use async loading
+        async def load_bag():
+            parser = BagParser()
+            
+            # Create progress callback for loading
+            def progress_callback(current, total, description="Loading"):
+                # Simple progress indication
+                if isinstance(current, (int, float)) and isinstance(total, (int, float)) and total > 0:
+                    percentage = (current / total) * 100
+                    console.print(f"[blue]Loading... {percentage:.1f}%[/blue]", end="\r")
+                else:
+                    # Handle string descriptions
+                    console.print(f"[blue]{current}[/blue]", end="\r")
+            
+            bag_info, elapsed_time = await parser.load_bag_async(
+                str(bag_path), 
+                full_analysis=False,  # Use quick analysis by default
+                progress_callback=progress_callback if verbose else None
+            )
+            
+            return bag_info, elapsed_time
+        
+        # Run the async loading
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        bag_info, elapsed_time = loop.run_until_complete(load_bag())
+        
+        if bag_info:
+            console.print(f"[green]✓[/green] Successfully loaded bag into cache in {elapsed_time:.2f}s")
+            if verbose:
+                console.print(f"  Topics: {len(bag_info.topics) if bag_info.topics else 0}")
+                console.print(f"  Duration: {bag_info.duration_seconds:.2f}s" if bag_info.duration_seconds else "  Duration: Unknown")
+            return True
+        else:
+            console.print("[red]✗[/red] Failed to load bag into cache")
+            return False
+            
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error loading bag: {e}")
+        if verbose:
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        return False
+
