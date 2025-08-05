@@ -137,7 +137,6 @@ async def main():
     print()
     
     # Step 7: Memory usage analysis
-    print("🧠 Step 7: Memory usage analysis")
     memory_footprint = bag_info.get_memory_footprint()
     print(f"📊 Memory analysis:")
     print(f"  Data structure footprint: {memory_footprint:,} bytes ({memory_footprint/1024:.1f} KB)")
@@ -146,15 +145,7 @@ async def main():
     print(f"  Memory efficiency: Optimized (no dictionary overhead)")
     print()
     
-    print("=" * 60)
-    print("✅ Demo completed successfully!")
-    print("Key benefits of optimized structure:")
-    print("  • Direct member access (bag_info.topics)")
-    print("  • Efficient list iteration")
-    print("  • Builder pattern methods (add_topic, find_topic)")
-    print("  • Reduced memory footprint")
-    print("  • Better cache locality")
-    print("=" * 60)
+
 
 
 if __name__ == "__main__":
