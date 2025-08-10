@@ -37,7 +37,7 @@ async def main():
     start_time = time.time()
     
     try:
-        bag_info, parse_time = await parser.load_bag_async(str(bag_path), full_analysis=False)
+        bag_info, parse_time = await parser.load_bag_async(str(bag_path), build_index=True)
         total_time = time.time() - start_time
         print(cache_manager.get_all_cache_entries())
         print(f"Parsing completed in {parse_time:.3f}s (total: {total_time:.3f}s)")
@@ -145,6 +145,8 @@ async def main():
     print(f"  Memory efficiency: Optimized (no dictionary overhead)")
     print()
     
+    
+    print(bag_info.df.to_csv("df.csv"))
 
 
 

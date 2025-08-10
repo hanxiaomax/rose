@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import List, Optional, Union, Any, Tuple, Dict
 import logging
 
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    pd = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +26,7 @@ class AnalysisLevel(Enum):
     NONE = "none"      # No analysis performed
     QUICK = "quick"    # Basic metadata without message traversal
     FULL = "full"      # Full statistics with message traversal
+    INDEX = "index"    # Message indexing with DataFrame creation
 
 
 @dataclass
@@ -239,6 +247,10 @@ class ComprehensiveBagInfo:
     # Keep this as simple structure since it's optional
     cached_message_topics: List[str] = field(default_factory=list)
     
+    # === MESSAGE INDEX DATA ===
+    # DataFrame for message indexing and data analysis (only when build_index=True)
+    df: Optional[Any] = field(default=None)  # Use Any to avoid pandas import issues
+    
     # === METADATA FOR PERSISTENCE AND MEMORY MANAGEMENT ===
     _memory_footprint: Optional[int] = field(default=None, init=False)
     _access_count: int = field(default=0, init=False)
@@ -276,6 +288,12 @@ class ComprehensiveBagInfo:
     def has_cached_messages(self) -> bool:
         """Check if cached messages data is available"""
         return len(self.cached_message_topics) > 0
+    
+    def has_message_index(self) -> bool:
+        """Check if message index DataFrame is available"""
+        return (self.analysis_level == AnalysisLevel.INDEX and 
+                self.df is not None and 
+                PANDAS_AVAILABLE)
     
     # === CONVENIENT ACCESS METHODS ===
     
@@ -512,7 +530,10 @@ class ComprehensiveBagInfo:
                 } for ts in self.topic_statistics
             ],
             
-            'cached_message_topics': self.cached_message_topics
+            'cached_message_topics': self.cached_message_topics,
+            
+            # Serialize DataFrame if available
+            'df_data': self.df.to_json(orient='records', date_format='iso') if (self.df is not None and PANDAS_AVAILABLE) else None
         }
         
         return json.dumps(data, indent=2, default=str)
@@ -573,6 +594,14 @@ class ComprehensiveBagInfo:
         if 'cached_message_topics' in data:
             instance.cached_message_topics = data['cached_message_topics']
         
+        # Restore DataFrame if available
+        if 'df_data' in data and data['df_data'] and PANDAS_AVAILABLE:
+            try:
+                instance.df = pd.read_json(data['df_data'], orient='records')
+            except Exception as e:
+                logger.warning(f"Failed to restore DataFrame: {e}")
+                instance.df = None
+        
         # Restore metadata
         instance._access_count = data.get('_access_count', 0)
         instance._last_accessed = data.get('_last_accessed', time.time())
@@ -583,10 +612,13 @@ class ComprehensiveBagInfo:
     
     def upgrade_analysis_level(self, new_level: AnalysisLevel) -> None:
         """Upgrade the analysis level"""
-        if new_level.value in ['quick', 'full'] and self.analysis_level == AnalysisLevel.NONE:
+        if new_level.value in ['quick', 'full', 'index'] and self.analysis_level == AnalysisLevel.NONE:
             self.analysis_level = new_level
             self.last_updated = time.time()
         elif new_level == AnalysisLevel.FULL and self.analysis_level == AnalysisLevel.QUICK:
+            self.analysis_level = new_level
+            self.last_updated = time.time()
+        elif new_level == AnalysisLevel.INDEX and self.analysis_level in [AnalysisLevel.QUICK, AnalysisLevel.FULL]:
             self.analysis_level = new_level
             self.last_updated = time.time()
     

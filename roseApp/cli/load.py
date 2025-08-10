@@ -39,7 +39,7 @@ def await_sync(coro):
     return loop.run_until_complete(coro)
 
 
-async def load_single_bag(bag_path: Path, parser, verbose: bool = False, full_analysis: bool = False, progress_callback=None) -> dict:
+async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_index: bool = False, progress_callback=None) -> dict:
     """Load a single bag file into cache using parser directly"""
     try:
         # Check if already cached
@@ -58,7 +58,7 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, full_an
         # Load bag using parser's async load function
         bag_info, elapsed_time = await parser.load_bag_async(
             str(bag_path), 
-            full_analysis=full_analysis,
+            build_index=build_index,
             progress_callback=progress_callback
         )
         
@@ -127,7 +127,7 @@ def load(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed loading information"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
-    full_analysis: bool = typer.Option(False, "--full-analysis/--quick-analysis", help="Perform full analysis (default) or quick analysis only")
+    build_index: bool = typer.Option(False, "--build-index", help="Build message index as pandas DataFrame for data analysis")
 ):
     """
     Load ROS bag files into cache for faster operations.
@@ -142,7 +142,7 @@ def load(
         rose load "*.bag" --workers 4           # Use 4 parallel workers
         rose load "*.bag" --force               # Force reload even if cached
         rose load "*.bag" --dry-run             # Preview what would be loaded
-        rose load "*.bag" --quick-analysis      # Use quick analysis only
+        rose load "*.bag" --build-index         # Build message index for data analysis
     """
     console = Console()
     
@@ -177,8 +177,8 @@ def load(
     if workers is None:
         workers = max(1, os.cpu_count() - 2)
     
-    analysis_type = "full" if full_analysis else "quick"
-    Message(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type} analysis)...", "info").render(console)
+    analysis_type = "with index building" if build_index else "quick"
+    Message(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...", "info").render(console)
     
     # Initialize parser
     parser = BagParser()
@@ -225,7 +225,7 @@ def load(
                 progress_callback = create_progress_callback(bag_path, task_id)
                 future = executor.submit(
                     await_sync, 
-                    load_single_bag(bag_path, parser, verbose, full_analysis, progress_callback)
+                    load_single_bag(bag_path, parser, verbose, build_index, progress_callback)
                 )
                 future_to_bag[future] = bag_path
             

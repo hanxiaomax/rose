@@ -17,6 +17,13 @@ from rosbags.rosbag1 import Writer as Rosbag1Writer
 from roseApp.core.util import get_logger
 from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    pd = None
+
 _logger = get_logger("parser")
 
 
@@ -88,7 +95,7 @@ class BagParser:
     async def load_bag_async(
         self, 
         bag_path: str, 
-        full_analysis: bool = False,
+        build_index: bool = False,
         progress_callback: Optional[Callable[[str, float], None]] = None
     ) -> Tuple[ComprehensiveBagInfo, float]:
         """
@@ -96,7 +103,7 @@ class BagParser:
         
         Args:
             bag_path: Path to the bag file
-            full_analysis: Whether to perform full analysis (True) or quick analysis (False)
+            build_index: Whether to build message index as DataFrame (True) or quick analysis (False)
             progress_callback: Optional callback for progress updates (phase, progress_pct)
             
         Returns:
@@ -111,13 +118,13 @@ class BagParser:
             progress_callback("Starting analysis...", 10.0)
         
         try:
-            if full_analysis:
+            if build_index:
                 if progress_callback:
-                    progress_callback("Performing full analysis...", 30.0)
+                    progress_callback("Building message index...", 30.0)
                 
                 bag_info, analysis_time = await loop.run_in_executor(
                     None,
-                    self._analyze_bag_full,
+                    self._analyze_bag_with_index,
                     bag_path
                 )
             else:
@@ -353,6 +360,113 @@ class BagParser:
         except Exception as e:
             _logger.error(f"Error in quick analysis for {bag_path}: {e}")
             raise Exception(f"Error in quick analysis: {e}")
+    
+    def _analyze_bag_with_index(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+        """
+        Perform analysis with message indexing and DataFrame creation
+        
+        Gets basic metadata plus creates a pandas DataFrame with all message data
+        for data analysis purposes.
+        
+        Args:
+            bag_path: Path to the bag file
+            
+        Returns:
+            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+        """
+        start_time = time.time()
+        
+        if not PANDAS_AVAILABLE:
+            _logger.warning("pandas not available, falling back to quick analysis")
+            return self._analyze_bag_quick(bag_path)
+        
+        # Check if we already have index analysis for this bag
+        if (self._is_cache_valid(bag_path) and 
+            self._current_bag_info is not None and
+            self._current_bag_info.has_message_index()):
+            elapsed = time.time() - start_time
+            _logger.info(f"Using cached index analysis for {bag_path}")
+            return self._current_bag_info, elapsed
+        
+        _logger.info(f"Performing analysis with message indexing for {bag_path}")
+        
+        try:
+            self._initialize_typestore()
+            
+            reader_args = [Path(bag_path)]
+            reader_kwargs = {'default_typestore': self._typestore} if self._typestore else {}
+            
+            with AnyReader(reader_args, **reader_kwargs) as reader:
+                # First, do quick analysis to get basic info
+                quick_info, _ = self._analyze_bag_quick(bag_path)
+                
+                # Upgrade analysis level to INDEX
+                quick_info.analysis_level = AnalysisLevel.INDEX
+                
+                # Prepare data for DataFrame
+                message_data = []
+                
+                _logger.info(f"Reading messages for indexing...")
+                message_count = 0
+                
+                # Read all messages and create index
+                for connection, timestamp, rawdata in reader.messages():
+                    # Convert timestamp to seconds for easier analysis
+                    timestamp_sec = timestamp / 1_000_000_000
+                    timestamp_ns = timestamp
+                    
+                    # Create message record
+                    message_record = {
+                        'timestamp_sec': timestamp_sec,
+                        'timestamp_ns': timestamp_ns,
+                        'topic': connection.topic,
+                        'message_type': connection.msgtype,
+                        'message_size': len(rawdata),
+                        'connection_id': connection.id if hasattr(connection, 'id') else None
+                    }
+                    
+                    message_data.append(message_record)
+                    message_count += 1
+                    
+                    # Log progress for large bags
+                    if message_count % 10000 == 0:
+                        _logger.debug(f"Indexed {message_count} messages...")
+                
+                # Create DataFrame
+                if message_data:
+                    df = pd.DataFrame(message_data)
+                    
+                    # Optimize DataFrame dtypes for memory efficiency
+                    df['timestamp_sec'] = df['timestamp_sec'].astype('float64')
+                    df['timestamp_ns'] = df['timestamp_ns'].astype('int64')
+                    df['topic'] = df['topic'].astype('category')
+                    df['message_type'] = df['message_type'].astype('category')
+                    df['message_size'] = df['message_size'].astype('int32')
+                    
+                    # Set timestamp as index for time-based analysis
+                    df.set_index('timestamp_sec', inplace=True)
+                    df.sort_index(inplace=True)
+                    
+                    # Store DataFrame in bag info
+                    quick_info.df = df
+                    
+                    _logger.info(f"Created message index with {len(df)} messages")
+                else:
+                    _logger.warning("No messages found in bag file")
+                    quick_info.df = pd.DataFrame()  # Empty DataFrame
+                
+                # Update metadata
+                quick_info.last_updated = time.time()
+                self._current_bag_info = quick_info
+                
+                elapsed = time.time() - start_time
+                _logger.info(f"Index analysis completed in {elapsed:.3f}s - {message_count} messages indexed")
+                
+                return quick_info, elapsed
+                
+        except Exception as e:
+            _logger.error(f"Error in index analysis for {bag_path}: {e}")
+            raise Exception(f"Error in index analysis: {e}")
     
     def _analyze_bag_full(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """
