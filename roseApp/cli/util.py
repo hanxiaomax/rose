@@ -41,7 +41,7 @@ def build_banner():
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("Yet another cross-platform and ROS Environment independent editor/filter tool for ROS bag files", style=f"{PRIMARY_COLOR}")
+    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{PRIMARY_COLOR}")
     
     # Create panel with all elements
     panel = Panel(

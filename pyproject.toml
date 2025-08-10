@@ -48,7 +48,7 @@ Homepage = "https://github.com/hanxiaomax/rose"
 "Bug Tracker" = "https://github.com/hanxiaomax/rose/issues"
 
 [project.scripts]
-rose = "roseApp.rose:app"
+rose = "roseApp.rose:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["roseApp"]

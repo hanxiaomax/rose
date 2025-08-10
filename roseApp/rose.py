@@ -69,9 +69,7 @@ def callback(
         # cache.enable_profiling()  # Enable if profiling method exists
         logger.info("Performance profiling enabled")
     
-    if ctx.invoked_subcommand is None:
-        from .cli.error_handling import show_available_commands
-        show_available_commands()
+
 
 
 # Add subcommands
