@@ -16,6 +16,7 @@ import tempfile
 
 from roseApp.core.util import get_logger
 from .model import ComprehensiveBagInfo
+from .directories import get_cache_dir
 
 _logger = get_logger("cache")
 
@@ -76,7 +77,7 @@ class UnifiedCache:
     
     def __init__(self, cache_dir: Optional[Path] = None):
         if cache_dir is None:
-            cache_dir = Path(tempfile.gettempdir()) / "rose_cache"
+            cache_dir = Path(get_cache_dir())
         
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)

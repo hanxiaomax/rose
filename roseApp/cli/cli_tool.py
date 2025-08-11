@@ -19,6 +19,7 @@ from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
 from ..core.ui_control import UIControl, Message
+from ..core.directories import get_rose_directories
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
                    print_usage_instructions, 
@@ -35,6 +36,8 @@ app = typer.Typer(help="ROS Bag Filter Tool")
 class CliTool:
     def __init__(self):
         self.console = Console()
+        # Initialize Rose directories
+        self.rose_dirs = get_rose_directories()
         # Use parser directly instead of BagManager
         self.parser = create_parser()
         self.cache_manager = create_bag_cache_manager()
@@ -67,7 +70,7 @@ class CliTool:
                 
                 bag_info, _ = await self.parser.load_bag_async(
                     bag_path, 
-                    full_analysis=False,  # Use quick analysis for CLI
+                    build_index=False,  # Use quick analysis for CLI
                     progress_callback=progress_callback
                 )
             
@@ -204,8 +207,9 @@ class CliTool:
                     message="Select action:",
                     choices=[
                         Choice(value="filter", name="1. Bag Editor - View and filter bag files"),
-                        Choice(value="whitelist", name="2. Whitelist - Manage topic whitelists"),
-                        Choice(value="exit", name="3. Exit")
+                        Choice(value="wizard", name="2. Extraction Wizard - Generate extract commands"),
+                        Choice(value="whitelist", name="3. Whitelist - Manage topic whitelists"),
+                        Choice(value="exit", name="4. Exit")
                     ]
                 ).execute()
                 
@@ -213,6 +217,8 @@ class CliTool:
                     break
                 elif action == "filter":
                     self.interactive_filter()
+                elif action == "wizard":
+                    self.extract_wizard()
                 elif action == "whitelist":
                     self.whitelist_manager()
                 
@@ -429,12 +435,7 @@ class CliTool:
         
     
     def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
-        whitelist_dir = "whitelists"
-        if not os.path.exists(whitelist_dir):
-            Message("No whitelists found", "warning").render(self.console)
-            return None
-            
-        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+        whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
             Message("No whitelists found", "warning").render(self.console)
             return None
@@ -449,7 +450,7 @@ class CliTool:
             return None
             
         # Load selected whitelist
-        whitelist_path = os.path.join(whitelist_dir, selected)
+        whitelist_path = self.rose_dirs.get_whitelist_file(selected)
         return self._load_whitelist_sync(whitelist_path)
 
     def _get_filter_topics_from_manual_selection(self, selected_files: List[str]) -> Optional[List[str]]:
@@ -644,12 +645,7 @@ class CliTool:
         # Get filter parameters based on method (if not provided)
         if filter_method == "whitelist":
             # Get whitelist file
-            whitelist_dir = "whitelists"
-            if not os.path.exists(whitelist_dir):
-                self.console.print("No whitelists found", style=UIControl.get_color("warning"))
-                return
-                
-            whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+            whitelists = self.rose_dirs.list_whitelists()
             if not whitelists:
                 self.console.print("No whitelists found", style=UIControl.get_color("warning"))
                 return
@@ -664,7 +660,7 @@ class CliTool:
                 return
                 
             # Load selected whitelist
-            whitelist_path = os.path.join(whitelist_dir, selected)
+            whitelist_path = self.rose_dirs.get_whitelist_file(selected)
             whitelist = self._load_whitelist_sync(whitelist_path)
             if not whitelist:
                 return
@@ -775,27 +771,30 @@ class CliTool:
             
         # Save whitelist
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        default_path = f"whitelists/whitelist_{timestamp}.txt"
+        default_name = f"whitelist_{timestamp}.txt"
         
         use_default = inquirer.confirm(
-            message=f"Use default path? ({default_path})",
+            message=f"Use default name? ({default_name})",
             default=True
         ).execute()
         
         if use_default:
-            output = default_path
+            output_name = default_name
         else:
-            output = inquirer.filepath(
-                message="Enter save path:",
-                default="whitelists/my_whitelist.txt",
-                validate=lambda x: x.endswith('.txt') or "File must be a .txt file"
+            output_name = inquirer.text(
+                message="Enter whitelist name (without .txt extension):",
+                default="my_whitelist",
+                validate=lambda x: len(x.strip()) > 0 or "Name cannot be empty"
             ).execute()
             
-            if not output:
+            if not output_name:
                 return
+            
+            if not output_name.endswith('.txt'):
+                output_name += '.txt'
         
         # Save whitelist
-        os.makedirs(os.path.dirname(output) if os.path.dirname(output) else '.', exist_ok=True)
+        output = self.rose_dirs.get_whitelist_file(output_name)
         with open(output, 'w') as f:
             f.write("# Generated by rose cli-tool\n")
             f.write(f"# Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -803,7 +802,7 @@ class CliTool:
             for topic in sorted(selected_topics):
                 f.write(f"{topic}\n")
         
-        self.console.print(f"\nSaved whitelist to: {output}", style=theme.PRIMARY)
+        self.console.print(f"\nSaved whitelist to: {output}", style=UIControl.get_color("primary"))
         
         # Ask what to do next
         next_action = inquirer.select(
@@ -820,12 +819,7 @@ class CliTool:
     def _browse_whitelists(self):
         """Browse and view whitelist files"""
         # Get all whitelist files
-        whitelist_dir = "whitelists"
-        if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
-            return
-            
-        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+        whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
             self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
@@ -840,11 +834,11 @@ class CliTool:
             return
             
         # Show whitelist contents
-        path = os.path.join(whitelist_dir, selected)
+        path = self.rose_dirs.get_whitelist_file(selected)
         with open(path) as f:
             content = f.read()
             
-        self.console.print(f"\nWhitelist: {selected}", style=f"bold {theme.PRIMARY}")
+        self.console.print(f"\nWhitelist: {selected}", style=f"bold {UIControl.get_color('primary')}")
         self.console.print("─" * 80)
         self.console.print(content)
     
@@ -854,12 +848,7 @@ class CliTool:
         
     def _delete_whitelist(self):
         """Delete a whitelist file"""
-        whitelist_dir = "whitelists"
-        if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
-            return
-            
-        whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
+        whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
             self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
@@ -881,12 +870,364 @@ class CliTool:
             return
             
         # Delete the file
-        path = os.path.join(whitelist_dir, selected)
+        path = self.rose_dirs.get_whitelist_file(selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style=theme.PRIMARY)
+            self.console.print(f"\nDeleted whitelist: {selected}", style=UIControl.get_color("primary"))
         except Exception as e:
-            self.console.print(f"\nError deleting whitelist: {str(e)}", style=theme.ERROR)
+            self.console.print(f"\nError deleting whitelist: {str(e)}", style=UIControl.get_color("error"))
+
+    def extract_wizard(self):
+        """Extract wizard - Generate extract commands for reuse"""
+        while True:
+            action = inquirer.select(
+                message="Extract Wizard:",
+                choices=[
+                    Choice(value="create", name="1. Create new extract command"),
+                    Choice(value="view", name="2. View saved commands"),
+                    Choice(value="run", name="3. Run saved command"),
+                    Choice(value="delete", name="4. Delete saved command"),
+                    Choice(value="back", name="5. Back")
+                ]
+            ).execute()
+            
+            if action == "back":
+                return
+            elif action == "create":
+                self._create_extract_command()
+            elif action == "view":
+                self._view_extract_commands()
+            elif action == "run":
+                self._run_extract_command()
+            elif action == "delete":
+                self._delete_extract_command()
+    
+    def _create_extract_command(self):
+        """Create a new extract command"""
+        # Get input bag file
+        input_bag = self.ask_for_bag("Select input bag file:")
+        if not input_bag:
+            return
+        
+        # Load bag information
+        with LoadingAnimation("Loading bag file...", dismiss=True) as progress:
+            progress.add_task(description="Loading...")
+            topics, connections, time_range = self._load_bag_sync(input_bag)
+        
+        # Get output file pattern
+        output_pattern = inquirer.text(
+            message="Enter output file pattern (use {input} for input filename):",
+            default="{input}_extracted.bag",
+            validate=lambda x: len(x.strip()) > 0 or "Pattern cannot be empty"
+        ).execute()
+        
+        if not output_pattern:
+            return
+        
+        # Select topics
+        selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
+        if not selected_topics:
+            return
+        
+        # Time range selection
+        use_time_range = inquirer.confirm(
+            message="Do you want to specify a time range?",
+            default=False
+        ).execute()
+        
+        start_time = None
+        end_time = None
+        if use_time_range and time_range:
+            # Convert time range to seconds for easier input
+            if hasattr(time_range, 'get_start_ns'):
+                start_sec = time_range.get_start_ns() / 1_000_000_000
+                end_sec = time_range.get_end_ns() / 1_000_000_000
+            else:
+                start_sec = time_range.start_time[0] + time_range.start_time[1] / 1_000_000_000
+                end_sec = time_range.end_time[0] + time_range.end_time[1] / 1_000_000_000
+            
+            self.console.print(f"Bag time range: {start_sec:.3f} - {end_sec:.3f} seconds")
+            
+            start_time = inquirer.number(
+                message=f"Enter start time (seconds, default: {start_sec:.3f}):",
+                default=start_sec,
+                min_allowed=start_sec,
+                max_allowed=end_sec
+            ).execute()
+            
+            if start_time is not None:
+                end_time = inquirer.number(
+                    message=f"Enter end time (seconds, default: {end_sec:.3f}):",
+                    default=end_sec,
+                    min_allowed=start_time,
+                    max_allowed=end_sec
+                ).execute()
+        
+        # Compression selection
+        from roseApp.core.util import get_available_compression_types
+        available_compressions = get_available_compression_types()
+        
+        compression_choices = []
+        if "none" in available_compressions:
+            compression_choices.append(Choice(value="none", name="No compression"))
+        if "bz2" in available_compressions:
+            compression_choices.append(Choice(value="bz2", name="BZ2 compression"))
+        if "lz4" in available_compressions:
+            compression_choices.append(Choice(value="lz4", name="LZ4 compression"))
+        
+        compression = inquirer.select(
+            message="Choose compression type:",
+            choices=compression_choices,
+            default="none"
+        ).execute()
+        
+        if compression is None:
+            return
+        
+        # Save command
+        command_name = inquirer.text(
+            message="Enter command name:",
+            default=f"extract_{time.strftime('%Y%m%d_%H%M%S')}",
+            validate=lambda x: len(x.strip()) > 0 or "Name cannot be empty"
+        ).execute()
+        
+        if not command_name:
+            return
+        
+        # Create command data
+        command_data = {
+            'name': command_name,
+            'created': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'input_pattern': input_bag,  # Can be modified to use patterns
+            'output_pattern': output_pattern,
+            'topics': selected_topics,
+            'start_time': start_time,
+            'end_time': end_time,
+            'compression': compression,
+            'description': f"Extract {len(selected_topics)} topics from bag files"
+        }
+        
+        # Save to config directory
+        commands_file = self.rose_dirs.get_config_file('extract_commands.json')
+        
+        # Load existing commands
+        commands = []
+        if os.path.exists(commands_file):
+            try:
+                import json
+                with open(commands_file, 'r') as f:
+                    commands = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load existing commands: {e}")
+                commands = []
+        
+        # Add new command
+        commands.append(command_data)
+        
+        # Save updated commands
+        try:
+            import json
+            with open(commands_file, 'w') as f:
+                json.dump(commands, f, indent=2)
+            
+            self.console.print(f"\nSaved extract command: {command_name}", style=UIControl.get_color("primary"))
+            self._show_extract_command_summary(command_data)
+            
+        except Exception as e:
+            self.console.print(f"\nError saving command: {str(e)}", style=UIControl.get_color("error"))
+    
+    def _show_extract_command_summary(self, command_data):
+        """Show a summary of the extract command"""
+        self.console.print("\nCommand Summary:", style=f"bold {UIControl.get_color('primary')}")
+        self.console.print("─" * 50)
+        self.console.print(f"Name: {command_data['name']}")
+        self.console.print(f"Output: {command_data['output_pattern']}")
+        self.console.print(f"Topics: {len(command_data['topics'])} selected")
+        if command_data['start_time'] is not None:
+            self.console.print(f"Time range: {command_data['start_time']:.3f} - {command_data['end_time']:.3f} seconds")
+        self.console.print(f"Compression: {command_data['compression']}")
+        
+        # Show equivalent command line
+        topics_str = ' '.join([f'"{topic}"' for topic in command_data['topics']])
+        cmd = f"rose extract --input \"{{input_bag}}\" --output \"{command_data['output_pattern']}\" --topics {topics_str}"
+        if command_data['start_time'] is not None:
+            cmd += f" --start-time {command_data['start_time']:.3f} --end-time {command_data['end_time']:.3f}"
+        if command_data['compression'] != "none":
+            cmd += f" --compression {command_data['compression']}"
+        
+        self.console.print(f"\nEquivalent command:")
+        self.console.print(f"  {cmd}", style=UIControl.get_color("info"))
+    
+    def _view_extract_commands(self):
+        """View saved extract commands"""
+        commands = self._load_extract_commands()
+        if not commands:
+            self.console.print("No saved extract commands found", style=UIControl.get_color("warning"))
+            return
+        
+        # Select command to view
+        choices = [
+            Choice(value=i, name=f"{cmd['name']} - {cmd['description']} ({cmd['created']})")
+            for i, cmd in enumerate(commands)
+        ]
+        
+        selected_idx = inquirer.select(
+            message="Select command to view:",
+            choices=choices
+        ).execute()
+        
+        if selected_idx is not None:
+            self._show_extract_command_summary(commands[selected_idx])
+    
+    def _run_extract_command(self):
+        """Run a saved extract command"""
+        commands = self._load_extract_commands()
+        if not commands:
+            self.console.print("No saved extract commands found", style=UIControl.get_color("warning"))
+            return
+        
+        # Select command to run
+        choices = [
+            Choice(value=i, name=f"{cmd['name']} - {cmd['description']}")
+            for i, cmd in enumerate(commands)
+        ]
+        
+        selected_idx = inquirer.select(
+            message="Select command to run:",
+            choices=choices
+        ).execute()
+        
+        if selected_idx is None:
+            return
+        
+        command_data = commands[selected_idx]
+        
+        # Get input bag file(s)
+        input_bag = self.ask_for_bag("Select input bag file:")
+        if not input_bag:
+            return
+        
+        # Generate output filename
+        input_name = os.path.splitext(os.path.basename(input_bag))[0]
+        output_bag = command_data['output_pattern'].replace('{input}', input_name)
+        
+        # Ask for output confirmation
+        output_bag = inquirer.text(
+            message="Output file:",
+            default=output_bag
+        ).execute()
+        
+        if not output_bag:
+            return
+        
+        # Check if output exists
+        if os.path.exists(output_bag):
+            overwrite = inquirer.confirm(
+                message=f"Output file '{output_bag}' already exists. Overwrite?",
+                default=False
+            ).execute()
+            
+            if not overwrite:
+                return
+        
+        # Run the extraction
+        self.console.print(f"\nRunning extract command: {command_data['name']}")
+        
+        try:
+            # Create ExtractOption
+            extract_option = ExtractOption(
+                topics=command_data['topics'],
+                compression=command_data['compression'],
+                overwrite=True
+            )
+            
+            # Set time range if specified
+            if command_data['start_time'] is not None:
+                # Convert to nanoseconds
+                start_ns = int(command_data['start_time'] * 1_000_000_000)
+                end_ns = int(command_data['end_time'] * 1_000_000_000)
+                extract_option.time_range = (start_ns, end_ns)
+            
+            # Run extraction with progress
+            with LoadingAnimation("Extracting...", dismiss=True) as progress:
+                task_id = progress.add_task(f"Extracting: {os.path.basename(input_bag)}", total=100)
+                
+                def update_progress(percent: int):
+                    progress.update(task_id, completed=percent)
+                
+                result = self._filter_bag_sync(
+                    input_bag,
+                    output_bag,
+                    command_data['topics'],
+                    progress_callback=update_progress,
+                    compression=command_data['compression'],
+                    overwrite=True
+                )
+            
+            self.console.print(f"\nExtraction completed successfully!", style=UIControl.get_color("success"))
+            self.console.print(f"Output: {output_bag}")
+            
+        except Exception as e:
+            self.console.print(f"\nExtraction failed: {str(e)}", style=UIControl.get_color("error"))
+    
+    def _delete_extract_command(self):
+        """Delete a saved extract command"""
+        commands = self._load_extract_commands()
+        if not commands:
+            self.console.print("No saved extract commands found", style=UIControl.get_color("warning"))
+            return
+        
+        # Select command to delete
+        choices = [
+            Choice(value=i, name=f"{cmd['name']} - {cmd['description']}")
+            for i, cmd in enumerate(commands)
+        ]
+        
+        selected_idx = inquirer.select(
+            message="Select command to delete:",
+            choices=choices
+        ).execute()
+        
+        if selected_idx is None:
+            return
+        
+        command_data = commands[selected_idx]
+        
+        # Confirm deletion
+        if not inquirer.confirm(
+            message=f"Are you sure you want to delete '{command_data['name']}'?",
+            default=False
+        ).execute():
+            return
+        
+        # Remove command and save
+        commands.pop(selected_idx)
+        
+        try:
+            import json
+            commands_file = self.rose_dirs.get_config_file('extract_commands.json')
+            with open(commands_file, 'w') as f:
+                json.dump(commands, f, indent=2)
+            
+            self.console.print(f"\nDeleted extract command: {command_data['name']}", style=UIControl.get_color("primary"))
+            
+        except Exception as e:
+            self.console.print(f"\nError deleting command: {str(e)}", style=UIControl.get_color("error"))
+    
+    def _load_extract_commands(self):
+        """Load saved extract commands"""
+        commands_file = self.rose_dirs.get_config_file('extract_commands.json')
+        
+        if not os.path.exists(commands_file):
+            return []
+        
+        try:
+            import json
+            with open(commands_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load extract commands: {e}")
+            return []
 
 # Typer commands
 @app.command()

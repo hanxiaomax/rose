@@ -505,7 +505,7 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
             
             bag_info, elapsed_time = await parser.load_bag_async(
                 str(bag_path), 
-                full_analysis=False,  # Use quick analysis by default
+                build_index=False,  # Use quick analysis by default
                 progress_callback=progress_callback if verbose else None
             )
             
