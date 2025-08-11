@@ -108,7 +108,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
         action = inquirer.select(
             message="What would you like to do?",
             choices=[
-                Choice(value="filter", name="1. Filter topics (fuzzy search)"),
+                Choice(value="filter", name="1. show topics (fuzzy search)"),
                 Choice(value="back", name="2. Back")
             ]
         ).execute()

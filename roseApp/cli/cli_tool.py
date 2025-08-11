@@ -184,7 +184,7 @@ class CliTool:
                     return output_bag, True  # File path and overwrite=True
                 else:
                     # User doesn't want to overwrite, ask for different filename
-                    self.console.print("Please choose a different filename.", style=theme.WARNING)
+                    self.console.print("Please choose a different filename.", style=UIControl.get_color("warning"))
                     continue  # Go back to filename input
             else:
                 # File doesn't exist, no need to overwrite
@@ -601,7 +601,7 @@ class CliTool:
                         active_files.remove(bag_file)
             
             max_workers = min(len(selected_files), WORKERS)
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=theme.INFO)
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=UIControl.get_color("info"))
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks to the executor without creating progress tasks yet
@@ -646,12 +646,12 @@ class CliTool:
             # Get whitelist file
             whitelist_dir = "whitelists"
             if not os.path.exists(whitelist_dir):
-                self.console.print("No whitelists found", style=theme.WARNING)
+                self.console.print("No whitelists found", style=UIControl.get_color("warning"))
                 return
                 
             whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
             if not whitelists:
-                self.console.print("No whitelists found", style=theme.WARNING)
+                self.console.print("No whitelists found", style=UIControl.get_color("warning"))
                 return
                 
             # Select whitelist to use
@@ -822,12 +822,12 @@ class CliTool:
         # Get all whitelist files
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=theme.WARNING)
+            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style=theme.WARNING)
+            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
             
         # Select whitelist to view
@@ -856,12 +856,12 @@ class CliTool:
         """Delete a whitelist file"""
         whitelist_dir = "whitelists"
         if not os.path.exists(whitelist_dir):
-            self.console.print("No whitelists found", style=theme.WARNING)
+            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
             
         whitelists = [f for f in os.listdir(whitelist_dir) if f.endswith('.txt')]
         if not whitelists:
-            self.console.print("No whitelists found", style=theme.WARNING)
+            self.console.print("No whitelists found", style=UIControl.get_color("warning"))
             return
             
         # Select whitelist to delete
