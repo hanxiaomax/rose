@@ -55,6 +55,14 @@ class CliTool:
             asyncio.set_event_loop(loop)
         return loop.run_until_complete(coro)
     
+    def _validate_float_in_range(self, value_str: str, min_val: float, max_val: float) -> bool:
+        """Validate that a string represents a float within the given range"""
+        try:
+            value = float(value_str)
+            return min_val <= value <= max_val
+        except (ValueError, TypeError):
+            return False
+    
     def _load_bag_sync(self, bag_path: str) -> Tuple[List[str], Dict[str, str], Tuple]:
         """Synchronous wrapper for bag loading using parser.load_bag_async"""
         async def _load():
@@ -948,19 +956,19 @@ class CliTool:
             
             self.console.print(f"Bag time range: {start_sec:.3f} - {end_sec:.3f} seconds")
             
-            start_time = inquirer.number(
+            start_time = inquirer.text(
                 message=f"Enter start time (seconds, default: {start_sec:.3f}):",
-                default=start_sec,
-                min_allowed=start_sec,
-                max_allowed=end_sec
+                default=str(start_sec),
+                validate=lambda x: self._validate_float_in_range(x, start_sec, end_sec) or f"Must be a number between {start_sec:.3f} and {end_sec:.3f}",
+                filter=lambda x: float(x) if x else start_sec
             ).execute()
             
             if start_time is not None:
-                end_time = inquirer.number(
+                end_time = inquirer.text(
                     message=f"Enter end time (seconds, default: {end_sec:.3f}):",
-                    default=end_sec,
-                    min_allowed=start_time,
-                    max_allowed=end_sec
+                    default=str(end_sec),
+                    validate=lambda x: self._validate_float_in_range(x, start_time, end_sec) or f"Must be a number between {start_time:.3f} and {end_sec:.3f}",
+                    filter=lambda x: float(x) if x else end_sec
                 ).execute()
         
         # Compression selection

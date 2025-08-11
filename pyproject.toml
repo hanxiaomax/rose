@@ -58,5 +58,11 @@ include = [
     "roseApp/**/*.py",
     "roseApp/**/*.tcss",
     "roseApp/**/*.json",
-    "roseApp/whitelists/*",
-] 
+]
+exclude = [
+    "roseApp/tests/**",
+    "**/*_test.py",
+    "**/test_*.py",
+    "**/conftest.py",
+    "**/.pytest_cache/**",
+]
