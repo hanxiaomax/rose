@@ -147,6 +147,11 @@ async def main():
     
     
     print(bag_info.df.to_csv("df.csv"))
+    
+    range_data = bag_info.df[bag_info.df['topic'] == '/radar/range']['range']
+    track_angles = bag_info.df['tracks[0].angle'].dropna()
+    print(range_data)
+    print(track_angles)
 
 
 

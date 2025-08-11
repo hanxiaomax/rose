@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag1 import Writer as Rosbag1Writer
+from rosbags.serde import deserialize_cdr
 from roseApp.core.util import get_logger
 from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
@@ -409,13 +410,13 @@ class BagParser:
                 _logger.info(f"Reading messages for indexing...")
                 message_count = 0
                 
-                # Read all messages and create index
+                # Read all messages and create index with content
                 for connection, timestamp, rawdata in reader.messages():
                     # Convert timestamp to seconds for easier analysis
                     timestamp_sec = timestamp / 1_000_000_000
                     timestamp_ns = timestamp
                     
-                    # Create message record
+                    # Start with basic message record
                     message_record = {
                         'timestamp_sec': timestamp_sec,
                         'timestamp_ns': timestamp_ns,
@@ -425,12 +426,25 @@ class BagParser:
                         'connection_id': connection.id if hasattr(connection, 'id') else None
                     }
                     
+                    # Deserialize and flatten message content
+                    try:
+                        # Use the reader's built-in deserialization
+                        msg = reader.deserialize(rawdata, connection.msgtype)
+                        
+                        # Flatten message fields
+                        flattened_fields = self._flatten_message_fields(msg)
+                        message_record.update(flattened_fields)
+                        
+                    except Exception as e:
+                        _logger.debug(f"Failed to deserialize message on {connection.topic}: {e}")
+                        # Continue with basic record if deserialization fails
+                    
                     message_data.append(message_record)
                     message_count += 1
                     
                     # Log progress for large bags
                     if message_count % 10000 == 0:
-                        _logger.debug(f"Indexed {message_count} messages...")
+                        _logger.debug(f"Indexed {message_count} messages with content...")
                 
                 # Create DataFrame
                 if message_data:
@@ -442,6 +456,19 @@ class BagParser:
                     df['topic'] = df['topic'].astype('category')
                     df['message_type'] = df['message_type'].astype('category')
                     df['message_size'] = df['message_size'].astype('int32')
+                    
+                    # Optimize numeric columns
+                    for col in df.columns:
+                        if col not in ['timestamp_sec', 'timestamp_ns', 'topic', 'message_type', 'message_size', 'connection_id']:
+                            if df[col].dtype == 'object':
+                                # Try to convert to numeric if possible
+                                try:
+                                    numeric_col = pd.to_numeric(df[col], errors='coerce')
+                                    # Only convert if we have some numeric values
+                                    if not numeric_col.isna().all():
+                                        df[col] = numeric_col
+                                except:
+                                    pass
                     
                     # Set timestamp as index for time-based analysis
                     df.set_index('timestamp_sec', inplace=True)
@@ -467,6 +494,89 @@ class BagParser:
         except Exception as e:
             _logger.error(f"Error in index analysis for {bag_path}: {e}")
             raise Exception(f"Error in index analysis: {e}")
+    
+    def _flatten_message_fields(self, msg: Any, prefix: str = '', max_depth: int = 3, current_depth: int = 0) -> Dict[str, Any]:
+        """
+        Flatten message fields into a dictionary for DataFrame storage
+        
+        Args:
+            msg: The deserialized message object
+            prefix: Field name prefix for nested structures
+            max_depth: Maximum nesting depth to prevent infinite recursion
+            current_depth: Current nesting depth
+            
+        Returns:
+            Dictionary of flattened field values
+        """
+        flattened = {}
+        
+        if current_depth >= max_depth:
+            return flattened
+        
+        try:
+            # Handle different message types
+            if hasattr(msg, '__dict__'):
+                # Standard message with attributes
+                for field_name, field_value in msg.__dict__.items():
+                    if field_name.startswith('_'):
+                        continue  # Skip private fields
+                    
+                    full_field_name = f"{prefix}.{field_name}" if prefix else field_name
+                    
+                    # Handle different data types
+                    if field_value is None:
+                        flattened[full_field_name] = None
+                    elif isinstance(field_value, (int, float, bool, str)):
+                        flattened[full_field_name] = field_value
+                    elif isinstance(field_value, (list, tuple)):
+                        # Handle arrays/lists
+                        if len(field_value) == 0:
+                            flattened[f"{full_field_name}_length"] = 0
+                        else:
+                            flattened[f"{full_field_name}_length"] = len(field_value)
+                            # Store first few elements for arrays of primitives
+                            for i, item in enumerate(field_value[:5]):  # Limit to first 5 elements
+                                if isinstance(item, (int, float, bool, str)):
+                                    flattened[f"{full_field_name}[{i}]"] = item
+                                elif hasattr(item, '__dict__') and current_depth < max_depth - 1:
+                                    # Nested object in array
+                                    nested = self._flatten_message_fields(
+                                        item, f"{full_field_name}[{i}]", max_depth, current_depth + 1
+                                    )
+                                    flattened.update(nested)
+                    elif hasattr(field_value, '__dict__') and current_depth < max_depth - 1:
+                        # Nested message
+                        nested = self._flatten_message_fields(
+                            field_value, full_field_name, max_depth, current_depth + 1
+                        )
+                        flattened.update(nested)
+                    else:
+                        # Convert other types to string representation
+                        flattened[full_field_name] = str(field_value)
+            
+            elif hasattr(msg, '__slots__'):
+                # Message with slots
+                for field_name in msg.__slots__:
+                    if hasattr(msg, field_name):
+                        field_value = getattr(msg, field_name)
+                        full_field_name = f"{prefix}.{field_name}" if prefix else field_name
+                        
+                        if isinstance(field_value, (int, float, bool, str)):
+                            flattened[full_field_name] = field_value
+                        elif field_value is None:
+                            flattened[full_field_name] = None
+                        elif hasattr(field_value, '__dict__') and current_depth < max_depth - 1:
+                            nested = self._flatten_message_fields(
+                                field_value, full_field_name, max_depth, current_depth + 1
+                            )
+                            flattened.update(nested)
+                        else:
+                            flattened[full_field_name] = str(field_value)
+            
+        except Exception as e:
+            _logger.warning(f"Error flattening message fields: {e}")
+        
+        return flattened
     
     def _analyze_bag_full(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """
