@@ -932,7 +932,27 @@ class CliTool:
         if not output_pattern:
             return
         
+        # Ask user whether to include or exclude topics
+        topic_mode = inquirer.select(
+            message="Topic selection mode:",
+            choices=[
+                Choice(value="include", name="Include selected topics (default)"),
+                Choice(value="exclude", name="Exclude selected topics (use --reverse)")
+            ],
+            default="include"
+        ).execute()
+        
+        if not topic_mode:
+            return
+        
         # Select topics
+        if topic_mode == "include":
+            prompt_message = "Select topics to INCLUDE in the extract:"
+        else:
+            prompt_message = "Select topics to EXCLUDE from the extract:"
+        
+        # Show the mode to user
+        self.console.print(f"\n{prompt_message}", style=UIControl.get_color("info"))
         selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
         if not selected_topics:
             return
@@ -1009,10 +1029,11 @@ class CliTool:
             'input_pattern': input_bag,  # Can be modified to use patterns
             'output_pattern': output_pattern,
             'topics': selected_topics,
+            'topic_mode': topic_mode,  # 'include' or 'exclude'
             'start_time': start_time,
             'end_time': end_time,
             'compression': compression,
-            'description': f"Extract {len(selected_topics)} topics from bag files"
+            'description': f"{'Exclude' if topic_mode == 'exclude' else 'Extract'} {len(selected_topics)} topics from bag files"
         }
         
         # Save to config directory
@@ -1050,7 +1071,9 @@ class CliTool:
         self.console.print("─" * 50)
         self.console.print(f"Name: {command_data['name']}")
         self.console.print(f"Output: {command_data['output_pattern']}")
-        self.console.print(f"Topics: {len(command_data['topics'])} selected")
+        topic_mode = command_data.get('topic_mode', 'include')
+        mode_text = "exclude" if topic_mode == 'exclude' else "include"
+        self.console.print(f"Topics: {len(command_data['topics'])} selected to {mode_text}")
         if command_data['start_time'] is not None:
             self.console.print(f"Time range: {command_data['start_time']:.3f} - {command_data['end_time']:.3f} seconds")
         self.console.print(f"Compression: {command_data['compression']}")
@@ -1058,6 +1081,11 @@ class CliTool:
         # Show equivalent command line
         topics_str = ' '.join([f'"{topic}"' for topic in command_data['topics']])
         cmd = f"rose extract --input \"{{input_bag}}\" --output \"{command_data['output_pattern']}\" --topics {topics_str}"
+        
+        # Add --reverse flag if topic_mode is exclude
+        if topic_mode == 'exclude':
+            cmd += " --reverse"
+            
         if command_data['start_time'] is not None:
             cmd += f" --start-time {command_data['start_time']:.3f} --end-time {command_data['end_time']:.3f}"
         if command_data['compression'] != "none":
@@ -1142,9 +1170,27 @@ class CliTool:
         self.console.print(f"\nRunning extract command: {command_data['name']}")
         
         try:
+            # Determine actual topics to extract based on topic_mode
+            topic_mode = command_data.get('topic_mode', 'include')
+            
+            if topic_mode == 'exclude':
+                # Load bag to get all available topics
+                all_topics, _, _ = self._load_bag_sync(input_bag)
+                # Exclude the specified topics
+                actual_topics = [t for t in all_topics if t not in command_data['topics']]
+                self.console.print(f"Excluding {len(command_data['topics'])} topics, extracting {len(actual_topics)} topics")
+            else:
+                # Include mode (default)
+                actual_topics = command_data['topics']
+                self.console.print(f"Including {len(actual_topics)} topics")
+            
+            if not actual_topics:
+                self.console.print("No topics to extract", style=UIControl.get_color("warning"))
+                return
+            
             # Create ExtractOption
             extract_option = ExtractOption(
-                topics=command_data['topics'],
+                topics=actual_topics,
                 compression=command_data['compression'],
                 overwrite=True
             )
@@ -1166,7 +1212,7 @@ class CliTool:
                 result = self._filter_bag_sync(
                     input_bag,
                     output_bag,
-                    command_data['topics'],
+                    actual_topics,
                     progress_callback=update_progress,
                     compression=command_data['compression'],
                     overwrite=True
