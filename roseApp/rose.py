@@ -12,6 +12,7 @@ import logging
 # Import necessary functions from utility modules
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
 from roseApp.cli.extract import extract as extract_main
+from roseApp.cli.compress import compress as compress_main
 from roseApp.cli.inspect import app as inspect_app
 # from roseApp.cli.plot import app as plot_app
 from roseApp.cli.cache import app as cache_app
@@ -75,6 +76,7 @@ def callback(
 # Add subcommands
 app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
+app.command(name="compress")(compress_main)
 app.add_typer(inspect_app)
 # app.add_typer(plot_app)
 app.add_typer(cache_app)
