@@ -95,13 +95,9 @@ async def validate_bag_file(bag_path: Path) -> dict:
         
         # Get basic statistics
         topics_count = len(bag_info.get_topic_names())
-        messages_count = 0
-        for topic in bag_info.topics:
-            if hasattr(topic, 'message_count') and topic.message_count is not None:
-                messages_count += topic.message_count
         
-        # Try to read a few messages to ensure the file is not corrupted
-        # Use the same reader logic as the parser
+        # Count messages by actually reading the bag file
+        messages_count = 0
         try:
             from rosbags.rosbag1 import Reader as ROS1Reader
             from rosbags.rosbag2 import Reader as ROS2Reader
@@ -109,29 +105,11 @@ async def validate_bag_file(bag_path: Path) -> dict:
             # Try ROS1 format first (most common for compressed bags)
             try:
                 with ROS1Reader(str(bag_path)) as reader:
-                    # Try to read first 10 messages (just check if we can iterate)
-                    message_count = 0
+                    # Count all messages and validate first few
+                    validation_count = 0
                     for connection, timestamp, rawdata in reader.messages():
-                        if message_count >= 10:  # Only check first 10 messages
-                            break
-                        # Just check that we can read the raw data
-                        if rawdata is None or len(rawdata) == 0:
-                            return {
-                                'valid': False,
-                                'error': 'Empty message data found',
-                                'topics_count': topics_count,
-                                'messages_count': messages_count
-                            }
-                        message_count += 1
-            except Exception:
-                # If ROS1 fails, try ROS2 format
-                try:
-                    with ROS2Reader(str(bag_path)) as reader:
-                        # Try to read first 10 messages
-                        message_count = 0
-                        for connection, timestamp, rawdata in reader.messages():
-                            if message_count >= 10:  # Only check first 10 messages
-                                break
+                        # Validate first 10 messages
+                        if validation_count < 10:
                             # Just check that we can read the raw data
                             if rawdata is None or len(rawdata) == 0:
                                 return {
@@ -140,7 +118,27 @@ async def validate_bag_file(bag_path: Path) -> dict:
                                     'topics_count': topics_count,
                                     'messages_count': messages_count
                                 }
-                            message_count += 1
+                            validation_count += 1
+                        messages_count += 1
+            except Exception:
+                # If ROS1 fails, try ROS2 format
+                try:
+                    with ROS2Reader(str(bag_path)) as reader:
+                        # Count all messages and validate first few
+                        validation_count = 0
+                        for connection, timestamp, rawdata in reader.messages():
+                            # Validate first 10 messages
+                            if validation_count < 10:
+                                # Just check that we can read the raw data
+                                if rawdata is None or len(rawdata) == 0:
+                                    return {
+                                        'valid': False,
+                                        'error': 'Empty message data found',
+                                        'topics_count': topics_count,
+                                        'messages_count': messages_count
+                                    }
+                                validation_count += 1
+                            messages_count += 1
                 except Exception as e2:
                     return {
                         'valid': False,
