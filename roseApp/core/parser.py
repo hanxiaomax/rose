@@ -446,41 +446,14 @@ class BagParser:
                     if message_count % 10000 == 0:
                         _logger.debug(f"Indexed {message_count} messages with content...")
                 
-                # Create DataFrame
+                # Create topic-based DataFrames (new approach)
                 if message_data:
-                    df = pd.DataFrame(message_data)
+                    self._create_topic_dataframes(message_data, quick_info)
                     
-                    # Optimize DataFrame dtypes for memory efficiency
-                    df['timestamp_sec'] = df['timestamp_sec'].astype('float64')
-                    df['timestamp_ns'] = df['timestamp_ns'].astype('int64')
-                    df['topic'] = df['topic'].astype('category')
-                    df['message_type'] = df['message_type'].astype('category')
-                    df['message_size'] = df['message_size'].astype('int32')
-                    
-                    # Optimize numeric columns
-                    for col in df.columns:
-                        if col not in ['timestamp_sec', 'timestamp_ns', 'topic', 'message_type', 'message_size', 'connection_id']:
-                            if df[col].dtype == 'object':
-                                # Try to convert to numeric if possible
-                                try:
-                                    numeric_col = pd.to_numeric(df[col], errors='coerce')
-                                    # Only convert if we have some numeric values
-                                    if not numeric_col.isna().all():
-                                        df[col] = numeric_col
-                                except:
-                                    pass
-                    
-                    # Set timestamp as index for time-based analysis
-                    df.set_index('timestamp_sec', inplace=True)
-                    df.sort_index(inplace=True)
-                    
-                    # Store DataFrame in bag info
-                    quick_info.df = df
-                    
-                    _logger.info(f"Created message index with {len(df)} messages")
+                    total_messages = sum(len(df) for df in quick_info.topic_dataframes.values() if df is not None)
+                    _logger.info(f"Created topic-based storage with {total_messages} messages across {len(quick_info.topic_dataframes)} topics")
                 else:
                     _logger.warning("No messages found in bag file")
-                    quick_info.df = pd.DataFrame()  # Empty DataFrame
                 
                 # Update metadata
                 quick_info.last_updated = time.time()
@@ -577,6 +550,97 @@ class BagParser:
             _logger.warning(f"Error flattening message fields: {e}")
         
         return flattened
+    
+    def _create_topic_dataframes(self, message_data: List[Dict], bag_info: ComprehensiveBagInfo) -> None:
+        """
+        Create topic-based DataFrames from message data (replaces sparse DataFrame)
+        
+        Args:
+            message_data: List of flattened message dictionaries
+            bag_info: ComprehensiveBagInfo to store the DataFrames
+        """
+        if not PANDAS_AVAILABLE:
+            return
+        
+        # Group messages by topic
+        topic_messages = {}
+        for message in message_data:
+            topic = message.get('topic')
+            if topic:
+                if topic not in topic_messages:
+                    topic_messages[topic] = []
+                topic_messages[topic].append(message)
+        
+        # Create DataFrame for each topic
+        for topic_name, messages in topic_messages.items():
+            if not messages:
+                continue
+            
+            # Create DataFrame from topic messages
+            topic_df = pd.DataFrame(messages)
+            
+            # Remove completely empty columns for this topic
+            topic_df = topic_df.dropna(axis=1, how='all')
+            
+            # Optimize DataFrame dtypes for memory efficiency
+            if 'timestamp_sec' in topic_df.columns:
+                topic_df['timestamp_sec'] = topic_df['timestamp_sec'].astype('float64')
+            if 'timestamp_ns' in topic_df.columns:
+                topic_df['timestamp_ns'] = topic_df['timestamp_ns'].astype('int64')
+            if 'topic' in topic_df.columns:
+                topic_df['topic'] = topic_df['topic'].astype('category')
+            if 'message_type' in topic_df.columns:
+                topic_df['message_type'] = topic_df['message_type'].astype('category')
+            if 'message_size' in topic_df.columns:
+                topic_df['message_size'] = topic_df['message_size'].astype('int32')
+            
+            # Optimize numeric columns
+            for col in topic_df.columns:
+                if col not in ['timestamp_sec', 'timestamp_ns', 'topic', 'message_type', 'message_size', 'connection_id']:
+                    if topic_df[col].dtype == 'object':
+                        # Try to convert to numeric if possible
+                        try:
+                            numeric_col = pd.to_numeric(topic_df[col], errors='coerce')
+                            # Only convert if we have some numeric values
+                            if not numeric_col.isna().all():
+                                topic_df[col] = numeric_col
+                        except:
+                            pass
+            
+            # Sort by timestamp
+            if 'timestamp_sec' in topic_df.columns:
+                topic_df = topic_df.sort_values('timestamp_sec').reset_index(drop=True)
+            
+            # Get message type for this topic
+            message_type = topic_df['message_type'].iloc[0] if 'message_type' in topic_df.columns and len(topic_df) > 0 else 'unknown'
+            
+            # Add to bag info
+            bag_info.add_topic_dataframe(topic_name, topic_df, message_type)
+            
+            _logger.debug(f"Created DataFrame for topic {topic_name}: {len(topic_df)} messages, {len(topic_df.columns)} columns")
+        
+        # Update time range from topic DataFrames
+        self._update_time_range_from_topics(bag_info)
+    
+    def _update_time_range_from_topics(self, bag_info: ComprehensiveBagInfo) -> None:
+        """Update time range information from topic DataFrames"""
+        if not PANDAS_AVAILABLE:
+            return
+        
+        all_times = []
+        for topic_df in bag_info.topic_dataframes.values():
+            if topic_df is not None and 'timestamp_sec' in topic_df.columns:
+                all_times.extend(topic_df['timestamp_sec'].tolist())
+        
+        if all_times:
+            start_time = min(all_times)
+            end_time = max(all_times)
+            
+            # Store as tuple for compatibility
+            bag_info.time_range = (start_time, end_time)
+            bag_info.duration_seconds = end_time - start_time
+            
+            _logger.debug(f"Updated time range: {start_time:.3f} - {end_time:.3f} ({bag_info.duration_seconds:.1f}s)")
     
     def _analyze_bag_full(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
         """

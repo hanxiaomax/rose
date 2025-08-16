@@ -19,7 +19,7 @@ from roseApp.cli.cache import app as cache_app
 from roseApp.cli.cli_tool import app as cli_tool_app
 from roseApp.cli.load import load as load_main
 # from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
-from roseApp.tui.tui import app as tui_app
+# from roseApp.tui.tui import app as tui_app
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -82,7 +82,7 @@ app.add_typer(inspect_app)
 app.add_typer(cache_app)
 app.add_typer(cli_tool_app)
 # app.add_typer(profile_app)  # Temporarily disabled due to API migration
-app.add_typer(tui_app)
+# app.add_typer(tui_app)
 
 if __name__ == '__main__':
     try:

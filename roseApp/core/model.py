@@ -233,8 +233,8 @@ class ComprehensiveBagInfo:
     topics: List[TopicInfo] = field(default_factory=list)
     message_types: List[MessageTypeInfo] = field(default_factory=list)
     
-    # Time information
-    time_range: Optional[TimeRange] = None
+    # Time information  
+    time_range: Optional[Union[TimeRange, Tuple[float, float]]] = None
     duration_seconds: Optional[float] = None
     
     # === FULL ANALYSIS DATA ===
@@ -247,9 +247,10 @@ class ComprehensiveBagInfo:
     # Keep this as simple structure since it's optional
     cached_message_topics: List[str] = field(default_factory=list)
     
-    # === MESSAGE INDEX DATA ===
-    # DataFrame for message indexing and data analysis (only when build_index=True)
-    df: Optional[Any] = field(default=None)  # Use Any to avoid pandas import issues
+    # === SMART DATAFRAME STORAGE ===
+    # Topic-based DataFrame storage (replaces sparse DataFrame)
+    topic_dataframes: Dict[str, Any] = field(default_factory=dict)  # topic_name -> TopicDataFrame
+    topics_by_type: Dict[str, List[str]] = field(default_factory=dict)  # message_type -> [topic_names]
     
     # === METADATA FOR PERSISTENCE AND MEMORY MANAGEMENT ===
     _memory_footprint: Optional[int] = field(default=None, init=False)
@@ -532,8 +533,13 @@ class ComprehensiveBagInfo:
             
             'cached_message_topics': self.cached_message_topics,
             
-            # Serialize DataFrame if available
-            'df_data': self.df.to_json(orient='records', date_format='iso') if (self.df is not None and PANDAS_AVAILABLE) else None
+            # Serialize topic DataFrames
+            'topic_dataframes_data': {
+                topic_name: topic_df.to_json(orient='records', date_format='iso')
+                for topic_name, topic_df in self.topic_dataframes.items()
+                if topic_df is not None and PANDAS_AVAILABLE
+            },
+            'topics_by_type': self.topics_by_type
         }
         
         return json.dumps(data, indent=2, default=str)
@@ -594,13 +600,19 @@ class ComprehensiveBagInfo:
         if 'cached_message_topics' in data:
             instance.cached_message_topics = data['cached_message_topics']
         
-        # Restore DataFrame if available
-        if 'df_data' in data and data['df_data'] and PANDAS_AVAILABLE:
+        # Restore topic DataFrames if available
+        if 'topic_dataframes_data' in data and PANDAS_AVAILABLE:
             try:
-                instance.df = pd.read_json(data['df_data'], orient='records')
+                from io import StringIO
+                for topic_name, df_json in data['topic_dataframes_data'].items():
+                    topic_df = pd.read_json(StringIO(df_json), orient='records')
+                    instance.topic_dataframes[topic_name] = topic_df
             except Exception as e:
-                logger.warning(f"Failed to restore DataFrame: {e}")
-                instance.df = None
+                logger.warning(f"Failed to restore topic DataFrames: {e}")
+        
+        # Restore topics by type index
+        if 'topics_by_type' in data:
+            instance.topics_by_type = data['topics_by_type']
         
         # Restore metadata
         instance._access_count = data.get('_access_count', 0)
@@ -622,6 +634,153 @@ class ComprehensiveBagInfo:
             self.analysis_level = new_level
             self.last_updated = time.time()
     
+    # === SMART DATAFRAME ACCESS METHODS ===
+    
+    def add_topic_dataframe(self, topic_name: str, topic_df: Any, message_type: str) -> None:
+        """Add a topic DataFrame to the storage"""
+        self.topic_dataframes[topic_name] = topic_df
+        
+        # Update type index
+        if message_type not in self.topics_by_type:
+            self.topics_by_type[message_type] = []
+        if topic_name not in self.topics_by_type[message_type]:
+            self.topics_by_type[message_type].append(topic_name)
+    
+    def get_topic_data(self, topic_name: str) -> Optional[Any]:
+        """Get DataFrame for a specific topic"""
+        return self.topic_dataframes.get(topic_name)
+    
+    def get_topics_by_type(self, message_type: str) -> List[str]:
+        """Get all topics with a specific message type"""
+        return self.topics_by_type.get(message_type, [])
+    
+    def get_all_topics(self) -> List[str]:
+        """Get list of all topic names"""
+        return list(self.topic_dataframes.keys())
+    
+    def query_topic(self, topic_name: str, time_start: Optional[float] = None, 
+                   time_end: Optional[float] = None, **filters) -> Optional[Any]:
+        """Query a topic with optional time filtering and other filters"""
+        if not PANDAS_AVAILABLE:
+            return None
+            
+        df = self.get_topic_data(topic_name)
+        if df is None:
+            return None
+        
+        result_df = df
+        
+        # Apply time filtering
+        if time_start is not None or time_end is not None:
+            if 'timestamp_sec' not in df.columns:
+                logger.warning(f"Topic {topic_name} has no timestamp_sec column for time filtering")
+            else:
+                query_conditions = []
+                if time_start is not None:
+                    query_conditions.append(f"timestamp_sec >= {time_start}")
+                if time_end is not None:
+                    query_conditions.append(f"timestamp_sec <= {time_end}")
+                
+                if query_conditions:
+                    result_df = df.query(" and ".join(query_conditions))
+        
+        # Apply additional filters
+        for column, value in filters.items():
+            if column in result_df.columns:
+                if isinstance(value, (list, tuple)):
+                    result_df = result_df[result_df[column].isin(value)]
+                else:
+                    result_df = result_df[result_df[column] == value]
+        
+        return result_df
+    
+    def create_unified_timeline(self, topics: Optional[List[str]] = None) -> Optional[Any]:
+        """Create a unified timeline DataFrame with just timestamps and topics"""
+        if not PANDAS_AVAILABLE:
+            return None
+        
+        timeline_data = []
+        topics_to_process = topics or self.get_all_topics()
+        
+        for topic_name in topics_to_process:
+            topic_df = self.get_topic_data(topic_name)
+            if topic_df is not None and 'timestamp_sec' in topic_df.columns:
+                # Get message type for this topic
+                message_type = 'unknown'
+                for msg_type, topic_list in self.topics_by_type.items():
+                    if topic_name in topic_list:
+                        message_type = msg_type
+                        break
+                
+                topic_timeline = pd.DataFrame({
+                    'timestamp_sec': topic_df['timestamp_sec'],
+                    'topic': topic_name,
+                    'message_type': message_type,
+                    'message_size': topic_df.get('message_size', None)
+                })
+                timeline_data.append(topic_timeline)
+        
+        if timeline_data:
+            unified = pd.concat(timeline_data, ignore_index=True)
+            return unified.sort_values('timestamp_sec').reset_index(drop=True)
+        
+        return None
+    
+    def export_topic_csv(self, topic_name: str, output_path: Path) -> bool:
+        """Export a specific topic to CSV"""
+        df = self.get_topic_data(topic_name)
+        if df is not None:
+            df.to_csv(output_path, index=False)
+            return True
+        return False
+    
+    def export_all_topics_csv(self, output_dir: Path, 
+                             topic_filter: Optional[List[str]] = None) -> Dict[str, Path]:
+        """Export all topics to separate CSV files"""
+        from pathlib import Path
+        output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
+        exported_files = {}
+        
+        topics_to_export = topic_filter or self.get_all_topics()
+        
+        for topic_name in topics_to_export:
+            clean_name = topic_name.replace('/', '_').replace(':', '_')
+            csv_path = output_dir / f"{clean_name}.csv"
+            
+            if self.export_topic_csv(topic_name, csv_path):
+                exported_files[topic_name] = csv_path
+        
+        return exported_files
+    
+    def get_dataframe_stats(self) -> Dict[str, Any]:
+        """Get comprehensive DataFrame statistics"""
+        total_messages = 0
+        total_memory = 0
+        
+        topic_stats = {}
+        for topic_name, topic_df in self.topic_dataframes.items():
+            if topic_df is not None and PANDAS_AVAILABLE:
+                message_count = len(topic_df)
+                memory_usage = topic_df.memory_usage(deep=True).sum()
+                
+                total_messages += message_count
+                total_memory += memory_usage
+                
+                topic_stats[topic_name] = {
+                    'message_count': message_count,
+                    'memory_mb': memory_usage / 1024 / 1024,
+                    'columns': len(topic_df.columns)
+                }
+        
+        return {
+            'total_topics': len(self.topic_dataframes),
+            'total_messages': total_messages,
+            'total_memory_mb': total_memory / 1024 / 1024,
+            'topics_by_type': {k: len(v) for k, v in self.topics_by_type.items()},
+            'topic_stats': topic_stats
+        }
+
     def __str__(self) -> str:
         """String representation for debugging"""
         return f"ComprehensiveBagInfo(file='{self.file_path}', level={self.analysis_level.value}, topics={len(self.topics)})"

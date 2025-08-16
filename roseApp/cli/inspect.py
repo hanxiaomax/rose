@@ -26,6 +26,8 @@ def inspect(
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of topics shown"),
     as_format: str = typer.Option("table", "--as", help="Output format (table, list, summary, json, yaml, csv, xml, html, markdown)"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
+    df_topic: Optional[str] = typer.Option(None, "--df", help="Export DataFrame for specified topic to CSV"),
+    df_output: Optional[Path] = typer.Option(None, "--df-output", help="Output path for DataFrame CSV (default: {topic_name}.csv)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
 
@@ -35,6 +37,23 @@ def inspect(
     
     If the bag file is not in cache, you will be prompted to load it automatically.
     This command uses cached bag analysis for fast inspection.
+    
+    DataFrame Export:
+    Use --df to export a specific topic's DataFrame to CSV format.
+    The exported DataFrame contains all message data for that topic with optimized structure.
+    
+    Examples:
+        # Basic inspection
+        rose inspect my_bag.bag
+        
+        # Export radar topic DataFrame
+        rose inspect my_bag.bag --df /radar/points
+        
+        # Export with custom output path
+        rose inspect my_bag.bag --df /radar/points --df-output radar_data.csv
+        
+        # Combine inspection with DataFrame export
+        rose inspect my_bag.bag --topics /radar/points /gps/fix --df /radar/points
     """
     # Use UIControl for unified output management
     ui = UIControl()
@@ -80,6 +99,8 @@ def inspect(
             self.limit = limit
             self.output_format = output_format
             self.output_file = output
+            self.df_topic = df_topic
+            self.df_output = df_output
             self.verbose = verbose
     
     options = SimpleInspectOptions()
@@ -109,7 +130,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             'total_messages': bag_info.total_messages,
             'total_size': bag_info.total_size,
             'duration_seconds': bag_info.duration_seconds,
-            'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None,
+            'time_range': _format_time_range(bag_info.time_range) if bag_info.time_range else None,
             'bag_info': {
                 'file_name': Path(bag_info.file_path).name,
                 'file_size': bag_info.file_size or 0,
@@ -176,6 +197,10 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             if field_analysis:
                 result['field_analysis'] = field_analysis
         
+        # Handle DataFrame export if requested
+        if options.df_topic:
+            await _export_topic_dataframe(bag_info, options.df_topic, options.df_output, ui)
+        
         # Determine if we should export to file or render to console
         if options.output_file:
             # Export to file
@@ -215,6 +240,112 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
         raise typer.Exit(1)
     finally:
         pass
+
+
+async def _export_topic_dataframe(bag_info, topic_name: str, output_path: Optional[Path], ui: UIControl):
+    """
+    Export DataFrame for a specific topic to CSV
+    
+    Args:
+        bag_info: ComprehensiveBagInfo containing topic DataFrames
+        topic_name: Name of the topic to export
+        output_path: Optional output path (defaults to {topic_name}.csv)
+        ui: UIControl instance for user feedback
+    """
+    try:
+        # Check if topic exists in the new topic_dataframes structure
+        if hasattr(bag_info, 'topic_dataframes') and topic_name in bag_info.topic_dataframes:
+            # Use new topic-based DataFrame storage
+            topic_df = bag_info.topic_dataframes[topic_name]
+            
+            if topic_df is None or len(topic_df) == 0:
+                ui.show_error(f"Topic '{topic_name}' has no data")
+                return
+            
+            # Generate output path if not provided
+            if output_path is None:
+                clean_topic_name = topic_name.replace('/', '_').replace(':', '_')
+                output_path = Path(f"{clean_topic_name}.csv")
+            
+            # Export to CSV
+            topic_df.to_csv(output_path, index=False)
+            
+            # Show success message
+            file_size = output_path.stat().st_size / 1024 / 1024  # MB
+            ui.show_success(f"DataFrame exported: {topic_name} -> {output_path}")
+            ui.show_info(f"  - Rows: {len(topic_df):,}")
+            ui.show_info(f"  - Columns: {len(topic_df.columns)}")
+            ui.show_info(f"  - File size: {file_size:.2f} MB")
+            
+        elif hasattr(bag_info, 'df') and bag_info.df is not None:
+            # Fallback to legacy sparse DataFrame
+            ui.show_warning("Using legacy sparse DataFrame (consider updating to new cache format)")
+            
+            # Filter for the specific topic
+            topic_mask = bag_info.df['topic'] == topic_name
+            topic_data = bag_info.df[topic_mask]
+            
+            if len(topic_data) == 0:
+                ui.show_error(f"Topic '{topic_name}' not found in bag")
+                return
+            
+            # Remove completely empty columns
+            topic_data = topic_data.dropna(axis=1, how='all')
+            
+            # Generate output path if not provided
+            if output_path is None:
+                clean_topic_name = topic_name.replace('/', '_').replace(':', '_')
+                output_path = Path(f"{clean_topic_name}.csv")
+            
+            # Export to CSV
+            topic_data.to_csv(output_path, index=True)  # Include index for legacy format
+            
+            # Show success message
+            file_size = output_path.stat().st_size / 1024 / 1024  # MB
+            ui.show_success(f"DataFrame exported (legacy): {topic_name} -> {output_path}")
+            ui.show_info(f"  - Rows: {len(topic_data):,}")
+            ui.show_info(f"  - Columns: {len(topic_data.columns)}")
+            ui.show_info(f"  - File size: {file_size:.2f} MB")
+            ui.show_info(f"  - Sparsity: {(topic_data.isnull().sum().sum() / topic_data.size):.2%}")
+            
+        else:
+            ui.show_error(f"No DataFrame data available for topic '{topic_name}'")
+            ui.show_info("Bag may need to be reloaded with DataFrame indexing enabled")
+            
+    except Exception as e:
+        ui.show_error(f"Failed to export DataFrame for topic '{topic_name}': {e}")
+
+
+def _format_time_range(time_range):
+    """
+    Format time range for display
+    
+    Args:
+        time_range: Can be TimeRange object or tuple of (start, end)
+    
+    Returns:
+        Dict with formatted time range information
+    """
+    if time_range is None:
+        return None
+    
+    try:
+        # Handle TimeRange object
+        if hasattr(time_range, 'start_time') and hasattr(time_range, 'end_time'):
+            return {
+                'start_time': time_range.start_time,
+                'end_time': time_range.end_time
+            }
+        # Handle tuple
+        elif isinstance(time_range, (tuple, list)) and len(time_range) == 2:
+            return {
+                'start_time': time_range[0],
+                'end_time': time_range[1]
+            }
+        else:
+            return None
+    except Exception:
+        return None
 
 
 def _extract_field_paths_from_message_type(msg_type_info):
