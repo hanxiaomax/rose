@@ -537,10 +537,24 @@ class ComprehensiveBagInfo:
     def refresh_all_statistics_from_dataframes(self) -> int:
         """Refresh statistics for all topics that have DataFrames"""
         count = 0
+        total_messages = 0
+        total_size = 0
+        
         for topic in self.topics:
             if isinstance(topic, TopicInfo) and topic.has_dataframe():
                 topic.refresh_statistics_from_dataframe()
                 count += 1
+                # Accumulate totals
+                if topic.message_count:
+                    total_messages += topic.message_count
+                if topic.total_size_bytes:
+                    total_size += topic.total_size_bytes
+        
+        # Update total statistics
+        if count > 0:
+            self.total_messages = total_messages
+            self.total_size = total_size
+            
         return count
     
     def get_statistics_summary_all_topics(self) -> Dict[str, Any]:

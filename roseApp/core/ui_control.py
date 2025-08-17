@@ -424,7 +424,7 @@ class UIControl:
         """Display bag summary information"""
         if config.verbose:
             console.print(f"\n[{cls.get_color('primary', 'bold')}]Bag File Summary[/{cls.get_color('primary', 'bold')}]")
-            console.print(f"File: {bag_info.get('file_name', 'Unknown')}")
+            console.print(f"File: {bag_info.get('file_path', bag_info.get('file_name', 'Unknown'))}")
             console.print(f"Path: {bag_info.get('file_path', 'Unknown')}")
             console.print(f"Analysis Time: {bag_info.get('analysis_time', 0):.3f}s")
             console.print(f"Cached: {'Yes' if bag_info.get('cached', False) else 'No'}")
@@ -459,7 +459,7 @@ class UIControl:
         
         # Add topic rows
         for topic_info in topics:
-            frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
+            frequency_str = f"{int(topic_info.get('frequency', 0))} Hz"
             
             # Format size
             size_bytes = topic_info.get('size_bytes', 0)
@@ -668,7 +668,7 @@ class UIControl:
 
         # Add topic rows
         for topic_info in topics:
-            frequency_str = f"{topic_info.get('frequency', 0):.1f} Hz"
+            frequency_str = f"{int(topic_info.get('frequency', 0))} Hz"
             
             # Format size
             size_bytes = topic_info.get('size_bytes', 0)
@@ -731,7 +731,7 @@ class UIControl:
             parts.append(f"[{cls.get_color('success')}]{count:,} msgs[/{cls.get_color('success')}]")
             
             if frequency > 0:
-                parts.append(f"[{cls.get_color('info')}]{frequency:.1f} Hz[/{cls.get_color('info')}]")
+                parts.append(f"[{cls.get_color('info')}]{int(frequency)} Hz[/{cls.get_color('info')}]")
             
             console.print(" | ".join(parts))
         
@@ -764,7 +764,7 @@ class UIControl:
         summary_text.append("Summary\n", style=cls.get_color('primary', 'bold'))
         
         # File information
-        file_name = bag_info.get('file_name', 'Unknown')
+        file_name = bag_info.get('file_path', bag_info.get('file_name', 'Unknown'))
         file_size = cls._format_size(bag_info.get('file_size', 0))
         topics_count = bag_info.get('topics_count', 0)
         total_messages = bag_info.get('total_messages', 0)
@@ -809,7 +809,7 @@ class UIControl:
         for topic_info in topics:
             # Handle both dict and object formats
             if isinstance(topic_info, dict):
-                frequency_str = str(topic_info.get('frequency', 0.0))
+                frequency_str = str(int(topic_info.get('frequency', 0.0)))
                 size_str = str(topic_info.get('size_bytes', 0))
                 name = topic_info.get('name', 'Unknown')
                 count = str(topic_info.get('message_count', 0))

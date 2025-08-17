@@ -441,7 +441,7 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
     )
 
 
-def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bool = False) -> bool:
+def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bool = False, build_index: bool = False, force_load: bool = False) -> bool:
     """
     Check if bag is in cache, and optionally prompt user to load it if not
     
@@ -449,6 +449,8 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         bag_path: Path to the bag file
         auto_load: Whether to prompt user for auto-loading
         verbose: Whether to show verbose output
+        build_index: Whether to build DataFrame index when loading
+        force_load: Whether to force loading without prompting user
     
     Returns:
         bool: True if bag is available in cache (either was already cached or was loaded), False otherwise
@@ -469,21 +471,27 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
             console.print(f"[green]✓[/green] Using cached bag analysis for [bold]{bag_path}[/bold]")
         return True
     
-    if not auto_load:
+    if not auto_load and not force_load:
         return False
     
-    # Bag not in cache, ask user if they want to load it
+    # Bag not in cache, ask user if they want to load it (unless force_load is True)
     ui = UIControl()
     console = ui.get_console()
     
-    console.print(f"[yellow]⚠[/yellow] Bag file [bold]{bag_path}[/bold] is not loaded in cache.")
-    
-    # Ask user for confirmation
-    should_load = typer.confirm("Would you like to load it now?", default=True)
-    
-    if not should_load:
-        console.print("[yellow]Operation cancelled. Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
-        return False
+    should_load = force_load
+    if not force_load:
+        console.print(f"[yellow]⚠[/yellow] Bag file [bold]{bag_path}[/bold] is not loaded in cache.")
+        
+        # Different prompts based on build_index mode
+        if build_index:
+            console.print("[blue]Note:[/blue] Verbose mode enabled - will build DataFrame index for detailed statistics.")
+            should_load = typer.confirm("Would you like to load it with DataFrame indexing now?", default=True)
+        else:
+            should_load = typer.confirm("Would you like to load it now?", default=True)
+        
+        if not should_load:
+            console.print("[yellow]Operation cancelled. Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
+            return False
     
     # Load the bag
     console.print(f"[blue]Loading bag file into cache...[/blue]")
@@ -505,7 +513,7 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
             
             bag_info, elapsed_time = await parser.load_bag_async(
                 str(bag_path), 
-                build_index=False,  # Use quick analysis by default
+                build_index=build_index,  # Use passed build_index parameter
                 progress_callback=progress_callback if verbose else None
             )
             

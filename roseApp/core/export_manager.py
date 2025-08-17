@@ -321,7 +321,7 @@ class ExportManager:
                     <td class="topic">{topic_info.get('name', '')}</td>
                     <td>{topic_info.get('message_type', '')}</td>
                     <td class="count">{topic_info.get('message_count', 0):,}</td>
-                    <td class="frequency">{topic_info.get('frequency', 0):.1f} Hz</td>
+                    <td class="frequency">{int(topic_info.get('frequency', 0))} Hz</td>
                 </tr>"""
         
         html_content += """
@@ -408,7 +408,7 @@ class ExportManager:
             count = topic_info.get('message_count', 0)
             frequency = topic_info.get('frequency', 0)
             
-            md_content += f"| `{name}` | {msg_type} | {count:,} | {frequency:.1f} Hz |\n"
+            md_content += f"| `{name}` | {msg_type} | {count:,} | {int(frequency)} Hz |\n"
         
         markdown = Markdown(md_content)
         console.print(markdown)
