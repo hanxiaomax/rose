@@ -128,6 +128,9 @@ class TopicInfo:
                 self.df_memory_usage = df.memory_usage(deep=True).sum()
             except:
                 self.df_memory_usage = None
+            
+            # Auto-calculate statistics from DataFrame
+            self._calculate_statistics_from_dataframe()
     
     def get_dataframe(self) -> Optional[Any]:
         """Get DataFrame for this topic"""
@@ -149,6 +152,89 @@ class TopicInfo:
         if self.df_memory_usage:
             return self.df_memory_usage / 1024 / 1024
         return None
+    
+    def _calculate_statistics_from_dataframe(self) -> None:
+        """Calculate topic statistics from DataFrame data"""
+        if not PANDAS_AVAILABLE or self.df is None or len(self.df) == 0:
+            return
+        
+        try:
+            # 1. Message count
+            self.message_count = len(self.df)
+            
+            # 2. Message size statistics
+            if 'message_size' in self.df.columns:
+                self.total_size_bytes = int(self.df['message_size'].sum())
+                self.average_message_size = int(self.df['message_size'].mean())
+            
+            # 3. Time range and frequency
+            if hasattr(self.df.index, 'min') and hasattr(self.df.index, 'max'):
+                start_time_sec = float(self.df.index.min())
+                end_time_sec = float(self.df.index.max())
+                
+                # Convert to (sec, nsec) format for compatibility
+                start_sec = int(start_time_sec)
+                start_nsec = int((start_time_sec - start_sec) * 1_000_000_000)
+                end_sec = int(end_time_sec)
+                end_nsec = int((end_time_sec - end_sec) * 1_000_000_000)
+                
+                self.first_message_time = (start_sec, start_nsec)
+                self.last_message_time = (end_sec, end_nsec)
+                
+                # Calculate frequency
+                duration = end_time_sec - start_time_sec
+                if duration > 0:
+                    self.message_frequency = self.message_count / duration
+            
+            # 4. Alternative time extraction from timestamp_ns if available
+            elif 'timestamp_ns' in self.df.columns:
+                first_ts_ns = int(self.df['timestamp_ns'].min())
+                last_ts_ns = int(self.df['timestamp_ns'].max())
+                
+                # Convert nanoseconds to (sec, nsec)
+                first_sec = first_ts_ns // 1_000_000_000
+                first_nsec = first_ts_ns % 1_000_000_000
+                last_sec = last_ts_ns // 1_000_000_000
+                last_nsec = last_ts_ns % 1_000_000_000
+                
+                self.first_message_time = (first_sec, first_nsec)
+                self.last_message_time = (last_sec, last_nsec)
+                
+                # Calculate frequency
+                duration_ns = last_ts_ns - first_ts_ns
+                if duration_ns > 0:
+                    duration_sec = duration_ns / 1_000_000_000
+                    self.message_frequency = self.message_count / duration_sec
+                    
+        except Exception as e:
+            # If calculation fails, keep existing values
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to calculate statistics from DataFrame for topic {self.name}: {e}")
+    
+    def refresh_statistics_from_dataframe(self) -> bool:
+        """Manually refresh statistics from DataFrame data"""
+        if self.has_dataframe():
+            self._calculate_statistics_from_dataframe()
+            return True
+        return False
+    
+    def get_statistics_summary(self) -> Dict[str, Any]:
+        """Get a summary of all statistics for this topic"""
+        return {
+            'name': self.name,
+            'message_type': self.message_type,
+            'message_count': self.message_count,
+            'total_size_bytes': self.total_size_bytes,
+            'average_message_size': self.average_message_size,
+            'message_frequency': self.message_frequency,
+            'first_message_time': self.first_message_time,
+            'last_message_time': self.last_message_time,
+            'duration_seconds': self.get_duration_seconds(),
+            'has_dataframe': self.has_dataframe(),
+            'df_memory_mb': self.df_memory_mb,
+            'df_created_at': self.df_created_at
+        }
 
 
 @dataclass
@@ -447,6 +533,41 @@ class ComprehensiveBagInfo:
     def has_message_index(self) -> bool:
         """Check if this bag has message index (DataFrames) - for backward compatibility"""
         return self.has_any_dataframes()
+    
+    def refresh_all_statistics_from_dataframes(self) -> int:
+        """Refresh statistics for all topics that have DataFrames"""
+        count = 0
+        for topic in self.topics:
+            if isinstance(topic, TopicInfo) and topic.has_dataframe():
+                topic.refresh_statistics_from_dataframe()
+                count += 1
+        return count
+    
+    def get_statistics_summary_all_topics(self) -> Dict[str, Any]:
+        """Get statistics summary for all topics"""
+        topics_stats = []
+        total_messages = 0
+        total_size = 0
+        
+        for topic in self.topics:
+            if isinstance(topic, TopicInfo):
+                stats = topic.get_statistics_summary()
+                topics_stats.append(stats)
+                
+                if stats['message_count']:
+                    total_messages += stats['message_count']
+                if stats['total_size_bytes']:
+                    total_size += stats['total_size_bytes']
+        
+        return {
+            'bag_file': self.file_path,
+            'total_topics': len(self.topics),
+            'topics_with_dataframes': len(self.get_topics_with_dataframes()),
+            'total_messages': total_messages,
+            'total_size_bytes': total_size,
+            'analysis_level': self.analysis_level.value,
+            'topics': topics_stats
+        }
     
     def get_topics(self) -> List[TopicInfo]:
         """Get list of topics"""

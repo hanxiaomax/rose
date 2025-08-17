@@ -19,7 +19,7 @@ app = typer.Typer(help="Inspect ROS bag files")
 def inspect(
     bag_path: Path = typer.Argument(..., help="Path to the ROS bag file"),
     topics: Optional[List[str]] = typer.Option(None, "--topics", "-t", help="Filter specific topics"),
-    topic_filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter topics by pattern"),
+
     show_fields: bool = typer.Option(False, "--show-fields", help="Show field analysis for messages"),
     sort_by: str = typer.Option("size", "--sort", help="Sort topics by (name, count, frequency, size)"),
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
@@ -73,7 +73,7 @@ def inspect(
     class SimpleInspectOptions:
         def __init__(self):
             self.topics = topics
-            self.topic_filter = topic_filter
+
             self.show_fields = show_fields
             self.sort_by = sort_by
             self.reverse_sort = reverse_sort
@@ -126,7 +126,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
         
         # Apply topic filtering if specified
         if options.topics:
-            filtered_topic_names = filter_topics(all_topic_names, options.topics, options.topic_filter)
+            filtered_topic_names = filter_topics(all_topic_names, options.topics, None)
         else:
             filtered_topic_names = all_topic_names
         
