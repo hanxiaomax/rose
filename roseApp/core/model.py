@@ -42,6 +42,11 @@ class TopicInfo:
     last_message_time: Optional[Tuple[int, int]] = None   # (sec, nsec)
     connection_id: Optional[str] = None
     
+    # DataFrame caching support (only populated when build_index=True)
+    df: Optional[Any] = field(default=None)  # Topic-specific DataFrame
+    df_memory_usage: Optional[int] = field(default=None)  # Memory usage in bytes
+    df_created_at: Optional[float] = field(default=None)  # Timestamp when DataFrame was created
+    
     def __lt__(self, other) -> bool:
         """Less than comparison based on topic name"""
         if not isinstance(other, TopicInfo):
@@ -108,6 +113,41 @@ class TopicInfo:
         if duration and duration > 0 and self.message_count:
             self.message_frequency = self.message_count / duration
             return self.message_frequency
+        return None
+    
+    # DataFrame management methods
+    def set_dataframe(self, df: Any) -> None:
+        """Set DataFrame for this topic and update metadata"""
+        import time
+        self.df = df
+        self.df_created_at = time.time()
+        
+        # Calculate memory usage if pandas is available
+        if PANDAS_AVAILABLE and df is not None:
+            try:
+                self.df_memory_usage = df.memory_usage(deep=True).sum()
+            except:
+                self.df_memory_usage = None
+    
+    def get_dataframe(self) -> Optional[Any]:
+        """Get DataFrame for this topic"""
+        return self.df
+    
+    def has_dataframe(self) -> bool:
+        """Check if this topic has a DataFrame"""
+        return self.df is not None
+    
+    def clear_dataframe(self) -> None:
+        """Clear DataFrame to free memory"""
+        self.df = None
+        self.df_memory_usage = None
+        self.df_created_at = None
+    
+    @property
+    def df_memory_mb(self) -> Optional[float]:
+        """Get DataFrame memory usage in MB"""
+        if self.df_memory_usage:
+            return self.df_memory_usage / 1024 / 1024
         return None
 
 
@@ -326,6 +366,87 @@ class ComprehensiveBagInfo:
             if stats.topic_name == topic_name:
                 return stats
         return None
+    
+    # === DATAFRAME MANAGEMENT METHODS ===
+    
+    def get_topic_dataframe(self, topic_name: str) -> Optional[Any]:
+        """Get DataFrame for a specific topic"""
+        topic = self.find_topic(topic_name)
+        if topic and topic.has_dataframe():
+            return topic.get_dataframe()
+        return None
+    
+    def set_topic_dataframe(self, topic_name: str, df: Any) -> bool:
+        """Set DataFrame for a specific topic"""
+        topic = self.find_topic(topic_name)
+        if topic:
+            topic.set_dataframe(df)
+            return True
+        return False
+    
+    def has_topic_dataframe(self, topic_name: str) -> bool:
+        """Check if a topic has a DataFrame"""
+        topic = self.find_topic(topic_name)
+        return topic.has_dataframe() if topic else False
+    
+    def get_topics_with_dataframes(self) -> List[str]:
+        """Get list of topic names that have DataFrames"""
+        return [topic.name for topic in self.topics if isinstance(topic, TopicInfo) and topic.has_dataframe()]
+    
+    def get_all_dataframes(self) -> Dict[str, Any]:
+        """Get all DataFrames as a dictionary {topic_name: dataframe}"""
+        result = {}
+        for topic in self.topics:
+            if isinstance(topic, TopicInfo) and topic.has_dataframe():
+                result[topic.name] = topic.get_dataframe()
+        return result
+    
+    def clear_topic_dataframe(self, topic_name: str) -> bool:
+        """Clear DataFrame for a specific topic to free memory"""
+        topic = self.find_topic(topic_name)
+        if topic and topic.has_dataframe():
+            topic.clear_dataframe()
+            return True
+        return False
+    
+    def clear_all_dataframes(self) -> int:
+        """Clear all DataFrames to free memory. Returns count of cleared DataFrames."""
+        count = 0
+        for topic in self.topics:
+            if isinstance(topic, TopicInfo) and topic.has_dataframe():
+                topic.clear_dataframe()
+                count += 1
+        return count
+    
+    def get_dataframe_memory_summary(self) -> Dict[str, Any]:
+        """Get memory usage summary for all DataFrames"""
+        total_memory = 0
+        topic_memory = {}
+        
+        for topic in self.topics:
+            if isinstance(topic, TopicInfo) and topic.has_dataframe():
+                memory_mb = topic.df_memory_mb or 0
+                topic_memory[topic.name] = {
+                    'memory_mb': memory_mb,
+                    'message_count': topic.message_count or 0,
+                    'message_type': topic.message_type,
+                    'created_at': topic.df_created_at
+                }
+                total_memory += memory_mb
+        
+        return {
+            'total_memory_mb': total_memory,
+            'topic_count': len(topic_memory),
+            'topics': topic_memory
+        }
+    
+    def has_any_dataframes(self) -> bool:
+        """Check if any topic has DataFrames"""
+        return len(self.get_topics_with_dataframes()) > 0
+    
+    def has_message_index(self) -> bool:
+        """Check if this bag has message index (DataFrames) - for backward compatibility"""
+        return self.has_any_dataframes()
     
     def get_topics(self) -> List[TopicInfo]:
         """Get list of topics"""

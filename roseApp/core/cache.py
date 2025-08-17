@@ -175,29 +175,10 @@ class UnifiedCache:
         return f"bag_{hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()}"
     
     def get_bag_analysis(self, bag_path: Path) -> Optional[BagCacheEntry]:
-        """Get cached bag analysis data (supports both compressed and uncompressed)"""
+        """Get cached bag analysis data"""
         cache_key = self.get_bag_cache_key(bag_path)
-        
-        # Try compressed version first
-        compressed_data = self.get(cache_key + "_compressed")
-        if compressed_data:
-            try:
-                import gzip
-                import pickle
-                decompressed = gzip.decompress(compressed_data)
-                cached_data = pickle.loads(decompressed)
-                
-                if isinstance(cached_data, BagCacheEntry) and cached_data.is_valid(bag_path):
-                    return cached_data
-                else:
-                    # Remove invalid cache
-                    self.delete(cache_key + "_compressed")
-            except Exception as e:
-                _logger.warning(f"Failed to decompress cache entry: {e}")
-                self.delete(cache_key + "_compressed")
-        
-        # Try uncompressed version
         cached_data = self.get(cache_key)
+        
         if cached_data and isinstance(cached_data, BagCacheEntry):
             if cached_data.is_valid(bag_path):
                 return cached_data
@@ -207,15 +188,14 @@ class UnifiedCache:
         
         return None
     
-    def put_bag_analysis(self, bag_path: Path, bag_info: Any, compress: bool = True, **kwargs) -> None:
-        """Store bag analysis data in cache with optional compression"""
+    def put_bag_analysis(self, bag_path: Path, bag_info: Any, **kwargs) -> None:
+        """Store bag analysis data in cache"""
         if not bag_path.exists():
             return
         
         cache_key = self.get_bag_cache_key(bag_path)
         stat = bag_path.stat()
         
-        # Create cache entry with compression support
         cache_entry = BagCacheEntry(
             bag_info=bag_info,
             cache_timestamp=time.time(),
@@ -225,15 +205,7 @@ class UnifiedCache:
             original_path=str(bag_path.absolute())
         )
         
-        # Store with compression if requested
-        if compress:
-            import gzip
-            import pickle
-            serialized = pickle.dumps(cache_entry)
-            compressed = gzip.compress(serialized)
-            self.put(cache_key + "_compressed", compressed)
-        else:
-            self.put(cache_key, cache_entry)
+        self.put(cache_key, cache_entry)
     
     def clear_bag_cache(self, bag_path: Optional[Path] = None) -> None:
         """Clear bag-specific cache entries"""
