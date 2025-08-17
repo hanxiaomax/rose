@@ -23,7 +23,7 @@ def inspect(
     show_fields: bool = typer.Option(False, "--show-fields", help="Show field analysis for messages"),
     sort_by: str = typer.Option("size", "--sort", help="Sort topics by (name, count, frequency, size)"),
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of topics shown"),
+
 
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
@@ -105,7 +105,7 @@ def inspect(
             self.show_fields = show_fields
             self.sort_by = sort_by
             self.reverse_sort = reverse_sort
-            self.limit = limit
+    
             self.output_format = output_format
             self.output_file = output
             self.verbose = verbose
