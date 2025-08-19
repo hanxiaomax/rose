@@ -18,7 +18,8 @@ from ..core.parser import create_parser, ExtractOption
 from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
-from ..core.ui_control import UIControl, Message
+from ..core.ui_control import UIControl
+from ..ui.common_ui import Message
 from ..core.directories import get_rose_directories
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
@@ -206,20 +207,16 @@ class CliTool:
     def run_cli(self):
         """Run the CLI tool with improved menu logic"""
         try:
+            # Use new UI components
+            from ..ui.cli_ui import CliUI as NewCliUI
+            cli_ui = NewCliUI()
+            
             # Show banner
-            self.console.print(build_banner())
+            cli_ui.display_banner()
             
             while True:
                 # Show main menu
-                action = inquirer.select(
-                    message="Select action:",
-                    choices=[
-                        Choice(value="filter", name="1. Bag Editor - View and filter bag files"),
-                        Choice(value="wizard", name="2. Extraction Wizard - Generate extract commands"),
-                        Choice(value="whitelist", name="3. Whitelist - Manage topic whitelists"),
-                        Choice(value="exit", name="4. Exit")
-                    ]
-                ).execute()
+                action = cli_ui.display_main_menu()
                 
                 if action == "exit":
                     break
@@ -231,10 +228,10 @@ class CliTool:
                     self.whitelist_manager()
                 
         except KeyboardInterrupt:
-            Message("\nOperation cancelled by user", "warning").render(self.console)
+            cli_ui.display_error("\nOperation cancelled by user")
         except Exception as e:
             logger.error(f"Error: {str(e)}", exc_info=True)
-            Message(f"\nError: {str(e)}", "error").render(self.console)
+            cli_ui.display_error(f"\nError: {str(e)}")
 
     def interactive_filter(self):
         """Run interactive filter workflow"""

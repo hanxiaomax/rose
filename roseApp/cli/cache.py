@@ -109,20 +109,12 @@ def _show_cache_info(cache, console, show_content, verbose):
     try:
         stats = cache.get_stats()
         
-        # Display cache summary
-        panel_content = Text()
-        panel_content.append(f"Cache Type: {type(cache).__name__}\n")
-        panel_content.append(f"Cache Directory: {stats.get('cache_dir', 'N/A')}\n")
-        panel_content.append(f"Total Entries: {stats.get('entry_count', 0):,}\n")
-        panel_content.append(f"Memory Entries: {stats.get('memory_entries', 0):,}\n")
-        panel_content.append(f"Total Size: {_format_size(stats.get('total_size_bytes', 0))}")
+        # Use new UI components
+        from ..ui.cache_ui import CacheUI
+        cache_ui = CacheUI()
         
-        cache_panel = Panel(
-            panel_content,
-            title="Cache Information",
-            border_style=UnifiedThemeManager.get_color(ComponentType.CLI, 'info')
-        )
-        console.print(cache_panel)
+        # Display cache statistics
+        cache_ui.display_cache_stats(stats)
         
         # Show cache entries
         _show_cache_entries(cache, console, show_content, verbose)
@@ -134,6 +126,10 @@ def _show_cache_info(cache, console, show_content, verbose):
 def _show_cache_entries(cache, console, show_content, verbose):
     """Show all cache entries"""
     try:
+        # Use new UI components
+        from ..ui.cache_ui import CacheUI
+        cache_ui = CacheUI()
+        
         # Get memory cache entries
         memory_entries = cache._memory_cache.items() if hasattr(cache, '_memory_cache') else []
         
@@ -156,25 +152,49 @@ def _show_cache_entries(cache, console, show_content, verbose):
         total_entries = len(memory_entries) + len(file_entries)
         
         if total_entries == 0:
-            console.print("\n[yellow]No cache entries found[/yellow]")
+            cache_ui.display_cache_empty()
             return
         
-        console.print(f"\n[bold]Cache Entries ({total_entries} total)[/bold]")
+        # Prepare cache entries for display
+        cache_entries = []
         
-        # Show memory cache entries
-        if memory_entries:
-            console.print(f"\n[cyan]Memory Cache ({len(memory_entries)} entries):[/cyan]")
-            for key, entry in memory_entries:
-                _display_cache_entry(console, key, entry.value if hasattr(entry, 'value') else entry, 
-                                   'memory', show_content, verbose)
+        # Process memory cache entries
+        for key, entry in memory_entries:
+            try:
+                value = entry.value if hasattr(entry, 'value') else entry
+                if isinstance(value, BagCacheEntry):
+                    bag_info = value.bag_info
+                    entry_data = {
+                        'file_path': getattr(bag_info, 'file_path', 'Unknown'),
+                        'size_bytes': value.file_size,
+                        'topics_count': len(getattr(bag_info, 'topics', [])),
+                        'messages_count': getattr(bag_info, 'total_messages', 0),
+                        'duration_seconds': getattr(bag_info, 'duration_seconds', 0),
+                        'modified_time': time.ctime(value.cache_timestamp)
+                    }
+                    cache_entries.append(entry_data)
+            except Exception:
+                continue
         
-        # Show file cache entries  
-        if file_entries:
-            console.print(f"\n[cyan]File Cache ({len(file_entries)} entries):[/cyan]")
-            for key, value in file_entries:
-                _display_cache_entry(console, key, value, 'file', show_content, verbose)
+        # Process file cache entries
+        for key, value in file_entries:
+            try:
+                if isinstance(value, BagCacheEntry):
+                    bag_info = value.bag_info
+                    entry_data = {
+                        'file_path': getattr(bag_info, 'file_path', 'Unknown'),
+                        'size_bytes': value.file_size,
+                        'topics_count': len(getattr(bag_info, 'topics', [])),
+                        'messages_count': getattr(bag_info, 'total_messages', 0),
+                        'duration_seconds': getattr(bag_info, 'duration_seconds', 0),
+                        'modified_time': time.ctime(value.cache_timestamp)
+                    }
+                    cache_entries.append(entry_data)
+            except Exception:
+                continue
         
-        console.print(f"\n[dim]Use 'rose cache clear' to delete all entries or 'rose cache clear --bag <path>' for specific bag[/dim]")
+        # Display using new UI
+        cache_ui.display_cache_list(cache_entries)
         
     except Exception as e:
         console.print(f"[red]Error showing cache entries: {e}[/red]")
@@ -250,6 +270,10 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print("[yellow]No cache data to clear[/yellow]")
             return
         
+        # Use new UI components
+        from ..ui.cache_ui import CacheUI
+        cache_ui = CacheUI()
+        
         if bag_path:
             # Clear specific bag cache
             bag_path_obj = Path(bag_path)
@@ -264,15 +288,14 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print(f"[bold]Found cache for bag: {bag_path}[/bold]")
             
             if not skip_confirm:
-                result = typer.confirm("Clear cache for this bag?")
-                if not result:
+                if not cache_ui.display_cache_clear_confirmation([bag_path]):
                     console.print("Operation cancelled")
                     return
             
             # Clear specific bag cache
             success = cache.delete(cache_key)
             if success:
-                console.print(f"[green]✓ Successfully cleared cache for {bag_path}[/green]")
+                cache_ui.display_cache_clear_success(1)
             else:
                 console.print(f"[red]✗ Failed to clear cache for {bag_path}[/red]")
         else:
@@ -280,14 +303,13 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print(f"[bold]Found {total_entries:,} cache entries[/bold]")
             
             if not skip_confirm:
-                result = typer.confirm("Clear all cache data?")
-                if not result:
+                if not cache_ui.display_cache_clear_all_confirmation():
                     console.print("Operation cancelled")
                     return
             
             # Clear all cache
             cache.clear()
-            console.print("[green]✓ Successfully cleared all cache data[/green]")
+            cache_ui.display_cache_clear_all_success(total_entries)
             
     except Exception as e:
         console.print(f"[red]Error clearing cache: {e}[/red]")

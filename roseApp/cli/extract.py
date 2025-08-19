@@ -16,7 +16,8 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
-from ..core.ui_control import UIControl, Message
+from ..core.ui_control import UIControl
+from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
@@ -399,43 +400,14 @@ def _extract_topics_impl(
                         })
                         progress.update(task_id, completed=100, description=f"{bag_path.name} - Error")
         
-        # Show summary
-        extracted_count = sum(1 for r in results if r['status'] == 'extracted')
+        # Use new UI components for display
+        from ..ui.extract_ui import ExtractUI
+        
+        extract_ui = ExtractUI()
+        extract_ui.display_batch_results(results, topics_to_extract, total_time=0)
+        
+        # Check for errors
         error_count = sum(1 for r in results if r['status'] == 'error')
-        
-        Message("Extraction Summary", "info").render(console)
-        
-        # Simple text-based summary
-        summary_lines = []
-        if extracted_count > 0:
-            summary_lines.append(f"{extracted_count} bag(s) successfully extracted")
-        if error_count > 0:
-            summary_lines.append(f"{error_count} bag(s) failed to extract")
-        
-        for line in summary_lines:
-            console.print(f"  {line}")
-        
-        # Show errors if any
-        if error_count > 0:
-            Message("Errors:", "error").render(console)
-            for result in results:
-                if result['status'] == 'error':
-                    Message(f"  {result['path']}: {result['message']}", "error").render(console)
-        
-        # Show success message
-        if extracted_count > 0:
-            Message(f"Success: {extracted_count} bag(s) extracted with {len(topics_to_extract)} topic(s) each", "success").render(console)
-            
-            if verbose:
-                Message("Output files:", "info").render(console)
-                for result in results:
-                    if result['status'] == 'extracted' and result['output_path']:
-                        output_path = Path(result['output_path'])
-                        if output_path.exists():
-                            size_mb = output_path.stat().st_size / 1024 / 1024
-                            elapsed = result.get('elapsed_time', 0)
-                            Message(f"  {result['output_path']} ({size_mb:.1f} MB, {elapsed:.2f}s)", "info").render(console)
-        
         if error_count > 0:
             raise typer.Exit(1)
         

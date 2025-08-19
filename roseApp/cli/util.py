@@ -11,7 +11,8 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..core.ui_control import UIControl,Message
+from ..core.ui_control import UIControl
+from ..ui.common_ui import Message
 
 
 WARNING_COLOR = UIControl.get_color('warning')

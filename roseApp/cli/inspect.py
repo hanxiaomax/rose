@@ -8,7 +8,9 @@ from typing import Optional, List
 
 import typer
 from ..core.model import AnalysisLevel
-from ..core.ui_control import UIControl, OutputFormat, ExportOptions, DisplayConfig, Message
+from ..core.export_manager import OutputFormat, ExportOptions
+from ..core.ui_control import UIControl
+from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
@@ -117,24 +119,24 @@ def inspect(
 
 
 async def _run_inspect(cached_entry, options, debug: bool = False):
-    """Run the bag inspection asynchronously using BagManager and ResultHandler"""
+    """Run the bag inspection asynchronously using new UI components"""
     
-    # Use UIControl for unified output management
-    ui = UIControl()
-    console = ui.get_console()
+    from ..ui.inspect_ui import InspectUI
     
-    # No longer need BagManager - we use cache directly
+    # Use new UI components
+    ui = InspectUI()
     
     try:
-        Message(f"Load {cached_entry.bag_info.file_path} from cache").render(console)
-        # Convert cached bag info to result format expected by UI
+        ui.display_cache_status(True, cached_entry.bag_info.file_path)
+        
+        # Convert cached bag info to result format
         bag_info = cached_entry.bag_info
         
         # Refresh statistics from DataFrames if available
         if bag_info.has_any_dataframes():
             bag_info.refresh_all_statistics_from_dataframes()
         
-        # Create the result structure expected by UIControl
+        # Create the result structure
         result = {
             'topics': [],
             'file_path': bag_info.file_path,
@@ -150,7 +152,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                 'topics_count': len(bag_info.topics),
                 'total_messages': bag_info.total_messages or 0,
                 'duration_seconds': bag_info.duration_seconds or 0.0,
-                'analysis_time': 0.0,  # From cache, so analysis time is 0
+                'analysis_time': 0.0,
                 'cached': True
             }
         }
@@ -164,15 +166,12 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
         else:
             filtered_topic_names = all_topic_names
         
-        # Convert topics to expected format using optimized TopicInfo structure
+        # Convert topics to expected format
         for topic_info_obj in bag_info.topics:
-            # Skip topics that don't match the filter
             if topic_info_obj.name not in filtered_topic_names:
                 continue
             
-            # Build topic info based on verbose mode
             if options.verbose:
-                # Verbose mode: include all statistics (count, size, frequency)
                 topic_info = {
                     'name': topic_info_obj.name,
                     'message_type': topic_info_obj.message_type,
@@ -181,35 +180,29 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                     'size_bytes': topic_info_obj.total_size_bytes or 0
                 }
             else:
-                # Non-verbose mode: only name and message type for list display
                 topic_info = {
                     'name': topic_info_obj.name,
                     'message_type': topic_info_obj.message_type
                 }
             
-            # Add field analysis if available from MessageTypeInfo
+            # Add field analysis if requested
             if options.show_fields:
                 msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
                 if msg_type_info and msg_type_info.fields:
-                    # Convert MessageFieldInfo objects to field paths
                     topic_info['field_paths'] = msg_type_info.get_all_field_paths()
             
             result['topics'].append(topic_info)
         
-        # Add field analysis if requested using optimized MessageTypeInfo structure
-        if options.show_fields and len(bag_info.message_types) > 0 and len(bag_info.topics) > 0:
-            # Convert MessageTypeInfo structure to topic-based field_analysis
+        # Add field analysis if requested
+        if options.show_fields and len(bag_info.message_types) > 0:
             field_analysis = {}
             for topic_info_obj in bag_info.topics:
-                # Skip topics that don't match the filter
                 if topic_info_obj.name not in filtered_topic_names:
                     continue
                     
                 msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
                 if msg_type_info and msg_type_info.fields:
-                    # Extract hierarchical field paths from MessageFieldInfo objects
-                    field_paths = _extract_field_paths_from_message_type(msg_type_info)
-                    
+                    field_paths = msg_type_info.get_all_field_paths()
                     if field_paths:
                         field_analysis[topic_info_obj.name] = {
                             'message_type': topic_info_obj.message_type,
@@ -219,90 +212,27 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
             if field_analysis:
                 result['field_analysis'] = field_analysis
         
-        # Determine if we should export to file or render to console
-        if options.output_file:
-            # Export to file
-            export_options = ExportOptions(
-                format=options.output_format,
-                output_file=options.output_file,
-                pretty=True,
-                include_metadata=True
-            )
-            
-            success = UIControl.export_result(result, export_options)
-            if not success:
-                ui.show_export_failed_error()
-                raise typer.Exit(1)
+        # Display results
+        display_config = {
+            'verbose': options.verbose,
+            'show_fields': options.show_fields
+        }
+        
+        if not options.verbose:
+            ui.display_simple_list(result, options.verbose)
         else:
-            # Choose display method based on format
-            if options.output_format == OutputFormat.LIST:
-                # Simple list format for non-verbose mode
-                _display_simple_list(result, console, options.verbose)
-            else:
-                # Display results in panel (table format)
-                display_config = DisplayConfig(
-                    show_summary=True,
-                    show_details=True,
-                    show_cache_stats=True,
-                    verbose=options.verbose,
-                    full_width=True
-                )
-                UIControl.display_inspection_result(result, display_config, console)
-            
-            
-            # Handle fields display separately if requested
-            if options.show_fields:
-                field_analysis = result.get('field_analysis', {})
-                topics = result.get('topics', [])
-                if field_analysis or any('field_paths' in topic for topic in topics):
-                    # Use unified UI method for field panel display
-                    ui.show_fields_panel(field_analysis, topics)
-            
+            ui.display_inspection_result(result, display_config)
+        
+        # Handle fields display
+        if options.show_fields:
+            field_analysis = result.get('field_analysis', {})
+            topics = result.get('topics', [])
+            if field_analysis or any('field_paths' in topic for topic in topics):
+                ui.display_field_analysis(field_analysis, topics)
+        
     except Exception as e:
-        ui.show_error(f"Error during bag inspection: {e}")
+        ui.display_loading_failed("inspection", str(e))
         raise typer.Exit(1)
-    finally:
-        pass
-
-
-def _extract_field_paths_from_message_type(msg_type_info):
-    """
-    Extract hierarchical field paths from MessageTypeInfo structure
-    
-    Args:
-        msg_type_info: MessageTypeInfo object containing fields as List of MessageFieldInfo objects
-    
-    Returns:
-        List of hierarchical field paths (e.g., ['header.seq', 'header.stamp', 'header.frame_id', ...])
-    """
-    if not msg_type_info.fields:
-        return []
-    
-    # Use the built-in method to get all flattened field paths
-    return msg_type_info.get_all_field_paths()
-
-
-def _display_simple_list(result: dict, console, verbose: bool):
-    """Display topics in simple list format"""
-    from rich.text import Text
-    from rich.panel import Panel
-    
-    bag_info = result.get('bag_info', {})
-    topics = result.get('topics', [])
-    
-    # Show summary consistent with verbose mode (no emojis)
-    console.print(f"\nFile: {bag_info.get('file_path', 'Unknown')}")
-    console.print(f"Topics: {len(topics)}")
-    console.print(f"File Size: {bag_info.get('file_size_mb', 0):.1f} MB")
-    console.print(f"Duration: {bag_info.get('duration_seconds', 0):.1f}s")
-    
-    # List topics
-    console.print(f"\nTopics:")
-    for topic in topics:
-        topic_line = Text()
-        topic_line.append(f"  • {topic['name']}", style="bold cyan")
-        topic_line.append(f" ({topic['message_type']})", style="dim")
-        console.print(topic_line)
 
 
 if __name__ == "__main__":

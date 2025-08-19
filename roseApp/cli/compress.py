@@ -16,7 +16,8 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
-from ..core.ui_control import UIControl, Message
+from ..core.ui_control import UIControl
+from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import check_and_load_bag_cache
@@ -537,73 +538,11 @@ async def _compress_bags_impl(
                 for v in invalid_files:
                     Message(f"    {Path(v['file']).name}: {v['error']}", "error").render(console)
     
-    # Show summary
-    successful = [r for r in results if r['success']]
-    failed = [r for r in results if not r['success']]
+    # Use new UI components for display
+    from ..ui.compress_ui import CompressUI
     
-    console.print()
-    Message("Compression Summary", "info").render(console)
-    
-    if successful:
-        Message(f"  {len(successful)} bag(s) successfully compressed", "success").render(console)
-        
-        # Always show file size and compression ratio for each successful file
-        total_input_size = 0
-        total_output_size = 0
-        
-        for result in successful:
-            input_size = Path(result['input_file']).stat().st_size
-            output_size = Path(result['output_file']).stat().st_size
-            ratio = (1 - output_size / input_size) * 100 if input_size > 0 else 0
-            
-            total_input_size += input_size
-            total_output_size += output_size
-            
-            # Format file sizes
-            input_size_mb = input_size / 1024 / 1024
-            output_size_mb = output_size / 1024 / 1024
-            
-            if input_size_mb >= 1.0:
-                input_str = f"{input_size_mb:.1f}MB"
-            else:
-                input_str = f"{input_size / 1024:.1f}KB"
-            
-            if output_size_mb >= 1.0:
-                output_str = f"{output_size_mb:.1f}MB"
-            else:
-                output_str = f"{output_size / 1024:.1f}KB"
-            
-            Message(f"    {Path(result['input_file']).name} -> {Path(result['output_file']).name}", "info").render(console)
-            Message(f"      Size: {input_str} -> {output_str} ({ratio:.1f}% reduction)", "success").render(console)
-        
-        # Show total statistics if multiple files
-        if len(successful) > 1:
-            total_ratio = (1 - total_output_size / total_input_size) * 100 if total_input_size > 0 else 0
-            total_input_mb = total_input_size / 1024 / 1024
-            total_output_mb = total_output_size / 1024 / 1024
-            
-            if total_input_mb >= 1.0:
-                total_input_str = f"{total_input_mb:.1f}MB"
-            else:
-                total_input_str = f"{total_input_size / 1024:.1f}KB"
-            
-            if total_output_mb >= 1.0:
-                total_output_str = f"{total_output_mb:.1f}MB"
-            else:
-                total_output_str = f"{total_output_size / 1024:.1f}KB"
-            
-            Message(f"  Total: {total_input_str} -> {total_output_str} ({total_ratio:.1f}% reduction)", "info").render(console)
-    
-    if failed:
-        Message(f"  {len(failed)} bag(s) failed to compress", "error").render(console)
-        for result in failed:
-            Message(f"    {Path(result['input_file']).name}: {result['error']}", "error").render(console)
-    
-    if successful:
-        Message(f"Success: {len(successful)} bag(s) compressed with {compression} compression", "success").render(console)
-    
-    if failed:
-        raise typer.Exit(1)
+    compress_ui = CompressUI()
+    compress_ui.display_batch_results(results, total_time)
 
 
 if __name__ == "__main__":
