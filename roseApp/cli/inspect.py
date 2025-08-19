@@ -9,7 +9,7 @@ from typing import Optional, List
 import typer
 from ..core.model import AnalysisLevel
 from ..core.export_manager import OutputFormat, ExportOptions
-from ..core.ui_control import UIControl
+from ..ui.common_ui import CommonUI
 from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
@@ -38,8 +38,8 @@ def inspect(
     If the bag file is not in cache, you will be prompted to load it automatically.
     This command uses cached bag analysis for fast inspection.
     """
-    # Use UIControl for unified output management
-    ui = UIControl()
+    # Use CommonUI for unified output management
+    ui = CommonUI()
     
     # Validate bag file exists
     if not bag_path.exists():
@@ -70,7 +70,7 @@ def inspect(
         cached_entry = cache_manager.get_analysis(bag_path)
     elif needs_index:
         # Bag in cache but needs DataFrame index for verbose mode
-        console = ui.get_console()
+        console = ui.console
         console.print(f"[yellow]⚠[/yellow] Verbose mode requires DataFrame index, but cached data doesn't have it.")
         should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
         

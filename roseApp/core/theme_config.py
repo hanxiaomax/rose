@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from .ui_control import UIControl
+from ..ui.common_ui import CommonUI
 
 
 class ComponentType(Enum):
@@ -56,7 +56,7 @@ class UnifiedThemeManager:
         Returns:
             ComponentTheme with appropriate colors for the component
         """
-        colors = UIControl.get_theme_colors()
+        colors = CommonUI.get_theme_colors()
         
         # Base theme applies to all components
         base_theme = ComponentTheme(
@@ -184,7 +184,7 @@ class UnifiedThemeManager:
         Returns:
             Dictionary of hex colors for plotting
         """
-        colors = UIControl.get_theme_colors()
+        colors = CommonUI.get_theme_colors()
         return {
             'primary': colors.primary,
             'secondary': colors.secondary,
@@ -207,7 +207,7 @@ class UnifiedThemeManager:
             Dictionary of CSS variable definitions
         """
         theme = cls.get_component_theme(ComponentType.TUI)
-        colors = UIControl.get_theme_colors()
+        colors = CommonUI.get_theme_colors()
         
         return {
             '--primary': colors.primary,

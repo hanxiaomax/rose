@@ -11,14 +11,13 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..core.ui_control import UIControl
-from ..ui.common_ui import Message
+from ..ui.common_ui import CommonUI, Message
 
 
-WARNING_COLOR = UIControl.get_color('warning')
-PRIMARY_COLOR = UIControl.get_color('primary')
-ACCENT_COLOR = UIControl.get_color('accent')
-SUCCESS_COLOR = UIControl.get_color('success')
+WARNING_COLOR = CommonUI.get_color('warning')
+PRIMARY_COLOR = CommonUI.get_color('primary')
+ACCENT_COLOR = CommonUI.get_color('accent')
+SUCCESS_COLOR = CommonUI.get_color('success')
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -35,9 +34,9 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{UIControl.get_color('primary')} link https://github.com/hanxiaomax/rose")
+    subtitle.append("Github", style=f"{CommonUI.get_color('primary')} link https://github.com/hanxiaomax/rose")
     subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{UIControl.get_color('primary')} link https://github.com/hanxiaomax")
+    subtitle.append("Author", style=f"{CommonUI.get_color('primary')} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
@@ -458,7 +457,6 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     """
     from ..core.cache import create_bag_cache_manager
     from ..core.parser import BagParser
-    from ..core.ui_control import UIControl
     import asyncio
     import typer
     
@@ -476,8 +474,8 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         return False
     
     # Bag not in cache, ask user if they want to load it (unless force_load is True)
-    ui = UIControl()
-    console = ui.get_console()
+    ui = CommonUI()
+    console = ui.console
     
     should_load = force_load
     if not force_load:

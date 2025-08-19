@@ -13,6 +13,20 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 
+# Import theme manager for consistent styling
+from ..core.theme_manager import ThemeManager, ThemeMode, ThemeColors, ThemeTypography, ThemeSpacing
+
+
+@dataclass
+class DisplayConfig:
+    """Configuration for result display"""
+    show_summary: bool = True
+    show_details: bool = True
+    show_cache_stats: bool = True
+    show_performance: bool = True
+    verbose: bool = False
+    full_width: bool = True
+
 
 @dataclass
 class Message:
@@ -40,6 +54,37 @@ class CommonUI:
     
     def __init__(self):
         self.console = Console()
+    
+    # Theme management methods
+    @staticmethod
+    def set_theme_mode(mode: ThemeMode) -> None:
+        """Set current theme mode"""
+        ThemeManager.set_theme_mode(mode)
+    
+    @staticmethod
+    def get_theme_colors() -> ThemeColors:
+        """Get current theme colors"""
+        return ThemeManager.get_theme_colors()
+    
+    @staticmethod
+    def get_theme_typography() -> ThemeTypography:
+        """Get current theme typography"""
+        return ThemeManager.get_theme_typography()
+    
+    @staticmethod
+    def get_theme_spacing() -> ThemeSpacing:
+        """Get current theme spacing"""
+        return ThemeManager.get_theme_spacing()
+    
+    @staticmethod
+    def get_color(color_name: str, modifier: str = "") -> str:
+        """Get unified color for any component"""
+        return ThemeManager.get_color(color_name, modifier)
+    
+    @staticmethod
+    def style_text(text: str, color_name: str, modifier: str = "") -> str:
+        """Apply unified styling to text"""
+        return ThemeManager.style_text(text, color_name, modifier)
     
     @staticmethod
     def format_file_size(size_bytes: int) -> str:

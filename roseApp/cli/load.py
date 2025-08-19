@@ -17,7 +17,7 @@ from rich.table import Table
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
-from ..core.ui_control import UIControl
+from ..ui.common_ui import CommonUI
 from ..ui.common_ui import Message
 
 # Set to CLI mode
