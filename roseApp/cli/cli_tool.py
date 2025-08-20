@@ -18,8 +18,8 @@ from ..core.parser import create_parser, ExtractOption
 from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
-from ..ui.common_ui import CommonUI
-from ..ui.common_ui import Message
+from ..ui.common_ui import CommonUI, Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
+from ..ui.theme import SimpleTheme as Theme
 from ..core.directories import get_rose_directories
 from .util import (LoadingAnimation, build_banner, 
                    collect_bag_files, 
@@ -196,7 +196,7 @@ class CliTool:
                     return output_bag, True  # File path and overwrite=True
                 else:
                     # User doesn't want to overwrite, ask for different filename
-                    self.console.print("Please choose a different filename.", style=CommonUI.get_color("warning"))
+                    WarningMessage("Please choose a different filename.").render(self.console)
                     continue  # Go back to filename input
             else:
                 # File doesn't exist, no need to overwrite
@@ -249,7 +249,7 @@ class CliTool:
             if os.path.isfile(input_path):
                 # Single bag file processing
                 if not input_path.endswith('.bag'):
-                    Message("File must be a .bag file", "error").render(self.console)
+                    ErrorMessage("File must be a .bag file").render(self.console)
                     continue
                 
                 # Process single bag file
@@ -359,7 +359,7 @@ class CliTool:
         # Find and select bag files
         bag_files = collect_bag_files(directory_path)
         if not bag_files:
-            Message("No bag files found in directory", "error").render(self.console)
+            ErrorMessage("No bag files found in directory").render(self.console)
             return  # Go back to input selection
             
         # Create file selection choices
@@ -442,7 +442,7 @@ class CliTool:
     def _get_filter_topics_from_whitelist(self) -> Optional[List[str]]:
         whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
-            Message("No whitelists found", "warning").render(self.console)
+            WarningMessage("No whitelists found").render(self.console)
             return None
             
         # Select whitelist to use
@@ -479,14 +479,14 @@ class CliTool:
                     all_connections.update(connections)
                     progress.advance(task)
                 except Exception as e:
-                    Message(f"Error loading {bag_file}: {str(e)}", "error").render(self.console)
+                    ErrorMessage(f"Error loading {bag_file}: {str(e)}").render(self.console)
                     # Continue with other files
         
         if not all_topics:
-            Message("No topics found in selected bag files", "error").render(self.console)
+            ErrorMessage("No topics found in selected bag files").render(self.console)
             return None
         
-        Message(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files", "success").render(self.console)
+        SuccessMessage(f"Found {len(all_topics)} unique topics across {len(selected_files)} bag files").render(self.console)
         
         # Use the first bag file for statistics display (as an example)
         bag_path_for_stats = selected_files[0] if selected_files else None
@@ -542,7 +542,7 @@ class CliTool:
                         f"Processing: {display_path}",
                         total=100,
                         completed=0,
-                        style=CommonUI.get_color("accent")
+                        style=Theme.get_color("accent")
                     )
                     tasks[bag_file] = task
                     active_files.add(bag_file)
@@ -556,14 +556,14 @@ class CliTool:
                     # BagManager handles thread safety internally
                     
                     # Initialize progress to 30% to indicate preparation complete
-                    progress.update(task, description=f"Processing: {display_path}", style=CommonUI.get_color("accent"), completed=0)
+                    progress.update(task, description=f"Processing: {display_path}", style=Theme.get_color("accent"), completed=0)
                     
                     # Define progress update callback function
                     def update_progress(percent: int):
                         # Map percentage to 30%-100% range, as 30% indicates preparation work complete
                         progress.update(task, 
                                        description=f"Processing: {display_path}", 
-                                        style=CommonUI.get_color("accent"), 
+                                        style=Theme.get_color("accent"), 
                                        completed=percent)
                     
                     # Use progress callback for filtering
@@ -607,7 +607,7 @@ class CliTool:
                         active_files.remove(bag_file)
             
             max_workers = min(len(selected_files), WORKERS)
-            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=CommonUI.get_color("info"))
+            self.console.print(f"\nProcessing {len(selected_files)} files with {max_workers} parallel workers\n", style=Theme.get_color("info"))
             # Use ThreadPoolExecutor for parallel processing
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks to the executor without creating progress tasks yet
@@ -652,7 +652,7 @@ class CliTool:
             # Get whitelist file
             whitelists = self.rose_dirs.list_whitelists()
             if not whitelists:
-                self.console.print("No whitelists found", style=CommonUI.get_color("warning"))
+                self.console.print("No whitelists found", style=Theme.get_color("warning"))
                 return
                 
             # Select whitelist to use
@@ -807,7 +807,7 @@ class CliTool:
             for topic in sorted(selected_topics):
                 f.write(f"{topic}\n")
         
-        self.console.print(f"\nSaved whitelist to: {output}", style=CommonUI.get_color("primary"))
+        self.console.print(f"\nSaved whitelist to: {output}", style=Theme.get_color("primary"))
         
         # Ask what to do next
         next_action = inquirer.select(
@@ -826,7 +826,7 @@ class CliTool:
         # Get all whitelist files
         whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
-            self.console.print("No whitelists found", style=CommonUI.get_color("warning"))
+            self.console.print("No whitelists found", style=Theme.get_color("warning"))
             return
             
         # Select whitelist to view
@@ -843,7 +843,7 @@ class CliTool:
         with open(path) as f:
             content = f.read()
             
-        self.console.print(f"\nWhitelist: {selected}", style=f"bold {CommonUI.get_color('primary')}")
+        self.console.print(f"\nWhitelist: {selected}", style=f"bold {Theme.get_color('primary')}")
         self.console.print("─" * 80)
         self.console.print(content)
     
@@ -855,7 +855,7 @@ class CliTool:
         """Delete a whitelist file"""
         whitelists = self.rose_dirs.list_whitelists()
         if not whitelists:
-            self.console.print("No whitelists found", style=CommonUI.get_color("warning"))
+            self.console.print("No whitelists found", style=Theme.get_color("warning"))
             return
             
         # Select whitelist to delete
@@ -878,9 +878,9 @@ class CliTool:
         path = self.rose_dirs.get_whitelist_file(selected)
         try:
             os.remove(path)
-            self.console.print(f"\nDeleted whitelist: {selected}", style=CommonUI.get_color("primary"))
+            self.console.print(f"\nDeleted whitelist: {selected}", style=Theme.get_color("primary"))
         except Exception as e:
-            self.console.print(f"\nError deleting whitelist: {str(e)}", style=CommonUI.get_color("error"))
+            self.console.print(f"\nError deleting whitelist: {str(e)}", style=Theme.get_color("error"))
 
     def extract_wizard(self):
         """Extract wizard - Generate extract commands for reuse"""
@@ -949,7 +949,7 @@ class CliTool:
             prompt_message = "Select topics to EXCLUDE from the extract:"
         
         # Show the mode to user
-        self.console.print(f"\n{prompt_message}", style=CommonUI.get_color("info"))
+        self.console.print(f"\n{prompt_message}", style=Theme.get_color("info"))
         selected_topics = ask_topics(self.console, topics, parser=self.parser, bag_path=input_bag)
         if not selected_topics:
             return
@@ -1056,15 +1056,15 @@ class CliTool:
             with open(commands_file, 'w') as f:
                 json.dump(commands, f, indent=2)
             
-            self.console.print(f"\nSaved extract command: {command_name}", style=CommonUI.get_color("primary"))
+            self.console.print(f"\nSaved extract command: {command_name}", style=Theme.get_color("primary"))
             self._show_extract_command_summary(command_data)
             
         except Exception as e:
-            self.console.print(f"\nError saving command: {str(e)}", style=CommonUI.get_color("error"))
+            self.console.print(f"\nError saving command: {str(e)}", style=Theme.get_color("error"))
     
     def _show_extract_command_summary(self, command_data):
         """Show a summary of the extract command"""
-        self.console.print("\nCommand Summary:", style=f"bold {CommonUI.get_color('primary')}")
+        self.console.print("\nCommand Summary:", style=f"bold {Theme.get_color('primary')}")
         self.console.print("─" * 50)
         self.console.print(f"Name: {command_data['name']}")
         self.console.print(f"Output: {command_data['output_pattern']}")
@@ -1089,13 +1089,13 @@ class CliTool:
             cmd += f" --compression {command_data['compression']}"
         
         self.console.print(f"\nEquivalent command:")
-        self.console.print(f"  {cmd}", style=CommonUI.get_color("info"))
+        self.console.print(f"  {cmd}", style=Theme.get_color("info"))
     
     def _view_extract_commands(self):
         """View saved extract commands"""
         commands = self._load_extract_commands()
         if not commands:
-            self.console.print("No saved extract commands found", style=CommonUI.get_color("warning"))
+            self.console.print("No saved extract commands found", style=Theme.get_color("warning"))
             return
         
         # Select command to view
@@ -1116,7 +1116,7 @@ class CliTool:
         """Run a saved extract command"""
         commands = self._load_extract_commands()
         if not commands:
-            self.console.print("No saved extract commands found", style=CommonUI.get_color("warning"))
+            self.console.print("No saved extract commands found", style=Theme.get_color("warning"))
             return
         
         # Select command to run
@@ -1182,7 +1182,7 @@ class CliTool:
                 self.console.print(f"Including {len(actual_topics)} topics")
             
             if not actual_topics:
-                self.console.print("No topics to extract", style=CommonUI.get_color("warning"))
+                self.console.print("No topics to extract", style=Theme.get_color("warning"))
                 return
             
             # Create ExtractOption
@@ -1215,17 +1215,17 @@ class CliTool:
                     overwrite=True
                 )
             
-            self.console.print(f"\nExtraction completed successfully!", style=CommonUI.get_color("success"))
+            self.console.print(f"\nExtraction completed successfully!", style=Theme.get_color("success"))
             self.console.print(f"Output: {output_bag}")
             
         except Exception as e:
-            self.console.print(f"\nExtraction failed: {str(e)}", style=CommonUI.get_color("error"))
+            self.console.print(f"\nExtraction failed: {str(e)}", style=Theme.get_color("error"))
     
     def _delete_extract_command(self):
         """Delete a saved extract command"""
         commands = self._load_extract_commands()
         if not commands:
-            self.console.print("No saved extract commands found", style=CommonUI.get_color("warning"))
+            self.console.print("No saved extract commands found", style=Theme.get_color("warning"))
             return
         
         # Select command to delete
@@ -1260,10 +1260,10 @@ class CliTool:
             with open(commands_file, 'w') as f:
                 json.dump(commands, f, indent=2)
             
-            self.console.print(f"\nDeleted extract command: {command_data['name']}", style=CommonUI.get_color("primary"))
+            self.console.print(f"\nDeleted extract command: {command_data['name']}", style=Theme.get_color("primary"))
             
         except Exception as e:
-            self.console.print(f"\nError deleting command: {str(e)}", style=CommonUI.get_color("error"))
+            self.console.print(f"\nError deleting command: {str(e)}", style=Theme.get_color("error"))
     
     def _load_extract_commands(self):
         """Load saved extract commands"""

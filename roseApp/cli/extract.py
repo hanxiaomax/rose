@@ -16,8 +16,8 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
-from ..ui.common_ui import CommonUI
-from ..ui.common_ui import Message
+from ..ui.common_ui import SuccessMessage, ErrorMessage, WarningMessage, InfoMessage, PathMessage
+from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
@@ -202,22 +202,22 @@ def _extract_topics_impl(
     try:
         # Validate input arguments
         if not topics:
-            Message("No topics specified. Use --topics to specify topics", "error").render(console)
+            ErrorMessage("No topics specified. Use --topics to specify topics").render(console)
             raise typer.Exit(1)
         
         # Find bag files using patterns
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
-            Message("No bag files found matching the specified patterns", "error").render(console)
+            ErrorMessage("No bag files found matching the specified patterns").render(console)
             for pattern in input_bags:
-                Message(f"  Pattern: {pattern}", "info").render(console)
+                InfoMessage(f"  Pattern: {pattern}").render(console)
             raise typer.Exit(1)
         
         # Show found files
-        Message(f"Found {len(valid_bags)} bag file(s):", "info").render(console)
+        InfoMessage(f"Found {len(valid_bags)} bag file(s):").render(console)
         for bag in valid_bags:
-            Message(f"  {bag}", "info").render(console)
+            PathMessage(f"  {bag}").render(console)
         
         # Check if bags are loaded in cache
         cache_manager = create_bag_cache_manager()
@@ -229,32 +229,32 @@ def _extract_topics_impl(
                 uncached_bags.append(bag_path)
         
         if uncached_bags:
-            Message(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.", "warning").render(console)
+            WarningMessage(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.").render(console)
             if not yes and not typer.confirm("Load uncached bags automatically?"):
-                Message("Operation cancelled", "warning").render(console)
+                WarningMessage("Operation cancelled").render(console)
                 raise typer.Exit(0)
             
             # Load uncached bags directly without additional prompts (could be done in parallel, but for simplicity doing sequentially)
             from ..core.parser import create_parser
             
             for bag_path in uncached_bags:
-                Message(f"Loading bag file into cache: {bag_path}", "info").render(console)
+                InfoMessage(f"Loading bag file into cache: {bag_path}").render(console)
                 start_time = time.time()
                 parser = create_parser()
                 try:
                     # Run async function in event loop
                     asyncio.run(parser.load_bag_async(bag_path, build_index=False))
                     elapsed = time.time() - start_time
-                    Message(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s", "success").render(console)
+                    SuccessMessage(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s").render(console)
                 except Exception as e:
-                    Message(f"✗ Failed to load bag: {e}", "error").render(console)
-                    Message(f"Failed to load bag: {bag_path}", "error").render(console)
+                    ErrorMessage(f"✗ Failed to load bag: {e}").render(console)
+                    ErrorMessage(f"Failed to load bag: {bag_path}").render(console)
                     raise typer.Exit(1)
         
         # Validate compression option
         valid_compression = ["none", "bz2", "lz4"]
         if compression not in valid_compression:
-            Message(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}", "error").render(console)
+            ErrorMessage(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}").render(console)
             raise typer.Exit(1)
         
         # Set default output pattern if not specified
@@ -264,7 +264,7 @@ def _extract_topics_impl(
             output_pattern = output
         
         # Determine topic filtering from first bag (assuming all bags have similar topics)
-        Message("Analyzing topics from bag files...", "info").render(console)
+        InfoMessage("Analyzing topics from bag files...").render(console)
         
         # Get all unique topics from all bags
         all_topics_set = set()
@@ -277,7 +277,7 @@ def _extract_topics_impl(
         
         all_topics = list(all_topics_set)
         if not all_topics:
-            Message("No topics found in cached bag analysis", "error").render(console)
+            ErrorMessage("No topics found in cached bag analysis").render(console)
             raise typer.Exit(1)
         
         # Apply topic filtering using our filter function
@@ -292,17 +292,17 @@ def _extract_topics_impl(
             operation_desc = f"Including topics matching: {', '.join(topics)}"
         
         if not topics_to_extract:
-            Message(f"No topics match the patterns: {', '.join(topics)}", "error").render(console)
-            Message(f"Available topics: {', '.join(all_topics[:10])}{'...' if len(all_topics) > 10 else ''}", "info").render(console)
+            ErrorMessage(f"No topics match the patterns: {', '.join(topics)}").render(console)
+            InfoMessage(f"Available topics: {', '.join(all_topics[:10])}{'...' if len(all_topics) > 10 else ''}").render(console)
             raise typer.Exit(1)
         
         # Show operation description
-        Message(operation_desc, "info").render(console)
-        Message(f"Will extract {len(topics_to_extract)} topic(s): {', '.join(topics_to_extract[:5])}{'...' if len(topics_to_extract) > 5 else ''}", "success").render(console)
+        InfoMessage(operation_desc).render(console)
+        SuccessMessage(f"Will extract {len(topics_to_extract)} topic(s): {', '.join(topics_to_extract[:5])}{'...' if len(topics_to_extract) > 5 else ''}").render(console)
         
         # If dry run, show preview and return
         if dry_run:
-            Message(f"DRY RUN - Would extract from {len(valid_bags)} bag file(s):", "warning").render(console)
+            WarningMessage(f"DRY RUN - Would extract from {len(valid_bags)} bag file(s):").render(console)
             for bag_path in valid_bags:
                 # Generate output path for preview
                 timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -313,8 +313,8 @@ def _extract_topics_impl(
                 else:
                     preview_output = f"{bag_path.stem}_{output_pattern}_{timestamp}.bag"
                 
-                Message(f"  {bag_path} -> {preview_output}", "info").render(console)
-            Message(f"Topics to extract: {', '.join(topics_to_extract)}", "info").render(console)
+                PathMessage(f"  {bag_path} -> {preview_output}").render(console)
+            InfoMessage(f"Topics to extract: {', '.join(topics_to_extract)}").render(console)
             return
         
         # Determine number of workers
@@ -322,7 +322,7 @@ def _extract_topics_impl(
             workers = max(1, os.cpu_count() - 2)
         
         analysis_type = f"with {compression} compression" if compression != "none" else "without compression"
-        Message(f"Extracting from {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...", "info").render(console)
+        InfoMessage(f"Extracting from {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...").render(console)
         
         # Extract bags with individual progress bars
         results = []
@@ -412,7 +412,7 @@ def _extract_topics_impl(
             raise typer.Exit(1)
         
     except Exception as e:
-        Message(f"Error during extraction: {e}", "error").render(console)
+        ErrorMessage(f"Error during extraction: {e}").render(console)
         logger.error(f"Extraction error: {e}", exc_info=True)
         raise typer.Exit(1)
 

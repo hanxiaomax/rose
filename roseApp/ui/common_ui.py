@@ -13,8 +13,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 
-# Import theme manager for consistent styling
-from ..core.theme_manager import ThemeManager, ThemeMode, ThemeColors, ThemeTypography, ThemeSpacing
+# Import simple theme system
+from .theme import SimpleTheme, MessageStyle
 
 
 @dataclass
@@ -30,23 +30,52 @@ class DisplayConfig:
 
 @dataclass
 class Message:
-    """Standard message component with consistent styling"""
+    """Base message class using unified theme system"""
     text: str
     message_type: str = "info"  # info, success, warning, error
     
     def render(self, console: Optional[Console] = None) -> None:
-        """Render the message to console"""
+        """Render the message to console using theme system"""
         if console is None:
             console = Console()
         
-        colors = {
-            "info": "cyan",
-            "success": "green", 
-            "warning": "yellow",
-            "error": "red"
-        }
-        color = colors.get(self.message_type, "white")
-        console.print(f"[{color}]{self.text}[/{color}]")
+        styled_text = MessageStyle.get_message(self.text, self.message_type)
+        console.print(styled_text)
+
+class SuccessMessage(Message):
+    """Success message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "success")
+
+class ErrorMessage(Message):
+    """Error message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "error")
+
+class WarningMessage(Message):
+    """Warning message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "warning")
+
+class InfoMessage(Message):
+    """Info message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "info")
+
+class TitleMessage(Message):
+    """Title message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "title")
+
+class PathMessage(Message):
+    """Path message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "path")
+
+class TopicMessage(Message):
+    """Topic message using theme system"""
+    def __init__(self, text: str):
+        super().__init__(text, "topic")
 
 
 class CommonUI:
@@ -55,36 +84,21 @@ class CommonUI:
     def __init__(self):
         self.console = Console()
     
-    # Theme management methods
-    @staticmethod
-    def set_theme_mode(mode: ThemeMode) -> None:
-        """Set current theme mode"""
-        ThemeManager.set_theme_mode(mode)
+    def show_success(self, message: str) -> None:
+        """Display success message using theme system"""
+        SuccessMessage(message).render(self.console)
     
-    @staticmethod
-    def get_theme_colors() -> ThemeColors:
-        """Get current theme colors"""
-        return ThemeManager.get_theme_colors()
+    def show_error(self, message: str) -> None:
+        """Display error message using theme system"""
+        ErrorMessage(message).render(self.console)
     
-    @staticmethod
-    def get_theme_typography() -> ThemeTypography:
-        """Get current theme typography"""
-        return ThemeManager.get_theme_typography()
+    def show_warning(self, message: str) -> None:
+        """Display warning message using theme system"""
+        WarningMessage(message).render(self.console)
     
-    @staticmethod
-    def get_theme_spacing() -> ThemeSpacing:
-        """Get current theme spacing"""
-        return ThemeManager.get_theme_spacing()
-    
-    @staticmethod
-    def get_color(color_name: str, modifier: str = "") -> str:
-        """Get unified color for any component"""
-        return ThemeManager.get_color(color_name, modifier)
-    
-    @staticmethod
-    def style_text(text: str, color_name: str, modifier: str = "") -> str:
-        """Apply unified styling to text"""
-        return ThemeManager.style_text(text, color_name, modifier)
+    def show_info(self, message: str) -> None:
+        """Display info message using theme system"""
+        InfoMessage(message).render(self.console)
     
     @staticmethod
     def format_file_size(size_bytes: int) -> str:

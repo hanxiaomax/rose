@@ -11,13 +11,16 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..ui.common_ui import CommonUI, Message
+from ..ui.common_ui import CommonUI, Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
 
 
-WARNING_COLOR = CommonUI.get_color('warning')
-PRIMARY_COLOR = CommonUI.get_color('primary')
-ACCENT_COLOR = CommonUI.get_color('accent')
-SUCCESS_COLOR = CommonUI.get_color('success')
+# Import theme system for colors
+from ..ui.theme import SimpleTheme as Theme
+
+WARNING_COLOR = Theme.get_color('warning')
+PRIMARY_COLOR = Theme.get_color('primary')
+ACCENT_COLOR = Theme.get_color('accent')
+SUCCESS_COLOR = Theme.get_color('success')
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -34,21 +37,21 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{CommonUI.get_color('primary')} link https://github.com/hanxiaomax/rose")
+    subtitle.append("Github", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax/rose")
     subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{CommonUI.get_color('primary')} link https://github.com/hanxiaomax")
+    subtitle.append("Author", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
     content.append(ROSE_BANNER, style="")
-    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{PRIMARY_COLOR}")
+    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{Theme.get_color('primary')}")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=WARNING_COLOR,  
+        border_style=Theme.get_color('warning'),  
         highlight=True
     )
     
@@ -57,16 +60,16 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style=f"bold {ACCENT_COLOR}")
+    console.print("\nUsage Instructions:",style=f"bold {Theme.get_color('accent')}")
     if is_fuzzy:
-        console.print(f"•  [{ACCENT_COLOR}]Type to search[/{ACCENT_COLOR}]")
+        console.print(f"•  [{Theme.get_color('accent')}]Type to search[/{Theme.get_color('accent')}]")
     else:
-        console.print(f"•  [{ACCENT_COLOR}]Space[/{ACCENT_COLOR}] to select/unselect") 
-    console.print(f"•  [{ACCENT_COLOR}]↑/↓[/{ACCENT_COLOR}] to navigate options")
-    console.print(f"•  [{ACCENT_COLOR}]Tab[/{ACCENT_COLOR}] to select and move to next item")
-    console.print(f"•  [{ACCENT_COLOR}]Shift+Tab[/{ACCENT_COLOR}] to select and move to previous item")
-    console.print(f"•  [{ACCENT_COLOR}]Ctrl+A[/{ACCENT_COLOR}] to select all")
-    console.print(f"•  [{ACCENT_COLOR}]Enter[/{ACCENT_COLOR}] to confirm selection\n")
+        console.print(f"•  [{Theme.get_color('accent')}]Space[/{Theme.get_color('accent')}] to select/unselect") 
+    console.print(f"•  [{Theme.get_color('accent')}]↑/↓[/{Theme.get_color('accent')}] to navigate options")
+    console.print(f"•  [{Theme.get_color('accent')}]Tab[/{Theme.get_color('accent')}] to select and move to next item")
+    console.print(f"•  [{Theme.get_color('accent')}]Shift+Tab[/{Theme.get_color('accent')}] to select and move to previous item")
+    console.print(f"•  [{Theme.get_color('accent')}]Ctrl+A[/{Theme.get_color('accent')}] to select all")
+    console.print(f"•  [{Theme.get_color('accent')}]Enter[/{Theme.get_color('accent')}] to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -86,19 +89,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT_COLOR}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {PRIMARY_COLOR}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {PRIMARY_COLOR}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=ACCENT_COLOR)
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {Theme.get_color('primary')}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {Theme.get_color('primary')}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=Theme.get_color('accent'))
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{PRIMARY_COLOR}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {PRIMARY_COLOR}")
+        bag_info.append(f"• {topic:<40}", style=f"{Theme.get_color('primary')}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {Theme.get_color('primary')}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=ACCENT_COLOR,
+                  border_style=Theme.get_color('accent'),
                   padding=(0, 1))
     
     console.print(panel)
@@ -120,23 +123,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=WARNING_COLOR)
+                console.print("No topics selected. Showing all topics.", style=Theme.get_color('warning'))
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {ACCENT_COLOR}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=PRIMARY_COLOR)
+                filtered_info.append(f"• {topic:<40}", style=Theme.get_color('primary'))
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=PRIMARY_COLOR,
+                                  border_style=Theme.get_color('primary'),
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -145,12 +148,12 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     """Show filtering statistics in a table format with headers and three rows"""
     # Check if files exist before trying to get their sizes
     if not os.path.exists(input_bag):
-        Message(f"Input bag file not found: {input_bag}", "error").render(console)
+        ErrorMessage(f"Input bag file not found: {input_bag}").render(console)
         return
     
     if not os.path.exists(output_bag):
-        Message(f"Output bag file not created: {output_bag}", "warning").render(console)
-        Message("The filtering process may have failed or been interrupted.", "warning").render(console)
+        WarningMessage(f"Output bag file not created: {output_bag}").render(console)
+        WarningMessage("The filtering process may have failed or been interrupted.").render(console)
         return
     
     input_size = os.path.getsize(input_bag)
@@ -169,9 +172,9 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     
     # 添加三列，第一列较窄
-    table.add_column("", style=f"{PRIMARY_COLOR}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{PRIMARY_COLOR}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{PRIMARY_COLOR}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    table.add_column("", style=f"{Theme.get_color('primary')}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{Theme.get_color('primary')}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{Theme.get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
     
     # 添加input行
     table.add_row(
@@ -182,13 +185,13 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     
     # 添加output行，包含缩小百分比，使用ACCENT颜色
     table.add_row(
-        f"[{ACCENT_COLOR}]Out[/{ACCENT_COLOR}]",
-        f"[{ACCENT_COLOR}]{os.path.basename(output_bag)}[/{ACCENT_COLOR}]",
-        f"[{ACCENT_COLOR}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{ACCENT_COLOR}]"
+        f"[{Theme.get_color('accent')}]Out[/{Theme.get_color('accent')}]",
+        f"[{Theme.get_color('accent')}]{os.path.basename(output_bag)}[/{Theme.get_color('accent')}]", 
+        f"[{Theme.get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{Theme.get_color('accent')}]"  
     )
     
     # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {ACCENT_COLOR}"))
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {Theme.get_color('accent')}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -207,9 +210,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=f"{SUCCESS_COLOR}")
+        console.print(summary, style=Theme.get_color('success'))
     else:
-        console.print(summary, style=f"{ACCENT_COLOR}")
+        console.print(summary, style=Theme.get_color('accent'))
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(

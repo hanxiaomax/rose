@@ -17,8 +17,8 @@ from rich.table import Table
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
-from ..ui.common_ui import CommonUI
-from ..ui.common_ui import Message
+from ..ui.theme import SimpleTheme as Theme
+from ..ui.common_ui import SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
 
 # Set to CLI mode
 set_app_mode(AppMode.CLI)
@@ -150,26 +150,26 @@ def load(
 
     # Check if input patterns are provided when not using --list
     if not input:
-        Message("Error: No bag files specified. Provide bag file patterns", "error").render(console)
+        ErrorMessage("Error: No bag files specified. Provide bag file patterns").render(console)
         raise typer.Exit(1)
     
     # Find bag files using patterns
     valid_bags = find_bag_files(input)
     
     if not valid_bags:
-        Message("No bag files found matching the specified patterns", "error").render(console)  
+        ErrorMessage("No bag files found matching the specified patterns").render(console)  
         for pattern in input:
-            Message(f"  Pattern: {pattern}", "info").render(console)
+            InfoMessage(f"  Pattern: {pattern}").render(console)
         raise typer.Exit(1)
     
     # Show found files
-    Message(f"Found {len(valid_bags)} bag file(s):", "info").render(console)
+    InfoMessage(f"Found {len(valid_bags)} bag file(s):").render(console)
     for bag in valid_bags:
-        Message(f"  {bag}", "info").render(console)
+        InfoMessage(f"  {bag}").render(console)
     
     # Handle dry run
     if dry_run:
-        Message(f"DRY RUN - Would load {len(valid_bags)} bag file(s)", "warning").render(console)
+        WarningMessage(f"DRY RUN - Would load {len(valid_bags)} bag file(s)").render(console)
 
         return
     
@@ -179,7 +179,7 @@ def load(
         workers = max(1, os.cpu_count() - 2)
     
     analysis_type = "with index building" if build_index else "quick"
-    Message(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...", "info").render(console)
+    InfoMessage(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...").render(console)
     
     # Initialize parser
     parser = BagParser()
@@ -272,7 +272,7 @@ def load(
     cached_count = sum(1 for r in results if r['status'] == 'already_cached')
     error_count = sum(1 for r in results if r['status'] == 'error')
     
-    Message("Loading Summary", "info").render(console)
+    InfoMessage("Loading Summary").render(console)
     
     # Simple text-based summary
     summary_lines = []
@@ -288,15 +288,15 @@ def load(
     
     # Show errors if any
     if error_count > 0:
-        Message("Errors:", "error").render(console)
+        ErrorMessage("Errors:").render(console)
         for result in results:
             if result['status'] == 'error':
-                Message(f"  {result['path']}: {result['message']}", "error").render(console)
+                ErrorMessage(f"  {result['path']}: {result['message']}").render(console)
     
     # Show success message
     total_ready = loaded_count + cached_count
     if total_ready > 0:
-        Message(f"Ready: {total_ready} bag(s) available for inspect and extract commands", "success").render(console)
+        SuccessMessage(f"Ready: {total_ready} bag(s) available for inspect and extract commands").render(console)
     
     if error_count > 0:
         raise typer.Exit(1)
