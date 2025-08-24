@@ -11,7 +11,7 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..ui.common_ui import CommonUI, Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
+from ..ui.common_ui import CommonUI, Message
 
 
 # Import theme system for colors
@@ -60,16 +60,20 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style=f"bold {Theme.get_color('accent')}")
+    from ..ui.common_ui import CommonUI
+    ui = CommonUI()
+    ui.console = console
+    
+    ui.print_bold("Usage Instructions:", "accent")
     if is_fuzzy:
-        console.print(f"•  [{Theme.get_color('accent')}]Type to search[/{Theme.get_color('accent')}]")
+        ui.show_accent("•  Type to search")
     else:
-        console.print(f"•  [{Theme.get_color('accent')}]Space[/{Theme.get_color('accent')}] to select/unselect") 
-    console.print(f"•  [{Theme.get_color('accent')}]↑/↓[/{Theme.get_color('accent')}] to navigate options")
-    console.print(f"•  [{Theme.get_color('accent')}]Tab[/{Theme.get_color('accent')}] to select and move to next item")
-    console.print(f"•  [{Theme.get_color('accent')}]Shift+Tab[/{Theme.get_color('accent')}] to select and move to previous item")
-    console.print(f"•  [{Theme.get_color('accent')}]Ctrl+A[/{Theme.get_color('accent')}] to select all")
-    console.print(f"•  [{Theme.get_color('accent')}]Enter[/{Theme.get_color('accent')}] to confirm selection\n")
+        ui.show_accent("•  Space to select/unselect") 
+    ui.show_accent("•  ↑/↓ to navigate options")
+    ui.show_accent("•  Tab to select and move to next item")
+    ui.show_accent("•  Shift+Tab to select and move to previous item")
+    ui.show_accent("•  Ctrl+A to select all")
+    ui.show_accent("•  Enter to confirm selection\n")
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -416,8 +420,8 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
         PanelProgress: A progress bar wrapped in a panel with optional title
     """
     return PanelProgress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),  # 设置为 None 以自适应宽度
+        TextColumn(f"[{Theme.get_color('primary')}][progress.description]{{task.description}}[/{Theme.get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=Theme.get_color('success'), finished_style=Theme.get_color('success')),  # 设置为 None 以自适应宽度
         TaskProgressColumn(),
         TimeRemainingColumn(),
         title=title,
@@ -435,8 +439,8 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
         TimedPanelProgress: A progress bar wrapped in a panel with timing functionality
     """
     return TimedPanelProgress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
+        TextColumn(f"[{Theme.get_color('primary')}][progress.description]{{task.description}}[/{Theme.get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=Theme.get_color('success'), finished_style=Theme.get_color('success')),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         title=title,
@@ -470,7 +474,10 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     if cached_entry and cached_entry.is_valid(bag_path):
         if verbose:
             console = Console()
-            console.print(f"[green]✓[/green] Using cached bag analysis for [bold]{bag_path}[/bold]")
+            from ..ui.common_ui import CommonUI
+            ui = CommonUI()
+            ui.console = console
+            ui.show_success(f"✓ Using cached bag analysis for {bag_path}")
         return True
     
     if not auto_load and not force_load:
@@ -482,21 +489,27 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     
     should_load = force_load
     if not force_load:
-        console.print(f"[yellow]⚠[/yellow] Bag file [bold]{bag_path}[/bold] is not loaded in cache.")
+        from ..ui.common_ui import CommonUI
+        ui = CommonUI()
+        ui.console = console
+        ui.show_warning(f"⚠ Bag file {bag_path} is not loaded in cache.")
         
         # Different prompts based on build_index mode
         if build_index:
-            console.print("[blue]Note:[/blue] Verbose mode enabled - will build DataFrame index for detailed statistics.")
+            ui.show_info("Note: Verbose mode enabled - will build DataFrame index for detailed statistics.")
             should_load = typer.confirm("Would you like to load it with DataFrame indexing now?", default=True)
         else:
             should_load = typer.confirm("Would you like to load it now?", default=True)
         
         if not should_load:
-            console.print("[yellow]Operation cancelled. Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
+            ui.show_warning(f"Operation cancelled. Please load the bag first using: rose load {bag_path}")
             return False
     
     # Load the bag
-    console.print(f"[blue]Loading bag file into cache...[/blue]")
+    from ..ui.common_ui import CommonUI
+    ui = CommonUI()
+    ui.console = console
+    ui.show_info("Loading bag file into cache...")
     
     try:
         # Use async loading
@@ -508,10 +521,10 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
                 # Simple progress indication
                 if isinstance(current, (int, float)) and isinstance(total, (int, float)) and total > 0:
                     percentage = (current / total) * 100
-                    console.print(f"[blue]Loading... {percentage:.1f}%[/blue]", end="\r")
+                    console.print(f"Loading... {percentage:.1f}%", end="\r")
                 else:
                     # Handle string descriptions
-                    console.print(f"[blue]{current}[/blue]", end="\r")
+                    console.print(f"{current}", end="\r")
             
             bag_info, elapsed_time = await parser.load_bag_async(
                 str(bag_path), 
@@ -531,13 +544,13 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         bag_info, elapsed_time = loop.run_until_complete(load_bag())
         
         if bag_info:
-            console.print(f"[green]✓[/green] Successfully loaded bag into cache in {elapsed_time:.2f}s")
+            ui.show_success(f"✓ Successfully loaded bag into cache in {elapsed_time:.2f}s")
             if verbose:
                 console.print(f"  Topics: {len(bag_info.topics) if bag_info.topics else 0}")
                 console.print(f"  Duration: {bag_info.duration_seconds:.2f}s" if bag_info.duration_seconds else "  Duration: Unknown")
             return True
         else:
-            console.print("[red]✗[/red] Failed to load bag into cache")
+            ui.show_error("✗ Failed to load bag into cache")
             return False
             
     except Exception as e:

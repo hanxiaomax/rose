@@ -17,8 +17,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
 from ..ui.common_ui import (
-    Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage,
-    TitleMessage, PathMessage, TopicMessage
+    CommonUI
 )
 from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
@@ -397,8 +396,8 @@ async def _compress_bags_impl(
     # Use ThreadPoolExecutor for parallel processing
     with Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         console=console,
@@ -471,10 +470,10 @@ async def _compress_bags_impl(
             validation_results = []
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeElapsedColumn(),
+                TextColumn("[progress.description]{task.description}", style=get_color('primary')),
+                BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
+                TaskProgressColumn(style=get_color('info')),
+                TimeElapsedColumn(style=get_color('muted')),
                 console=console,
                 refresh_per_second=10
             ) as progress:

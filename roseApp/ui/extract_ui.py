@@ -11,6 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI, TableUI
+from .theme import SimpleTheme as Theme
 
 
 class ExtractUI:
@@ -201,7 +202,7 @@ class ExtractUI:
             created = cmd.get('created', 'Unknown')
             topics_count = len(cmd.get('topics', []))
             
-            self.console.print(f"  {i}. [cyan]{name}[/cyan] - {description} ({created})")
+            self.common_ui.show_primary(f"  {i}. {name} - {description} ({created})")
             self.console.print(f"     Topics: {topics_count}, Compression: {cmd.get('compression', 'none')}")
     
     def confirm_overwrite(self, output_file: str) -> bool:

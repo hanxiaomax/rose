@@ -21,18 +21,19 @@ class ThemeMode(Enum):
 
 @dataclass
 class ThemeColors:
-    """Simple color palette for CLI"""
+    """Simple color palette for CLI with custom accent"""
     
     # Base colors
-    primary: str = "cyan"
+    primary: str = "white"
     secondary: str = "blue"
-    accent: str = "yellow"
+    accent: str = "red"
+    orange: str = "orange1"
     
     # Status colors
-    success: str = "green"
-    warning: str = "yellow"
-    error: str = "red"
-    info: str = "blue"
+    success: str = "blue"
+    warning: str = "magenta"
+    error: str = "orange1"
+    info: str = "green"
     
     # Neutral colors
     muted: str = "dim"
@@ -78,15 +79,17 @@ class SimpleTheme:
         'debug': _colors.muted,
         
         # UI elements
+        'primary': _colors.primary,
+        'accent': _colors.accent,
         'title': _colors.primary,
         'header': _colors.primary,
         'label': _colors.secondary,
         'value': _colors.foreground,
         'path': _colors.file,
-        'topic': _colors.accent,
+        'topic': _colors.orange,
         
         # Operations
-        'processing': _colors.accent,
+        'processing': _colors.orange,
         'loading': _colors.muted,
         'complete': _colors.success,
         'skip': _colors.muted,

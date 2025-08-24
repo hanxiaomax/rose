@@ -42,40 +42,7 @@ class Message:
         styled_text = MessageStyle.get_message(self.text, self.message_type)
         console.print(styled_text)
 
-class SuccessMessage(Message):
-    """Success message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "success")
-
-class ErrorMessage(Message):
-    """Error message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "error")
-
-class WarningMessage(Message):
-    """Warning message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "warning")
-
-class InfoMessage(Message):
-    """Info message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "info")
-
-class TitleMessage(Message):
-    """Title message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "title")
-
-class PathMessage(Message):
-    """Path message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "path")
-
-class TopicMessage(Message):
-    """Topic message using theme system"""
-    def __init__(self, text: str):
-        super().__init__(text, "topic")
+# 所有具体的Message类已被统一为通过CommonUI的show_*方法使用基础Message类
 
 
 class CommonUI:
@@ -86,19 +53,49 @@ class CommonUI:
     
     def show_success(self, message: str) -> None:
         """Display success message using theme system"""
-        SuccessMessage(message).render(self.console)
+        Message(message, "success").render(self.console)
     
     def show_error(self, message: str) -> None:
         """Display error message using theme system"""
-        ErrorMessage(message).render(self.console)
+        Message(message, "error").render(self.console)
     
     def show_warning(self, message: str) -> None:
         """Display warning message using theme system"""
-        WarningMessage(message).render(self.console)
+        Message(message, "warning").render(self.console)
     
     def show_info(self, message: str) -> None:
         """Display info message using theme system"""
-        InfoMessage(message).render(self.console)
+        Message(message, "info").render(self.console)
+    
+    def show_accent(self, message: str) -> None:
+        """Display accent message using theme system"""
+        Message(message, "accent").render(self.console)
+    
+    def show_primary(self, message: str) -> None:
+        """Display primary message using theme system"""
+        Message(message, "primary").render(self.console)
+    
+    def show_dim(self, message: str) -> None:
+        """Display dim message using theme system"""
+        Message(message, "dim").render(self.console)
+    
+    def show_path(self, message: str) -> None:
+        """Display path message using theme system"""
+        Message(message, "path").render(self.console)
+    
+    def show_topic(self, message: str) -> None:
+        """Display topic message using theme system"""
+        Message(message, "topic").render(self.console)
+    
+    def print_styled(self, message: str, style_type: str = "info") -> None:
+        """Print message with specified style type"""
+        Message(message, style_type).render(self.console)
+    
+    def print_bold(self, message: str, style_type: str = "primary") -> None:
+        """Print bold message with specified style type"""
+        from .theme import SimpleTheme
+        styled_message = f"[bold {SimpleTheme.get_color(style_type)}]{message}[/bold {SimpleTheme.get_color(style_type)}]"
+        self.console.print(styled_message)
     
     @staticmethod
     def format_file_size(size_bytes: int) -> str:
@@ -151,11 +148,11 @@ class CommonUI:
         Message(message, "info").render(self.console)
     
     def create_progress_bar(self, description: str = "Processing...", total: int = 100) -> Progress:
-        """Create a standard progress bar."""
+        """Create a standard progress bar with theme colors."""
         return Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
+            TextColumn(f"[{SimpleTheme.get_color('primary')}][progress.description]{{task.description}}[/{SimpleTheme.get_color('primary')}]"),
+            BarColumn(complete_style=SimpleTheme.get_color('success'), finished_style=SimpleTheme.get_color('success')),
             TaskProgressColumn(),
             TimeElapsedColumn(),
             console=self.console

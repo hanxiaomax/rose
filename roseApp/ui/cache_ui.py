@@ -11,6 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, TableUI
+from .theme import SimpleTheme as Theme
 
 
 class CacheUI:
@@ -54,7 +55,7 @@ class CacheUI:
         total_size = sum(entry.get('size_bytes', 0) for entry in cache_entries)
         total_files = len(cache_entries)
         
-        self.console.print(f"\n[dim]Total: {total_files} files, {self.common_ui.format_file_size(total_size)}[/dim]")
+        self.common_ui.show_dim(f"\nTotal: {total_files} files, {self.common_ui.format_file_size(total_size)}")
     
     def display_cache_stats(self, stats: Dict[str, Any]) -> None:
         """Display cache statistics."""
@@ -122,7 +123,7 @@ class CacheUI:
         # Show topics if available
         topics = entry.get('topics', [])
         if topics:
-            self.console.print(f"\n[bold]Topics ({len(topics)}):[/bold]")
+            self.common_ui.print_bold(f"\nTopics ({len(topics)}):")
             for topic in topics[:10]:  # Show first 10 topics
                 self.console.print(f"  • {topic}")
             if len(topics) > 10:
@@ -156,12 +157,12 @@ class CacheUI:
     
     def display_cache_size_info(self, total_size: int, entry_count: int) -> None:
         """Display cache size information."""
-        self.console.print(f"\n[bold]Cache Size Information:[/bold]")
+        self.common_ui.print_bold("\nCache Size Information:")
         self.console.print(f"  Total Size: {self.common_ui.format_file_size(total_size)}")
         self.console.print(f"  Entry Count: {entry_count}")
         
         if total_size > 1024 * 1024 * 100:  # > 100MB
-            self.console.print("  [yellow]Warning: Large cache size[/yellow]")
+            self.common_ui.show_warning("  Warning: Large cache size")
     
     def display_cache_optimization_summary(self, removed_count: int, freed_space: int) -> None:
         """Display cache optimization summary."""
@@ -174,12 +175,12 @@ class CacheUI:
         valid = [r for r in results if r.get('valid', True)]
         invalid = [r for r in results if not r.get('valid', True)]
         
-        self.console.print(f"\n[bold]Cache Validation Results:[/bold]")
+        self.common_ui.print_bold("\nCache Validation Results:")
         self.console.print(f"  Valid entries: {len(valid)}")
         self.console.print(f"  Invalid entries: {len(invalid)}")
         
         if invalid:
-            self.console.print("\n[red]Invalid entries:[/red]")
+            self.common_ui.show_error("\nInvalid entries:")
             for entry in invalid[:5]:  # Show first 5 invalid entries
                 file_path = entry.get('file_path', 'Unknown')
                 error = entry.get('error', 'Unknown error')

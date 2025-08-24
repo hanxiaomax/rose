@@ -10,6 +10,7 @@ from rich.table import Table
 from rich.text import Text
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI, TableUI
+from .theme import SimpleTheme as Theme
 
 
 class CompressUI:
@@ -27,7 +28,7 @@ class CompressUI:
         failed = [r for r in results if not r.get('success', False)]
         
         if successful:
-            self.console.print(f"\n[bold green]✓[/bold green] Compression completed successfully")
+            self.common_ui.show_success("\n✓ Compression completed successfully")
             
             # Create compression results table
             table = self.table_ui.create_compression_summary_table(successful)

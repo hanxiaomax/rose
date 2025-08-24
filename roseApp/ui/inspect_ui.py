@@ -11,6 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI
+from .theme import SimpleTheme as Theme
 
 
 class InspectUI:
@@ -35,7 +36,7 @@ class InspectUI:
         self.console.print(f"\nTopics:")
         for topic in topics:
             topic_line = Text()
-            topic_line.append(f"  • {topic['name']}", style="bold cyan")
+            topic_line.append(f"  • {topic['name']}", style=f"bold {Theme.get_color('primary')}")
             topic_line.append(f" ({topic['message_type']})", style="dim")
             self.console.print(topic_line)
     
@@ -74,11 +75,11 @@ class InspectUI:
             return
         
         table = Table(title="Topics")
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Type", style="magenta")
-        table.add_column("Messages", justify="right", style="green")
-        table.add_column("Frequency", justify="right", style="blue")
-        table.add_column("Size", justify="right", style="yellow")
+        table.add_column("Topic", style=Theme.get_color('primary'), no_wrap=True)
+        table.add_column("Type", style=Theme.get_color('accent'))
+        table.add_column("Messages", justify="right", style=Theme.get_color('success'))
+        table.add_column("Frequency", justify="right", style=Theme.get_color('info'))
+        table.add_column("Size", justify="right", style=Theme.get_color('warning'))
         
         for topic in topics:
             table.add_row(

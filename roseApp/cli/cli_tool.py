@@ -18,7 +18,7 @@ from ..core.parser import create_parser, ExtractOption
 from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo
 from ..core.util import get_logger, get_preferred_parser_type
-from ..ui.common_ui import CommonUI, Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
+from ..ui.common_ui import CommonUI
 from ..ui.theme import SimpleTheme as Theme
 from ..core.directories import get_rose_directories
 from .util import (LoadingAnimation, build_banner, 
@@ -581,7 +581,7 @@ class CliTool:
                         raise e
                     
                     # Update task status to complete, showing green success mark
-                    progress.update(task, description=f"[green]✓ {display_path}[/green]", completed=100)
+                    progress.update(task, description=f"[{Theme.get_color('success')}]✓ {display_path}[/{Theme.get_color('success')}]", completed=100)
                     
                     # Increment success count
                     with success_fail_lock:
@@ -592,7 +592,7 @@ class CliTool:
                     
                 except Exception as e:
                     # Update task status to failed, showing red error mark
-                    progress.update(task, description=f"[red]✗ {display_path}: {str(e)}[/red]", completed=100)
+                    progress.update(task, description=f"[{Theme.get_color('error')}]✗ {display_path}: {str(e)}[/{Theme.get_color('error')}]", completed=100)
                     logger.error(f"Error processing {bag_file}: {str(e)}", exc_info=True)
                     
                     # Increment failure count
@@ -728,7 +728,7 @@ class CliTool:
                 overwrite=overwrite
             )
             
-            # progress.update(task_id, description=f"[green]✓ Complete: {display_name}[/green]", completed=100)
+            # progress.update(task_id, description=f"[{Theme.get_color('success')}]✓ Complete: {display_name}[/{Theme.get_color('success')}]", completed=100)
         
         
         # Show filtering result statistics

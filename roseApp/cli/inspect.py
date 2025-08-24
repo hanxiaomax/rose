@@ -11,6 +11,7 @@ from ..core.model import AnalysisLevel
 from ..core.export_manager import OutputFormat, ExportOptions
 from ..ui.common_ui import CommonUI
 from ..ui.common_ui import Message
+from ..ui.theme import SimpleTheme as Theme
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
@@ -71,11 +72,11 @@ def inspect(
     elif needs_index:
         # Bag in cache but needs DataFrame index for verbose mode
         console = ui.console
-        console.print(f"[yellow]⚠[/yellow] Verbose mode requires DataFrame index, but cached data doesn't have it.")
+        console.print(f"[{Theme.get_color('warning')}]⚠[/{Theme.get_color('warning')}] Verbose mode requires DataFrame index, but cached data doesn't have it.")
         should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
         
         if should_rebuild:
-            console.print(f"[blue]Rebuilding cache with DataFrame indexing...[/blue]")
+            console.print(f"[{Theme.get_color('info')}]Rebuilding cache with DataFrame indexing...[/{Theme.get_color('info')}]")
             # Clear current cache entry and reload with index
             cache_manager.clear(bag_path)
             if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
@@ -83,7 +84,7 @@ def inspect(
                 raise typer.Exit(1)
             cached_entry = cache_manager.get_analysis(bag_path)
         else:
-            console.print("[yellow]Continuing with cached data (statistics may be incomplete).[/yellow]")
+            console.print(f"[{Theme.get_color('warning')}]Continuing with cached data (statistics may be incomplete).[/{Theme.get_color('warning')}]")
     
     # Set output format based on verbose mode
     if verbose:

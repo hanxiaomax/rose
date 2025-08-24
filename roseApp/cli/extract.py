@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
-from ..ui.common_ui import SuccessMessage, ErrorMessage, WarningMessage, InfoMessage, PathMessage
+from ..ui.common_ui import CommonUI
 from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
@@ -329,8 +329,8 @@ def _extract_topics_impl(
         
         with Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
+            TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+            BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
             MofNCompleteColumn(),
             TimeElapsedColumn(),
             console=console
