@@ -5,16 +5,21 @@ import sys
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 # Import logging module first
 import logging
 
 # Import necessary functions from utility modules
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
-from roseApp.cli.filter import app as filter_app
+from roseApp.cli.extract import extract as extract_main
+from roseApp.cli.compress import compress as compress_main
+from roseApp.cli.inspect import app as inspect_app
+# from roseApp.cli.plot import app as plot_app
+from roseApp.cli.cache import app as cache_app
 from roseApp.cli.cli_tool import app as cli_tool_app
-from roseApp.tui.tui import app as tui_app
+from roseApp.cli.load import load as load_main
+# from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
+# from roseApp.tui.tui import app as tui_app
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -43,31 +48,11 @@ def configure_logging(verbosity: int):
                 '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
             ))
 
-def parse_time_range(time_range: str) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
-    """Parse time range string in 'start_time,end_time' format
-    
-    Args:
-        time_range: String in 'YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS' format
-    
-    Returns:
-        Tuple ((start_seconds, start_nanos), (end_seconds, end_nanos))
-    """
-    if not time_range:
-        return None
-        
-    try:
-        start_str, end_str = time_range.split(',')
-        return TimeUtil.convert_time_range_to_tuple(start_str.strip(), end_str.strip())
-    except Exception as e:
-        logger.error(f"Error parsing time range: {str(e)}")
-        raise typer.BadParameter(
-            "Time range must be in 'YY/MM/DD HH:MM:SS,YY/MM/DD HH:MM:SS' format"
-        )
-
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)")
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)"),
+    profile: bool = typer.Option(False, "--profile", help="Enable performance profiling for analysis operations")
 ):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
     # Set application mode based on command
@@ -78,18 +63,33 @@ def callback(
         
     configure_logging(verbose)
     
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+    # Set up profiling if requested
+    if profile:
+        from .core.cache import get_cache
+        cache = get_cache()
+        # cache.enable_profiling()  # Enable if profiling method exists
+        logger.info("Performance profiling enabled")
+    
+
 
 
 # Add subcommands
-app.add_typer(filter_app)
+app.command(name="load")(load_main)
+app.command(name="extract")(extract_main)
+app.command(name="compress")(compress_main)
+app.add_typer(inspect_app)
+# app.add_typer(plot_app)
+app.add_typer(cache_app)
 app.add_typer(cli_tool_app)
-app.add_typer(tui_app)
+# app.add_typer(profile_app)  # Temporarily disabled due to API migration
+# app.add_typer(tui_app)
 
 if __name__ == '__main__':
     try:
         app()
+    except typer.Exit as e:
+        # Re-raise typer.Exit cleanly (this is expected behavior)
+        raise
     except Exception as e:
         # Handle top-level exceptions only in CLI mode
         if 'tui' not in sys.argv:

@@ -12,13 +12,13 @@ from textual.widgets import DirectoryTree
 from roseApp.tui.components.StatusBar import StatusBar
 from roseApp.core.BagManager import BagManager
 from roseApp.core.util import get_logger
-from roseApp.core.parser import create_parser, ParserType
+from roseApp.core.parser import create_parser
 
 logger = get_logger("BagExplorer")
 
 class BagExplorer(DirectoryTree):
     """A directory tree widget specialized for selecting ROS bag files"""
-    bags = reactive(BagManager(create_parser(ParserType.PYTHON)))
+    bags = reactive(BagManager(create_parser()))
     multi_select_mode = reactive(False)
     
     BINDINGS = [
@@ -36,11 +36,9 @@ class BagExplorer(DirectoryTree):
         self.border_title = "File Explorer"
         self.logger = logger.getChild("BagExplorer")
         
-        # Get config from app
-        config = self.app.config if hasattr(self.app, 'config') else {}
-        parser_type = ParserType.CPP if config.get('load_cpp_parser', False) else ParserType.PYTHON
-        self.bags = BagManager(create_parser(parser_type))
-        self.logger.info(f"Using parser type: {parser_type}")
+        # Use RosbagsBagParser for enhanced performance
+        self.bags = BagManager(create_parser())
+        self.logger.info("Using RosbagsBagParser for enhanced performance")
 
     def on_mount(self) -> None:
         """Initialize when mounted"""

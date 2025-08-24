@@ -38,3 +38,10 @@ dist/**
 *.log
 *.bag
 *.cast
+*.csv
+*.html
+*.png
+
+# Planning folder
+.plan/
+roseApp/tests/.coverage
