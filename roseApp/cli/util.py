@@ -43,7 +43,7 @@ def build_banner():
 
     # Create banner content
     content = Text()
-    content.append(ROSE_BANNER, style="")
+    content.append(ROSE_BANNER, style=f"{Theme.get_color('primary')}")
     content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{Theme.get_color('primary')}")
     
     # Create panel with all elements

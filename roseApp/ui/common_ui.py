@@ -87,6 +87,18 @@ class CommonUI:
         """Display topic message using theme system"""
         Message(message, "topic").render(self.console)
     
+    def show_claude(self, message: str) -> None:
+        """Display message in Claude's signature style"""
+        Message(message, "claude").render(self.console)
+    
+    def show_thinking(self, message: str) -> None:
+        """Display thinking/processing message"""
+        Message(message, "thinking").render(self.console)
+    
+    def show_emphasis(self, message: str) -> None:
+        """Display emphasized message"""
+        Message(message, "emphasis").render(self.console)
+    
     def print_styled(self, message: str, style_type: str = "info") -> None:
         """Print message with specified style type"""
         Message(message, style_type).render(self.console)

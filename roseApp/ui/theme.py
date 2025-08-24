@@ -1,10 +1,10 @@
 """
-Simple, unified theme system for Rose CLI tools.
-Inspired by vim color schemes - provides minimal but consistent styling.
+Claude-inspired theme system for Rose CLI tools.
+Features warm orange/amber accents with high contrast text for professional appearance.
 
 This module provides a single source of truth for all CLI colors and styling,
-ensuring consistent appearance across all CLI commands without exposing
-implementation details to individual UI components.
+ensuring consistent appearance across all CLI commands with Claude's signature
+warm and professional color palette.
 """
 
 from enum import Enum
@@ -21,66 +21,71 @@ class ThemeMode(Enum):
 
 @dataclass
 class ThemeColors:
-    """Simple color palette for CLI with custom accent"""
+    """Claude-inspired color palette for CLI - warm and professional"""
     
-    # Base colors
-    primary: str = "white"
-    secondary: str = "blue"
-    accent: str = "red"
-    orange: str = "orange1"
+    # Base colors - Claude's signature warm tones
+    primary: str = "dark_orange3"        # Clean, high contrast text
+    secondary: str = "gold3"              # Cool complement to warm accent
+    accent: str = "orange1"              # Claude's signature orange/amber
+    orange: str = "orange1"              # Consistent warm tone
     
-    # Status colors
-    success: str = "blue"
-    warning: str = "magenta"
-    error: str = "orange1"
-    info: str = "green"
+    # Status colors - Clear semantic meaning
+    success: str = "bright_green"        # Vibrant success indicator
+    warning: str = "bright_yellow"       # Attention-grabbing yellow
+    error: str = "bright_red"            # Clear error indication
+    info: str = "bright_cyan"            # Informative blue-cyan
     
-    # Neutral colors
-    muted: str = "dim"
-    dim: str = "dim"
+    # Neutral colors - Sophisticated grays
+    muted: str = "bright_black"          # Subtle secondary text
+    dim: str = "bright_black"            # Dimmed elements
     
-    # Special colors
-    highlight: str = "bright_white"
-    background: str = "black"
-    foreground: str = "white"
+    # Special colors - Professional highlights
+    highlight: str = "bright_white"      # Maximum contrast
+    background: str = "black"            # Deep background
+    foreground: str = "bright_white"     # Primary text
     
-    # File operations
-    file: str = "cyan"
-    directory: str = "blue"
-    executable: str = "green"
-    link: str = "magenta"
+    # File operations - Intuitive color coding
+    file: str = "bright_cyan"            # Files in bright cyan
+    directory: str = "bright_blue"       # Directories in blue
+    executable: str = "bright_green"     # Executables in green
+    link: str = "bright_magenta"         # Links in magenta
 
 
 class SimpleTheme:
-    """Simple theme system without complexity"""
+    """Claude-inspired theme system with warm professional colors"""
     
     # Standard color palette
     _colors = ThemeColors()
     
-    # Vim-inspired color mappings
+    # Claude-inspired color mappings with professional semantics
     _color_map = {
-        # Status messages
+        # Status messages - Clear and vibrant
         'ok': _colors.success,
         'success': _colors.success,
         'good': _colors.success,
         'pass': _colors.success,
+        'complete': _colors.success,
         
         'warn': _colors.warning,
         'warning': _colors.warning,
         'caution': _colors.warning,
+        'attention': _colors.warning,
         
         'error': _colors.error,
         'fail': _colors.error,
         'bad': _colors.error,
         'critical': _colors.error,
+        'danger': _colors.error,
         
         'info': _colors.info,
         'note': _colors.info,
+        'tip': _colors.info,
         'debug': _colors.muted,
         
-        # UI elements
+        # UI elements - Professional hierarchy
         'primary': _colors.primary,
         'accent': _colors.accent,
+        'claude': _colors.accent,           # Claude signature color
         'title': _colors.primary,
         'header': _colors.primary,
         'label': _colors.secondary,
@@ -88,22 +93,28 @@ class SimpleTheme:
         'path': _colors.file,
         'topic': _colors.orange,
         
-        # Operations
-        'processing': _colors.orange,
-        'loading': _colors.muted,
-        'complete': _colors.success,
+        # Operations - Intuitive workflow colors
+        'processing': _colors.accent,       # Use Claude's signature color
+        'loading': _colors.accent,          # Warm loading indicator
+        'working': _colors.accent,          # Active work indication
+        'thinking': _colors.accent,         # AI thinking state
+        'analyzing': _colors.info,          # Analysis mode
         'skip': _colors.muted,
         
-        # File types
+        # File types - Enhanced visibility
         'file': _colors.file,
         'directory': _colors.directory,
+        'folder': _colors.directory,
         'size': _colors.muted,
         'time': _colors.muted,
+        'timestamp': _colors.muted,
         
-        # Special
+        # Special - Maximum impact
         'highlight': _colors.highlight,
         'dim': _colors.dim,
         'muted': _colors.muted,
+        'subtle': _colors.muted,
+        'emphasis': _colors.accent,         # Claude emphasis color
     }
     
     @classmethod
@@ -167,8 +178,28 @@ class MessageStyle:
         return SimpleTheme.style_text(text, "dim")
     
     @staticmethod
+    def claude(text: str) -> str:
+        """Claude signature style - warm orange/amber"""
+        return SimpleTheme.style_text(text, "claude", "bold")
+    
+    @staticmethod
+    def accent(text: str) -> str:
+        """Accent style using Claude's signature color"""
+        return SimpleTheme.style_text(text, "accent")
+    
+    @staticmethod
+    def emphasis(text: str) -> str:
+        """Emphasis style for important text"""
+        return SimpleTheme.style_text(text, "emphasis", "bold")
+    
+    @staticmethod
+    def thinking(text: str) -> str:
+        """Thinking/processing style"""
+        return SimpleTheme.style_text(text, "thinking")
+    
+    @staticmethod
     def get_message(text: str, message_type: str) -> str:
-        """Get styled message based on type"""
+        """Get styled message based on type - expanded for Claude theme"""
         type_map = {
             "success": MessageStyle.success,
             "error": MessageStyle.error,
@@ -178,6 +209,11 @@ class MessageStyle:
             "path": MessageStyle.path,
             "topic": MessageStyle.topic,
             "dim": MessageStyle.dim,
+            "claude": MessageStyle.claude,
+            "accent": MessageStyle.accent,
+            "emphasis": MessageStyle.emphasis,
+            "thinking": MessageStyle.thinking,
+            "primary": lambda t: SimpleTheme.style_text(t, "primary"),
         }
         
         style_func = type_map.get(message_type, MessageStyle.info)
