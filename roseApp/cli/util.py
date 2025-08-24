@@ -15,12 +15,12 @@ from ..ui.common_ui import CommonUI, Message
 
 
 # Import theme system for colors
-from ..ui.theme import SimpleTheme as Theme
+from ..ui.theme import get_color
 
-WARNING_COLOR = Theme.get_color('warning')
-PRIMARY_COLOR = Theme.get_color('primary')
-ACCENT_COLOR = Theme.get_color('accent')
-SUCCESS_COLOR = Theme.get_color('success')
+WARNING_COLOR = get_color('warning')
+PRIMARY_COLOR = get_color('primary')
+ACCENT_COLOR = get_color('accent')
+SUCCESS_COLOR = get_color('success')
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -37,21 +37,21 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax/rose")
+    subtitle.append("Github", style=f"{get_color('primary')} link https://github.com/hanxiaomax/rose")
     subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax")
+    subtitle.append("Author", style=f"{get_color('primary')} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
-    content.append(ROSE_BANNER, style=f"{Theme.get_color('primary')}")
-    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{Theme.get_color('primary')}")
+    content.append(ROSE_BANNER, style=f"{get_color('primary')}")
+    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{get_color('primary')}")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=Theme.get_color('warning'),  
+        border_style=get_color('accent'),  # Use Claude's signature color
         highlight=True
     )
     
@@ -64,16 +64,16 @@ def print_usage_instructions(console:Console, is_fuzzy:bool = False):
     ui = CommonUI()
     ui.console = console
     
-    ui.print_bold("Usage Instructions:", "accent")
+    Message.accent("Usage Instructions:", console)
     if is_fuzzy:
-        ui.show_accent("•  Type to search")
+        Message.accent("•  Type to search", console)
     else:
-        ui.show_accent("•  Space to select/unselect") 
-    ui.show_accent("•  ↑/↓ to navigate options")
-    ui.show_accent("•  Tab to select and move to next item")
-    ui.show_accent("•  Shift+Tab to select and move to previous item")
-    ui.show_accent("•  Ctrl+A to select all")
-    ui.show_accent("•  Enter to confirm selection\n")
+        Message.accent("•  Space to select/unselect", console) 
+    Message.accent("•  ↑/↓ to navigate options", console)
+    Message.accent("•  Tab to select and move to next item", console)
+    Message.accent("•  Shift+Tab to select and move to previous item", console)
+    Message.accent("•  Ctrl+A to select all", console)
+    Message.accent("•  Enter to confirm selection\n", console)
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -477,7 +477,7 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
             from ..ui.common_ui import CommonUI
             ui = CommonUI()
             ui.console = console
-            ui.show_success(f"✓ Using cached bag analysis for {bag_path}")
+            Message.success(f"✓ Using cached bag analysis for {bag_path}")
         return True
     
     if not auto_load and not force_load:
@@ -492,24 +492,24 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         from ..ui.common_ui import CommonUI
         ui = CommonUI()
         ui.console = console
-        ui.show_warning(f"⚠ Bag file {bag_path} is not loaded in cache.")
+        Message.warning(f"⚠ Bag file {bag_path} is not loaded in cache.", console)
         
         # Different prompts based on build_index mode
         if build_index:
-            ui.show_info("Note: Verbose mode enabled - will build DataFrame index for detailed statistics.")
+            Message.info("Note: Verbose mode enabled - will build DataFrame index for detailed statistics.", console)
             should_load = typer.confirm("Would you like to load it with DataFrame indexing now?", default=True)
         else:
             should_load = typer.confirm("Would you like to load it now?", default=True)
         
         if not should_load:
-            ui.show_warning(f"Operation cancelled. Please load the bag first using: rose load {bag_path}")
+            Message.warning(f"Operation cancelled. Please load the bag first using: rose load {bag_path}", console)
             return False
     
     # Load the bag
     from ..ui.common_ui import CommonUI
     ui = CommonUI()
     ui.console = console
-    ui.show_info("Loading bag file into cache...")
+    Message.info("Loading bag file into cache...", console)
     
     try:
         # Use async loading
@@ -544,13 +544,13 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         bag_info, elapsed_time = loop.run_until_complete(load_bag())
         
         if bag_info:
-            ui.show_success(f"✓ Successfully loaded bag into cache in {elapsed_time:.2f}s")
+            Message.success(f"✓ Successfully loaded bag into cache in {elapsed_time:.2f}s", console)
             if verbose:
                 console.print(f"  Topics: {len(bag_info.topics) if bag_info.topics else 0}")
                 console.print(f"  Duration: {bag_info.duration_seconds:.2f}s" if bag_info.duration_seconds else "  Duration: Unknown")
             return True
         else:
-            ui.show_error("✗ Failed to load bag into cache")
+            Message.error("✗ Failed to load bag into cache", console)
             return False
             
     except Exception as e:

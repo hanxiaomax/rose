@@ -24,7 +24,7 @@ class LoadUI:
     def display_loading_started(self, file_count: int, build_index: bool) -> None:
         """Display loading started message."""
         index_text = "with DataFrame indexing" if build_index else "without indexing"
-        self.common_ui.show_info(f"Loading {file_count} bag file(s) {index_text}...")
+        Message.info(f"Loading {file_count} bag file(s, self.console) {index_text}...")
     
     def display_loading_progress(self, current: int, total: int, file_path: str) -> None:
         """Display loading progress for individual file."""
@@ -39,14 +39,14 @@ class LoadUI:
         """Display successful file loading."""
         file_name = Path(file_path).name
         details = f"{topics_count} topics, {messages_count} messages" if topics_count > 0 else ""
-        self.common_ui.show_success(
+        Message.success(
             f"✓ Loaded {file_name} in {elapsed_time:.2f}s {details}"
-        )
+        , self.console)
     
     def display_loading_failed(self, file_path: str, error: str) -> None:
         """Display failed file loading."""
         file_name = Path(file_path).name
-        self.common_ui.show_error(f"✗ Failed to load {file_name}: {error}")
+        Message.error(f"✗ Failed to load {file_name}: {error}", self.console)
     
     def display_batch_results(self, results: List[Dict[str, Any]], total_time: float) -> None:
         """Display batch loading results."""
@@ -85,7 +85,7 @@ class LoadUI:
     
     def display_failed_summary(self, failed: List[Dict[str, Any]]) -> None:
         """Display failed loading summary."""
-        self.common_ui.show_error(f"Failed to load {len(failed)} file(s):")
+        Message.error(f"Failed to load {len(failed, self.console)} file(s):")
         for result in failed:
             file_name = Path(result.get('file_path', '')).name
             error = result.get('error', 'Unknown error')
@@ -94,12 +94,12 @@ class LoadUI:
     def display_found_files(self, files: List[str], patterns: List[str]) -> None:
         """Display found files."""
         if not files:
-            self.common_ui.show_warning("No bag files found matching patterns")
+            Message.warning("No bag files found matching patterns", self.console)
             for pattern in patterns:
                 self.console.print(f"  Pattern: {pattern}")
             return
         
-        self.common_ui.show_info(f"Found {len(files)} bag file(s):")
+        Message.info(f"Found {len(files, self.console)} bag file(s):")
         for file_path in files:
             file_path_obj = Path(file_path)
             if file_path_obj.exists():
@@ -112,9 +112,9 @@ class LoadUI:
         """Display already cached file status."""
         file_name = Path(file_path).name
         if is_valid:
-            self.common_ui.show_info(f"{file_name} is already cached and valid")
+            Message.info(f"{file_name} is already cached and valid", self.console)
         else:
-            self.common_ui.show_warning(f"{file_name} is cached but invalid - will reload")
+            Message.warning(f"{file_name} is cached but invalid - will reload", self.console)
     
     def display_reload_confirmation(self, file_path: str) -> bool:
         """Display reload confirmation."""
@@ -126,14 +126,14 @@ class LoadUI:
     
     def display_force_reload_info(self, count: int) -> None:
         """Display force reload information."""
-        self.common_ui.show_info(f"Force reloading {count} file(s)...")
+        Message.info(f"Force reloading {count} file(s, self.console)...")
     
     def display_indexing_info(self, enabled: bool) -> None:
         """Display indexing configuration."""
         if enabled:
-            self.common_ui.show_info("Building DataFrame indexes for enhanced analysis")
+            Message.info("Building DataFrame indexes for enhanced analysis", self.console)
         else:
-            self.common_ui.show_info("Loading without DataFrame indexing (faster)")
+            Message.info("Loading without DataFrame indexing (faster, self.console)")
     
     def display_progress_header(self, total_files: int, build_index: bool) -> None:
         """Display progress header."""
@@ -156,7 +156,7 @@ class LoadUI:
     def display_cache_miss(self, file_path: str) -> None:
         """Display cache miss information."""
         file_name = Path(file_path).name
-        self.common_ui.show_info(f"Loading {file_name} into cache")
+        Message.info(f"Loading {file_name} into cache", self.console)
     
     def display_cache_hit(self, file_path: str, is_valid: bool) -> None:
         """Display cache hit information."""
@@ -175,11 +175,11 @@ class LoadUI:
     
     def display_loading_cancelled(self) -> None:
         """Display loading cancelled message."""
-        self.common_ui.show_warning("Loading cancelled by user")
+        Message.warning("Loading cancelled by user", self.console)
     
     def display_validation_start(self, file_count: int) -> None:
         """Display validation start message."""
-        self.common_ui.show_info(f"Validating {file_count} bag file(s)...")
+        Message.info(f"Validating {file_count} bag file(s, self.console)...")
     
     def display_validation_result(self, file_path: str, is_valid: bool, error: str = None) -> None:
         """Display validation result."""
@@ -195,20 +195,20 @@ class LoadUI:
         self.console.print(f"\nValidation complete: {valid_count}/{total} files valid")
         
         if invalid_count > 0:
-            self.common_ui.show_warning(f"{invalid_count} file(s) failed validation")
+            Message.warning(f"{invalid_count} file(s, self.console) failed validation")
     
     def display_cleanup_info(self, removed_count: int, freed_space: int) -> None:
         """Display cleanup information."""
         if removed_count > 0:
-            self.common_ui.show_info(
+            Message.info(
                 f"Cleanup: removed {removed_count} invalid entries, "
                 f"freed {self.common_ui.format_file_size(freed_space)}"
             )
     
     def display_memory_warning(self, estimated_memory: int) -> None:
         """Display memory usage warning."""
-        self.common_ui.show_warning(
-            f"Estimated memory usage: {self.common_ui.format_file_size(estimated_memory)}. "
+        Message.warning(
+            f"Estimated memory usage: {self.common_ui.format_file_size(estimated_memory, self.console)}. "
             f"Consider using --no-index for large files."
         )
     
@@ -219,7 +219,7 @@ class LoadUI:
     def display_loading_error_summary(self, errors: List[str]) -> None:
         """Display loading error summary."""
         if errors:
-            self.common_ui.show_error("Loading errors:")
+            Message.error("Loading errors:", self.console)
             for error in errors[:5]:  # Show first 5 errors
                 self.console.print(f"  • {error}")
             if len(errors) > 5:
@@ -247,10 +247,10 @@ class LoadUI:
     def display_file_already_loaded(self, file_path: str) -> None:
         """Display file already loaded message."""
         file_name = Path(file_path).name
-        self.common_ui.show_info(f"{file_name} is already loaded")
+        Message.info(f"{file_name} is already loaded", self.console)
     
     def display_loading_start(self, file_path: str, build_index: bool) -> None:
         """Display loading start message."""
         file_name = Path(file_path).name
         index_text = " with indexing" if build_index else ""
-        self.common_ui.show_info(f"Loading {file_name}{index_text}")
+        Message.info(f"Loading {file_name}{index_text}", self.console)

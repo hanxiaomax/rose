@@ -11,7 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI, TableUI
-from .theme import SimpleTheme as Theme
+from .theme import get_color
 
 
 class ExtractUI:
@@ -27,7 +27,7 @@ class ExtractUI:
                                  compression: str, success: bool, elapsed_time: float) -> None:
         """Display extraction summary after completion."""
         if success:
-            self.common_ui.show_success(f"Extraction completed in {elapsed_time:.2f}s")
+            Message.success(f"Extraction completed in {elapsed_time:.2f}s", self.console)
             summary_data = {
                 "Input": Path(input_file).name,
                 "Output": Path(output_file).name,
@@ -37,7 +37,7 @@ class ExtractUI:
             }
             self.common_ui.display_summary_table(summary_data, "Extraction Summary")
         else:
-            self.common_ui.show_error("Extraction failed")
+            Message.error("Extraction failed", self.console)
     
     def display_extraction_progress(self, input_file: str, progress_callback=None) -> None:
         """Display extraction progress with progress bar."""
@@ -82,7 +82,7 @@ class ExtractUI:
         if not failed_results:
             return
             
-        self.common_ui.show_error(f"Failed to extract {len(failed_results)} file(s):")
+        Message.error(f"Failed to extract {len(failed_results, self.console)} file(s):")
         for result in failed_results:
             file_name = Path(result.get('input_file', '')).name
             error = result.get('error', 'Unknown error')
@@ -91,30 +91,30 @@ class ExtractUI:
     def display_topics_selection(self, topics: List[str], selected_topics: List[str]) -> None:
         """Display topic selection summary."""
         if not topics:
-            self.common_ui.show_info("No topics found in bag file")
+            Message.info("No topics found in bag file", self.console)
             return
             
-        self.common_ui.show_info(f"Found {len(topics)} topics, selected {len(selected_topics)}")
+        Message.info(f"Found {len(topics)} topics, selected {len(selected_topics)}")
         
         # Show selected topics
         if selected_topics:
             self.common_ui.display_topics_list(selected_topics)
         else:
-            self.common_ui.show_warning("No topics selected for extraction")
+            Message.warning("No topics selected for extraction", self.console)
     
     def display_time_range_info(self, start_time: Optional[float], end_time: Optional[float], 
                               bag_start: float, bag_end: float) -> None:
         """Display time range selection information."""
         if start_time is not None and end_time is not None:
-            self.common_ui.show_info(f"Time range: {start_time:.3f}s - {end_time:.3f}s")
-            self.common_ui.show_info(f"Bag range: {bag_start:.3f}s - {bag_end:.3f}s")
+            Message.info(f"Time range: {start_time:.3f}s - {end_time:.3f}s", self.console)
+            Message.info(f"Bag range: {bag_start:.3f}s - {bag_end:.3f}s", self.console)
         else:
-            self.common_ui.show_info("Using full bag duration")
+            Message.info("Using full bag duration", self.console)
     
     def display_dry_run_preview(self, input_files: List[str], output_pattern: str, 
                               topics: List[str], compression: str) -> None:
         """Display dry run preview of extraction operations."""
-        self.common_ui.show_warning("DRY RUN - Preview of extraction operations:")
+        Message.warning("DRY RUN - Preview of extraction operations:", self.console)
         
         for input_file in input_files:
             input_path = Path(input_file)
@@ -144,14 +144,14 @@ class ExtractUI:
     
     def display_loading_message(self, file_path: str) -> None:
         """Display loading message for bag files."""
-        self.common_ui.show_info(f"Loading bag file: {file_path}")
+        Message.info(f"Loading bag file: {file_path}", self.console)
     
     def display_cache_status(self, cached_files: int, total_files: int) -> None:
         """Display cache loading status."""
         if cached_files == total_files:
-            self.common_ui.show_success(f"All {total_files} file(s) loaded from cache")
+            Message.success(f"All {total_files} file(s, self.console) loaded from cache")
         else:
-            self.common_ui.show_info(f"Loaded {cached_files}/{total_files} file(s) from cache")
+            Message.info(f"Loaded {cached_files}/{total_files} file(s, self.console) from cache")
     
     def display_extraction_command(self, command_data: Dict[str, Any]) -> None:
         """Display saved extraction command details."""
@@ -191,7 +191,7 @@ class ExtractUI:
     def display_extract_commands_list(self, commands: List[Dict[str, Any]]) -> None:
         """Display list of saved extraction commands."""
         if not commands:
-            self.common_ui.show_info("No saved extract commands found")
+            Message.info("No saved extract commands found", self.console)
             return
             
         self.console.print(f"\n[bold]Saved Extract Commands ({len(commands)}):[/bold]")
@@ -202,7 +202,7 @@ class ExtractUI:
             created = cmd.get('created', 'Unknown')
             topics_count = len(cmd.get('topics', []))
             
-            self.common_ui.show_primary(f"  {i}. {name} - {description} ({created})")
+            Message.primary(f"  {i}. {name} - {description} ({created}, self.console)")
             self.console.print(f"     Topics: {topics_count}, Compression: {cmd.get('compression', 'none')}")
     
     def confirm_overwrite(self, output_file: str) -> bool:

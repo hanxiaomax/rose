@@ -210,7 +210,7 @@ class CliUI:
         from InquirerPy import inquirer
         
         if not whitelists:
-            self.common_ui.show_warning("No whitelists found")
+            Message.warning("No whitelists found", self.console)
             return None
             
         return inquirer.select(
@@ -340,7 +340,7 @@ class CliUI:
         from InquirerPy.base.control import Choice
         
         if not commands:
-            self.common_ui.show_warning("No saved extract commands found")
+            Message.warning("No saved extract commands found", self.console)
             return None
         
         choices = [
@@ -355,19 +355,19 @@ class CliUI:
     
     def display_error(self, message: str) -> None:
         """Display error message."""
-        self.common_ui.show_error(message)
+        Message.error(message, self.console)
     
     def display_success(self, message: str) -> None:
         """Display success message."""
-        self.common_ui.show_success(message)
+        Message.success(message, self.console)
     
     def display_info(self, message: str) -> None:
         """Display info message."""
-        self.common_ui.show_info(message)
+        Message.info(message, self.console)
     
     def display_warning(self, message: str) -> None:
         """Display warning message."""
-        self.common_ui.show_warning(message)
+        Message.warning(message, self.console)
     
     def display_usage_instructions(self) -> None:
         """Display usage instructions."""

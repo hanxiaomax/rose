@@ -11,7 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, TableUI
-from .theme import SimpleTheme as Theme
+from .theme import get_color
 
 
 class CacheUI:
@@ -25,7 +25,7 @@ class CacheUI:
     def display_cache_list(self, cache_entries: List[Dict[str, Any]]) -> None:
         """Display list of cache entries."""
         if not cache_entries:
-            self.common_ui.show_info("No cache entries found")
+            Message.info("No cache entries found", self.console)
             return
             
         table = Table(title="Cache Entries")
@@ -55,7 +55,7 @@ class CacheUI:
         total_size = sum(entry.get('size_bytes', 0) for entry in cache_entries)
         total_files = len(cache_entries)
         
-        self.common_ui.show_dim(f"\nTotal: {total_files} files, {self.common_ui.format_file_size(total_size)}")
+        Message.muted(f"\nTotal: {total_files} files, {self.common_ui.format_file_size(total_size)}")
     
     def display_cache_stats(self, stats: Dict[str, Any]) -> None:
         """Display cache statistics."""
@@ -81,7 +81,7 @@ class CacheUI:
     
     def display_cache_clear_success(self, cleared_count: int) -> None:
         """Display cache clear success."""
-        self.common_ui.show_success(f"Cleared {cleared_count} cache entries")
+        Message.success(f"Cleared {cleared_count} cache entries", self.console)
     
     def display_cache_clear_all_confirmation(self) -> bool:
         """Display confirmation for clearing all cache."""
@@ -92,12 +92,12 @@ class CacheUI:
     
     def display_cache_clear_all_success(self, cleared_count: int) -> None:
         """Display success for clearing all cache."""
-        self.common_ui.show_success(f"Cleared all {cleared_count} cache entries")
+        Message.success(f"Cleared all {cleared_count} cache entries", self.console)
     
     def display_cache_entry_details(self, entry: Dict[str, Any]) -> None:
         """Display detailed cache entry information."""
         if not entry:
-            self.common_ui.show_warning("Cache entry not found")
+            Message.warning("Cache entry not found", self.console)
             return
             
         table = Table(title=f"Cache Entry: {Path(entry.get('file_path', '')).name}")
@@ -138,22 +138,22 @@ class CacheUI:
     
     def display_cache_rebuild_success(self, file_path: str) -> None:
         """Display cache rebuild success."""
-        self.common_ui.show_success(f"Rebuilt cache for {Path(file_path).name}")
+        Message.success(f"Rebuilt cache for {Path(file_path, self.console).name}")
     
     def display_cache_rebuild_failed(self, file_path: str, error: str) -> None:
         """Display cache rebuild failure."""
-        self.common_ui.show_error(f"Failed to rebuild cache for {Path(file_path).name}: {error}")
+        Message.error(f"Failed to rebuild cache for {Path(file_path, self.console).name}: {error}")
     
     def display_cache_status(self, file_path: str, is_cached: bool, is_valid: bool) -> None:
         """Display cache status for a file."""
         file_name = Path(file_path).name
         
         if is_cached and is_valid:
-            self.common_ui.show_success(f"✓ {file_name} is cached and valid")
+            Message.success(f"✓ {file_name} is cached and valid", self.console)
         elif is_cached and not is_valid:
-            self.common_ui.show_warning(f"⚠ {file_name} is cached but invalid (needs rebuild)")
+            Message.warning(f"⚠ {file_name} is cached but invalid (needs rebuild, self.console)")
         else:
-            self.common_ui.show_info(f"○ {file_name} is not cached")
+            Message.info(f"○ {file_name} is not cached", self.console)
     
     def display_cache_size_info(self, total_size: int, entry_count: int) -> None:
         """Display cache size information."""
@@ -162,11 +162,11 @@ class CacheUI:
         self.console.print(f"  Entry Count: {entry_count}")
         
         if total_size > 1024 * 1024 * 100:  # > 100MB
-            self.common_ui.show_warning("  Warning: Large cache size")
+            Message.warning("  Warning: Large cache size", self.console)
     
     def display_cache_optimization_summary(self, removed_count: int, freed_space: int) -> None:
         """Display cache optimization summary."""
-        self.common_ui.show_success(
+        Message.success(
             f"Optimized cache: removed {removed_count} entries, freed {self.common_ui.format_file_size(freed_space)}"
         )
     
@@ -180,7 +180,7 @@ class CacheUI:
         self.console.print(f"  Invalid entries: {len(invalid)}")
         
         if invalid:
-            self.common_ui.show_error("\nInvalid entries:")
+            Message.error("\nInvalid entries:", self.console)
             for entry in invalid[:5]:  # Show first 5 invalid entries
                 file_path = entry.get('file_path', 'Unknown')
                 error = entry.get('error', 'Unknown error')
@@ -191,19 +191,19 @@ class CacheUI:
     
     def display_cache_export_success(self, export_path: str, entry_count: int) -> None:
         """Display cache export success."""
-        self.common_ui.show_success(
+        Message.success(
             f"Exported {entry_count} cache entries to {export_path}"
-        )
+        , self.console)
     
     def display_cache_import_success(self, import_path: str, entry_count: int) -> None:
         """Display cache import success."""
-        self.common_ui.show_success(
+        Message.success(
             f"Imported {entry_count} cache entries from {import_path}"
-        )
+        , self.console)
     
     def display_cache_import_failed(self, import_path: str, error: str) -> None:
         """Display cache import failure."""
-        self.common_ui.show_error(f"Failed to import cache from {import_path}: {error}")
+        Message.error(f"Failed to import cache from {import_path}: {error}", self.console)
     
     def ask_cache_entry_selection(self, entries: List[str]) -> Optional[List[str]]:
         """Ask user to select cache entries."""
@@ -211,7 +211,7 @@ class CacheUI:
         from InquirerPy.base.control import Choice
         
         if not entries:
-            self.common_ui.show_warning("No cache entries available")
+            Message.warning("No cache entries available", self.console)
             return None
         
         choices = [Choice(value=e, name=Path(e).name) for e in entries]
@@ -227,7 +227,7 @@ class CacheUI:
     
     def display_cache_empty(self) -> None:
         """Display empty cache message."""
-        self.common_ui.show_info("Cache is empty")
+        Message.info("Cache is empty", self.console)
     
     def display_cache_loading_progress(self, current: int, total: int, file_path: str) -> None:
         """Display cache loading progress."""
@@ -236,8 +236,8 @@ class CacheUI:
     
     def display_cache_corrupted_warning(self, file_path: str) -> None:
         """Display corrupted cache warning."""
-        self.common_ui.show_warning(
-            f"Corrupted cache entry detected: {Path(file_path).name}"
+        Message.warning(
+            f"Corrupted cache entry detected: {Path(file_path, self.console).name}"
         )
     
     def ask_cache_action(self, available_actions: List[str]) -> str:

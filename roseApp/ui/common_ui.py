@@ -13,8 +13,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 
-# Import simple theme system
-from .theme import SimpleTheme, MessageStyle
+# Import theme system
+from .theme import get_color
 
 
 @dataclass
@@ -28,21 +28,58 @@ class DisplayConfig:
     full_width: bool = True
 
 
-@dataclass
 class Message:
-    """Base message class using unified theme system"""
-    text: str
-    message_type: str = "info"  # info, success, warning, error
+    """Unified message interface with theme colors"""
     
-    def render(self, console: Optional[Console] = None) -> None:
-        """Render the message to console using theme system"""
+    @staticmethod
+    def _print_styled(text: str, color: str, console: Optional[Console] = None, bold: bool = False) -> None:
+        """Print styled text using theme colors"""
         if console is None:
             console = Console()
         
-        styled_text = MessageStyle.get_message(self.text, self.message_type)
-        console.print(styled_text)
+        style = f"bold {color}" if bold else color
+        console.print(f"[{style}]{text}[/{style}]")
+    
+    @staticmethod
+    def success(text: str, console: Optional[Console] = None) -> None:
+        """Display success message"""
+        Message._print_styled(text, get_color('success'), console)
+    
+    @staticmethod
+    def error(text: str, console: Optional[Console] = None) -> None:
+        """Display error message"""
+        Message._print_styled(text, get_color('error'), console)
+    
+    @staticmethod
+    def warning(text: str, console: Optional[Console] = None) -> None:
+        """Display warning message"""
+        Message._print_styled(text, get_color('warning'), console)
+    
+    @staticmethod
+    def info(text: str, console: Optional[Console] = None) -> None:
+        """Display info message"""
+        Message._print_styled(text, get_color('info'), console)
+    
+    @staticmethod
+    def primary(text: str, console: Optional[Console] = None) -> None:
+        """Display primary message"""
+        Message._print_styled(text, get_color('primary'), console)
+    
+    @staticmethod
+    def accent(text: str, console: Optional[Console] = None) -> None:
+        """Display accent message"""
+        Message._print_styled(text, get_color('accent'), console)
+    
+    @staticmethod
+    def claude(text: str, console: Optional[Console] = None) -> None:
+        """Display Claude signature message"""
+        Message._print_styled(text, get_color('claude'), console, bold=True)
+    
+    @staticmethod
+    def muted(text: str, console: Optional[Console] = None) -> None:
+        """Display muted message"""
+        Message._print_styled(text, get_color('muted'), console)
 
-# 所有具体的Message类已被统一为通过CommonUI的show_*方法使用基础Message类
 
 
 class CommonUI:
@@ -50,64 +87,6 @@ class CommonUI:
     
     def __init__(self):
         self.console = Console()
-    
-    def show_success(self, message: str) -> None:
-        """Display success message using theme system"""
-        Message(message, "success").render(self.console)
-    
-    def show_error(self, message: str) -> None:
-        """Display error message using theme system"""
-        Message(message, "error").render(self.console)
-    
-    def show_warning(self, message: str) -> None:
-        """Display warning message using theme system"""
-        Message(message, "warning").render(self.console)
-    
-    def show_info(self, message: str) -> None:
-        """Display info message using theme system"""
-        Message(message, "info").render(self.console)
-    
-    def show_accent(self, message: str) -> None:
-        """Display accent message using theme system"""
-        Message(message, "accent").render(self.console)
-    
-    def show_primary(self, message: str) -> None:
-        """Display primary message using theme system"""
-        Message(message, "primary").render(self.console)
-    
-    def show_dim(self, message: str) -> None:
-        """Display dim message using theme system"""
-        Message(message, "dim").render(self.console)
-    
-    def show_path(self, message: str) -> None:
-        """Display path message using theme system"""
-        Message(message, "path").render(self.console)
-    
-    def show_topic(self, message: str) -> None:
-        """Display topic message using theme system"""
-        Message(message, "topic").render(self.console)
-    
-    def show_claude(self, message: str) -> None:
-        """Display message in Claude's signature style"""
-        Message(message, "claude").render(self.console)
-    
-    def show_thinking(self, message: str) -> None:
-        """Display thinking/processing message"""
-        Message(message, "thinking").render(self.console)
-    
-    def show_emphasis(self, message: str) -> None:
-        """Display emphasized message"""
-        Message(message, "emphasis").render(self.console)
-    
-    def print_styled(self, message: str, style_type: str = "info") -> None:
-        """Print message with specified style type"""
-        Message(message, style_type).render(self.console)
-    
-    def print_bold(self, message: str, style_type: str = "primary") -> None:
-        """Print bold message with specified style type"""
-        from .theme import SimpleTheme
-        styled_message = f"[bold {SimpleTheme.get_color(style_type)}]{message}[/bold {SimpleTheme.get_color(style_type)}]"
-        self.console.print(styled_message)
     
     @staticmethod
     def format_file_size(size_bytes: int) -> str:
@@ -143,28 +122,14 @@ class CommonUI:
         ratio = (1 - compressed_size / original_size) * 100
         return f"{ratio:.1f}%"
     
-    def show_success(self, message: str) -> None:
-        """Display success message."""
-        Message(message, "success").render(self.console)
-    
-    def show_error(self, message: str) -> None:
-        """Display error message."""
-        Message(message, "error").render(self.console)
-    
-    def show_warning(self, message: str) -> None:
-        """Display warning message."""
-        Message(message, "warning").render(self.console)
-    
-    def show_info(self, message: str) -> None:
-        """Display info message."""
-        Message(message, "info").render(self.console)
+
     
     def create_progress_bar(self, description: str = "Processing...", total: int = 100) -> Progress:
         """Create a standard progress bar with theme colors."""
         return Progress(
             SpinnerColumn(),
-            TextColumn(f"[{SimpleTheme.get_color('primary')}][progress.description]{{task.description}}[/{SimpleTheme.get_color('primary')}]"),
-            BarColumn(complete_style=SimpleTheme.get_color('success'), finished_style=SimpleTheme.get_color('success')),
+            TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+            BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
             TaskProgressColumn(),
             TimeElapsedColumn(),
             console=self.console
@@ -173,10 +138,10 @@ class CommonUI:
     def display_file_list(self, files: List[Path], title: str = "Files") -> None:
         """Display a list of files with sizes."""
         if not files:
-            self.show_info("No files found.")
+            Message.info("No files found.", self.console)
             return
         
-        self.show_info(f"{title} ({len(files)}):")
+        Message.info(f"{title} ({len(files)}):", self.console)
         for file in files:
             if file.exists():
                 size = self.format_file_size(file.stat().st_size)
@@ -198,10 +163,10 @@ class CommonUI:
     def display_topics_list(self, topics: List[str], message_types: Optional[Dict[str, str]] = None) -> None:
         """Display topics in a clean list format."""
         if not topics:
-            self.show_info("No topics found.")
+            Message.info("No topics found.", self.console)
             return
         
-        self.show_info(f"Topics ({len(topics)}):")
+        Message.info(f"Topics ({len(topics)}):", self.console)
         for topic in sorted(topics):
             if message_types and topic in message_types:
                 msg_type = Text(f" ({message_types[topic]})", style="dim")

@@ -11,7 +11,7 @@ from ..core.model import AnalysisLevel
 from ..core.export_manager import OutputFormat, ExportOptions
 from ..ui.common_ui import CommonUI
 from ..ui.common_ui import Message
-from ..ui.theme import SimpleTheme as Theme
+from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
@@ -44,7 +44,7 @@ def inspect(
     
     # Validate bag file exists
     if not bag_path.exists():
-        ui.show_error(f"Bag file not found: {bag_path}")
+        Message.error(f"Bag file not found: {bag_path}", console)
         raise typer.Exit(1)
     
     # Get cache manager and check current status
@@ -66,25 +66,25 @@ def inspect(
         # Bag not in cache at all
         build_index = verbose
         if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=build_index):
-            ui.show_error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.")
+            Message.error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.", console)
             raise typer.Exit(1)
         cached_entry = cache_manager.get_analysis(bag_path)
     elif needs_index:
         # Bag in cache but needs DataFrame index for verbose mode
         console = ui.console
-        console.print(f"[{Theme.get_color('warning')}]⚠[/{Theme.get_color('warning')}] Verbose mode requires DataFrame index, but cached data doesn't have it.")
+        console.print(f"[{get_color('warning')}]⚠[/{get_color('warning')}] Verbose mode requires DataFrame index, but cached data doesn't have it.")
         should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
         
         if should_rebuild:
-            console.print(f"[{Theme.get_color('info')}]Rebuilding cache with DataFrame indexing...[/{Theme.get_color('info')}]")
+            console.print(f"[{get_color('info')}]Rebuilding cache with DataFrame indexing...[/{get_color('info')}]")
             # Clear current cache entry and reload with index
             cache_manager.clear(bag_path)
             if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
-                ui.show_error(f"Failed to rebuild cache with DataFrame indexing.")
+                Message.error(f"Failed to rebuild cache with DataFrame indexing.", console)
                 raise typer.Exit(1)
             cached_entry = cache_manager.get_analysis(bag_path)
         else:
-            console.print(f"[{Theme.get_color('warning')}]Continuing with cached data (statistics may be incomplete).[/{Theme.get_color('warning')}]")
+            console.print(f"[{get_color('warning')}]Continuing with cached data (statistics may be incomplete).[/{get_color('warning')}]")
     
     # Set output format based on verbose mode
     if verbose:

@@ -11,7 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI
-from .theme import SimpleTheme as Theme
+from .theme import get_color
 
 
 class InspectUI:
@@ -36,7 +36,7 @@ class InspectUI:
         self.console.print(f"\nTopics:")
         for topic in topics:
             topic_line = Text()
-            topic_line.append(f"  • {topic['name']}", style=f"bold {Theme.get_color('primary')}")
+            topic_line.append(f"  • {topic['name']}", style=f"bold {get_color('primary')}")
             topic_line.append(f" ({topic['message_type']})", style="dim")
             self.console.print(topic_line)
     
@@ -71,15 +71,15 @@ class InspectUI:
     def display_verbose_topics(self, topics: List[Dict[str, Any]]) -> None:
         """Display topics with detailed information."""
         if not topics:
-            self.common_ui.show_info("No topics found.")
+            Message.info("No topics found.", self.console)
             return
         
         table = Table(title="Topics")
-        table.add_column("Topic", style=Theme.get_color('primary'), no_wrap=True)
-        table.add_column("Type", style=Theme.get_color('accent'))
-        table.add_column("Messages", justify="right", style=Theme.get_color('success'))
-        table.add_column("Frequency", justify="right", style=Theme.get_color('info'))
-        table.add_column("Size", justify="right", style=Theme.get_color('warning'))
+        table.add_column("Topic", style=get_color('primary'), no_wrap=True)
+        table.add_column("Type", style=get_color('accent'))
+        table.add_column("Messages", justify="right", style=get_color('success'))
+        table.add_column("Frequency", justify="right", style=get_color('info'))
+        table.add_column("Size", justify="right", style=get_color('warning'))
         
         for topic in topics:
             table.add_row(
@@ -95,10 +95,10 @@ class InspectUI:
     def display_simple_topics(self, topics: List[Dict[str, Any]]) -> None:
         """Display topics in simple format."""
         if not topics:
-            self.common_ui.show_info("No topics found.")
+            Message.info("No topics found.", self.console)
             return
         
-        self.common_ui.show_info(f"Topics ({len(topics)}):")
+        Message.info(f"Topics ({len(topics, self.console)}):")
         for topic in topics:
             topic_line = Text()
             topic_line.append(f"  • {topic['name']}", style="bold cyan")
@@ -127,25 +127,25 @@ class InspectUI:
     def display_export_success(self, output_file: Optional[Path]) -> None:
         """Display export success message."""
         if output_file:
-            self.common_ui.show_success(f"Export saved to: {output_file}")
+            Message.success(f"Export saved to: {output_file}", self.console)
     
     def display_export_failed(self) -> None:
         """Display export failure message."""
-        self.common_ui.show_error("Failed to export results")
+        Message.error("Failed to export results", self.console)
     
     def display_cache_status(self, cached: bool, file_path: str) -> None:
         """Display cache status information."""
         if cached:
-            self.common_ui.show_info(f"Loaded from cache: {file_path}")
+            Message.info(f"Loaded from cache: {file_path}", self.console)
         else:
-            self.common_ui.show_info(f"Loaded fresh: {file_path}")
+            Message.info(f"Loaded fresh: {file_path}", self.console)
     
     def display_loading_message(self, file_path: str) -> None:
         """Display loading message."""
-        self.common_ui.show_info(f"Loading bag file: {file_path}")
+        Message.info(f"Loading bag file: {file_path}", self.console)
     
     def display_filtering_topics(self, filtered_topics: List[str], original_count: int) -> None:
         """Display topic filtering results."""
-        self.common_ui.show_info(
-            f"Filtered to {len(filtered_topics)} topics from {original_count} total"
+        Message.info(
+            f"Filtered to {len(filtered_topics, self.console)} topics from {original_count} total"
         )

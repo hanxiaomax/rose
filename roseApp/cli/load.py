@@ -17,7 +17,7 @@ from rich.table import Table
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
-from ..ui.theme import SimpleTheme as Theme
+from ..ui.theme import get_color
 from ..ui.common_ui import CommonUI
 
 # Set to CLI mode
@@ -154,26 +154,26 @@ def load(
     
     # Check if input patterns are provided when not using --list
     if not input:
-        ui.show_error("Error: No bag files specified. Provide bag file patterns")
+        Message.error("Error: No bag files specified. Provide bag file patterns", console)
         raise typer.Exit(1)
     
     # Find bag files using patterns
     valid_bags = find_bag_files(input)
     
     if not valid_bags:
-        ui.show_error("No bag files found matching the specified patterns")
+        Message.error("No bag files found matching the specified patterns", console)
         for pattern in input:
-            ui.show_info(f"  Pattern: {pattern}")
+            Message.info(f"  Pattern: {pattern}", console)
         raise typer.Exit(1)
     
     # Show found files
-    ui.show_info(f"Found {len(valid_bags)} bag file(s):")
+    Message.info(f"Found {len(valid_bags, console)} bag file(s):")
     for bag in valid_bags:
-        ui.show_info(f"  {bag}")
+        Message.info(f"  {bag}", console)
     
     # Handle dry run
     if dry_run:
-        ui.show_warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)")
+        Message.warning(f"DRY RUN - Would load {len(valid_bags, console)} bag file(s)")
 
         return
     
@@ -183,7 +183,7 @@ def load(
         workers = max(1, os.cpu_count() - 2)
     
     analysis_type = "with index building" if build_index else "quick"
-    ui.show_info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...")
+    Message.info(f"Loading {len(valid_bags, console)} bag file(s) with {workers} worker(s) ({analysis_type})...")
     
     # Initialize parser
     parser = BagParser()
@@ -199,8 +199,8 @@ def load(
     
     with Progress(
         SpinnerColumn(),
-        TextColumn(f"[{Theme.get_color('primary')}][progress.description]{{task.description}}[/{Theme.get_color('primary')}]"),
-        BarColumn(complete_style=Theme.get_color('success'), finished_style=Theme.get_color('success')),
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         console=console
@@ -276,7 +276,7 @@ def load(
     cached_count = sum(1 for r in results if r['status'] == 'already_cached')
     error_count = sum(1 for r in results if r['status'] == 'error')
     
-    ui.show_info("Loading Summary")
+    Message.info("Loading Summary", console)
     
     # Simple text-based summary
     summary_lines = []
@@ -292,15 +292,15 @@ def load(
     
     # Show errors if any
     if error_count > 0:
-        ui.show_error("Errors:")
+        Message.error("Errors:", console)
         for result in results:
             if result['status'] == 'error':
-                ui.show_error(f"  {result['path']}: {result['message']}")
+                Message.error(f"  {result['path']}: {result['message']}", console)
     
     # Show success message
     total_ready = loaded_count + cached_count
     if total_ready > 0:
-        ui.show_success(f"Ready: {total_ready} bag(s) available for inspect and extract commands")
+        Message.success(f"Ready: {total_ready} bag(s, console) available for inspect and extract commands")
     
     if error_count > 0:
         raise typer.Exit(1)
