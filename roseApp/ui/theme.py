@@ -11,11 +11,11 @@ class Colors:
     """Claude-inspired color palette for CLI"""
     
     # Base colors
-    primary: str = "dark_orange3"
+    primary: str = "salmon1"
     accent: str = "orange1"
     
     # Status colors
-    success: str = "bright_green"
+    success: str = "dark_cyan"
     warning: str = "bright_yellow"
     error: str = "bright_red"
     info: str = "bright_cyan"
