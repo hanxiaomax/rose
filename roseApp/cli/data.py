@@ -194,15 +194,97 @@ class DataProcessor:
         
         return filtered_df
     
+    def _process_timestamp_columns(self, df: Any) -> Any:
+        """Process timestamp columns and index into a single timestamp column in seconds"""
+        if not PANDAS_AVAILABLE or df is None:
+            return df
+        
+        df_copy = df.copy()
+        
+        # Check if timestamp columns exist in columns
+        has_sec_col = 'timestamp_sec' in df_copy.columns
+        has_ns_col = 'timestamp_ns' in df_copy.columns
+        
+        # Check if timestamp is in index
+        has_timestamp_index = df_copy.index.name == 'timestamp_sec' or 'timestamp' in str(type(df_copy.index)).lower()
+        
+        # Priority 1: Handle index timestamp (most common case)
+        if has_timestamp_index and not has_sec_col:
+            # Convert index to timestamp column in seconds
+            if df_copy.index.name == 'timestamp_sec':
+                df_copy['timestamp'] = df_copy.index
+            else:
+                # Index might be in nanoseconds or other format
+                try:
+                    # Try to convert index to seconds
+                    index_values = df_copy.index.values
+                    if hasattr(index_values[0], 'timestamp'):
+                        # Pandas datetime index
+                        df_copy['timestamp'] = df_copy.index.values.astype('datetime64[ns]').astype('float64') / 1_000_000_000
+                    else:
+                        # Numeric index, assume seconds
+                        df_copy['timestamp'] = df_copy.index
+                except:
+                    # Fallback: use index as-is
+                    df_copy['timestamp'] = df_copy.index
+            
+            logger.debug("Converted timestamp index to timestamp column")
+        
+        # Priority 2: Handle column timestamps
+        elif has_sec_col and has_ns_col:
+            # Merge timestamp_sec and timestamp_ns columns
+            df_copy['timestamp'] = df_copy['timestamp_sec'] + (df_copy['timestamp_ns'] / 1_000_000_000)
+            
+            # Remove the original timestamp columns
+            df_copy = df_copy.drop(columns=['timestamp_sec', 'timestamp_ns'])
+            
+            logger.debug("Merged timestamp_sec and timestamp_ns columns into single timestamp column")
+        
+        elif has_sec_col:
+            # Only timestamp_sec column exists
+            df_copy['timestamp'] = df_copy['timestamp_sec']
+            df_copy = df_copy.drop(columns=['timestamp_sec'])
+            logger.debug("Converted timestamp_sec column to timestamp")
+        
+        elif has_ns_col:
+            # Only timestamp_ns column exists, convert to seconds
+            df_copy['timestamp'] = df_copy['timestamp_ns'] / 1_000_000_000
+            df_copy = df_copy.drop(columns=['timestamp_ns'])
+            logger.debug("Converted timestamp_ns column to timestamp in seconds")
+        
+        # Always remove any remaining timestamp columns that might be duplicates
+        columns_to_remove = [col for col in df_copy.columns 
+                           if col in ['timestamp_sec', 'timestamp_ns'] and col != 'timestamp']
+        if columns_to_remove:
+            df_copy = df_copy.drop(columns=columns_to_remove)
+            logger.debug(f"Removed duplicate timestamp columns: {columns_to_remove}")
+        
+        # Move timestamp column to the front if it exists
+        if 'timestamp' in df_copy.columns:
+            cols = ['timestamp'] + [col for col in df_copy.columns if col != 'timestamp']
+            df_copy = df_copy[cols]
+        
+        return df_copy
+    
     def export_to_csv(self, df: Any, output_path: str, include_index: bool = True) -> bool:
-        """Export DataFrame to CSV file"""
+        """Export DataFrame to CSV file with timestamp processing"""
         if not PANDAS_AVAILABLE or df is None:
             logger.error("Pandas is not available or DataFrame is None")
             return False
         
         try:
-            df.to_csv(output_path, index=include_index)
-            logger.info(f"Successfully exported {len(df)} rows to {output_path}")
+            # Process timestamp columns before export
+            processed_df = self._process_timestamp_columns(df)
+            
+            # If we created a timestamp column, don't include the index to avoid duplication
+            should_include_index = include_index
+            if 'timestamp' in processed_df.columns:
+                should_include_index = False
+                logger.debug("Excluding index since timestamp column was created")
+            
+            # Export with processed timestamps
+            processed_df.to_csv(output_path, index=should_include_index)
+            logger.info(f"Successfully exported {len(processed_df)} rows to {output_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to export CSV: {str(e)}")
