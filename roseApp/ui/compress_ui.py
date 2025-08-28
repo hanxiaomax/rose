@@ -42,7 +42,7 @@ class CompressUI:
         if not failed_results:
             return
             
-        Message.error(f"Failed to compress {len(failed_results, self.console)} file(s):")
+        Message.error(f"Failed to compress {len(failed_results)} file(s):")
         for result in failed_results:
             file_name = Path(result.get('input_file', '')).name
             error = result.get('error', 'Unknown error')
@@ -111,10 +111,10 @@ class CompressUI:
         self.console.print(f"\n[bold]Validation Summary[/bold]")
         
         if valid_files:
-            Message.success(f"  {len(valid_files, self.console)} bag(s) passed validation")
+            Message.success(f"  {len(valid_files)} bag(s) passed validation")
             
         if invalid_files:
-            Message.error(f"  {len(invalid_files, self.console)} bag(s) failed validation")
+            Message.error(f"  {len(invalid_files)} bag(s) failed validation")
             for v in invalid_files:
                 file_name = Path(v.get('file', '')).name
                 error = v.get('error', 'Unknown error')
@@ -126,7 +126,7 @@ class CompressUI:
             Message.info("No bag files found", self.console)
             return
             
-        Message.info(f"Found {len(files, self.console)} bag file(s):")
+        Message.info(f"Found {len(files)} bag file(s):")
         for file in files:
             if file.exists():
                 size = self.common_ui.format_file_size(file.stat().st_size)
@@ -137,7 +137,7 @@ class CompressUI:
     def display_cache_loading(self, uncached_files: List[Path]) -> None:
         """Display cache loading status."""
         if uncached_files:
-            Message.warning(f"{len(uncached_files, self.console)} bag(s) not in cache. Loading...")
+            Message.warning(f"{len(uncached_files)} bag(s) not in cache. Loading...")
             for file in uncached_files:
                 self.console.print(f"  Loading: {file.name}")
     
@@ -184,7 +184,7 @@ class CompressUI:
     def display_compression_started(self, files: List[str], workers: int, compression: str) -> None:
         """Display compression start message."""
         Message.info(
-            f"Compressing {len(files, self.console)} bag file(s) with {workers} worker(s) (using {compression.upper()} compression)..."
+            f"Compressing {len(files)} bag file(s) with {workers} worker(s) (using {compression.upper()} compression)..."
         )
     
     def display_single_file_compression(self, input_file: str, output_file: str, compression: str) -> None:

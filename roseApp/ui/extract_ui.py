@@ -82,7 +82,7 @@ class ExtractUI:
         if not failed_results:
             return
             
-        Message.error(f"Failed to extract {len(failed_results, self.console)} file(s):")
+        Message.error(f"Failed to extract {len(failed_results)} file(s):")
         for result in failed_results:
             file_name = Path(result.get('input_file', '')).name
             error = result.get('error', 'Unknown error')
@@ -162,7 +162,7 @@ class ExtractUI:
             "Name": command_data.get('name', ''),
             "Output Pattern": command_data.get('output_pattern', ''),
             "Topic Mode": command_data.get('topic_mode', 'include'),
-            "Topics Count": len(command_data.get('topics', [])),
+            "Topics Count": len(command_data.get('topics')),
             "Compression": command_data.get('compression', 'none')
         }
         
@@ -200,7 +200,7 @@ class ExtractUI:
             name = cmd.get('name', f'command_{i}')
             description = cmd.get('description', 'No description')
             created = cmd.get('created', 'Unknown')
-            topics_count = len(cmd.get('topics', []))
+            topics_count = len(cmd.get('topics'))
             
             Message.primary(f"  {i}. {name} - {description} ({created}, self.console)")
             self.console.print(f"     Topics: {topics_count}, Compression: {cmd.get('compression', 'none')}")

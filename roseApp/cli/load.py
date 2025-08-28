@@ -18,7 +18,7 @@ from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..ui.theme import get_color
-from ..ui.common_ui import CommonUI
+from ..ui.common_ui import CommonUI, Message
 
 # Set to CLI mode
 set_app_mode(AppMode.CLI)
@@ -167,13 +167,13 @@ def load(
         raise typer.Exit(1)
     
     # Show found files
-    Message.info(f"Found {len(valid_bags, console)} bag file(s):")
+    Message.info(f"Found {len(valid_bags)} bag file(s):", console)
     for bag in valid_bags:
         Message.info(f"  {bag}", console)
     
     # Handle dry run
     if dry_run:
-        Message.warning(f"DRY RUN - Would load {len(valid_bags, console)} bag file(s)")
+        Message.warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)")
 
         return
     
@@ -183,7 +183,7 @@ def load(
         workers = max(1, os.cpu_count() - 2)
     
     analysis_type = "with index building" if build_index else "quick"
-    Message.info(f"Loading {len(valid_bags, console)} bag file(s) with {workers} worker(s) ({analysis_type})...")
+    Message.info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...")
     
     # Initialize parser
     parser = BagParser()
@@ -300,7 +300,7 @@ def load(
     # Show success message
     total_ready = loaded_count + cached_count
     if total_ready > 0:
-        Message.success(f"Ready: {total_ready} bag(s, console) available for inspect and extract commands")
+        Message.success(f"Ready: {total_ready} bag(s) available for inspect and extract commands", console)
     
     if error_count > 0:
         raise typer.Exit(1)

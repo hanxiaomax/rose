@@ -98,7 +98,7 @@ class InspectUI:
             Message.info("No topics found.", self.console)
             return
         
-        Message.info(f"Topics ({len(topics, self.console)}):")
+        Message.info(f"Topics ({len(topics)}):")
         for topic in topics:
             topic_line = Text()
             topic_line.append(f"  • {topic['name']}", style="bold cyan")
@@ -147,5 +147,5 @@ class InspectUI:
     def display_filtering_topics(self, filtered_topics: List[str], original_count: int) -> None:
         """Display topic filtering results."""
         Message.info(
-            f"Filtered to {len(filtered_topics, self.console)} topics from {original_count} total"
+            f"Filtered to {len(filtered_topics)} topics from {original_count} total"
         )

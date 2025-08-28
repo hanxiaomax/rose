@@ -85,7 +85,7 @@ class LoadUI:
     
     def display_failed_summary(self, failed: List[Dict[str, Any]]) -> None:
         """Display failed loading summary."""
-        Message.error(f"Failed to load {len(failed, self.console)} file(s):")
+        Message.error(f"Failed to load {len(failed)} file(s):")
         for result in failed:
             file_name = Path(result.get('file_path', '')).name
             error = result.get('error', 'Unknown error')
@@ -99,7 +99,7 @@ class LoadUI:
                 self.console.print(f"  Pattern: {pattern}")
             return
         
-        Message.info(f"Found {len(files, self.console)} bag file(s):")
+        Message.info(f"Found {len(files)} bag file(s):")
         for file_path in files:
             file_path_obj = Path(file_path)
             if file_path_obj.exists():
