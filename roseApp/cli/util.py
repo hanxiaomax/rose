@@ -93,19 +93,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {Theme.get_color('primary')}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {Theme.get_color('primary')}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=Theme.get_color('accent'))
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {get_color('primary')}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {get_color('primary')}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=get_color('accent'))
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{Theme.get_color('primary')}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {Theme.get_color('primary')}")
+        bag_info.append(f"• {topic:<40}", style=f"{get_color('primary')}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {get_color('primary')}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=Theme.get_color('accent'),
+                  border_style=get_color('accent'),
                   padding=(0, 1))
     
     console.print(panel)
@@ -127,23 +127,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=Theme.get_color('warning'))
+                console.print("No topics selected. Showing all topics.", style=get_color('warning'))
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=Theme.get_color('primary'))
+                filtered_info.append(f"• {topic:<40}", style=get_color('primary'))
                 filtered_info.append(f"{connections[topic]}\n", style="dim")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=Theme.get_color('primary'),
+                                  border_style=get_color('primary'),
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -176,9 +176,9 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     
     # 添加三列，第一列较窄
-    table.add_column("", style=f"{Theme.get_color('primary')}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{Theme.get_color('primary')}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{Theme.get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    table.add_column("", style=f"{get_color('primary')}", width=4)  # 用于input/output标签
+    table.add_column("file", style=f"{get_color('primary')}", justify="left")  # 文件名列
+    table.add_column("size", style=f"{get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
     
     # 添加input行
     table.add_row(
@@ -189,13 +189,13 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     
     # 添加output行，包含缩小百分比，使用ACCENT颜色
     table.add_row(
-        f"[{Theme.get_color('accent')}]Out[/{Theme.get_color('accent')}]",
-        f"[{Theme.get_color('accent')}]{os.path.basename(output_bag)}[/{Theme.get_color('accent')}]", 
-        f"[{Theme.get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{Theme.get_color('accent')}]"  
+        f"[{get_color('accent')}]Out[/{get_color('accent')}]",
+        f"[{get_color('accent')}]{os.path.basename(output_bag)}[/{get_color('accent')}]", 
+        f"[{get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{get_color('accent')}]"  
     )
     
     # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {Theme.get_color('accent')}"))
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {get_color('accent')}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -214,9 +214,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=Theme.get_color('success'))
+        console.print(summary, style=get_color('success'))
     else:
-        console.print(summary, style=Theme.get_color('accent'))
+        console.print(summary, style=get_color('accent'))
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -420,8 +420,8 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
         PanelProgress: A progress bar wrapped in a panel with optional title
     """
     return PanelProgress(
-        TextColumn(f"[{Theme.get_color('primary')}][progress.description]{{task.description}}[/{Theme.get_color('primary')}]"),
-        BarColumn(bar_width=None, complete_style=Theme.get_color('success'), finished_style=Theme.get_color('success')),  # 设置为 None 以自适应宽度
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),  # 设置为 None 以自适应宽度
         TaskProgressColumn(),
         TimeRemainingColumn(),
         title=title,
@@ -439,8 +439,8 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
         TimedPanelProgress: A progress bar wrapped in a panel with timing functionality
     """
     return TimedPanelProgress(
-        TextColumn(f"[{Theme.get_color('primary')}][progress.description]{{task.description}}[/{Theme.get_color('primary')}]"),
-        BarColumn(bar_width=None, complete_style=Theme.get_color('success'), finished_style=Theme.get_color('success')),
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         title=title,

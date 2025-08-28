@@ -14,6 +14,7 @@ from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_c
 from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.compress import compress as compress_main
 from roseApp.cli.inspect import app as inspect_app
+from roseApp.cli.data import app as data_app
 # from roseApp.cli.plot import app as plot_app
 from roseApp.cli.cache import app as cache_app
 from roseApp.cli.cli_tool import app as cli_tool_app
@@ -78,6 +79,7 @@ app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
 app.command(name="compress")(compress_main)
 app.add_typer(inspect_app)
+app.add_typer(data_app, name="data")
 # app.add_typer(plot_app)
 app.add_typer(cache_app)
 app.add_typer(cli_tool_app)
