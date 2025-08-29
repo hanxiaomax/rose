@@ -25,6 +25,7 @@ from ..core.parser import create_parser
 from ..core.cache import create_bag_cache_manager
 from ..core.model import ComprehensiveBagInfo, TopicInfo
 from ..core.util import get_logger
+from ..core.plugins import get_plugin_manager, HookType
 from ..ui.common_ui import Message
 from .util import LoadingAnimation, filter_topics, check_and_load_bag_cache
 
@@ -40,297 +41,9 @@ console = Console()
 app = typer.Typer(help="Data manipulation commands for ROS bag files")
 
 
-@app.command()
-def data(
-    bag_path: Path = typer.Argument(..., help="Path to the ROS bag file"),
-    topics: Optional[List[str]] = typer.Option(None, "--topics", "-t", help="Filter specific topics"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output CSV file path"),
-    show_columns: bool = typer.Option(False, "--columns", "-c", help="Show DataFrame column information"),
-    show_sample: bool = typer.Option(False, "--sample", "-s", help="Show sample data"),
-    sample_size: int = typer.Option(5, "--sample-size", help="Number of sample rows to show"),
-    start_time: Optional[str] = typer.Option(None, "--start-time", help="Start time filter (ISO format or seconds)"),
-    end_time: Optional[str] = typer.Option(None, "--end-time", help="End time filter (ISO format or seconds)"),
-    search: Optional[str] = typer.Option(None, "--search", help="Search text in string columns"),
-    include_index: bool = typer.Option(True, "--include-index/--no-index", help="Include timestamp index in CSV"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (auto-load cache, etc.)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-    debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
-):
-    """
-    Data manipulation and analysis for ROS bag files
-    
-    This command provides comprehensive data operations including:
-    - Display DataFrame information for topics
-    - Export data to CSV format with filtering
-    - Show sample data and column information
-    
-    If the bag file is not in cache, you will be prompted to load it automatically.
-    This command requires DataFrame indexing for full functionality.
-    """
-    if not PANDAS_AVAILABLE:
-        Message.error("Pandas is required for data operations. Please install pandas: pip install pandas", console)
-        raise typer.Exit(1)
-    
-    # Validate bag file exists
-    if not bag_path.exists():
-        Message.error(f"Bag file not found: {bag_path}", console)
-        raise typer.Exit(1)
-    
-    # Configure logging based on debug flag
-    if not debug:
-        # Suppress logs in standard output unless debug mode
-        import logging
-        logging.getLogger().setLevel(logging.CRITICAL)
-        logging.getLogger('cache').setLevel(logging.CRITICAL)
-        logging.getLogger('root').setLevel(logging.CRITICAL)
-    
-    # Get cache manager and check current status
-    cache_manager = create_bag_cache_manager()
-    cached_entry = cache_manager.get_analysis(bag_path)
-    
-    # Check if bag needs loading or re-loading for DataFrame index
-    needs_loading = False
-    needs_index = False
-    
-    if cached_entry is None:
-        needs_loading = True
-        needs_index = True  # Data command always needs DataFrame index
-    elif not cached_entry.bag_info.has_any_dataframes():
-        # Data command requires DataFrame index, but current cache doesn't have DataFrames
-        needs_index = True
-        
-    if needs_loading:
-        # Bag not in cache at all
-        if not yes:
-            Message.warning(f"⚠ Bag file {bag_path} is not loaded in cache.", console)
-            Message.info("Data operations require DataFrame indexing for full functionality.", console)
-            should_load = typer.confirm("Would you like to load it with DataFrame indexing now?", default=True)
-            if not should_load:
-                Message.warning(f"Operation cancelled. Please load the bag first using: rose load {bag_path}", console)
-                raise typer.Exit(1)
-        
-        if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=yes):
-            Message.error(f"Bag file '{bag_path}' is not available in cache and loading failed.", console)
-            raise typer.Exit(1)
-        cached_entry = cache_manager.get_analysis(bag_path)
-    elif needs_index:
-        # Bag in cache but needs DataFrame index for data operations
-        should_rebuild = yes  # Default to yes if --yes flag is used
-        
-        if not yes:
-            Message.warning("⚠ Data operations require DataFrame index, but cached data doesn't have it.", console)
-            should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
-            if not should_rebuild:
-                Message.warning("Continuing with cached data (data operations may be limited).", console)
-                # Continue with limited functionality
-        
-        if should_rebuild:
-            Message.info("Rebuilding cache with DataFrame indexing...", console)
-            # Clear current cache entry and reload with index
-            cache_manager.clear(bag_path)
-            if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
-                Message.error(f"Failed to rebuild cache with DataFrame indexing.", console)
-                raise typer.Exit(1)
-            cached_entry = cache_manager.get_analysis(bag_path)
-    
-    # Now we have cached data, proceed with data operations
-    bag_info = cached_entry.bag_info
-    
-    # Get available topics
-    available_topics = []
-    for topic in bag_info.topics:
-        if isinstance(topic, TopicInfo):
-            available_topics.append(topic)
-        else:
-            # Handle legacy string format
-            available_topics.append(TopicInfo(name=str(topic), message_type="unknown"))
-    
-    # Filter topics if specified
-    if topics:
-        topic_names = [t.name for t in available_topics]
-        filtered_topic_names = filter_topics(topic_names, topics, None)
-        if not filtered_topic_names:
-            Message.error(f"No topics match the patterns: {', '.join(topics)}", console)
-            Message.info(f"Available topics: {', '.join(topic_names[:10])}{'...' if len(topic_names) > 10 else ''}", console)
-            raise typer.Exit(1)
-        
-        available_topics = [t for t in available_topics if t.name in filtered_topic_names]
-        Message.info(f"Filtered to {len(available_topics)} topics: {', '.join(filtered_topic_names[:5])}{'...' if len(filtered_topic_names) > 5 else ''}", console)
-    
-    # Display topic information
-    _display_data_info(bag_info, available_topics, show_columns, show_sample, sample_size)
-    
-    # Export to CSV if output path is specified
-    if output:
-        _export_data_to_csv(bag_info, available_topics, output, start_time, end_time, search, include_index)
 
 
-def _display_data_info(bag_info: ComprehensiveBagInfo, topics: List[TopicInfo], show_columns: bool, show_sample: bool, sample_size: int):
-    """Display data information for the specified topics"""
-    from rich.table import Table
-    
-    # Display topic information
-    table = Table(title=f"Data Information for {Path(bag_info.file_path).name}")
-    table.add_column("Topic", style="cyan")
-    table.add_column("Message Type", style="magenta")
-    table.add_column("Messages", justify="right")
-    table.add_column("DataFrame", style="green")
-    table.add_column("Memory (MB)", justify="right")
-    
-    total_dataframes = 0
-    total_memory = 0
-    
-    for topic_info in topics:
-        if isinstance(topic_info, TopicInfo):
-            has_df = "✓" if topic_info.has_dataframe() else "✗"
-            memory_mb = f"{topic_info.df_memory_mb:.2f}" if topic_info.df_memory_mb else "N/A"
-            
-            if topic_info.has_dataframe():
-                total_dataframes += 1
-                if topic_info.df_memory_mb:
-                    total_memory += topic_info.df_memory_mb
-            
-            table.add_row(
-                topic_info.name,
-                topic_info.message_type,
-                topic_info.count_str,
-                has_df,
-                memory_mb
-            )
-        else:
-            table.add_row(
-                topic_info.name,
-                topic_info.message_type,
-                "N/A",
-                "✗",
-                "N/A"
-            )
-    
-    console.print(table)
-    console.print(f"\nSummary: {total_dataframes} topics with DataFrames, {total_memory:.2f} MB total memory")
-    
-    # Show column information if requested
-    if show_columns:
-        for topic_info in topics:
-            if isinstance(topic_info, TopicInfo) and topic_info.has_dataframe():
-                df = topic_info.get_dataframe()
-                if df is not None:
-                    console.print(f"\n[bold cyan]Columns for {topic_info.name}:[/bold cyan]")
-                    col_table = Table()
-                    col_table.add_column("Column", style="cyan")
-                    col_table.add_column("Type", style="magenta")
-                    col_table.add_column("Non-Null Count", justify="right")
-                    
-                    for col in df.columns:
-                        dtype = str(df[col].dtype)
-                        non_null = df[col].count()
-                        col_table.add_row(col, dtype, str(non_null))
-                    
-                    console.print(col_table)
-    
-    # Show sample data if requested
-    if show_sample:
-        for topic_info in topics:
-            if isinstance(topic_info, TopicInfo) and topic_info.has_dataframe():
-                df = topic_info.get_dataframe()
-                if df is not None and len(df) > 0:
-                    console.print(f"\n[bold cyan]Sample data for {topic_info.name}:[/bold cyan]")
-                    sample_df = df.head(sample_size)
-                    
-                    # Create a simple table for sample data
-                    sample_table = Table()
-                    sample_table.add_column("Index", style="dim")
-                    for col in sample_df.columns:
-                        sample_table.add_column(col, style="white")
-                    
-                    for idx, row in sample_df.iterrows():
-                        row_data = [str(idx)]
-                        for col in sample_df.columns:
-                            value = str(row[col])
-                            if len(value) > 30:
-                                value = value[:27] + "..."
-                            row_data.append(value)
-                        sample_table.add_row(*row_data)
-                    
-                    console.print(sample_table)
 
-
-def _export_data_to_csv(
-    bag_info: ComprehensiveBagInfo, 
-    topics: List[TopicInfo], 
-    output_path: Path, 
-    start_time: Optional[str], 
-    end_time: Optional[str], 
-    search: Optional[str], 
-    include_index: bool
-):
-    """Export data to CSV with filtering"""
-    processor = DataProcessor()
-    
-    # Get topic names
-    topic_names = [t.name for t in topics]
-    
-    # Get DataFrames for selected topics
-    Message.info(f"Retrieving DataFrames for {len(topic_names)} topics...", console)
-    dataframes = processor.get_topic_dataframes(bag_info, topic_names)
-    
-    if not dataframes:
-        Message.error("No DataFrames available for selected topics", console)
-        raise typer.Exit(1)
-    
-    Message.success(f"Found DataFrames for {len(dataframes)} topics", console)
-    
-    # Set up filters
-    filters = {}
-    if start_time:
-        filters['start_time'] = start_time
-    if end_time:
-        filters['end_time'] = end_time
-    if search:
-        filters['search_text'] = search
-    
-    # Process data - automatically stack multiple topics
-    if len(dataframes) > 1:
-        Message.info(f"Stacking {len(dataframes)} topic DataFrames by timestamp...", console)
-        stacked_df = processor.merge_topic_dataframes(dataframes)
-        
-        # Apply filters
-        if filters:
-            Message.info("Applying filters...", console)
-            stacked_df = processor.filter_dataframe(stacked_df, filters)
-        
-        # Export stacked DataFrame
-        success = processor.export_to_csv(stacked_df, str(output_path), include_index)
-        
-        if success:
-            Message.success(f"Successfully exported stacked data to: {output_path}", console)
-            console.print(f"Total rows: {len(stacked_df)}, Columns: {len(stacked_df.columns)}")
-        else:
-            Message.error("Failed to export stacked data", console)
-            raise typer.Exit(1)
-    
-    elif len(dataframes) == 1:
-        # Single topic export
-        topic_name = list(dataframes.keys())[0]
-        df = list(dataframes.values())[0]
-        
-        # Apply filters
-        if filters:
-            Message.info("Applying filters...", console)
-            df = processor.filter_dataframe(df, filters)
-        
-        success = processor.export_to_csv(df, str(output_path), include_index)
-        
-        if success:
-            Message.success(f"Successfully exported {topic_name} data to: {output_path}", console)
-            console.print(f"Total rows: {len(df)}, Columns: {len(df.columns)}")
-        else:
-            Message.error(f"Failed to export {topic_name} data", console)
-            raise typer.Exit(1)
-    
-    else:
-        Message.error("No valid DataFrames to export", console)
-        raise typer.Exit(1)
 
 
 class DataProcessor:
@@ -717,6 +430,17 @@ def export(
                 topic_name = topics[0].replace('/', '_')
                 output_csv = f"{bag_name}{topic_name}_{timestamp}.csv"
         
+        # Execute before_export hooks
+        plugin_manager = get_plugin_manager()
+        before_export_context = plugin_manager.create_plugin_context(
+            bag_path, 'export',
+            topics=topics,
+            output_path=output_csv,
+            filters=filters,
+            bag_info=bag_info
+        )
+        plugin_manager.execute_hooks(HookType.BEFORE_EXPORT, before_export_context)
+        
         # Get DataFrames for selected topics
         console.print(f"Retrieving DataFrames for {len(topics)} topics...")
         dataframes = processor.get_topic_dataframes(bag_info, topics)
@@ -743,6 +467,18 @@ def export(
             if success:
                 console.print(f"[green]Successfully exported stacked data to: {output_csv}[/green]")
                 console.print(f"Total rows: {len(stacked_df)}, Columns: {len(stacked_df.columns)}")
+                
+                # Execute after_export hooks
+                after_export_context = plugin_manager.create_plugin_context(
+                    bag_path, 'export',
+                    topics=topics,
+                    output_path=output_csv,
+                    success=True,
+                    row_count=len(stacked_df),
+                    column_count=len(stacked_df.columns),
+                    export_type='stacked'
+                )
+                plugin_manager.execute_hooks(HookType.AFTER_EXPORT, after_export_context)
             else:
                 console.print("[red]Failed to export stacked data[/red]")
                 raise typer.Exit(1)
@@ -762,6 +498,18 @@ def export(
             if success:
                 console.print(f"[green]Successfully exported {topic_name} data to: {output_csv}[/green]")
                 console.print(f"Total rows: {len(df)}, Columns: {len(df.columns)}")
+                
+                # Execute after_export hooks
+                after_export_context = plugin_manager.create_plugin_context(
+                    bag_path, 'export',
+                    topics=[topic_name],
+                    output_path=output_csv,
+                    success=True,
+                    row_count=len(df),
+                    column_count=len(df.columns),
+                    export_type='single'
+                )
+                plugin_manager.execute_hooks(HookType.AFTER_EXPORT, after_export_context)
             else:
                 console.print(f"[red]Failed to export {topic_name} data[/red]")
                 raise typer.Exit(1)

@@ -42,6 +42,11 @@ More than mere retro styling, this approach serves as poetic resistance to digit
    - 🌟 parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
 - 🌟 cassette futurism theme for dark and light mode
+- 🌟 **Plugin System** - Extensible architecture for custom functionality
+  - 🔌 Hot-loadable plugins with hook system
+  - 📊 Data interface for safe bag data access
+  - 🛠️ Custom CLI commands support
+  - 📝 Multiple plugin templates (basic, data_processor, hook_example)
 - 🚧 Message view in TUI
 - 🚧 Support dynamic file/whitelist refresh in TUI
 
@@ -164,6 +169,38 @@ Key features:
 
 #### Multi-Bag Processing
 ![asciicast](screen-shots/multi-bag.gif)
+
+### Plugin System
+
+Rose features a powerful plugin system that allows you to extend functionality without modifying core code:
+
+```bash
+# List available plugins
+rose plugin list
+
+# Create a new plugin
+rose plugin create my_plugin --template basic
+
+# Run plugin commands
+rose plugin run my_plugin hello
+
+# Install plugin from file
+rose plugin install /path/to/plugin.py
+```
+
+**Plugin Features:**
+- 🔌 **Hot-loadable plugins**: Load and reload plugins without restarting
+- 🎣 **Hook system**: Execute custom logic before/after Rose operations
+- 📊 **Data interface**: Safe access to bag data and DataFrames
+- 🛠️ **Custom CLI commands**: Plugins can provide their own commands
+- 📝 **Multiple templates**: Basic, data processor, and hook examples
+
+**Plugin Templates:**
+- `basic` - Simple plugin with CLI commands
+- `data_processor` - Advanced data analysis and processing
+- `hook_example` - Demonstrates hook system usage
+
+See [Plugin Documentation](docs/PLUGIN_README.md) for detailed guides and examples.
 
 
 ### TUI Interface
