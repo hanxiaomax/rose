@@ -60,7 +60,6 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    from ..ui.common_ui import CommonUI
     ui = CommonUI()
     ui.console = console
     
@@ -474,10 +473,9 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     if cached_entry and cached_entry.is_valid(bag_path):
         if verbose:
             console = Console()
-            from ..ui.common_ui import CommonUI
             ui = CommonUI()
             ui.console = console
-            Message.success(f"✓ Using cached bag analysis for {bag_path}")
+            Message.success(f"✓ Using cached bag analysis for {bag_path}", console)
         return True
     
     if not auto_load and not force_load:
@@ -489,9 +487,6 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     
     should_load = force_load
     if not force_load:
-        from ..ui.common_ui import CommonUI
-        ui = CommonUI()
-        ui.console = console
         Message.warning(f"⚠ Bag file {bag_path} is not loaded in cache.", console)
         
         # Different prompts based on build_index mode
@@ -506,9 +501,6 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
             return False
     
     # Load the bag
-    from ..ui.common_ui import CommonUI
-    ui = CommonUI()
-    ui.console = console
     Message.info("Loading bag file into cache...", console)
     
     try:
