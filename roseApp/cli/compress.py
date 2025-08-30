@@ -340,9 +340,9 @@ async def _compress_bags_impl(
                 # Use await since we're already in an async function
                 await parser.load_bag_async(bag_path, build_index=False)
                 elapsed = time.time() - start_time
-                Message.success(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s", console)
+                Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s", console)
             except Exception as e:
-                Message.error(f"✗ Failed to load bag: {e}", console)
+                Message.error(f"Failed to load bag: {e}", console)
                 Message.error(f"Failed to load bag: {bag_path}", console)
                 raise typer.Exit(1)
     

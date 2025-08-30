@@ -11,15 +11,20 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI
+from .interactive_common import InteractiveCommon, BagLoader
+from .command_builder import CommandBuilder, InteractiveWizard
 
 
 class LoadUI:
     """UI components specifically for the load command."""
     
-    def __init__(self):
-        self.console = Console()
+    def __init__(self, console: Optional[Console] = None):
+        self.console = console or Console()
         self.common_ui = CommonUI()
         self.progress_ui = ProgressUI()
+        self.interactive = InteractiveCommon(self.console)
+        self.bag_loader = BagLoader(self.console)
+        self.wizard = InteractiveWizard("load", self.console)
     
     def display_loading_started(self, file_count: int, build_index: bool) -> None:
         """Display loading started message."""
@@ -40,7 +45,7 @@ class LoadUI:
         file_name = Path(file_path).name
         details = f"{topics_count} topics, {messages_count} messages" if topics_count > 0 else ""
         Message.success(
-            f"✓ Loaded {file_name} in {elapsed_time:.2f}s {details}"
+            f"Loaded {file_name} in {elapsed_time:.2f}s {details}"
         , self.console)
     
     def display_loading_failed(self, file_path: str, error: str) -> None:
@@ -185,9 +190,9 @@ class LoadUI:
         """Display validation result."""
         file_name = Path(file_path).name
         if is_valid:
-            self.console.print(f"  ✓ {file_name}")
+            self.console.print(f"  {file_name} - Valid")
         else:
-            self.console.print(f"  ✗ {file_name}: {error}")
+            self.console.print(f"  {file_name}: {error} - Invalid")
     
     def display_validation_summary(self, valid_count: int, invalid_count: int) -> None:
         """Display validation summary."""
@@ -254,3 +259,147 @@ class LoadUI:
         file_name = Path(file_path).name
         index_text = " with indexing" if build_index else ""
         Message.info(f"Loading {file_name}{index_text}", self.console)
+    
+    def run_interactive(self) -> None:
+        """Run interactive load command wizard - builds and executes load commands"""
+        from InquirerPy import inquirer
+        from InquirerPy.base.control import Choice
+        import os
+        import subprocess
+        import sys
+        
+        self.wizard.show_welcome("Load ROS bag files into cache for faster operations")
+        
+        while True:
+            # Ask for input source
+            input_source = inquirer.select(
+                message="Select input source:",
+                choices=[
+                    Choice(value="file", name="Single bag file"),
+                    Choice(value="directory", name="Directory with bag files"),
+                    Choice(value="pattern", name="File pattern (glob/regex)"),
+                    Choice(value="exit", name="Exit")
+                ]
+            ).execute()
+            
+            if input_source == "exit" or input_source is None:
+                break
+            
+            # Get bag files based on selection
+            bag_files = []
+            
+            if input_source == "file":
+                bag_file = self.interactive.ask_for_bag_file("Select bag file to load:")
+                if bag_file:
+                    bag_files = [bag_file]
+            
+            elif input_source == "directory":
+                directory = inquirer.filepath(
+                    message="Select directory containing bag files:",
+                    validate=lambda x: os.path.isdir(x) or "Must be a valid directory"
+                ).execute()
+                
+                if directory:
+                    selected_files = self.interactive.ask_for_bag_files_from_directory(directory)
+                    if selected_files:
+                        bag_files = selected_files
+            
+            elif input_source == "pattern":
+                pattern = inquirer.text(
+                    message="Enter file pattern (supports glob and regex):",
+                    default="*.bag",
+                    validate=lambda x: len(x.strip()) > 0 or "Pattern cannot be empty"
+                ).execute()
+                
+                if pattern:
+                    from ..cli.load import find_bag_files
+                    bag_files = find_bag_files([pattern])
+                    
+                    if not bag_files:
+                        Message.warning("No files found matching pattern", self.console)
+                        continue
+                    
+                    # Show found files and ask for confirmation
+                    self.display_found_files(bag_files, [pattern])
+                    if not self.interactive.confirm_operation("Load these files?"):
+                        continue
+            
+            if not bag_files:
+                continue
+            
+            # Ask for loading options
+            self.console.print("\nLoading Options:")
+            
+            # Build index option
+            build_index = inquirer.confirm(
+                message="Build DataFrame index for data analysis? (slower but enables data commands)",
+                default=False
+            ).execute()
+            
+            # Force reload option
+            force = inquirer.confirm(
+                message="Force reload even if files are already cached?",
+                default=False
+            ).execute()
+            
+            # Workers option
+            workers = self.interactive.ask_for_workers_count()
+            
+            # Verbose option
+            verbose = inquirer.confirm(
+                message="Show detailed loading information?",
+                default=True
+            ).execute()
+            
+            # Dry run option
+            dry_run = inquirer.confirm(
+                message="Dry run (preview only, don't actually load)?",
+                default=False
+            ).execute()
+            
+            # Build and execute command
+            options = {
+                "workers": workers,
+                "verbose": verbose,
+                "force": force,
+                "dry_run": dry_run,
+                "build_index": build_index
+            }
+            
+            # Show summary
+            summary = {
+                "Input files": len(bag_files),
+                "Build index": "Yes" if build_index else "No",
+                "Force reload": "Yes" if force else "No",
+                "Workers": workers or "Default",
+                "Dry run": "Yes" if dry_run else "No"
+            }
+            self.wizard.show_summary(summary)
+            
+            # Build and execute command
+            success = self.wizard.command_builder.build_and_execute_command(
+                "load", bag_files, options
+            )
+            
+            # Ask if user wants to continue
+            if not inquirer.confirm(
+                message="Load more files?",
+                default=False
+            ).execute():
+                break
+        
+        self.wizard.show_exit_message()
+    
+    def _create_await_sync(self):
+        """Create async helper function"""
+        import asyncio
+        
+        def await_sync(coro):
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            return loop.run_until_complete(coro)
+        
+        return await_sync

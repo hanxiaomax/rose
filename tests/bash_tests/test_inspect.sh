@@ -118,3 +118,4 @@ echo "Cleaning up test output files..."
 rm -f $OUTPUT_DIR/inspect_*.txt
 
 echo -e "${GREEN}All inspect command tests completed successfully!${NC}"
+

@@ -157,7 +157,7 @@ async def extract_single_bag(
 
 @app.command()
 def extract(
-    input_bags: List[str] = typer.Argument(..., help="Bag file patterns (supports glob and regex)"),
+    input_bags: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
     topics: Optional[List[str]] = typer.Option(None, "--topics", help="Topics to keep (supports fuzzy matching, can be used multiple times)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output pattern (use {input} for input filename, {timestamp} for timestamp)"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count - 2)"),
@@ -166,7 +166,7 @@ def extract(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be extracted without doing it"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
-
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Enter interactive mode for bag and topic selection")
 ):
     """
     Extract specific topics from ROS bag files (supports multiple files and patterns)
@@ -180,6 +180,17 @@ def extract(
         rose extract "*.bag" --topics gps --compression lz4 --workers 4         # Parallel extraction with compression
         rose extract "*.bag" --topics gps --dry-run                             # Preview without extraction
     """
+    # Handle interactive mode
+    if interactive:
+        from ..ui.extract_ui import ExtractUI
+        extract_ui = ExtractUI()
+        return extract_ui.run_interactive()
+    
+    # Check if input patterns are provided for non-interactive mode
+    if not input_bags:
+        Message.error("Error: No bag files specified. Provide bag file patterns or use --interactive", Console())
+        raise typer.Exit(1)
+    
     _extract_topics_impl(input_bags, topics, output, workers, reverse, compression, dry_run, yes, verbose)
 
 
@@ -245,9 +256,9 @@ def _extract_topics_impl(
                     # Run async function in event loop
                     asyncio.run(parser.load_bag_async(bag_path, build_index=False))
                     elapsed = time.time() - start_time
-                    Message.success(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s", console)
+                    Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s", console)
                 except Exception as e:
-                    Message.error(f"✗ Failed to load bag: {e}", console)
+                    Message.error(f"Failed to load bag: {e}", console)
                     Message.error(f"Failed to load bag: {bag_path}", console)
                     raise typer.Exit(1)
         

@@ -391,3 +391,4 @@ class ScriptPluginError(Exception):
 class ScriptExecutionError(ScriptPluginError):
     """Raised when script execution fails"""
     pass
+

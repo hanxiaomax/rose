@@ -98,3 +98,4 @@ echo "Cleaning up test output files..."
 rm -f $OUTPUT_DIR/test_*.bag
 
 echo -e "${GREEN}All compress command tests completed successfully!${NC}"
+

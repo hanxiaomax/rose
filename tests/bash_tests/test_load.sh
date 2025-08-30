@@ -76,3 +76,4 @@ $ROSE_CMD load "roseApp/tests/*.bag" --dry-run
 print_success "Glob pattern dry-run completed"
 
 echo -e "${GREEN}All load command tests completed successfully!${NC}"
+

@@ -683,3 +683,4 @@ class ProfiledPlugin(BasePlugin):
 ```
 
 这个 API 参考提供了开发 Rose 插件所需的所有接口和方法。配合完整文档和最佳实践指南，你可以开发出功能强大且稳定的插件。
+

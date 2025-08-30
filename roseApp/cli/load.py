@@ -148,7 +148,8 @@ def load(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed loading information"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
-    build_index: bool = typer.Option(False, "--build-index", help="Build message index as pandas DataFrame for data analysis")
+    build_index: bool = typer.Option(False, "--build-index", help="Build message index as pandas DataFrame for data analysis"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Enter interactive mode for bag selection and options")
 ):
     """
     Load ROS bag files into cache for faster operations.
@@ -167,7 +168,12 @@ def load(
     """
     console = Console()
     
-
+    # Handle interactive mode
+    if interactive:
+        from ..ui.load_ui import LoadUI
+        load_ui = LoadUI(console)
+        return load_ui.run_interactive()
+    
     # Initialize UI
     ui = CommonUI()
     ui.console = console
