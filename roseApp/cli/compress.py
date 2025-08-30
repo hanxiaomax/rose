@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
 from ..ui.common_ui import (
-    CommonUI
+    CommonUI, Message
 )
 from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
@@ -304,15 +304,15 @@ async def _compress_bags_impl(
     valid_bags = find_bag_files(input_bags)
     
     if not valid_bags:
-        ErrorMessage("No bag files found matching the specified patterns").render(console)
+        Message.error("No bag files found matching the specified patterns", console)
         for pattern in input_bags:
-            InfoMessage(f"  Pattern: {pattern}").render(console)
+            Message.info(f"  Pattern: {pattern}", console)
         raise typer.Exit(1)
     
     # Show found files
-    InfoMessage(f"Found {len(valid_bags)} bag file(s):").render(console)
+    Message.info(f"Found {len(valid_bags)} bag file(s):", console)
     for bag in valid_bags:
-        PathMessage(f"  {bag}").render(console)
+        Message.primary(f"  {bag}", console)
     
     # Check if bags are loaded in cache
     cache_manager = create_bag_cache_manager()
@@ -324,32 +324,32 @@ async def _compress_bags_impl(
             uncached_bags.append(bag_path)
     
     if uncached_bags:
-        WarningMessage(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.").render(console)
+        Message.warning(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.", console)
         if not yes and not typer.confirm("Load uncached bags automatically?"):
-            WarningMessage("Operation cancelled").render(console)
+            Message.warning("Operation cancelled", console)
             raise typer.Exit(0)
         
         # Load uncached bags directly without additional prompts
         from ..core.parser import create_parser
         
         for bag_path in uncached_bags:
-            InfoMessage(f"Loading bag file into cache: {bag_path}").render(console)
+            Message.info(f"Loading bag file into cache: {bag_path}", console)
             start_time = time.time()
             parser = create_parser()
             try:
                 # Use await since we're already in an async function
                 await parser.load_bag_async(bag_path, build_index=False)
                 elapsed = time.time() - start_time
-                SuccessMessage(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s").render(console)
+                Message.success(f"✓ Successfully loaded bag into cache in {elapsed:.2f}s", console)
             except Exception as e:
-                ErrorMessage(f"✗ Failed to load bag: {e}").render(console)
-                ErrorMessage(f"Failed to load bag: {bag_path}").render(console)
+                Message.error(f"✗ Failed to load bag: {e}", console)
+                Message.error(f"Failed to load bag: {bag_path}", console)
                 raise typer.Exit(1)
     
     # Validate compression option
     valid_compression = ["bz2", "lz4"]
     if compression not in valid_compression:
-        ErrorMessage(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}").render(console)
+        Message.error(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}", console)
         raise typer.Exit(1)
     
     # Set default output pattern if not specified
@@ -360,7 +360,7 @@ async def _compress_bags_impl(
     
     # Dry run preview
     if dry_run:
-        WarningMessage(f"DRY RUN - Would compress {len(valid_bags)} bag file(s) with {compression}:").render(console)
+        Message.warning(f"DRY RUN - Would compress {len(valid_bags)} bag file(s) with {compression}:", console)
         for bag_path in valid_bags:
             # Generate output path for preview
             timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -375,9 +375,9 @@ async def _compress_bags_impl(
                 if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
                     preview_output = f"{bag_path.stem}_{compression}_{timestamp}.bag"
             
-            PathMessage(f"  {bag_path} -> {preview_output}").render(console)
+            Message.primary(f"  {bag_path} -> {preview_output}", console)
         
-        InfoMessage(f"Compression: {compression}").render(console)
+        Message.info(f"Compression: {compression}", console)
         return
     
     # Determine number of workers - be more conservative for compression
@@ -388,7 +388,7 @@ async def _compress_bags_impl(
         workers = max(1, min(workers, len(valid_bags), 6))  # Cap at 6 workers max
     
     # Perform compression
-    InfoMessage(f"Compressing {len(valid_bags)} bag file(s) with {workers} worker(s) (using {compression} compression)...").render(console)
+    Message.info(f"Compressing {len(valid_bags)} bag file(s) with {workers} worker(s) (using {compression} compression)...", console)
     
     # Track results
     results = []
@@ -465,7 +465,7 @@ async def _compress_bags_impl(
         successful_results = [r for r in results if r['success']]
         if successful_results:
             console.print()
-            InfoMessage("Validating compressed bag files...").render(console)
+            Message.info("Validating compressed bag files...", console)
             
             validation_results = []
             with Progress(
@@ -528,17 +528,17 @@ async def _compress_bags_impl(
             valid_files = [v for v in validation_results if v['valid']]
             invalid_files = [v for v in validation_results if not v['valid']]
             
-            TitleMessage("Validation Summary").render(console)
+            Message.primary("Validation Summary", console)
             if valid_files:
-                SuccessMessage(f"  {len(valid_files)} bag(s) passed validation").render(console)
+                Message.success(f"  {len(valid_files)} bag(s) passed validation", console)
                 if verbose:
                     for v in valid_files:
-                        InfoMessage(f"    {Path(v['file']).name}: {v['topics_count']} topics, {v['messages_count']} messages").render(console)
+                        Message.info(f"    {Path(v['file']).name}: {v['topics_count']} topics, {v['messages_count']} messages", console)
             
             if invalid_files:
-                ErrorMessage(f"  {len(invalid_files)} bag(s) failed validation").render(console)
+                Message.error(f"  {len(invalid_files)} bag(s) failed validation", console)
                 for v in invalid_files:
-                    ErrorMessage(f"    {Path(v['file']).name}: {v['error']}").render(console)
+                    Message.error(f"    {Path(v['file']).name}: {v['error']}", console)
     
     # Use new UI components for display
     from ..ui.compress_ui import CompressUI
