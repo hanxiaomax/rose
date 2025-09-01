@@ -17,9 +17,10 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 import typer
 
-from ..ui.theme import get_color
-from ..ui.common_ui import Message
-from .util import check_and_load_bag_cache
+from ...ui.theme import get_color
+from ...ui.common_ui import Message
+from ..util import check_and_load_bag_cache
+from .run_cli_adapter import CLIAdapter
 
 
 class RunCommandHandlers:
@@ -29,6 +30,7 @@ class RunCommandHandlers:
         self.runner = runner
         self.console = runner.console
         self.state = runner.state
+        self.cli_adapter = CLIAdapter(runner)
         self.cache_manager = runner.cache_manager
         self.task_queue = runner.task_queue
         self.running_tasks = runner.running_tasks
@@ -91,18 +93,38 @@ class RunCommandHandlers:
         op_type = parts[0]
         
         if op_type == "load":
-            self._run_load_operation(parts[1:])
+            result = self.cli_adapter.interactive_load(parts[1:])
+            self._show_operation_result('load', result)
         elif op_type == "extract":
-            self._run_extract_operation(parts[1:])
+            result = self.cli_adapter.interactive_extract(parts[1:])
+            self._show_operation_result('extract', result)
         elif op_type == "inspect":
-            self._run_inspect_operation(parts[1:])
+            result = self.cli_adapter.interactive_inspect(parts[1:])
+            self._show_operation_result('inspect', result)
         elif op_type == "compress":
-            self._run_compress_operation(parts[1:])
+            result = self.cli_adapter.interactive_compress(parts[1:])
+            self._show_operation_result('compress', result)
         elif op_type == "data":
-            self._run_data_operation(parts[1:])
+            result = self.cli_adapter.interactive_data(parts[1:])
+            self._show_operation_result('data', result)
+        elif op_type == "cache":
+            result = self.cli_adapter.interactive_cache(parts[1:])
+            self._show_operation_result('cache', result)
+        elif op_type == "plugin":
+            result = self.cli_adapter.interactive_plugin(parts[1:])
+            self._show_operation_result('plugin', result)
         else:
             self.console.print(f"[red]Unknown operation: {op_type}[/red]")
             self._show_run_help()
+    
+    def _show_operation_result(self, operation: str, result: Dict[str, Any]):
+        """Display operation result with appropriate formatting"""
+        if result.get('success'):
+            message = result.get('message', f'{operation.title()} completed successfully')
+            self.console.print(f"[green]✅ {message}[/green]")
+        else:
+            error = result.get('error', 'Unknown error')
+            self.console.print(f"[red]❌ {operation.title()} failed: {error}[/red]")
     
     def handle_undo(self, args: str):
         """Handle undo operations"""
@@ -322,7 +344,7 @@ class RunCommandHandlers:
             with open(auto_save_file, 'w') as f:
                 json.dump(self.state.to_dict(), f, indent=2, default=str)
         except Exception as e:
-            from ..core.util import get_logger
+            from ...core.util import get_logger
             logger = get_logger("run")
             logger.warning(f"Failed to auto-save session: {e}")
         
@@ -605,16 +627,31 @@ class RunCommandHandlers:
         self.console.print(panel)
     
     def _show_run_help(self):
-        """Show help for /run command"""
+        """Show help for /run command with actual CLI command support"""
         help_text = """[bold]Available /run operations:[/bold]
 
-[cyan]/run load <bag_path>[/cyan]     - Load bag file into workspace
-[cyan]/run extract[/cyan]             - Extract topics from loaded bags  
-[cyan]/run inspect[/cyan]             - Inspect bag contents and statistics
-[cyan]/run compress[/cyan]            - Compress loaded bags
-[cyan]/run data[/cyan]                - Export bag data to CSV
+[cyan]/run load [patterns][/cyan]      - Load bag files (supports glob: *.bag, regex patterns)
+[cyan]/run extract[/cyan]              - Extract specific topics from bags (interactive selection)
+[cyan]/run inspect topics[/cyan]       - Show topic information and statistics
+[cyan]/run inspect info[/cyan]         - Show comprehensive bag file information  
+[cyan]/run inspect timeline[/cyan]     - Show message timeline and frequency
+[cyan]/run compress[/cyan]             - Compress bags with bz2/lz4 (interactive options)
+[cyan]/run data export[/cyan]          - Export topic data to CSV/JSON
+[cyan]/run data convert[/cyan]         - Convert between data formats
+[cyan]/run cache clear[/cyan]          - Clear analysis cache
+[cyan]/run cache info[/cyan]           - Show cache statistics
+[cyan]/run cache list[/cyan]           - List cached bag files
+[cyan]/run plugin list[/cyan]          - List available plugins
+[cyan]/run plugin info <name>[/cyan]   - Show plugin information
+[cyan]/run plugin run <name>[/cyan]    - Execute plugin on loaded bags
 
-All operations run in background and can be cancelled with /cancel.
+[bold]Examples:[/bold]
+  /run load *.bag                      # Load all bags in directory
+  /run extract                         # Interactive topic extraction
+  /run inspect topics                  # Show topic details
+  /run data export                     # Export to CSV with interactive options
+
+All operations use interactive prompts for parameter collection.
 """
         self.console.print(Markdown(help_text))
     
@@ -738,7 +775,7 @@ All operations run in background and can be cancelled with /cancel.
         topics_list = sorted(list(all_topics))
         
         # Use fuzzy selector
-        from .util import ask_topics_with_fuzzy
+        from ..util import ask_topics_with_fuzzy
         
         selected_topics = ask_topics_with_fuzzy(
             console=self.console,

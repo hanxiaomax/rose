@@ -16,9 +16,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from ..core.util import get_logger
-from ..core.directories import get_rose_directories
-from ..ui.theme import get_color
+from ...core.util import get_logger
+from ...core.directories import get_rose_directories
+from ...ui.theme import get_color
 
 logger = get_logger("run_simple")
 app = typer.Typer(help="Rose Interactive Run Environment (Simple)")

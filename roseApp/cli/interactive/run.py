@@ -29,13 +29,13 @@ from prompt_toolkit.shortcuts import confirm
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from ..core.parser import create_parser
-from ..core.cache import create_bag_cache_manager
-from ..core.directories import get_rose_directories
-from ..core.util import get_logger
-from ..ui.common_ui import Message
-from ..ui.theme import get_color
-from .util import filter_topics, check_and_load_bag_cache
+from ...core.parser import create_parser
+from ...core.cache import create_bag_cache_manager
+from ...core.directories import get_rose_directories
+from ...core.util import get_logger
+from ...ui.common_ui import Message
+from ...ui.theme import get_color
+from ..util import filter_topics, check_and_load_bag_cache
 
 logger = get_logger("run")
 
@@ -109,10 +109,16 @@ class InteractiveRunner:
         self.task_counter = 0
         self._stop_event = threading.Event()
         
-        # Command routing
+        # Command routing - independent commands like CLI
         self.commands = {
             "/ask": self.handle_ask,
-            "/run": self.handle_run,
+            "/load": self.handle_load,
+            "/extract": self.handle_extract,
+            "/inspect": self.handle_inspect,
+            "/compress": self.handle_compress,
+            "/data": self.handle_data,
+            "/cache": self.handle_cache,
+            "/plugin": self.handle_plugin,
             "/undo": self.handle_undo,
             "/cancel": self.handle_cancel,
             "/status": self.handle_status,
@@ -124,7 +130,7 @@ class InteractiveRunner:
             "/help": self.handle_help,
             "/clear": self.handle_clear,
             "/save": self.handle_save,
-            "/load": self.handle_load_session,
+            "/session": self.handle_load_session,
             "/export": self.handle_export,
             "/exit": self.handle_exit,
             "/quit": self.handle_exit
@@ -138,6 +144,7 @@ class InteractiveRunner:
             from .run_handlers import RunCommandHandlers
             from .run_tasks import TaskExecutor
             from .run_session import SessionManager
+            from .run_cli_adapter import CLIAdapter
             
             logger.debug("Initializing handlers...")
             self.handlers = RunCommandHandlers(self)
@@ -147,6 +154,9 @@ class InteractiveRunner:
             
             logger.debug("Initializing session manager...")
             self.session_manager = SessionManager(self)
+            
+            logger.debug("Initializing CLI adapter...")
+            self.cli_adapter = CLIAdapter(self)
             
             logger.debug("Starting background task processor...")
             self._start_task_processor()
@@ -158,6 +168,7 @@ class InteractiveRunner:
             self.handlers = None
             self.task_executor = None
             self.session_manager = None
+            self.cli_adapter = None
     
     def _setup_prompt_session(self):
         """Setup intelligent prompt session with history and completion"""
@@ -171,13 +182,27 @@ class InteractiveRunner:
                 logger.warning(f"Completer creation failed: {e}")
                 completer = None
             
-            self.session = PromptSession(
-                history=FileHistory(str(history_file)),
-                completer=completer,
-                auto_suggest=AutoSuggestFromHistory(),
-                multiline=False,  # 修复: 设置为单行模式
-                complete_style='column'  # 简化样式
-            )
+            # Create session with safe configuration
+            session_kwargs = {
+                'multiline': False,  # 关键修复: 单行模式
+                'complete_style': 'column'
+            }
+            
+            # Add optional features safely
+            try:
+                session_kwargs['history'] = FileHistory(str(history_file))
+            except Exception as e:
+                logger.warning(f"Could not setup history: {e}")
+            
+            if completer:
+                session_kwargs['completer'] = completer
+            
+            try:
+                session_kwargs['auto_suggest'] = AutoSuggestFromHistory()
+            except Exception as e:
+                logger.warning(f"Could not setup auto-suggest: {e}")
+            
+            self.session = PromptSession(**session_kwargs)
             logger.debug("Advanced prompt session initialized")
         except Exception as e:
             logger.warning(f"Could not setup advanced prompt features: {e}")
@@ -185,43 +210,29 @@ class InteractiveRunner:
             self.session = PromptSession()
             logger.debug("Basic prompt session initialized")
     
-    def _create_completer(self) -> Completer:
-        """Create intelligent completer for commands and context"""
-        
-        class RoseCompleter(Completer):
-            def __init__(self, runner):
-                self.runner = runner
-                self.base_commands = list(runner.commands.keys())
-                self.bag_commands = ['load', 'extract', 'inspect', 'compress', 'data']
-                self.common_options = ['--help', '--verbose', '--dry-run', '--output']
+    def _create_completer(self) -> Optional[Completer]:
+        """Create safe completer that won't crash"""
+        try:
+            # Try enhanced completer first
+            from .run_path_completer import EnhancedRoseCompleter
+            return EnhancedRoseCompleter(self)
+        except Exception as e:
+            logger.warning(f"Enhanced completer failed: {e}")
             
-            def get_completions(self, document, complete_event):
-                text = document.text_before_cursor
+            try:
+                # Try simple completer
+                from .run_simple_completer import create_safe_completer
+                return create_safe_completer(self)
+            except Exception as e2:
+                logger.warning(f"Simple completer failed: {e2}")
                 
-                # Complete slash commands
-                if text.startswith('/'):
-                    for cmd in self.base_commands:
-                        if cmd.startswith(text):
-                            yield Completion(cmd, start_position=-len(text))
-                
-                # Complete bag operations after /run
-                elif text.startswith('/run '):
-                    remaining = text[5:].strip()
-                    for cmd in self.bag_commands:
-                        if cmd.startswith(remaining):
-                            yield Completion(cmd, start_position=-len(remaining))
-                
-                # Complete bag files
-                elif 'bag' in text.lower():
-                    try:
-                        current_dir = Path('.')
-                        for bag_file in current_dir.glob('*.bag'):
-                            if str(bag_file).startswith(text.split()[-1]):
-                                yield Completion(str(bag_file), start_position=-len(text.split()[-1]))
-                    except:
-                        pass
-        
-        return RoseCompleter(self)
+                try:
+                    # Ultimate fallback
+                    commands = list(self.commands.keys())
+                    return WordCompleter(commands, ignore_case=True)
+                except Exception as e3:
+                    logger.warning(f"All completers failed: {e3}")
+                    return None
     
     def _start_task_processor(self):
         """Start background task processor thread"""
@@ -324,16 +335,20 @@ class InteractiveRunner:
         welcome = Text()
         welcome.append("🌹 Welcome to Rose Interactive Environment\n\n", style="bold cyan")
         welcome.append("Available commands:\n", style="bold")
-        welcome.append("/ask <question>     - Ask for help or guidance\n", style="dim")
-        welcome.append("/run <operation>    - Execute bag operations in background\n", style="dim")
-        welcome.append("/status            - Show running tasks and workspace status\n", style="dim")
-        welcome.append("/bags              - Manage loaded bag files\n", style="dim")
-        welcome.append("/topics            - Work with topics\n", style="dim")
-        welcome.append("/note <text>       - Add a note to current session\n", style="dim")
-        welcome.append("/undo              - Undo last operation\n", style="dim")
-        welcome.append("/help              - Show detailed help\n", style="dim")
-        welcome.append("/exit              - Exit interactive mode\n\n", style="dim")
-        welcome.append("💡 Tip: Just type naturally for help, or use slash commands for actions", style="green")
+        welcome.append("/load [files]       - Load bag files (supports glob patterns, Tab completion)\n", style="dim")
+        welcome.append("/extract [args]     - Extract topics from bags (interactive selection)\n", style="dim")
+        welcome.append("/inspect            - Inspect bag contents\n", style="dim")
+        welcome.append("/compress [args]    - Compress bag files (bz2/lz4 options)\n", style="dim")
+        welcome.append("/data [export|info] - Data operations with CSV/JSON export\n", style="dim")
+        welcome.append("/cache [export|clear] - Cache management operations\n", style="dim")
+        welcome.append("/plugin [list|info|run|enable|disable] - Plugin operations\n", style="dim")
+        welcome.append("/status             - Show workspace status\n", style="dim")
+        welcome.append("/bags               - Manage loaded bags\n", style="dim")
+        welcome.append("/topics             - Manage topic selection\n", style="dim")
+        welcome.append("/note <text>        - Add session note\n", style="dim")
+        welcome.append("/help               - Show this help\n", style="dim")
+        welcome.append("/exit               - Exit interactive mode\n\n", style="dim")
+        welcome.append("💡 All commands support Tab completion for files and paths!", style="green")
         
         panel = Panel(welcome, title="Rose Interactive", border_style=get_color('primary'))
         self.console.print(panel)
@@ -385,13 +400,77 @@ class InteractiveRunner:
             self.console.print(f"[yellow]You asked: {query}[/yellow]")
             self.console.print("[dim]Handlers not initialized yet[/dim]")
     
-    def handle_run(self, operation: str):
-        """Handle run command - execute operations"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_run(operation)
+    def handle_load(self, args: str):
+        """Handle load command - load bag files"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_load(args.split() if args else [])
+            self._show_operation_result('load', result)
         else:
-            self.console.print(f"[yellow]Run operation: {operation}[/yellow]")
-            self.console.print("[dim]Handlers not initialized yet[/dim]")
+            self.console.print(f"[yellow]Load: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_extract(self, args: str):
+        """Handle extract command - extract topics"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_extract(args.split() if args else [])
+            self._show_operation_result('extract', result)
+        else:
+            self.console.print(f"[yellow]Extract: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_inspect(self, args: str):
+        """Handle inspect command - inspect bag contents"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_inspect(args.split() if args else [])
+            self._show_operation_result('inspect', result)
+        else:
+            self.console.print(f"[yellow]Inspect: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_compress(self, args: str):
+        """Handle compress command - compress bag files"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_compress(args.split() if args else [])
+            self._show_operation_result('compress', result)
+        else:
+            self.console.print(f"[yellow]Compress: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_data(self, args: str):
+        """Handle data command - data operations"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_data(args.split() if args else [])
+            self._show_operation_result('data', result)
+        else:
+            self.console.print(f"[yellow]Data: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_cache(self, args: str):
+        """Handle cache command - cache management"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_cache(args.split() if args else [])
+            self._show_operation_result('cache', result)
+        else:
+            self.console.print(f"[yellow]Cache: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def handle_plugin(self, args: str):
+        """Handle plugin command - plugin operations"""
+        if hasattr(self, 'cli_adapter'):
+            result = self.cli_adapter.interactive_plugin(args.split() if args else [])
+            self._show_operation_result('plugin', result)
+        else:
+            self.console.print(f"[yellow]Plugin: {args}[/yellow]")
+            self.console.print("[dim]CLI adapter not initialized yet[/dim]")
+    
+    def _show_operation_result(self, operation: str, result: Dict[str, Any]):
+        """Display operation result with appropriate formatting"""
+        if result.get('success'):
+            message = result.get('message', f'{operation.title()} completed successfully')
+            self.console.print(f"[green]✅ {message}[/green]")
+        else:
+            error = result.get('error', 'Unknown error')
+            self.console.print(f"[red]❌ {operation.title()} failed: {error}[/red]")
     
     def handle_undo(self, args: str):
         """Handle undo command"""

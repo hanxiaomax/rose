@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from copy import deepcopy
 
-from ..core.directories import get_rose_directories
-from ..core.util import get_logger
+from ...core.directories import get_rose_directories
+from ...core.util import get_logger
 
 logger = get_logger("run_session")
 

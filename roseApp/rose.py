@@ -20,8 +20,8 @@ from roseApp.cli.cache import app as cache_app
 from roseApp.cli.cli_tool import app as cli_tool_app
 from roseApp.cli.load import load as load_main
 from roseApp.cli.plugin import app as plugin_app
-from roseApp.cli.run import app as run_app
-from roseApp.cli.run_simple import app as run_simple_app
+from roseApp.cli.interactive.run import app as run_app
+from roseApp.cli.interactive.run_simple import app as run_simple_app
 # from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
 # from roseApp.tui.tui import app as tui_app
 
