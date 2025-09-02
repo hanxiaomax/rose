@@ -74,7 +74,7 @@ class SimpleInteractiveRunner:
                     self.console.print("\n[yellow]Use /exit to quit[/yellow]")
                     continue
                 except EOFError:
-                    self.console.print("\n[cyan]👋 Goodbye![/cyan]")
+                    self.console.print("\n[cyan]Goodbye![/cyan]")
                     break
                     
         except Exception as e:
@@ -84,7 +84,7 @@ class SimpleInteractiveRunner:
     def _show_welcome(self):
         """Show simplified welcome message"""
         welcome = Text()
-        welcome.append("🌹 Rose Interactive Environment (Simple Mode)\n\n", style="bold cyan")
+        welcome.append("Rose Interactive Environment (Simple Mode)\n\n", style="bold cyan")
         welcome.append("Available commands:\n", style="bold")
         welcome.append("/help     - Show this help\n", style="dim")
         welcome.append("/status   - Show current status\n", style="dim")
@@ -162,7 +162,7 @@ class SimpleInteractiveRunner:
     
     def handle_exit(self, args: str):
         """Exit interactive mode"""
-        self.console.print("[cyan]👋 Goodbye! Simple mode exiting...[/cyan]")
+        self.console.print("[cyan]Goodbye! Simple mode exiting...[/cyan]")
         # Force exit
         sys.exit(0)
 
@@ -188,13 +188,13 @@ def debug():
         print("Testing simple interactive...")
         runner = SimpleInteractiveRunner()
         
-        print("✅ Simple runner created successfully")
+        print("SUCCESS: Simple runner created successfully")
         print("Starting interactive mode...")
         
         runner.run_interactive()
         
     except Exception as e:
-        print(f"❌ Debug failed: {e}")
+        print(f"ERROR: Debug failed: {e}")
         import traceback
         traceback.print_exc()
 

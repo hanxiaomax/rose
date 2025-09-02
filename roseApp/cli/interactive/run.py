@@ -321,7 +321,7 @@ class InteractiveRunner:
                     self.console.print("\n[yellow]Use /exit to quit[/yellow]")
                     continue
                 except EOFError:
-                    self.console.print("\n[cyan]👋 Goodbye![/cyan]")
+                    self.console.print("\n[cyan]Goodbye![/cyan]")
                     break
         
         except Exception as e:
@@ -333,7 +333,7 @@ class InteractiveRunner:
     def _show_welcome(self):
         """Show welcome message and interface overview"""
         welcome = Text()
-        welcome.append("🌹 Welcome to Rose Interactive Environment\n\n", style="bold cyan")
+        welcome.append("Welcome to Rose Interactive Environment\n\n", style="bold cyan")
         welcome.append("Available commands:\n", style="bold")
         welcome.append("/load [files]       - Load bag files (supports glob patterns, Tab completion)\n", style="dim")
         welcome.append("/extract [args]     - Extract topics from bags (interactive selection)\n", style="dim")
@@ -341,14 +341,14 @@ class InteractiveRunner:
         welcome.append("/compress [args]    - Compress bag files (bz2/lz4 options)\n", style="dim")
         welcome.append("/data [export|info] - Data operations with CSV/JSON export\n", style="dim")
         welcome.append("/cache [export|clear] - Cache management operations\n", style="dim")
-        welcome.append("/plugin [list|info|run|enable|disable] - Plugin operations\n", style="dim")
+        welcome.append("/plugin [list|info|run|enable|disable|reload|install|uninstall|create] - Plugin operations\n", style="dim")
         welcome.append("/status             - Show workspace status\n", style="dim")
         welcome.append("/bags               - Manage loaded bags\n", style="dim")
         welcome.append("/topics             - Manage topic selection\n", style="dim")
         welcome.append("/note <text>        - Add session note\n", style="dim")
         welcome.append("/help               - Show this help\n", style="dim")
         welcome.append("/exit               - Exit interactive mode\n\n", style="dim")
-        welcome.append("💡 All commands support Tab completion for files and paths!", style="green")
+        welcome.append("All commands support Tab completion for files and paths!", style="green")
         
         panel = Panel(welcome, title="Rose Interactive", border_style=get_color('primary'))
         self.console.print(panel)
@@ -371,12 +371,134 @@ class InteractiveRunner:
         
         return f"rose{context}> "
     
+    def _resolve_at_symbols(self, user_input: str) -> str:
+        """Resolve @ symbols to full bag paths"""
+        if '@' not in user_input:
+            return user_input
+        
+        try:
+            # Get cached bags
+            cached_bags = self._get_cached_bags()
+            
+            # Split input into words and process each one
+            words = user_input.split()
+            resolved_words = []
+            
+            for word in words:
+                if word.startswith('@'):
+                    bag_name = word[1:]  # Remove @ symbol
+                    
+                    # Find matching bag by name
+                    matching_bag = None
+                    for bag_path in cached_bags:
+                        from pathlib import Path
+                        bag_file = Path(bag_path)
+                        # Try exact name match, stem match, and case-insensitive matches
+                        if (bag_file.name == bag_name or 
+                            bag_file.stem == bag_name or
+                            bag_file.name.lower() == bag_name.lower() or
+                            bag_file.stem.lower() == bag_name.lower()):
+                            matching_bag = bag_path
+                            logger.debug(f"Matched @{bag_name} to {bag_path}")
+                            break
+                    
+                    if matching_bag:
+                        resolved_words.append(matching_bag)
+                        logger.debug(f"Resolved @{bag_name} to {matching_bag}")
+                    else:
+                        # Keep original if no match found
+                        resolved_words.append(word)
+                        logger.warning(f"Could not resolve @{bag_name} to a cached bag")
+                else:
+                    resolved_words.append(word)
+            
+            return ' '.join(resolved_words)
+            
+        except Exception as e:
+            logger.debug(f"Error resolving @ symbols: {e}")
+            return user_input  # Return original on error
+    
+    def _get_cached_bags(self):
+        """Get cached bags (same logic as in completer)"""
+        try:
+            from ...core.cache import get_cache
+            cache = get_cache()
+            
+            cached_bags = []
+            if hasattr(cache, 'cache_dir') and cache.cache_dir.exists():
+                import pickle
+                for cache_file in cache.cache_dir.glob("*.pkl"):
+                    try:
+                        with open(cache_file, 'rb') as f:
+                            cached_data = pickle.load(f)
+                        
+                        # Extract original bag path with multiple fallback methods
+                        bag_path = None
+                        
+                        # Debug: print what we found
+                        logger.debug(f"Processing cache file: {cache_file.name}")
+                        logger.debug(f"Cached data type: {type(cached_data)}")
+                        
+                        if hasattr(cached_data, 'original_path') and cached_data.original_path:
+                            bag_path = cached_data.original_path
+                            logger.debug(f"Found original_path: {bag_path}")
+                        elif hasattr(cached_data, 'bag_info') and cached_data.bag_info:
+                            bag_info = cached_data.bag_info
+                            if hasattr(bag_info, 'file_path') and bag_info.file_path:
+                                bag_path = str(bag_info.file_path)
+                                # If it's a relative path, make it absolute
+                                if not bag_path.startswith('/'):
+                                    bag_path = f"/workspaces/rose/{bag_path}"
+                                logger.debug(f"Found bag_info.file_path: {bag_path}")
+                            elif hasattr(bag_info, 'file_info'):
+                                file_info = bag_info.file_info
+                                if isinstance(file_info, dict):
+                                    # Try different possible keys
+                                    for key in ['path', 'file_path', 'absolute_path', 'name']:
+                                        if key in file_info and file_info[key]:
+                                            bag_path = file_info[key]
+                                            logger.debug(f"Found file_info[{key}]: {bag_path}")
+                                            break
+                        
+                        # If still no path, try to infer from cache filename
+                        if not bag_path:
+                            # Cache filename might give us a clue
+                            cache_stem = cache_file.stem
+                            # Look for .bag files that match the cache stem
+                            from pathlib import Path
+                            possible_paths = [
+                                f"{cache_stem}.bag",
+                                f"roseApp/tests/{cache_stem}.bag",
+                                f"/workspaces/rose/roseApp/tests/{cache_stem}.bag"
+                            ]
+                            for possible_path in possible_paths:
+                                if Path(possible_path).exists():
+                                    bag_path = str(Path(possible_path).absolute())
+                                    break
+                        
+                        if bag_path:
+                            cached_bags.append(bag_path)
+                            logger.debug(f"Found cached bag: {bag_path}")
+                            
+                    except Exception as e:
+                        logger.debug(f"Could not process cache file {cache_file}: {e}")
+                        continue
+            
+            return list(set(cached_bags))
+            
+        except Exception as e:
+            logger.debug(f"Could not get cached bags: {e}")
+            return []
+    
     def _dispatch_command(self, user_input: str):
         """Dispatch user input to appropriate handler"""
+        # Resolve @ symbols to full paths before processing commands
+        resolved_input = self._resolve_at_symbols(user_input)
+        
         # Check for slash commands
         for cmd_prefix, handler in self.commands.items():
-            if user_input.startswith(cmd_prefix):
-                args = user_input[len(cmd_prefix):].strip()
+            if resolved_input.startswith(cmd_prefix):
+                args = resolved_input[len(cmd_prefix):].strip()
                 try:
                     # Call handler directly (they're all methods of this class)
                     handler(args)
@@ -386,7 +508,7 @@ class InteractiveRunner:
                 return
         
         # Default to ask handler for natural language
-        self.handle_ask(user_input)
+        self.handle_ask(resolved_input)
     
     # =============================================================================
     # Command Handler Stubs (delegated to handlers)
@@ -467,10 +589,10 @@ class InteractiveRunner:
         """Display operation result with appropriate formatting"""
         if result.get('success'):
             message = result.get('message', f'{operation.title()} completed successfully')
-            self.console.print(f"[green]✅ {message}[/green]")
+            self.console.print(f"[green]SUCCESS: {message}[/green]")
         else:
             error = result.get('error', 'Unknown error')
-            self.console.print(f"[red]❌ {operation.title()} failed: {error}[/red]")
+            self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
     
     def handle_undo(self, args: str):
         """Handle undo command"""
@@ -565,7 +687,7 @@ class InteractiveRunner:
     
     def handle_exit(self, args: str):
         """Handle exit command - quit the interactive environment"""
-        self.console.print("[cyan]👋 Goodbye! Session auto-saved.[/cyan]")
+        self.console.print("[cyan]Goodbye! Session auto-saved.[/cyan]")
         try:
             self._cleanup()
         except Exception as e:
@@ -617,7 +739,7 @@ class InteractiveRunner:
             formatted_result = ResultFormatter.format_load_result(result.result)
             self.console.print(f"\n{formatted_result}")
         elif result.status == 'failed':
-            self.console.print(f"\n[red]❌ Failed to load bag: {result.error}[/red]")
+            self.console.print(f"\n[red]ERROR: Failed to load bag: {result.error}[/red]")
     
     def _on_extract_complete(self, result: TaskResult):
         """Called when extract task completes"""
@@ -627,7 +749,7 @@ class InteractiveRunner:
             formatted_result = ResultFormatter.format_extract_result(result.result)
             self.console.print(f"\n{formatted_result}")
         elif result.status == 'failed':
-            self.console.print(f"\n[red]❌ Extraction failed: {result.error}[/red]")
+            self.console.print(f"\n[red]ERROR: Extraction failed: {result.error}[/red]")
     
     def _on_inspect_complete(self, result: TaskResult):
         """Called when inspect task completes"""
@@ -637,7 +759,7 @@ class InteractiveRunner:
             formatted_result = ResultFormatter.format_inspect_result(result.result)
             self.console.print(f"\n{formatted_result}")
         elif result.status == 'failed':
-            self.console.print(f"\n[red]❌ Inspection failed: {result.error}[/red]")
+            self.console.print(f"\n[red]ERROR: Inspection failed: {result.error}[/red]")
     
     def _on_compress_complete(self, result: TaskResult):
         """Called when compress task completes"""
@@ -647,7 +769,7 @@ class InteractiveRunner:
             formatted_result = ResultFormatter.format_compress_result(result.result)
             self.console.print(f"\n{formatted_result}")
         elif result.status == 'failed':
-            self.console.print(f"\n[red]❌ Compression failed: {result.error}[/red]")
+            self.console.print(f"\n[red]ERROR: Compression failed: {result.error}[/red]")
     
     def _on_data_complete(self, result: TaskResult):
         """Called when data export task completes"""
@@ -657,7 +779,7 @@ class InteractiveRunner:
             formatted_result = ResultFormatter.format_data_result(result.result)
             self.console.print(f"\n{formatted_result}")
         elif result.status == 'failed':
-            self.console.print(f"\n[red]❌ Data export failed: {result.error}[/red]")
+            self.console.print(f"\n[red]ERROR: Data export failed: {result.error}[/red]")
 
 
 # =============================================================================

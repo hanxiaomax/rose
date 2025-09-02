@@ -4,6 +4,7 @@ CLI Adapter for Rose Interactive Run Environment
 Adapts existing CLI commands to work in interactive mode
 """
 
+import sys
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from rich.console import Console
@@ -21,6 +22,24 @@ class CLIAdapter:
     def __init__(self, runner):
         self.runner = runner
         self.console = runner.console
+    
+    def _proxy_to_native_cli(self, command_parts: List[str]) -> Dict[str, Any]:
+        """Generic proxy to native CLI commands"""
+        try:
+            import subprocess
+            cmd = [sys.executable, '-m', 'roseApp.rose'] + command_parts
+            result = subprocess.run(
+                cmd,
+                capture_output=False,  # Let output go directly to console
+                cwd=Path.cwd()
+            )
+            
+            if result.returncode == 0:
+                return {'success': True, 'message': f'Command {" ".join(command_parts)} completed'}
+            else:
+                return {'success': False, 'error': f'Command failed with code {result.returncode}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
         
         # Initialize path selector for enhanced file completion
         try:
@@ -53,6 +72,33 @@ class CLIAdapter:
                 dry_run=params.get('dry_run', False),
                 build_index=params.get('build_index', True)
             )
+            
+            # Update runner state with loaded bags
+            if not params.get('dry_run', False):
+                import glob
+                from pathlib import Path
+                
+                loaded_files = []
+                for pattern in params['input_patterns']:
+                    if '*' in pattern or '?' in pattern:
+                        loaded_files.extend(glob.glob(pattern))
+                    else:
+                        loaded_files.append(pattern)
+                
+                # Update current bags in runner state
+                for bag_file in loaded_files:
+                    if bag_file not in self.runner.state.current_bags:
+                        self.runner.state.current_bags.append(bag_file)
+                    
+                    # Also update loaded_bags with basic info
+                    if bag_file not in self.runner.state.loaded_bags:
+                        self.runner.state.loaded_bags[bag_file] = {
+                            'path': bag_file,
+                            'name': Path(bag_file).name,
+                            'topics': [],  # Will be populated by cache
+                            'loaded_at': 'now'
+                        }
+            
             return {'success': True, 'message': 'Load completed'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -99,30 +145,48 @@ class CLIAdapter:
     # =============================================================================
     
     def interactive_extract(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive version of extract command"""
-        from ..extract import _extract_topics_impl
+        """Interactive version of extract command - proxy to native CLI"""
+        # If args provided, use them directly
+        if args:
+            return self._proxy_to_native_cli(['extract'] + args + ['--yes'])
         
-        params = self._collect_extract_parameters(args)
-        if not params:
-            return {'success': False, 'error': 'Operation cancelled'}
+        # No args - need to collect bag file and topics
+        bag_file = None
         
-        try:
-            _extract_topics_impl(
-                input_bags=params['input_bags'],
-                topics=params['topics'],
-                output=params.get('output'),
-                workers=params.get('workers'),
-                reverse=params.get('reverse', False),
-                compression=params.get('compression', 'none'),
-                dry_run=params.get('dry_run', False),
-                yes=True,  # Auto-confirm in interactive mode
-                verbose=params.get('verbose', False)
-            )
-            return {'success': True, 'message': 'Extract completed'}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        # Get bag file
+        if self.runner.state.current_bags:
+            # Use first loaded bag
+            bag_file = self.runner.state.current_bags[0]
+        else:
+            # Prompt for bag file
+            from .run_path_completer import BagFileCompleter
+            bag_file = inquirer.text(
+                message="Enter bag file path:",
+                completer=BagFileCompleter()
+            ).execute()
+            
+            if not bag_file:
+                return {'success': False, 'error': 'No bag file specified'}
+        
+        # Show available topics first
+        self.console.print(f"[yellow]Showing available topics in {bag_file}...[/yellow]")
+        inspect_result = self._proxy_to_native_cli(['inspect', bag_file])
+        
+        # Prompt for topics
+        topics_input = inquirer.text(
+            message="Enter topics to extract (space-separated, use names from above):"
+        ).execute()
+        
+        if not topics_input:
+            return {'success': False, 'error': 'No topics specified'}
+        
+        topics = topics_input.split()
+        
+        # Build and execute command
+        cmd_args = ['extract', bag_file, '--topics'] + topics + ['--yes']
+        return self._proxy_to_native_cli(cmd_args)
     
-    def _collect_extract_parameters(self, args: List[str]) -> Optional[Dict[str, Any]]:
+    def _collect_extract_parameters_DEPRECATED(self, args: List[str]) -> Optional[Dict[str, Any]]:
         """Collect extract command parameters interactively"""
         params = {}
         
@@ -143,7 +207,7 @@ class CLIAdapter:
                 return None
             params['input_bags'] = selected
         else:
-            self.console.print("[yellow]No bags loaded. Use /run load first.[/yellow]")
+            self.console.print("[yellow]No bags loaded. Use /load first.[/yellow]")
             return None
         
         # Topics selection
@@ -170,8 +234,8 @@ class CLIAdapter:
             instruction="Use {input} for input filename, {timestamp} for timestamp"
         ).execute()
         
-        # Advanced options
-        if inquirer.confirm("Configure advanced options?", default=False).execute():
+        # Advanced options - only ask if no args and not using loaded bags
+        if not args and not self.runner.state.current_bags and inquirer.confirm("Configure advanced options?", default=False).execute():
             params['compression'] = inquirer.select(
                 message="Compression type:",
                 choices=[
@@ -222,27 +286,31 @@ class CLIAdapter:
     # =============================================================================
     
     def interactive_compress(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive version of compress command"""
-        from ..compress import compress as compress_command
-        
-        params = self._collect_compress_parameters(args)
-        if not params:
-            return {'success': False, 'error': 'Operation cancelled'}
-        
-        try:
-            compress_command(
-                input_bags=params['input_bags'],
-                compression=params['compression'],
-                output=params.get('output'),
-                workers=params.get('workers'),
-                yes=True,  # Auto-confirm in interactive mode
-                verbose=params.get('verbose', False)
-            )
-            return {'success': True, 'message': 'Compression completed'}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        """Interactive version of compress command - proxy to native CLI"""
+        # If no args provided, use loaded bags or prompt
+        if not args:
+            if self.runner.state.current_bags:
+                # Use loaded bags and add --yes for auto-confirm
+                cmd_args = ['compress'] + self.runner.state.current_bags + ['--yes']
+                return self._proxy_to_native_cli(cmd_args)
+            else:
+                # Prompt for bag file
+                from .run_path_completer import BagFileCompleter
+                bag_file = inquirer.text(
+                    message="Enter bag file path:",
+                    completer=BagFileCompleter()
+                ).execute()
+                
+                if not bag_file:
+                    return {'success': False, 'error': 'No bag file specified'}
+                
+                cmd_args = ['compress', bag_file, '--yes']
+                return self._proxy_to_native_cli(cmd_args)
+        else:
+            # Use provided arguments directly, add --yes for auto-confirm
+            return self._proxy_to_native_cli(['compress'] + args + ['--yes'])
     
-    def _collect_compress_parameters(self, args: List[str]) -> Optional[Dict[str, Any]]:
+    def _collect_compress_parameters_DEPRECATED(self, args: List[str]) -> Optional[Dict[str, Any]]:
         """Collect compress command parameters interactively"""
         params = {}
         
@@ -304,27 +372,30 @@ class CLIAdapter:
     # =============================================================================
     
     def interactive_inspect(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive version of inspect command"""
-        from ..inspect import inspect as inspect_command
-        
-        # Collect parameters for inspect command
-        params = self._collect_inspect_parameters(args)
-        if not params:
-            return {'success': False, 'error': 'Operation cancelled'}
-        
-        try:
-            # Execute inspect command
-            inspect_command(
-                bag_path=Path(params['bag_file']),
-                topics=params.get('topics'),
-                show_fields=params.get('show_fields', False),
-                verbose=params.get('verbose', False)
-            )
-            return {'success': True, 'message': 'Inspect completed'}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        """Interactive version of inspect command - proxy to native CLI"""
+        # If no args provided, try to use loaded bags or prompt for bag file
+        if not args:
+            if self.runner.state.current_bags:
+                # Use first loaded bag
+                bag_file = self.runner.state.current_bags[0]
+                return self._proxy_to_native_cli(['inspect', bag_file])
+            else:
+                # Prompt for bag file
+                from .run_path_completer import BagFileCompleter
+                bag_file = inquirer.text(
+                    message="Enter bag file path:",
+                    completer=BagFileCompleter()
+                ).execute()
+                
+                if not bag_file:
+                    return {'success': False, 'error': 'No bag file specified'}
+                
+                return self._proxy_to_native_cli(['inspect', bag_file])
+        else:
+            # Use provided arguments directly
+            return self._proxy_to_native_cli(['inspect'] + args)
     
-    def _collect_inspect_parameters(self, args: List[str]) -> Optional[Dict[str, Any]]:
+    def _collect_inspect_parameters_DEPRECATED(self, args: List[str]) -> Optional[Dict[str, Any]]:
         """Collect inspect command parameters interactively"""
         params = {}
         
@@ -358,8 +429,8 @@ class CLIAdapter:
                 return None
             params['bag_file'] = selected
         
-        # Advanced options
-        if inquirer.confirm("Configure advanced options?", default=False).execute():
+        # Advanced options - only ask if no args and not using loaded bags
+        if not args and not self.runner.state.current_bags and inquirer.confirm("Configure advanced options?", default=False).execute():
             params['show_fields'] = inquirer.confirm("Show field analysis?", default=False).execute()
             params['verbose'] = inquirer.confirm("Verbose output?", default=False).execute()
         
@@ -370,25 +441,18 @@ class CLIAdapter:
     # =============================================================================
     
     def interactive_data(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive version of data command"""
+        """Interactive version of data command - proxy to native CLI"""
         if not args:
             return self._show_data_menu()
         
-        subcommand = args[0]
-        subargs = args[1:]
-        
-        if subcommand == 'export':
-            return self._data_export(subargs)
-        elif subcommand == 'info':
-            return self._data_info(subargs)
-        else:
-            return self._show_data_menu()
+        # Proxy directly to native CLI
+        return self._proxy_to_native_cli(['data'] + args)
     
     def _show_data_menu(self) -> Dict[str, Any]:
         """Show data command menu"""
         choices = [
-            Choice(value='export', name='📤 Export - Export topic data to CSV'),
-            Choice(value='info', name='ℹ️  Info - Show bag data information')
+            Choice(value='export', name='Export - Export topic data to CSV'),
+            Choice(value='info', name='Info - Show bag data information')
         ]
         
         selected = inquirer.select(
@@ -416,8 +480,7 @@ class CLIAdapter:
             data_export_cmd(
                 input_bag=input_bag,
                 topics=params['topics'],
-                output_csv=params['output'],
-                yes=True
+                output_csv=params['output']
             )
             
             return {'success': True, 'message': 'Data export completed'}
@@ -432,7 +495,7 @@ class CLIAdapter:
         if self.runner.state.current_bags:
             params['input_bags'] = self.runner.state.current_bags
         else:
-            self.console.print("[yellow]No bags loaded. Use /run load first.[/yellow]")
+            self.console.print("[yellow]No bags loaded. Use /load first.[/yellow]")
             return None
         
         # Topics selection
@@ -534,7 +597,8 @@ class CLIAdapter:
     def interactive_cache(self, args: List[str]) -> Dict[str, Any]:
         """Interactive version of cache command"""
         if not args:
-            return self._show_cache_menu()
+            # Default behavior: show cache info (like native CLI)
+            return self._cache_show_info()
         
         subcommand = args[0]
         
@@ -545,11 +609,15 @@ class CLIAdapter:
         else:
             return self._show_cache_menu()
     
+    def _cache_show_info(self) -> Dict[str, Any]:
+        """Show cache information (default behavior) - proxy to native CLI"""
+        return self._proxy_to_native_cli(['cache'])
+    
     def _show_cache_menu(self) -> Dict[str, Any]:
         """Show cache management menu"""
         choices = [
-            Choice(value='export', name='📤 Export - Export cache entries to file'),
-            Choice(value='clear', name='🗑️  Clear - Clear cache data')
+            Choice(value='export', name='Export - Export cache entries to file'),
+            Choice(value='clear', name='Clear - Clear cache data')
         ]
         
         selected = inquirer.select(
@@ -569,11 +637,50 @@ class CLIAdapter:
         try:
             from ..cache import cache_clear as cache_clear_cmd
             
-            if inquirer.confirm("Clear all cache data?", default=False).execute():
-                cache_clear_cmd(yes=True)
-                return {'success': True, 'message': 'Cache cleared'}
-            else:
-                return {'success': False, 'error': 'Operation cancelled'}
+            # Ask what to clear
+            clear_type = inquirer.select(
+                message="What to clear?",
+                choices=[
+                    Choice(value='all', name='Clear all cache data'),
+                    Choice(value='specific', name='Clear cache for specific bag')
+                ]
+            ).execute()
+            
+            if clear_type == 'all':
+                if inquirer.confirm("Clear all cache data?", default=False).execute():
+                    cache_clear_cmd(yes=True)
+                    return {'success': True, 'message': 'All cache cleared'}
+                else:
+                    return {'success': False, 'error': 'Operation cancelled'}
+            
+            elif clear_type == 'specific':
+                # Select bag to clear cache for
+                if self.runner.state.current_bags:
+                    choices = [Choice(value=bag, name=Path(bag).name) for bag in self.runner.state.current_bags]
+                    selected_bag = inquirer.select(
+                        message="Select bag to clear cache for:",
+                        choices=choices
+                    ).execute()
+                    
+                    if selected_bag:
+                        cache_clear_cmd(bag_path=selected_bag, yes=True)
+                        return {'success': True, 'message': f'Cache cleared for {Path(selected_bag).name}'}
+                    else:
+                        return {'success': False, 'error': 'No bag selected'}
+                else:
+                    # Manual input
+                    bag_path = inquirer.text(
+                        message="Enter bag file path:",
+                        default=""
+                    ).execute()
+                    
+                    if bag_path:
+                        cache_clear_cmd(bag_path=bag_path, yes=True)
+                        return {'success': True, 'message': f'Cache cleared for {Path(bag_path).name}'}
+                    else:
+                        return {'success': False, 'error': 'No bag path specified'}
+            
+            return {'success': False, 'error': 'Operation cancelled'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
@@ -581,6 +688,7 @@ class CLIAdapter:
         """Export cache data"""
         try:
             from ..cache import cache_export as cache_export_cmd
+            from pathlib import Path
             
             # Get export parameters
             output_file = inquirer.text(
@@ -589,6 +697,52 @@ class CLIAdapter:
             ).execute()
             if not output_file:
                 return {'success': False, 'error': 'No output file specified'}
+            
+            # Export scope selection
+            export_scope = inquirer.select(
+                message="What to export?",
+                choices=[
+                    Choice(value='all', name='Export all cache data'),
+                    Choice(value='bag', name='Export cache for specific bag'),
+                    Choice(value='name', name='Export cache by name/key')
+                ]
+            ).execute()
+            
+            # Prepare parameters
+            export_params = {'output_file': output_file}
+            
+            if export_scope == 'bag':
+                # Select bag to export cache for
+                if self.runner.state.current_bags:
+                    choices = [Choice(value=bag, name=Path(bag).name) for bag in self.runner.state.current_bags]
+                    selected_bag = inquirer.select(
+                        message="Select bag to export cache for:",
+                        choices=choices
+                    ).execute()
+                    if selected_bag:
+                        export_params['bag_path'] = selected_bag
+                    else:
+                        return {'success': False, 'error': 'No bag selected'}
+                else:
+                    # Manual input
+                    bag_path = inquirer.text(
+                        message="Enter bag file path:",
+                        default=""
+                    ).execute()
+                    if bag_path:
+                        export_params['bag_path'] = bag_path
+                    else:
+                        return {'success': False, 'error': 'No bag path specified'}
+            
+            elif export_scope == 'name':
+                cache_name = inquirer.text(
+                    message="Enter cache key/name:",
+                    default=""
+                ).execute()
+                if cache_name:
+                    export_params['name'] = cache_name
+                else:
+                    return {'success': False, 'error': 'No cache name specified'}
             
             # Advanced options
             if inquirer.confirm("Configure export options?", default=False).execute():
@@ -601,16 +755,13 @@ class CLIAdapter:
                     ],
                     default='json'
                 ).execute()
+                export_params['format'] = format_choice
                 
                 include_messages = inquirer.confirm("Include message data?", default=False).execute()
-                
-                cache_export_cmd(
-                    output_file=output_file,
-                    format=format_choice,
-                    include_messages=include_messages
-                )
-            else:
-                cache_export_cmd(output_file=output_file)
+                export_params['include_messages'] = include_messages
+            
+            # Execute export command
+            cache_export_cmd(**export_params)
             
             return {'success': True, 'message': 'Cache export completed'}
         except Exception as e:
@@ -637,17 +788,29 @@ class CLIAdapter:
             return self._plugin_enable(args[1:])
         elif subcommand == 'disable':
             return self._plugin_disable(args[1:])
+        elif subcommand == 'reload':
+            return self._plugin_reload(args[1:])
+        elif subcommand == 'install':
+            return self._plugin_install(args[1:])
+        elif subcommand == 'uninstall':
+            return self._plugin_uninstall(args[1:])
+        elif subcommand == 'create':
+            return self._plugin_create(args[1:])
         else:
             return self._show_plugin_menu()
     
     def _show_plugin_menu(self) -> Dict[str, Any]:
         """Show plugin management menu"""
         choices = [
-            Choice(value='list', name='📋 List - List available plugins'),
-            Choice(value='info', name='ℹ️  Info - Show plugin information'),
-            Choice(value='run', name='▶️  Run - Execute a plugin'),
-            Choice(value='enable', name='✅ Enable - Enable a plugin'),
-            Choice(value='disable', name='❌ Disable - Disable a plugin')
+            Choice(value='list', name='List - List available plugins'),
+            Choice(value='info', name='Info - Show plugin information'),
+            Choice(value='run', name='Run - Execute a plugin'),
+            Choice(value='enable', name='Enable - Enable a plugin'),
+            Choice(value='disable', name='Disable - Disable a plugin'),
+            Choice(value='reload', name='Reload - Reload plugins'),
+            Choice(value='install', name='Install - Install a plugin'),
+            Choice(value='uninstall', name='Uninstall - Uninstall a plugin'),
+            Choice(value='create', name='Create - Create a new plugin')
         ]
         
         selected = inquirer.select(
@@ -665,6 +828,14 @@ class CLIAdapter:
             return self._plugin_enable([])
         elif selected == 'disable':
             return self._plugin_disable([])
+        elif selected == 'reload':
+            return self._plugin_reload([])
+        elif selected == 'install':
+            return self._plugin_install([])
+        elif selected == 'uninstall':
+            return self._plugin_uninstall([])
+        elif selected == 'create':
+            return self._plugin_create([])
         
         return {'success': False, 'error': 'No operation selected'}
     
@@ -755,6 +926,80 @@ class CLIAdapter:
             
             plugin_disable_cmd(plugin_name=args[0])
             return {'success': True, 'message': 'Plugin disabled'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _plugin_reload(self, args: List[str]) -> Dict[str, Any]:
+        """Reload plugins"""
+        try:
+            from ..plugin import reload as plugin_reload_cmd
+            plugin_reload_cmd()
+            return {'success': True, 'message': 'Plugins reloaded'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _plugin_install(self, args: List[str]) -> Dict[str, Any]:
+        """Install a plugin"""
+        try:
+            from ..plugin import install as plugin_install_cmd
+            
+            if not args:
+                plugin_path = inquirer.text(
+                    message="Enter plugin path or URL:"
+                ).execute()
+                if not plugin_path:
+                    return {'success': False, 'error': 'No plugin path specified'}
+                args = [plugin_path]
+            
+            plugin_install_cmd(plugin_path=args[0])
+            return {'success': True, 'message': 'Plugin installed'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _plugin_uninstall(self, args: List[str]) -> Dict[str, Any]:
+        """Uninstall a plugin"""
+        try:
+            from ..plugin import uninstall as plugin_uninstall_cmd
+            
+            if not args:
+                plugin_name = inquirer.text(
+                    message="Enter plugin name to uninstall:"
+                ).execute()
+                if not plugin_name:
+                    return {'success': False, 'error': 'No plugin specified'}
+                args = [plugin_name]
+            
+            plugin_uninstall_cmd(plugin_name=args[0])
+            return {'success': True, 'message': 'Plugin uninstalled'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _plugin_create(self, args: List[str]) -> Dict[str, Any]:
+        """Create a new plugin"""
+        try:
+            from ..plugin import create as plugin_create_cmd
+            
+            if not args:
+                plugin_name = inquirer.text(
+                    message="Enter plugin name:"
+                ).execute()
+                if not plugin_name:
+                    return {'success': False, 'error': 'No plugin name specified'}
+                args = [plugin_name]
+            
+            # Ask for template type
+            template = inquirer.select(
+                message="Select plugin template:",
+                choices=[
+                    Choice(value='hook', name='Hook Plugin'),
+                    Choice(value='script', name='Script Plugin'),
+                    Choice(value='data', name='Data Plugin')
+                ],
+                default='hook'
+            ).execute()
+            
+            plugin_create_cmd(name=args[0], template=template)
+            return {'success': True, 'message': 'Plugin created'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

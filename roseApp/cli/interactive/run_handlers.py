@@ -121,10 +121,10 @@ class RunCommandHandlers:
         """Display operation result with appropriate formatting"""
         if result.get('success'):
             message = result.get('message', f'{operation.title()} completed successfully')
-            self.console.print(f"[green]✅ {message}[/green]")
+            self.console.print(f"[green]SUCCESS: {message}[/green]")
         else:
             error = result.get('error', 'Unknown error')
-            self.console.print(f"[red]❌ {operation.title()} failed: {error}[/red]")
+            self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
     
     def handle_undo(self, args: str):
         """Handle undo operations"""
@@ -336,7 +336,7 @@ class RunCommandHandlers:
             if not confirm("Exit anyway?"):
                 return
         
-        self.console.print("[cyan]👋 Goodbye! Your session has been auto-saved.[/cyan]")
+        self.console.print("[cyan]Goodbye! Your session has been auto-saved.[/cyan]")
         
         # Auto-save session
         try:

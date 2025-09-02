@@ -50,7 +50,8 @@ class CLIAdapter:
                 workers=params.get('workers'),
                 verbose=params.get('verbose', False),
                 force=params.get('force', False),
-                build_index=params.get('build_index', True)
+                build_index=params.get('build_index', True),
+                yes=True  # Auto-confirm in interactive mode
             )
             return {'success': True, 'message': 'Load completed'}
         except Exception as e:
@@ -67,25 +68,17 @@ class CLIAdapter:
             # Use enhanced path selector if available
             if self.path_selector:
                 selected_files = self.path_selector.select_bag_files(
-                    message="Enter bag file path or pattern:",
+                    message="Select bag files to load:",
                     multiselect=True
                 )
                 if not selected_files:
                     return None
                 params['input_patterns'] = selected_files
             else:
-                # Fallback with basic path completion
-                from .run_path_completer import PathCompleter
-                
-                # Create a simple completer for bag files
-                def bag_completer(text):
-                    return PathCompleter.complete_bag_files(text, include_patterns=True)
-                
+                # Fallback to basic selection
                 pattern = inquirer.text(
-                    message="Enter bag file path or pattern:",
-                    default="*.bag",
-                    completer=bag_completer,
-                    complete_style="multi-column"
+                    message="Enter bag file pattern:",
+                    default="*.bag"
                 ).execute()
                 if not pattern:
                     return None
@@ -235,14 +228,14 @@ class CLIAdapter:
     
     def interactive_compress(self, args: List[str]) -> Dict[str, Any]:
         """Interactive version of compress command"""
-        from .compress import compress as compress_command
+        from .compress import _compress_impl
         
         params = self._collect_compress_parameters(args)
         if not params:
             return {'success': False, 'error': 'Operation cancelled'}
         
         try:
-            compress_command(
+            _compress_impl(
                 input_bags=params['input_bags'],
                 compression=params['compression'],
                 output=params.get('output'),
@@ -482,12 +475,13 @@ class CLIAdapter:
             if not params:
                 return {'success': False, 'error': 'Operation cancelled'}
             
-            # Data export only supports single bag, use first one
-            input_bag = params['input_bags'][0] if params['input_bags'] else ""
             data_export_cmd(
-                input_bag=input_bag,
+                input=params['input_bags'],
                 topics=params['topics'],
-                output_csv=params['output'],
+                output=params['output'],
+                format=params.get('format', 'csv'),
+                workers=params.get('workers'),
+                verbose=params.get('verbose', False),
                 yes=True
             )
             
@@ -600,7 +594,7 @@ class CLIAdapter:
     def _cache_clear(self) -> Dict[str, Any]:
         """Clear cache interactively"""
         try:
-            from .cache import cache_clear as cache_clear_cmd
+            from .cache import clear as cache_clear_cmd
             
             if inquirer.confirm("Clear all cache data?", default=False).execute():
                 cache_clear_cmd(yes=True)

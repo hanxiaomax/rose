@@ -41,6 +41,7 @@ def inspect(
     """
     # Use CommonUI for unified output management
     ui = CommonUI()
+    console = ui.console
     
     # Validate bag file exists
     if not bag_path.exists():

@@ -348,8 +348,12 @@ class EnhancedRoseCompleter(Completer):
         words = text.split()
         
         try:
+            # Complete loaded bags when @ is typed
+            if '@' in text:
+                yield from self._complete_loaded_bags(text, document)
+            
             # Complete slash commands
-            if text.startswith('/'):
+            elif text.startswith('/'):
                 yield from self._complete_commands(text, words, document)
             
             # Complete file paths for any command
@@ -359,6 +363,118 @@ class EnhancedRoseCompleter(Completer):
             # Prevent completer from crashing
             logger.debug(f"Completion error: {e}")
             return
+    
+    def _complete_loaded_bags(self, text, document):
+        """Complete with loaded bag files when @ is detected"""
+        try:
+            # Find the position of @ in the text
+            at_pos = text.rfind('@')
+            if at_pos == -1:
+                return
+            
+            # Get the text after @
+            after_at = text[at_pos + 1:]
+            
+            # Get loaded bags from cache directly (more reliable than runner state)
+            loaded_bags = self._get_cached_bags()
+            
+            if not loaded_bags:
+                # Show hint if no bags are loaded
+                yield Completion(
+                    text='<no bags loaded>',
+                    start_position=-len(after_at),
+                    display='<no bags loaded - use /load first>',
+                    style='class:completion.hint'
+                )
+                return
+            
+            # Filter bags based on input after @
+            for bag_path in loaded_bags:
+                bag_name = Path(bag_path).name
+                bag_stem = Path(bag_path).stem  # filename without extension
+                
+                # Match against both full name and stem
+                if (not after_at or 
+                    bag_name.lower().startswith(after_at.lower()) or 
+                    bag_stem.lower().startswith(after_at.lower())):
+                    
+                    yield Completion(
+                        text=bag_name,
+                        start_position=-len(after_at),
+                        display=f'{bag_name} ({bag_path})',
+                        style='class:completion.bag'
+                    )
+                
+        except Exception as e:
+            logger.debug(f"Loaded bags completion error: {e}")
+    
+    def _get_cached_bags(self):
+        """Get bags from cache directly (more reliable than runner state)"""
+        try:
+            from ...core.cache import get_cache
+            cache = get_cache()
+            
+            # Get all cache files
+            cached_bags = []
+            if hasattr(cache, 'cache_dir') and cache.cache_dir.exists():
+                import pickle
+                for cache_file in cache.cache_dir.glob("*.pkl"):
+                    try:
+                        with open(cache_file, 'rb') as f:
+                            cached_data = pickle.load(f)
+                        
+                        # Extract original bag path with multiple fallback methods
+                        bag_path = None
+                        
+                        if hasattr(cached_data, 'original_path'):
+                            bag_path = cached_data.original_path
+                        elif hasattr(cached_data, 'bag_info'):
+                            bag_info = cached_data.bag_info
+                            if hasattr(bag_info, 'file_path'):
+                                bag_path = str(bag_info.file_path)
+                            elif hasattr(bag_info, 'file_info'):
+                                file_info = bag_info.file_info
+                                if isinstance(file_info, dict):
+                                    # Try different possible keys
+                                    for key in ['path', 'file_path', 'absolute_path', 'name']:
+                                        if key in file_info:
+                                            bag_path = file_info[key]
+                                            break
+                        
+                        # If still no path, try to infer from cache filename
+                        if not bag_path:
+                            # Cache filename might give us a clue
+                            cache_stem = cache_file.stem
+                            # Look for .bag files that match the cache stem
+                            possible_paths = [
+                                f"{cache_stem}.bag",
+                                f"roseApp/tests/{cache_stem}.bag",
+                                f"/workspaces/rose/roseApp/tests/{cache_stem}.bag"
+                            ]
+                            for possible_path in possible_paths:
+                                if Path(possible_path).exists():
+                                    bag_path = str(Path(possible_path).absolute())
+                                    break
+                        
+                        if bag_path:
+                            cached_bags.append(bag_path)
+                            logger.debug(f"Found cached bag: {bag_path}")
+                            
+                    except Exception as e:
+                        logger.debug(f"Could not process cache file {cache_file}: {e}")
+                        continue
+            
+            # Remove duplicates and return
+            return list(set(cached_bags))
+            
+        except Exception as e:
+            logger.debug(f"Could not get cached bags: {e}")
+            
+            # Fallback to runner state if cache access fails
+            if hasattr(self.runner, 'state') and hasattr(self.runner.state, 'current_bags'):
+                return self.runner.state.current_bags or []
+            
+            return []
     
     def _complete_commands(self, text, words, document):
         """Complete slash commands and sub-commands"""

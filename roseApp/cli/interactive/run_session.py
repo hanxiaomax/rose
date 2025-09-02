@@ -306,7 +306,7 @@ Generated: {time.strftime("%Y-%m-%d %H:%M:%S")}
         if self.runner.state.task_history:
             content += "\n## Task History\n\n"
             for task in self.runner.state.task_history[-10:]:  # Last 10 tasks
-                status_icon = "✅" if task.status == 'completed' else "❌" if task.status == 'failed' else "⏳"
+                status_icon = "[OK]" if task.status == 'completed' else "[ERR]" if task.status == 'failed' else "[...]"
                 content += f"- {status_icon} {task.command} ({task.task_id})\n"
         
         # Write to file

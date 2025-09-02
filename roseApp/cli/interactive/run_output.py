@@ -454,10 +454,10 @@ class ResultFormatter:
             bag_name = Path(result['bag_path']).name
             topics_count = result.get('topics_count', 0)
             size_mb = result.get('file_size_mb', 0)
-            return f"✅ Loaded {bag_name} ({topics_count} topics, {size_mb:.1f} MB)"
+            return f"SUCCESS: Loaded {bag_name} ({topics_count} topics, {size_mb:.1f} MB)"
         else:
             error = result.get('error', 'Unknown error')
-            return f"❌ Load failed: {error}"
+            return f"ERROR: Load failed: {error}"
     
     @staticmethod
     def format_extract_result(result: Dict[str, Any]) -> str:
@@ -466,10 +466,10 @@ class ResultFormatter:
             success_count = result.get('success_count', 0)
             total_count = result.get('total_count', 0)
             topics_count = result.get('topics_count', 0)
-            return f"✅ Extracted {topics_count} topics from {success_count}/{total_count} bags"
+            return f"SUCCESS: Extracted {topics_count} topics from {success_count}/{total_count} bags"
         else:
             error = result.get('error', 'Unknown error')
-            return f"❌ Extraction failed: {error}"
+            return f"ERROR: Extraction failed: {error}"
     
     @staticmethod
     def format_inspect_result(result: Dict[str, Any]) -> str:
@@ -478,10 +478,10 @@ class ResultFormatter:
             report = result.get('report', {})
             topics_count = report.get('topics_count', 0)
             messages_count = report.get('total_messages', 0)
-            return f"✅ Inspection completed: {topics_count} topics, {messages_count} messages"
+            return f"SUCCESS: Inspection completed: {topics_count} topics, {messages_count} messages"
         else:
             error = result.get('error', 'Unknown error')
-            return f"❌ Inspection failed: {error}"
+            return f"ERROR: Inspection failed: {error}"
     
     @staticmethod
     def format_compress_result(result: Dict[str, Any]) -> str:
@@ -490,10 +490,10 @@ class ResultFormatter:
             success_count = result.get('success_count', 0)
             total_count = result.get('total_count', 0)
             compression = result.get('compression', 'unknown')
-            return f"✅ Compressed {success_count}/{total_count} bags with {compression}"
+            return f"SUCCESS: Compressed {success_count}/{total_count} bags with {compression}"
         else:
             error = result.get('error', 'Unknown error')
-            return f"❌ Compression failed: {error}"
+            return f"ERROR: Compression failed: {error}"
     
     @staticmethod
     def format_data_result(result: Dict[str, Any]) -> str:
@@ -501,10 +501,10 @@ class ResultFormatter:
         if result.get('success'):
             row_count = result.get('row_count', 0)
             output_path = result.get('output_path', 'unknown')
-            return f"✅ Exported {row_count} rows to {Path(output_path).name}"
+            return f"SUCCESS: Exported {row_count} rows to {Path(output_path).name}"
         else:
             error = result.get('error', 'Unknown error')
-            return f"❌ Data export failed: {error}"
+            return f"ERROR: Data export failed: {error}"
 
 
 if __name__ == "__main__":
