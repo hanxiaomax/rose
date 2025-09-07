@@ -656,82 +656,44 @@ All operations use interactive prompts for parameter collection.
         self.console.print(Markdown(help_text))
     
     def _show_detailed_help(self):
-        """Show comprehensive help"""
-        help_content = """# Rose Interactive Environment Help
-
-## Core Commands
-
-### Navigation & Status
-- `/status` - Show workspace status, running tasks, and recent operations
-- `/workspace info` - Show detailed workspace information  
-- `/workspace cd <path>` - Change workspace directory
-- `/clear` - Clear console and show welcome message
-
-### Bag File Management
-- `/bags` - Interactive bag file management
-- `/bags list` - List currently loaded bags
-- `/bags add <path>` - Add bag file to workspace
-- `/bags clear` - Remove all bags from workspace
-
-### Topic Operations  
-- `/topics` - Interactive topic selection and management
-- `/run extract` - Extract selected topics from bags
-- `/run data` - Export topic data to CSV format
-
-### Background Operations
-- `/run load <bag>` - Load bag file into cache (background)
-- `/run inspect` - Analyze bag contents (background)
-- `/run compress` - Compress bag files (background)
-- `/cancel [task_id]` - Cancel running tasks
-- `/undo` - Undo last operation
-
-### Session Management
-- `/note <text>` - Add note to current session
-- `/notes` - Show all session notes
-- `/save [filename]` - Save current session
-- `/load [filename]` - Load saved session
-- `/export <type>` - Export notes/session/results
-
-### Help & Exit
-- `/help` - Show this help message
-- `/ask <question>` - Get contextual help and suggestions
-- `/exit` or `/quit` - Exit interactive mode
-
-## Special Symbols
-
-### @ Symbol - Bag File References
-- `@<bag_name>` - Reference cached bag files by name
-- Examples: `@test.bag`, `@demo3_filtered_20250901_233347`
-- Automatically resolves to full path of cached bag files
-- Works with both full filename and stem (without extension)
-
-### ! Symbol - Native Shell Commands
-- `!<command>` - Execute native bash/shell commands
-- Examples: `!ls -la`, `!pwd`, `!find . -name "*.bag"`
-- Runs in current working directory
-- Shows command output and exit codes
-
-## Usage Tips
-
-1. **Natural Questions**: Just type your question without /ask
-2. **Background Tasks**: Long operations run in background, you can continue working
-3. **Context Aware**: Commands adapt based on current workspace state
-4. **File References**: Use @symbol for cached bags, !commands for shell operations
-4. **Undo Support**: Most operations can be undone with /undo
-5. **Auto-complete**: Use Tab for command and file completion
-
-## Examples
-
-```
-> load my_data.bag
-> What topics are in this bag?
-> /run extract  
-> /note GPS data looks good
-> /status
-```
-"""
+        """Show comprehensive help from Markdown file"""
+        try:
+            # Get the help file path
+            help_file = Path(__file__).parent / "help.md"
+            
+            if help_file.exists():
+                # Read the Markdown content
+                with open(help_file, 'r', encoding='utf-8') as f:
+                    help_content = f.read()
+                
+                # Display with Rich Markdown rendering
+                self.console.print(Markdown(help_content))
+            else:
+                # Fallback if help file doesn't exist
+                self.console.print("[red]Help file not found. Using basic help.[/red]")
+                self._show_basic_help()
+                
+        except Exception as e:
+            logger.warning(f"Could not load help file: {e}")
+            self.console.print(f"[yellow]Could not load help file: {e}[/yellow]")
+            self._show_basic_help()
+    
+    def _show_basic_help(self):
+        """Show basic help as fallback"""
+        basic_help = Text()
+        basic_help.append("Rose Interactive Environment - Basic Help\n\n", style="bold cyan")
+        basic_help.append("Core Commands:\n", style="bold")
         
-        self.console.print(Markdown(help_content))
+        # Show available commands dynamically
+        for cmd in sorted(self.runner.commands.keys()):
+            if cmd in ['/help', '/exit', '/quit', '/status', '/clear']:
+                basic_help.append(f"  {cmd}\n", style="dim")
+        
+        basic_help.append("\nFor comprehensive help, ensure help.md file is available.\n", style="yellow")
+        basic_help.append("Try: '/status' to see current state or ask questions directly.", style="green")
+        
+        panel = Panel(basic_help, title="Basic Help", border_style=get_color('primary'))
+        self.console.print(panel)
     
     # =============================================================================
     # Helper Methods

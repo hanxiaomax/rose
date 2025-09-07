@@ -74,6 +74,12 @@ def callback(
         # cache.enable_profiling()  # Enable if profiling method exists
         logger.info("Performance profiling enabled")
     
+    # If no subcommand is provided, start interactive mode
+    if ctx.invoked_subcommand is None:
+        from roseApp.cli.interactive.run import InteractiveRunner
+        runner = InteractiveRunner()
+        runner.run_interactive()
+    
 
 
 
@@ -88,7 +94,7 @@ app.add_typer(cache_app)
 app.add_typer(cli_tool_app)
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(run_app, name="run")
-app.add_typer(run_simple_app, name="interactive")
+app.add_typer(run_app, name="interactive")
 # app.add_typer(profile_app)  # Temporarily disabled due to API migration
 # app.add_typer(tui_app)
 

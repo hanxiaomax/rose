@@ -332,25 +332,67 @@ class InteractiveRunner:
     
     def _show_welcome(self):
         """Show welcome message and interface overview"""
-        welcome = Text()
-        welcome.append("Welcome to Rose Interactive Environment\n\n", style="bold cyan")
-        welcome.append("Available commands:\n", style="bold")
-        welcome.append("/load [files]       - Load bag files (supports glob patterns, Tab completion)\n", style="dim")
-        welcome.append("/extract [args]     - Extract topics from bags (interactive selection)\n", style="dim")
-        welcome.append("/inspect            - Inspect bag contents\n", style="dim")
-        welcome.append("/compress [args]    - Compress bag files (bz2/lz4 options)\n", style="dim")
-        welcome.append("/data [export|info] - Data operations with CSV/JSON export\n", style="dim")
-        welcome.append("/cache [export|clear] - Cache management operations\n", style="dim")
-        welcome.append("/plugin [list|info|run|enable|disable|reload|install|uninstall|create] - Plugin operations\n", style="dim")
-        welcome.append("/status             - Show workspace status\n", style="dim")
-        welcome.append("/bags               - Manage loaded bags\n", style="dim")
-        welcome.append("/topics             - Manage topic selection\n", style="dim")
-        welcome.append("/note <text>        - Add session note\n", style="dim")
-        welcome.append("/help               - Show this help\n", style="dim")
-        welcome.append("/exit               - Exit interactive mode\n\n", style="dim")
-        welcome.append("All commands support Tab completion for files and paths!", style="green")
+        # Display the beautiful ROSE banner first
+        from ..util import build_banner
+        self.console.print(build_banner())
         
-        panel = Panel(welcome, title="Rose Interactive", border_style=get_color('primary'))
+        # Generate command list dynamically
+        welcome = Text()
+        welcome.append("Available commands:\n", style="bold")
+        
+        # Define command categories and descriptions
+        command_descriptions = {
+            # Core bag operations
+            "/load": "Load bag files (supports glob patterns, Tab completion)",
+            "/extract": "Extract topics from bags (interactive selection)", 
+            "/inspect": "Inspect bag contents and statistics",
+            "/compress": "Compress bag files (bz2/lz4 options)",
+            
+            # Data operations
+            "/data": "Data operations with CSV/JSON export",
+            "/cache": "Cache management operations",
+            "/plugin": "Plugin system operations",
+            
+            # Session management
+            "/status": "Show workspace status and running tasks",
+            "/bags": "Manage loaded bags",
+            "/topics": "Manage topic selection",
+            "/workspace": "Workspace operations",
+            "/note": "Add session note",
+            "/notes": "Show all session notes",
+            "/save": "Save current session",
+            "/session": "Load saved session",
+            "/export": "Export notes/session/results",
+            
+            # System operations
+            "/undo": "Undo last operation",
+            "/cancel": "Cancel running tasks",
+            "/clear": "Clear console",
+            "/help": "Show comprehensive help",
+            "/exit": "Exit interactive mode",
+        }
+        
+        # Display commands that are actually available
+        for cmd in sorted(self.commands.keys()):
+            if cmd in command_descriptions:
+                # Format command with proper spacing
+                cmd_text = f"{cmd:<12}"
+                desc_text = command_descriptions[cmd]
+                welcome.append(f"{cmd_text} - {desc_text}\n", style="dim")
+        
+        # Add usage tips
+        welcome.append("\n", style="dim")
+        welcome.append("Features:\n", style="green")
+        welcome.append("  • Tab completion for commands and file paths\n", style="dim")
+        welcome.append("  • Natural language queries (just ask questions!)\n", style="dim")
+        welcome.append("  • @ symbol for cached bags (@test.bag)\n", style="dim")
+        welcome.append("  • ! symbol for shell commands (!ls -la)\n", style="dim")
+        welcome.append("  • Background task execution\n", style="dim")
+        
+        welcome.append("\nTry: ", style="dim")
+        welcome.append("'/help'", style="italic")
+        
+        panel = Panel(welcome, title="Interactive Environment", border_style=get_color('primary'))
         self.console.print(panel)
     
     def _get_prompt_text(self) -> str:
