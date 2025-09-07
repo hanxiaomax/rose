@@ -19,8 +19,11 @@ import typer
 
 from ...ui.theme import get_color
 from ...ui.common_ui import Message
+from ...core.util import get_logger
 from ..util import check_and_load_bag_cache
 from .run_cli_adapter import CLIAdapter
+
+logger = get_logger("run_handlers")
 
 
 class RunCommandHandlers:
@@ -656,7 +659,7 @@ All operations use interactive prompts for parameter collection.
         self.console.print(Markdown(help_text))
     
     def _show_detailed_help(self):
-        """Show comprehensive help from Markdown file"""
+        """Show comprehensive help from Markdown file with Textual paging"""
         try:
             # Get the help file path
             help_file = Path(__file__).parent / "help.md"
@@ -666,8 +669,8 @@ All operations use interactive prompts for parameter collection.
                 with open(help_file, 'r', encoding='utf-8') as f:
                     help_content = f.read()
                 
-                # Display with Rich Markdown rendering
-                self.console.print(Markdown(help_content))
+                # Display with Textual Markdown rendering and paging
+                self._display_markdown_with_textual(help_content)
             else:
                 # Fallback if help file doesn't exist
                 self.console.print("[red]Help file not found. Using basic help.[/red]")
@@ -677,6 +680,170 @@ All operations use interactive prompts for parameter collection.
             logger.warning(f"Could not load help file: {e}")
             self.console.print(f"[yellow]Could not load help file: {e}[/yellow]")
             self._show_basic_help()
+    
+    def _display_markdown_with_textual(self, markdown_content: str):
+        """Display markdown content using Textual with paging support"""
+        try:
+            # Try to use Textual for better markdown rendering and paging
+            import asyncio
+            from textual.app import App
+            from textual.widgets import Markdown as TextualMarkdown, Footer
+            from textual.containers import Vertical, Horizontal
+            from textual.binding import Binding
+            from textual import on
+            
+            # Ensure we have an event loop for Textual
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # No event loop exists, create one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            class MarkdownViewer(App):
+                """A Textual app for viewing Markdown with paging support"""
+                
+                CSS = """
+                MarkdownViewer {
+                    background: $background;
+                }
+                
+                #markdown {
+                    scrollbar-background: $primary-background;
+                    scrollbar-color: $accent;
+                    scrollbar-corner-color: $primary-background;
+                    scrollbar-size: 2 1;
+                    padding: 1 2;
+                    height: 100%;
+                    overflow-y: auto;
+                    overflow-x: auto;
+                }
+                
+                Footer {
+                    background: $primary;
+                    color: $text;
+                }
+                """
+                
+                BINDINGS = [
+                    Binding("q", "quit", "Quit", priority=True),
+                    Binding("escape", "quit", "Quit", priority=True),
+                    # Vim-style navigation
+                    Binding("j", "scroll_down", "Scroll Down", show=False),
+                    Binding("k", "scroll_up", "Scroll Up", show=False),
+                    Binding("h", "scroll_left", "Scroll Left", show=False),
+                    Binding("l", "scroll_right", "Scroll Right", show=False),
+                    # Arrow keys
+                    Binding("down", "scroll_down", "Scroll Down", show=False),
+                    Binding("up", "scroll_up", "Scroll Up", show=False),
+                    Binding("left", "scroll_left", "Scroll Left", show=False),
+                    Binding("right", "scroll_right", "Scroll Right", show=False),
+                    # Page navigation
+                    Binding("d", "page_down", "Page Down"),
+                    Binding("u", "page_up", "Page Up"),
+                    Binding("pagedown", "page_down", "Page Down", show=False),
+                    Binding("pageup", "page_up", "Page Up", show=False),
+                    Binding("space", "page_down", "Page Down", show=False),
+                    Binding("b", "page_up", "Page Up", show=False),
+                    # Home/End navigation
+                    Binding("g", "scroll_home", "Go to Top", show=False),
+                    Binding("G", "scroll_end", "Go to Bottom", show=False),
+                    Binding("home", "scroll_home", "Go to Top", show=False),
+                    Binding("end", "scroll_end", "Go to Bottom", show=False),
+                ]
+                
+                def __init__(self, markdown_content: str):
+                    super().__init__()
+                    self.markdown_content = markdown_content
+                    self.title = "🌹 Rose Help - Interactive Documentation"
+                    self.sub_title = "Navigate: ↑↓=scroll, PgUp/PgDn=page, Home/End=top/bottom, q=quit"
+                
+                def compose(self):
+                    """Create child widgets for the app."""
+                    with Vertical():
+                        yield TextualMarkdown(self.markdown_content, id="markdown")
+                        yield Footer()
+                
+                def action_scroll_down(self):
+                    """Scroll down one line."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_down(animate=True)
+                
+                def action_scroll_up(self):
+                    """Scroll up one line."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_up(animate=True)
+                
+                def action_scroll_left(self):
+                    """Scroll left."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_left(animate=True)
+                
+                def action_scroll_right(self):
+                    """Scroll right."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_right(animate=True)
+                
+                def action_page_down(self):
+                    """Scroll down one page."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_page_down(animate=True)
+                
+                def action_page_up(self):
+                    """Scroll up one page."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_page_up(animate=True)
+                
+                def action_scroll_home(self):
+                    """Scroll to the top."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_home(animate=True)
+                
+                def action_scroll_end(self):
+                    """Scroll to the bottom."""
+                    markdown_widget = self.query_one("#markdown")
+                    markdown_widget.scroll_end(animate=True)
+            
+            # Create and run the Textual app
+            app = MarkdownViewer(markdown_content)
+            
+            # Run the app synchronously
+            try:
+                app.run()
+            except KeyboardInterrupt:
+                pass  # User pressed Ctrl+C, exit gracefully
+                
+        except ImportError:
+            logger.debug("Textual not available, falling back to Rich")
+            self._display_markdown_with_rich_pager(markdown_content)
+        except Exception as e:
+            logger.warning(f"Textual markdown viewer failed: {e}")
+            self._display_markdown_with_rich_pager(markdown_content)
+    
+    def _display_markdown_with_rich_pager(self, markdown_content: str):
+        """Fallback: Display markdown with Rich and simple paging"""
+        try:
+            # Check if content is long enough to need paging
+            lines = markdown_content.split('\n')
+            terminal_height = getattr(self.console.size, 'height', 25)
+            
+            if len(lines) <= terminal_height - 5:
+                # Content fits on screen, display directly
+                self.console.print(Markdown(markdown_content))
+            else:
+                # Use Rich's built-in pager if available
+                try:
+                    with self.console.pager(styles=True):
+                        self.console.print(Markdown(markdown_content))
+                except Exception:
+                    # Final fallback: direct display with scroll hint
+                    self.console.print(Markdown(markdown_content))
+                    self.console.print("\n[dim]Tip: Use your terminal's scroll functionality to navigate[/dim]")
+                    
+        except Exception as e:
+            logger.warning(f"Rich pager failed: {e}")
+            # Ultimate fallback
+            self.console.print(Markdown(markdown_content))
     
     def _show_basic_help(self):
         """Show basic help as fallback"""
