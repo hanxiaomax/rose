@@ -21,8 +21,8 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - `/compress [args]` - Compress bag files (bz2/lz4 options)
 
 ### Data Operations
-- `/data [export|info]` - Data operations with CSV/JSON export
-- `/cache [export|clear]` - Cache management operations
+- `/data [export|convert]` - Data operations with CSV/JSON export and conversion
+- `/cache [clear|info|list]` - Cache management operations
 
 ### Plugin System
 - `/plugin [list|info|run|enable|disable|reload|install|uninstall|create]` - Plugin operations
@@ -61,7 +61,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 ## Usage Tips
 
-1. **Natural Questions**: Just type your question without /ask
+1. **Natural Questions**: Just type your question directly
    ```
    > What topics are in this bag?
    > How many messages does /cmd_vel have?
@@ -126,16 +126,28 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > /export session
 ```
 
-## 🛠️ Advanced Features
+### Using Special Symbols
+```
+> /load test_data.bag        # Load a bag file
+> @test_data.bag             # Reference it by name later
+> !find . -name "*.bag"      # Use shell commands
+> /cache list                # See all cached files
+```
+
+## Advanced Features
 
 ### Plugin System
 - List available plugins: `/plugin list`
-- Run custom analysis: `/plugin run my_analyzer`
-- Install new plugins: `/plugin install /path/to/plugin`
+- Show plugin information: `/plugin info [name]`
+- Run custom analysis: `/plugin run [name]`
+- Enable/disable plugins: `/plugin enable/disable [name]`
+- Install new plugins: `/plugin install [path]`
+- Uninstall plugins: `/plugin uninstall [name]`
+- Create new plugins: `/plugin create`
 
 ### Cache Management
-- View cache status: `/cache`
-- Export cache data: `/cache export cache_backup.json`
+- View cache status: `/cache info`
+- List cached files: `/cache list`
 - Clear old cache: `/cache clear`
 
 ### Debugging and Monitoring
@@ -162,4 +174,4 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 ---
 
-*Rose Interactive Environment - Making ROS bag processing intuitive and powerful* 🌹
+*Rose Interactive Environment - Making ROS bag processing intuitive and powerful*
