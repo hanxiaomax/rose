@@ -404,7 +404,7 @@ def _extract_topics_impl(
         from ..ui.extract_ui import ExtractUI
         
         extract_ui = ExtractUI()
-        extract_ui.display_batch_results(results, topics_to_extract, total_time=0)
+        extract_ui.display_batch_results(results, total_time=0)
         
         # Check for errors
         error_count = sum(1 for r in results if r['status'] == 'error')

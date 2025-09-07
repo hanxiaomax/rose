@@ -74,23 +74,22 @@ class InspectUI:
             Message.info("No topics found.", self.console)
             return
         
-        table = Table(title="Topics")
-        table.add_column("Topic", style=get_color('primary'), no_wrap=True)
-        table.add_column("Type", style=get_color('accent'))
-        table.add_column("Messages", justify="right", style=get_color('success'))
-        table.add_column("Frequency", justify="right", style=get_color('info'))
-        table.add_column("Size", justify="right", style=get_color('warning'))
+        self.console.print("\n[bold]Topics:[/bold]")
         
-        for topic in topics:
-            table.add_row(
-                topic.get('name', ''),
-                topic.get('message_type', ''),
-                str(topic.get('message_count', 0)),
-                f"{topic.get('frequency', 0):.1f} Hz" if 'frequency' in topic else "-",
-                self.common_ui.format_file_size(topic.get('size_bytes', 0))
+        for i, topic in enumerate(topics, 1):
+            name = topic.get('name', '')
+            msg_type = topic.get('message_type', '')
+            messages = topic.get('message_count', 0)
+            frequency = f"{topic.get('frequency', 0):.1f} Hz" if 'frequency' in topic else "-"
+            size = self.common_ui.format_file_size(topic.get('size_bytes', 0))
+            
+            self.console.print(
+                f"  {i:2d}. [{get_color('primary')}]{name}[/{get_color('primary')}] "
+                f"([{get_color('accent')}]{msg_type}[/{get_color('accent')}]) "
+                f"- [{get_color('success')}]{messages} messages[/{get_color('success')}] "
+                f"@ [{get_color('info')}]{frequency}[/{get_color('info')}] "
+                f"([{get_color('warning')}]{size}[/{get_color('warning')}])"
             )
-        
-        self.console.print(table)
     
     def display_simple_topics(self, topics: List[Dict[str, Any]]) -> None:
         """Display topics in simple format."""

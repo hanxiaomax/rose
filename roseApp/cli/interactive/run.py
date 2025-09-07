@@ -492,6 +492,11 @@ class InteractiveRunner:
     
     def _dispatch_command(self, user_input: str):
         """Dispatch user input to appropriate handler"""
+        # Handle native shell commands with ! prefix
+        if user_input.startswith('!'):
+            self._handle_shell_command(user_input[1:].strip())
+            return
+        
         # Resolve @ symbols to full paths before processing commands
         resolved_input = self._resolve_at_symbols(user_input)
         
@@ -509,6 +514,44 @@ class InteractiveRunner:
         
         # Default to ask handler for natural language
         self.handle_ask(resolved_input)
+    
+    def _handle_shell_command(self, command: str):
+        """Handle native shell command execution"""
+        if not command:
+            self.console.print("[yellow]Usage: !<command>[/yellow]")
+            self.console.print("[dim]Example: !ls -la[/dim]")
+            return
+        
+        try:
+            import subprocess
+            import shlex
+            
+            # Show what command we're executing
+            self.console.print(f"[dim]$ {command}[/dim]")
+            
+            # Execute command in native shell
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=None  # Use current working directory
+            )
+            
+            # Display output
+            if result.stdout:
+                self.console.print(result.stdout.rstrip())
+            
+            if result.stderr:
+                self.console.print(f"[red]{result.stderr.rstrip()}[/red]")
+            
+            # Show exit code if non-zero
+            if result.returncode != 0:
+                self.console.print(f"[red]Command exited with code {result.returncode}[/red]")
+                
+        except Exception as e:
+            self.console.print(f"[red]Shell command error: {e}[/red]")
+            logger.error(f"Shell command error: {e}", exc_info=True)
     
     # =============================================================================
     # Command Handler Stubs (delegated to handlers)

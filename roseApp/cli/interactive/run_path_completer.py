@@ -352,6 +352,10 @@ class EnhancedRoseCompleter(Completer):
             if '@' in text:
                 yield from self._complete_loaded_bags(text, document)
             
+            # Complete shell commands when ! is typed
+            elif text.startswith('!'):
+                yield from self._complete_shell_commands(text, document)
+            
             # Complete slash commands
             elif text.startswith('/'):
                 yield from self._complete_commands(text, words, document)
@@ -407,6 +411,67 @@ class EnhancedRoseCompleter(Completer):
                 
         except Exception as e:
             logger.debug(f"Loaded bags completion error: {e}")
+    
+    def _complete_shell_commands(self, text, document):
+        """Complete shell commands when ! is detected"""
+        try:
+            # Remove the ! prefix
+            after_bang = text[1:]
+            
+            # Common shell commands to suggest
+            common_commands = [
+                'ls', 'pwd', 'cd', 'find', 'grep', 'cat', 'head', 'tail',
+                'ps', 'top', 'df', 'du', 'which', 'whereis', 'history',
+                'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'chmod', 'chown',
+                'tar', 'gzip', 'gunzip', 'zip', 'unzip',
+                'python', 'python3', 'pip', 'pip3', 'git'
+            ]
+            
+            # Filter commands based on input
+            for cmd in common_commands:
+                if not after_bang or cmd.startswith(after_bang.lower()):
+                    yield Completion(
+                        text=cmd,
+                        start_position=-len(after_bang),
+                        display=f'{cmd}',
+                        style='class:completion.shell'
+                    )
+            
+            # If there's already a command, try to complete file paths
+            words = after_bang.split()
+            if len(words) > 1:
+                # Complete file paths for shell command arguments
+                from pathlib import Path
+                current_path = words[-1] if words else ''
+                
+                try:
+                    if '/' in current_path:
+                        parent_dir = Path(current_path).parent
+                        filename_start = Path(current_path).name
+                    else:
+                        parent_dir = Path('.')
+                        filename_start = current_path
+                    
+                    if parent_dir.exists() and parent_dir.is_dir():
+                        for item in parent_dir.iterdir():
+                            if filename_start and not item.name.startswith(filename_start):
+                                continue
+                            
+                            display_name = item.name
+                            if item.is_dir():
+                                display_name += '/'
+                            
+                            yield Completion(
+                                text=item.name,
+                                start_position=-len(filename_start),
+                                display=display_name,
+                                style='class:completion.file'
+                            )
+                except Exception:
+                    pass  # Ignore file completion errors
+                    
+        except Exception as e:
+            logger.debug(f"Shell command completion error: {e}")
     
     def _get_cached_bags(self):
         """Get bags from cache directly (more reliable than runner state)"""

@@ -697,11 +697,26 @@ All operations use interactive prompts for parameter collection.
 - `/ask <question>` - Get contextual help and suggestions
 - `/exit` or `/quit` - Exit interactive mode
 
+## Special Symbols
+
+### @ Symbol - Bag File References
+- `@<bag_name>` - Reference cached bag files by name
+- Examples: `@test.bag`, `@demo3_filtered_20250901_233347`
+- Automatically resolves to full path of cached bag files
+- Works with both full filename and stem (without extension)
+
+### ! Symbol - Native Shell Commands
+- `!<command>` - Execute native bash/shell commands
+- Examples: `!ls -la`, `!pwd`, `!find . -name "*.bag"`
+- Runs in current working directory
+- Shows command output and exit codes
+
 ## Usage Tips
 
 1. **Natural Questions**: Just type your question without /ask
 2. **Background Tasks**: Long operations run in background, you can continue working
 3. **Context Aware**: Commands adapt based on current workspace state
+4. **File References**: Use @symbol for cached bags, !commands for shell operations
 4. **Undo Support**: Most operations can be undone with /undo
 5. **Auto-complete**: Use Tab for command and file completion
 
@@ -867,29 +882,27 @@ All operations use interactive prompts for parameter collection.
             self.console.print("[yellow]No bags loaded in workspace[/yellow]")
             return
         
-        table = Table(title="Loaded Bags")
-        table.add_column("File", style="cyan")
-        table.add_column("Status", style="green")
-        table.add_column("Topics", justify="right")
-        table.add_column("Size", justify="right")
+        self.console.print("\n[bold]Loaded Bags:[/bold]")
         
-        for bag_path in self.state.current_bags:
+        for i, bag_path in enumerate(self.state.current_bags, 1):
             bag_name = Path(bag_path).name
             
             if bag_path in self.state.loaded_bags:
                 bag_info = self.state.loaded_bags[bag_path]
-                status = "✓ Cached"
+                status = "[green]✓ Cached[/green]"
                 topics_count = len(bag_info.get('topics', []))
                 size_mb = bag_info.get('file_size_mb', 0)
                 size_str = f"{size_mb:.1f} MB"
+                
+                self.console.print(
+                    f"  {i:2d}. [cyan]{bag_name}[/cyan] - {status} "
+                    f"({topics_count} topics, {size_str})"
+                )
             else:
-                status = "⏳ Loading..."
-                topics_count = "?"
-                size_str = "?"
-            
-            table.add_row(bag_name, status, str(topics_count), size_str)
-        
-        self.console.print(table)
+                status = "[yellow]⏳ Loading...[/yellow]"
+                self.console.print(
+                    f"  {i:2d}. [cyan]{bag_name}[/cyan] - {status}"
+                )
     
     def _add_bag_to_workspace(self, bag_path: str):
         """Add bag file to workspace"""
