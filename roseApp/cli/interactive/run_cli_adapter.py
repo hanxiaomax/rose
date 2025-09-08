@@ -663,8 +663,10 @@ class CLIAdapter:
                     ).execute()
                     
                     if selected_bag:
-                        cache_clear_cmd(bag_path=selected_bag, yes=True)
-                        return {'success': True, 'message': f'Cache cleared for {Path(selected_bag).name}'}
+                        # Ensure selected_bag is a string, not OptionInfo object
+                        bag_path_str = str(selected_bag)
+                        cache_clear_cmd(bag_path=bag_path_str, yes=True)
+                        return {'success': True, 'message': f'Cache cleared for {Path(bag_path_str).name}'}
                     else:
                         return {'success': False, 'error': 'No bag selected'}
                 else:
@@ -675,8 +677,13 @@ class CLIAdapter:
                     ).execute()
                     
                     if bag_path:
-                        cache_clear_cmd(bag_path=bag_path, yes=True)
-                        return {'success': True, 'message': f'Cache cleared for {Path(bag_path).name}'}
+                        # Ensure bag_path is a string, not OptionInfo object
+                        bag_path_str = str(bag_path).strip()
+                        if bag_path_str:
+                            cache_clear_cmd(bag_path=bag_path_str, yes=True)
+                            return {'success': True, 'message': f'Cache cleared for {Path(bag_path_str).name}'}
+                        else:
+                            return {'success': False, 'error': 'No bag path specified'}
                     else:
                         return {'success': False, 'error': 'No bag path specified'}
             

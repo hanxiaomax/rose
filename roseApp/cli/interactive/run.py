@@ -60,14 +60,11 @@ class TaskResult:
 
 @dataclass
 class SessionState:
-    """Current session state including workspace, notes, and history"""
+    """Current session state including workspace and loaded data"""
     workspace_path: str
     current_bags: List[str]
     loaded_bags: Dict[str, Dict[str, Any]]  # bag_path -> bag_info
     selected_topics: List[str]
-    notes: List[str]
-    task_history: List[TaskResult]
-    undo_stack: List[Dict[str, Any]]
     created_at: float
     
     def to_dict(self) -> Dict[str, Any]:
@@ -97,9 +94,6 @@ class InteractiveRunner:
             current_bags=[],
             loaded_bags={},
             selected_topics=[],
-            notes=[],
-            task_history=[],
-            undo_stack=[],
             created_at=time.time()
         )
         
@@ -119,19 +113,12 @@ class InteractiveRunner:
             "/data": self.handle_data,
             "/cache": self.handle_cache,
             "/plugin": self.handle_plugin,
-            "/undo": self.handle_undo,
-            "/cancel": self.handle_cancel,
             "/status": self.handle_status,
-            "/note": self.handle_note,
-            "/notes": self.handle_notes,
             "/workspace": self.handle_workspace,
             "/bags": self.handle_bags,
             "/topics": self.handle_topics,
             "/help": self.handle_help,
             "/clear": self.handle_clear,
-            "/save": self.handle_save,
-            "/session": self.handle_load_session,
-            "/export": self.handle_export,
             "/exit": self.handle_exit,
             "/quit": self.handle_exit
         }
@@ -143,7 +130,6 @@ class InteractiveRunner:
         try:
             from .run_handlers import RunCommandHandlers
             from .run_tasks import TaskExecutor
-            from .run_session import SessionManager
             from .run_cli_adapter import CLIAdapter
             
             logger.debug("Initializing handlers...")
@@ -152,8 +138,6 @@ class InteractiveRunner:
             logger.debug("Initializing task executor...")
             self.task_executor = TaskExecutor(self)
             
-            logger.debug("Initializing session manager...")
-            self.session_manager = SessionManager(self)
             
             logger.debug("Initializing CLI adapter...")
             self.cli_adapter = CLIAdapter(self)
@@ -167,7 +151,6 @@ class InteractiveRunner:
             # Continue with basic functionality
             self.handlers = None
             self.task_executor = None
-            self.session_manager = None
             self.cli_adapter = None
     
     def _setup_prompt_session(self):
@@ -221,7 +204,7 @@ class InteractiveRunner:
             
             try:
                 # Try simple completer
-                from .run_simple_completer import create_safe_completer
+                from .run_fallback_completer import create_safe_completer
                 return create_safe_completer(self)
             except Exception as e2:
                 logger.warning(f"Simple completer failed: {e2}")
@@ -308,11 +291,6 @@ class InteractiveRunner:
                     if not user_input:
                         continue
                     
-                    # Save state for undo (with error handling)
-                    try:
-                        self._save_state_for_undo()
-                    except Exception as e:
-                        logger.warning(f"Could not save state for undo: {e}")
                     
                     # Dispatch command
                     self._dispatch_command(user_input)
@@ -358,15 +336,8 @@ class InteractiveRunner:
             "/bags": "Manage loaded bags",
             "/topics": "Manage topic selection",
             "/workspace": "Workspace operations",
-            "/note": "Add session note",
-            "/notes": "Show all session notes",
-            "/save": "Save current session",
-            "/session": "Load saved session",
-            "/export": "Export notes/session/results",
             
             # System operations
-            "/undo": "Undo last operation",
-            "/cancel": "Cancel running tasks",
             "/clear": "Clear console",
             "/help": "Show comprehensive help",
             "/exit": "Exit interactive mode",
@@ -679,19 +650,6 @@ class InteractiveRunner:
             error = result.get('error', 'Unknown error')
             self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
     
-    def handle_undo(self, args: str):
-        """Handle undo command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_undo(args)
-        else:
-            self.console.print("[yellow]Undo not available yet[/yellow]")
-    
-    def handle_cancel(self, args: str):
-        """Handle cancel command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_cancel(args)
-        else:
-            self.console.print("[yellow]Cancel not available yet[/yellow]")
     
     def handle_status(self, args: str):
         """Handle status command"""
@@ -700,19 +658,6 @@ class InteractiveRunner:
         else:
             self.console.print("[yellow]Status: Interactive environment running[/yellow]")
     
-    def handle_note(self, note_text: str):
-        """Handle note command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_note(note_text)
-        else:
-            self.console.print(f"[yellow]Note: {note_text}[/yellow]")
-    
-    def handle_notes(self, args: str):
-        """Handle notes command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_notes(args)
-        else:
-            self.console.print("[yellow]Notes management not available yet[/yellow]")
     
     def handle_workspace(self, args: str):
         """Handle workspace command"""
@@ -749,30 +694,10 @@ class InteractiveRunner:
         else:
             self.console.clear()
     
-    def handle_save(self, args: str):
-        """Handle save command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_save(args)
-        else:
-            self.console.print("[yellow]Session save not available yet[/yellow]")
-    
-    def handle_load_session(self, args: str):
-        """Handle load session command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_load_session(args)
-        else:
-            self.console.print("[yellow]Session load not available yet[/yellow]")
-    
-    def handle_export(self, args: str):
-        """Handle export command"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_export(args)
-        else:
-            self.console.print("[yellow]Export not available yet[/yellow]")
     
     def handle_exit(self, args: str):
         """Handle exit command - quit the interactive environment"""
-        self.console.print("[cyan]Goodbye! Session auto-saved.[/cyan]")
+        self.console.print("[cyan]Goodbye![/cyan]")
         try:
             self._cleanup()
         except Exception as e:
@@ -786,27 +711,10 @@ class InteractiveRunner:
             import os
             os._exit(0)
     
-    def _save_state_for_undo(self, operation: str = "operation"):
-        """Save current state for undo functionality"""
-        if hasattr(self, 'session_manager'):
-            self.session_manager.create_snapshot(operation)
-        else:
-            # Fallback to old method during initialization
-            if len(self.state.undo_stack) >= 10:
-                self.state.undo_stack.pop(0)
-            
-            snapshot = {
-                'current_bags': self.state.current_bags.copy(),
-                'selected_topics': self.state.selected_topics.copy(),
-                'timestamp': time.time()
-            }
-            self.state.undo_stack.append(snapshot)
     
     def _cleanup(self):
         """Cleanup resources"""
-        # Auto-save session before cleanup
-        if hasattr(self, 'session_manager'):
-            self.session_manager.auto_save_session()
+        # Cleanup resources
         
         self._stop_event.set()
         if hasattr(self, 'task_thread'):

@@ -129,49 +129,6 @@ class RunCommandHandlers:
             error = result.get('error', 'Unknown error')
             self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
     
-    def handle_undo(self, args: str):
-        """Handle undo operations"""
-        if not self.state.undo_stack:
-            self.console.print("[yellow]Nothing to undo[/yellow]")
-            return
-        
-        # Restore previous state
-        previous_state = self.state.undo_stack.pop()
-        
-        # Create undo info
-        current_time = time.strftime("%H:%M:%S")
-        self.console.print(f"[green]✓ Undid operation from {current_time}[/green]")
-        
-        # Apply state changes
-        if 'current_bags' in previous_state:
-            self.state.current_bags = previous_state['current_bags']
-        if 'selected_topics' in previous_state:
-            self.state.selected_topics = previous_state['selected_topics']
-        
-        self._show_status_summary()
-    
-    def handle_cancel(self, args: str):
-        """Handle task cancellation"""
-        if not self.running_tasks:
-            self.console.print("[yellow]No running tasks to cancel[/yellow]")
-            return
-        
-        if args:
-            # Cancel specific task
-            task_id = args.strip()
-            if task_id in self.running_tasks:
-                self.running_tasks[task_id].status = 'cancelled'
-                self.console.print(f"[yellow]Cancelled task: {task_id}[/yellow]")
-            else:
-                self.console.print(f"[red]Task not found: {task_id}[/red]")
-        else:
-            # Cancel all tasks
-            if self.running_tasks:
-                cancelled_count = len(self.running_tasks)
-                for task in self.running_tasks.values():
-                    task.status = 'cancelled'
-                self.running_tasks.clear()
-                self.console.print(f"[yellow]Cancelled {cancelled_count} running tasks[/yellow]")
     
     def handle_status(self, args: str):
         """Show current status and running tasks"""
@@ -185,36 +142,7 @@ class RunCommandHandlers:
                 self.console.print(f"  {task_id}: {task.command} ([yellow]{elapsed:.1f}s[/yellow])")
         
         # Show recent completed tasks
-        recent_tasks = [t for t in self.state.task_history[-5:] if t.status in ['completed', 'failed']]
-        if recent_tasks:
-            self.console.print("\n[bold]Recent Tasks:[/bold]")
-            for task in recent_tasks:
-                status_color = 'green' if task.status == 'completed' else 'red'
-                elapsed = (task.end_time or time.time()) - (task.start_time or time.time())
-                self.console.print(f"  {task.task_id}: {task.command} ([{status_color}]{task.status}[/{status_color}], {elapsed:.1f}s)")
     
-    def handle_note(self, note_text: str):
-        """Add a note to current session"""
-        if not note_text:
-            note_text = inquirer.text(message="Enter note:").execute()
-            if not note_text:
-                return
-        
-        timestamp = time.strftime("%H:%M:%S")
-        note_with_time = f"[{timestamp}] {note_text}"
-        self.state.notes.append(note_with_time)
-        
-        self.console.print(f"[green]✓ Note added: {note_text}[/green]")
-    
-    def handle_notes(self, args: str):
-        """Show all notes"""
-        if not self.state.notes:
-            self.console.print("[yellow]No notes in current session[/yellow]")
-            return
-        
-        self.console.print("[bold]Session Notes:[/bold]")
-        for i, note in enumerate(self.state.notes, 1):
-            self.console.print(f"  {i}. {note}")
     
     def handle_workspace(self, args: str):
         """Handle workspace operations"""
@@ -259,78 +187,8 @@ class RunCommandHandlers:
         self.console.clear()
         self.runner._show_welcome()
     
-    def handle_save(self, args: str):
-        """Save current session"""
-        if not args:
-            args = f"session_{time.strftime('%Y%m%d_%H%M%S')}.json"
-        
-        session_file = self.rose_dirs.get_config_file(args)
-        try:
-            with open(session_file, 'w') as f:
-                json.dump(self.state.to_dict(), f, indent=2, default=str)
-            self.console.print(f"[green]✓ Session saved to: {session_file}[/green]")
-        except Exception as e:
-            self.console.print(f"[red]Failed to save session: {e}[/red]")
     
-    def handle_load_session(self, args: str):
-        """Load saved session"""
-        if not args:
-            # List available sessions
-            config_dir = self.rose_dirs.config_dir
-            session_files = list(config_dir.glob("session_*.json"))
-            
-            if not session_files:
-                self.console.print("[yellow]No saved sessions found[/yellow]")
-                return
-            
-            choices = [Choice(value=str(f), name=f.name) for f in session_files]
-            selected = inquirer.select(
-                message="Select session to load:",
-                choices=choices
-            ).execute()
-            
-            if not selected:
-                return
-            
-            args = selected
-        
-        try:
-            session_file = Path(args)
-            if not session_file.exists():
-                session_file = self.rose_dirs.get_config_file(args)
-            
-            with open(session_file, 'r') as f:
-                state_data = json.load(f)
-            
-            # Restore state by updating current state attributes
-            for key, value in state_data.items():
-                if hasattr(self.runner.state, key):
-                    setattr(self.runner.state, key, value)
-            self.state = self.runner.state  # Update reference
-            
-            self.console.print(f"[green]✓ Session loaded from: {session_file}[/green]")
-            self._show_status_summary()
-            
-        except Exception as e:
-            self.console.print(f"[red]Failed to load session: {e}[/red]")
     
-    def handle_export(self, args: str):
-        """Handle export operations"""
-        if not args:
-            self.console.print("[yellow]Specify export type: notes, session, results[/yellow]")
-            return
-        
-        export_type = args.split()[0]
-        output_file = args.split()[1] if len(args.split()) > 1 else None
-        
-        if export_type == "notes":
-            self._export_notes(output_file)
-        elif export_type == "session":
-            self._export_session(output_file)
-        elif export_type == "results":
-            self._export_results(output_file)
-        else:
-            self.console.print(f"[red]Unknown export type: {export_type}[/red]")
     
     def handle_exit(self, args: str):
         """Handle exit command"""
@@ -339,18 +197,7 @@ class RunCommandHandlers:
             if not confirm("Exit anyway?"):
                 return
         
-        self.console.print("[cyan]Goodbye! Your session has been auto-saved.[/cyan]")
-        
-        # Auto-save session
-        try:
-            auto_save_file = self.rose_dirs.get_config_file("last_session.json")
-            with open(auto_save_file, 'w') as f:
-                json.dump(self.state.to_dict(), f, indent=2, default=str)
-        except Exception as e:
-            from ...core.util import get_logger
-            logger = get_logger("run")
-            logger.warning(f"Failed to auto-save session: {e}")
-        
+        self.console.print("[cyan]Goodbye![/cyan]")
         raise typer.Exit(0)
     
     # =============================================================================
@@ -623,8 +470,6 @@ class RunCommandHandlers:
             status.append(f"⚡ Tasks: {len(self.running_tasks)} running\n", style="cyan")
         
         # Notes info
-        if self.state.notes:
-            status.append(f"📝 Notes: {len(self.state.notes)} saved\n", style="blue")
         
         panel = Panel(status, title="Workspace Status", border_style=get_color('primary'))
         self.console.print(panel)
@@ -1074,9 +919,6 @@ All operations use interactive prompts for parameter collection.
         info.append(f"⏰ Session started: {time.ctime(self.state.created_at)}\n")
         info.append(f"📦 Loaded bags: {len(self.state.current_bags)}\n")
         info.append(f"🏷️  Selected topics: {len(self.state.selected_topics)}\n")
-        info.append(f"📝 Notes: {len(self.state.notes)}\n")
-        info.append(f"🔄 Task history: {len(self.state.task_history)}\n")
-        info.append(f"↩️  Undo levels: {len(self.state.undo_stack)}\n")
         
         panel = Panel(info, title="Workspace", border_style=get_color('accent'))
         self.console.print(panel)
@@ -1103,59 +945,3 @@ All operations use interactive prompts for parameter collection.
     # Export Functions
     # =============================================================================
     
-    def _export_notes(self, output_file: Optional[str]):
-        """Export session notes"""
-        if not self.state.notes:
-            self.console.print("[yellow]No notes to export[/yellow]")
-            return
-        
-        if not output_file:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output_file = f"notes_{timestamp}.md"
-        
-        try:
-            with open(output_file, 'w') as f:
-                f.write("# Session Notes\n\n")
-                f.write(f"Created: {time.ctime(self.state.created_at)}\n")
-                f.write(f"Workspace: {self.state.workspace_path}\n\n")
-                
-                for note in self.state.notes:
-                    f.write(f"- {note}\n")
-            
-            self.console.print(f"[green]✓ Notes exported to: {output_file}[/green]")
-        except Exception as e:
-            self.console.print(f"[red]Failed to export notes: {e}[/red]")
-    
-    def _export_session(self, output_file: Optional[str]):
-        """Export complete session state"""
-        if not output_file:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output_file = f"session_{timestamp}.json"
-        
-        try:
-            with open(output_file, 'w') as f:
-                json.dump(self.state.to_dict(), f, indent=2, default=str)
-            
-            self.console.print(f"[green]✓ Session exported to: {output_file}[/green]")
-        except Exception as e:
-            self.console.print(f"[red]Failed to export session: {e}[/red]")
-    
-    def _export_results(self, output_file: Optional[str]):
-        """Export task results"""
-        if not self.state.task_history:
-            self.console.print("[yellow]No task results to export[/yellow]")
-            return
-        
-        if not output_file:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output_file = f"results_{timestamp}.json"
-        
-        try:
-            from dataclasses import asdict
-            results_data = [asdict(task) for task in self.state.task_history]
-            with open(output_file, 'w') as f:
-                json.dump(results_data, f, indent=2, default=str)
-            
-            self.console.print(f"[green]✓ Results exported to: {output_file}[/green]")
-        except Exception as e:
-            self.console.print(f"[red]Failed to export results: {e}[/red]")

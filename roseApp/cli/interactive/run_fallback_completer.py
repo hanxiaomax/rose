@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple and robust completer for Rose interactive environment
-Provides basic command and file completion without complex features that might cause errors
+Fallback completer for Rose interactive environment
+Provides basic command and file completion as a safe fallback when enhanced completers fail
 """
 
 from pathlib import Path
@@ -10,11 +10,11 @@ from prompt_toolkit.completion import WordCompleter
 
 from ...core.util import get_logger
 
-logger = get_logger("run_simple_completer")
+logger = get_logger("run_fallback_completer")
 
 
-class SimpleRoseCompleter(Completer):
-    """Simple, robust completer that won't crash"""
+class FallbackRoseCompleter(Completer):
+    """Fallback completer that won't crash when enhanced completers fail"""
     
     def __init__(self, runner):
         self.runner = runner
@@ -96,7 +96,7 @@ class SimpleRoseCompleter(Completer):
 def create_safe_completer(runner) -> Completer:
     """Create a safe completer that won't cause crashes"""
     try:
-        return SimpleRoseCompleter(runner)
+        return FallbackRoseCompleter(runner)
     except Exception as e:
         logger.warning(f"Could not create simple completer: {e}")
         # Ultimate fallback - just basic word completion

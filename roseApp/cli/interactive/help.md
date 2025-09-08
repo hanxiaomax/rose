@@ -32,15 +32,8 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - `/bags` - Manage loaded bags
 - `/topics` - Manage topic selection
 - `/workspace` - Workspace operations
-- `/note <text>` - Add session note
-- `/notes` - Show all session notes
-- `/save [filename]` - Save current session
-- `/session [filename]` - Load saved session
-- `/export <type>` - Export notes/session/results
 
 ### System Operations
-- `/undo` - Undo last operation
-- `/cancel [task_id]` - Cancel running tasks
 - `/clear` - Clear console
 - `/help` - Show this help
 - `/exit` or `/quit` - Exit interactive mode
@@ -99,7 +92,6 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > /load data/*.bag
 > What topics are available?
 > /inspect
-> /note Found interesting GPS data
 > /status
 ```
 
@@ -108,7 +100,6 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > /load my_data.bag
 > /topics                     # Select topics interactively
 > /extract                    # Extract selected topics
-> /note Extracted GPS and IMU data
 ```
 
 ### Data Export
@@ -118,12 +109,11 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > !ls -la *.csv             # Check exported files
 ```
 
-### Session Management
+### Workspace Management
 ```
 > /load project_bags/*.bag
-> /note Starting analysis session
-> /save analysis_session
-> /export session
+> /workspace info
+> /status
 ```
 
 ### Using Special Symbols
@@ -152,9 +142,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 ### Debugging and Monitoring
 - Check running tasks: `/status`
-- Cancel long operations: `/cancel`
-- View session history: `/notes`
-- Undo recent changes: `/undo`
+- View workspace info: `/workspace info`
 
 ## Troubleshooting
 
@@ -162,7 +150,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 1. **Tab completion not working**: Restart the session
 2. **Bag file not found**: Use absolute paths or check current directory
-3. **Long operations stuck**: Use `/cancel` to stop, then `/status` to check
+3. **Long operations stuck**: Check `/status` for current operations
 4. **Cache issues**: Try `/cache clear` to reset
 
 ### Getting Help
@@ -170,7 +158,6 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - Type your question naturally: "How do I extract specific topics?"
 - Use `/help` for this comprehensive guide
 - Check `/status` for current workspace state
-- Use `/notes` to review your session history
 
 ---
 
