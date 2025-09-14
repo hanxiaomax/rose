@@ -18,6 +18,12 @@ ROSE is a high-performance ROS bag filtering tool with distinctive cassette futu
 - **BagManager** (`roseApp/core/BagManager.py`) - Central orchestrator for bag operations
 - **Parser** (`roseApp/core/parser.py`) - ROS bag file parsing using rosbags
 - **ExportManager** (`roseApp/core/export_manager.py`) - Handles filtered bag output
+- **TUIApp** (`roseApp/tui/tui.py`) - Main TUI application with theme management
+
+### Data Flow Architecture
+- **Parser** → **BagManager** → **ExportManager**: Bag files are parsed into metadata, filtered by topics/time, then exported with optional compression
+- **Cache System**: `roseApp/core/cache.py` provides persistent caching for parsed bag metadata to accelerate repeated operations
+- **Theme System**: `roseApp/tui/themes/cassette_theme.py` implements cassette futurism aesthetic across TUI components
 
 ## Development Commands
 
@@ -36,21 +42,27 @@ rose --help
 
 ### Testing
 ```bash
-# Run all tests with coverage
-python roseApp/tests/run_tests.py
+# Run tests using pytest (main testing approach)
+pytest roseApp/tests/ -v
 
-# Run specific test file
-python roseApp/tests/run_tests.py --file test_bag_manager
+# Run specific test module
+pytest roseApp/tests/test_bag_manager.py -v
 
-# Run fast unit tests only
-python roseApp/tests/run_tests.py --fast
+# Run tests with coverage
+pytest --cov=roseApp --cov-report=html roseApp/tests/
 
-# Run tests with coverage report
-python roseApp/tests/run_tests.py --coverage
+# Run example test demos
+python example/test_parser_cache_demo.py
+
+# Run bash integration tests
+cd tests/bash_tests && ./run_all_tests.sh
 ```
 
 ### Development Workflow
 ```bash
+# Install in development mode
+pip install -e .
+
 # Run TUI in dev mode (with hot reload)
 textual run --dev roseApp.tui.tui:app
 
@@ -65,6 +77,13 @@ rose inspect info input.bag
 
 # Extract specific data
 rose extract --help
+
+# Build package
+hatch build
+
+# Run linting and checks
+pytest roseApp/tests/ -v
+python -m py_compile roseApp/**/*.py  # Basic syntax check
 ```
 
 ## Interface Modes
@@ -135,6 +154,9 @@ export TERM=xterm-256color
 python roseApp/tests/run_tests.py --file test_parser
 python roseApp/tests/run_tests.py --fast
 python roseApp/tests/run_tests.py --coverage
+
+# Run single test method
+python -m pytest roseApp/tests/test_bag_manager.py::TestBagManager::test_load_bag -v
 ```
 
 ## Deployment
@@ -167,3 +189,29 @@ docker run -it --rm -v $(pwd):/data rose-bag rose tui
 ### Optional Dependencies
 - **lz4**: LZ4 compression support
 - **matplotlib/plotly**: Visualization features
+
+## Build Configuration
+- Uses hatchling build system
+- Tests and development files excluded from wheel via pyproject.toml
+- Supports Python 3.8+
+
+## Advanced Features
+
+### Cache System
+- **Persistent caching**: Parsed bag metadata is cached to accelerate repeated operations
+- **Cache location**: Automatic cache management in `~/.cache/rose/` or project directory
+- **Invalidation**: Cache automatically invalidates when bag files are modified
+
+### Theme System
+- **cassette-walkman**: Light theme with retro styling
+- **cassette-dark**: Dark theme variant
+- **claude-dark**: Claude-inspired dark theme with signature purple/blue colors
+- **claude-light**: Claude-inspired light theme
+- **claude-midnight**: High-contrast midnight theme
+- **claude-high-contrast**: Accessibility-focused high contrast theme
+- **Custom themes**: Extend `roseApp/tui/themes/cassette_theme.py` or `roseApp/tui/themes/claude_theme.py` for new themes
+
+### Whitelist Management
+- **Format**: Text files with one topic per line
+- **Location**: `whitelists/` directory
+- **Integration**: Reference in `roseApp/tui/config.json` for TUI access
