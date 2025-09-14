@@ -698,7 +698,7 @@ All operations use interactive prompts for parameter collection.
         
         # Show available commands dynamically
         for cmd in sorted(self.runner.commands.keys()):
-            if cmd in ['/help', '/exit', '/quit', '/status', '/clear']:
+            if cmd in ['/help', '/exit', '/status', '/clear']:
                 basic_help.append(f"  {cmd}\n", style="dim")
         
         basic_help.append("\nFor comprehensive help, ensure help.md file is available.\n", style="yellow")

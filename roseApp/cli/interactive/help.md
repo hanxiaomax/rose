@@ -36,7 +36,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 ### System Operations
 - `/clear` - Clear console
 - `/help` - Show this help
-- `/exit` or `/quit` - Exit interactive mode
+- `/exit` - Exit interactive mode
 
 ## Special Symbols
 

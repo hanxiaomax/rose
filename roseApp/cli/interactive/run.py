@@ -105,7 +105,6 @@ class InteractiveRunner:
         
         # Command routing - independent commands like CLI
         self.commands = {
-            "/ask": self.handle_ask,
             "/load": self.handle_load,
             "/extract": self.handle_extract,
             "/inspect": self.handle_inspect,
@@ -120,7 +119,6 @@ class InteractiveRunner:
             "/help": self.handle_help,
             "/clear": self.handle_clear,
             "/exit": self.handle_exit,
-            "/quit": self.handle_exit
         }
         
         # Setup prompt session
@@ -569,14 +567,6 @@ class InteractiveRunner:
     # =============================================================================
     # Command Handler Stubs (delegated to handlers)
     # =============================================================================
-    
-    def handle_ask(self, query: str):
-        """Handle ask command - natural language queries"""
-        if hasattr(self, 'handlers'):
-            self.handlers.handle_ask(query)
-        else:
-            self.console.print(f"[yellow]You asked: {query}[/yellow]")
-            self.console.print("[dim]Handlers not initialized yet[/dim]")
     
     def handle_load(self, args: str):
         """Handle load command - load bag files"""
