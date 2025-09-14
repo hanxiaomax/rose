@@ -12,6 +12,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from ...core.util import get_logger
+from .interactive_ui import InteractiveUI
 
 logger = get_logger("run_cli_adapter")
 
@@ -22,6 +23,7 @@ class CLIAdapter:
     def __init__(self, runner):
         self.runner = runner
         self.console = runner.console
+        self.ui = runner.ui  # Use UI from runner
     
     def _proxy_to_native_cli(self, command_parts: List[str]) -> Dict[str, Any]:
         """Generic proxy to native CLI commands"""
@@ -214,7 +216,7 @@ class CLIAdapter:
                 return {'success': False, 'error': 'No bag file specified'}
         
         # Show available topics first
-        self.console.print(f"[yellow]Showing available topics in {bag_file}...[/yellow]")
+        self.ui.msg.info(f"Showing available topics in {bag_file}...")
         inspect_result = self._proxy_to_native_cli(['inspect', bag_file])
         
         # Prompt for topics
@@ -252,7 +254,7 @@ class CLIAdapter:
                 return None
             params['input_bags'] = selected
         else:
-            self.console.print("[yellow]No bags loaded. Use /load first.[/yellow]")
+            self.ui.msg.warning("No bags loaded. Use /load first.")
             return None
         
         # Topics selection
@@ -314,7 +316,7 @@ class CLIAdapter:
                 all_topics.update(bag_info.get('topics', []))
         
         if not all_topics:
-            self.console.print("[yellow]No topics available[/yellow]")
+            self.ui.msg.warning("No topics available")
             return []
         
         # Use fuzzy search
@@ -454,7 +456,8 @@ class CLIAdapter:
         else:
             bag_files = list(Path('.').glob('*.bag'))
             if not bag_files:
-                self.console.print("[yellow]No bag files found in current directory[/yellow]")
+                from ...ui.theme import get_color
+                self.console.print(f"[{get_color('warning')}]No bag files found in current directory[/{get_color('warning')}]")
                 return None
             
             choices = [Choice(value=str(f), name=f.name) for f in bag_files]

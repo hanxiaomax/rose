@@ -22,6 +22,7 @@ from ...ui.common_ui import Message
 from ...core.util import get_logger
 from ..util import check_and_load_bag_cache
 from .run_cli_adapter import CLIAdapter
+from .interactive_ui import InteractiveUI
 
 logger = get_logger("run_handlers")
 
@@ -32,6 +33,7 @@ class RunCommandHandlers:
     def __init__(self, runner):
         self.runner = runner
         self.console = runner.console
+        self.ui = runner.ui  # Use the UI from runner
         self.state = runner.state
         self.cli_adapter = CLIAdapter(runner)
         self.cache_manager = runner.cache_manager
@@ -80,17 +82,16 @@ class RunCommandHandlers:
             result = self.cli_adapter.interactive_plugin(parts[1:])
             self._show_operation_result('plugin', result)
         else:
-            self.console.print(f"[red]Unknown operation: {op_type}[/red]")
+            self.ui.msg.error(f"Unknown operation: {op_type}")
             self._show_run_help()
     
     def _show_operation_result(self, operation: str, result: Dict[str, Any]):
         """Display operation result with appropriate formatting"""
-        if result.get('success'):
-            message = result.get('message', f'{operation.title()} completed successfully')
-            self.console.print(f"[green]SUCCESS: {message}[/green]")
-        else:
-            error = result.get('error', 'Unknown error')
-            self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
+        success = result.get('success', False)
+        message = result.get('message', f'{operation.title()} completed successfully')
+        error = result.get('error', 'Unknown error')
+        
+        self.ui.msg.operation_result(operation, success, message, error)
     
     
     def handle_status(self, args: str):
@@ -120,17 +121,17 @@ class RunCommandHandlers:
         elif args == "clear":
             self.state.current_bags.clear()
             self.state.loaded_bags.clear()
-            self.console.print("[green]✓ Cleared all bags from workspace[/green]")
+            self.ui.msg.completion_message("Cleared all bags from workspace")
         elif args.startswith("add "):
             bag_path = args[4:].strip()
             self._add_bag_to_workspace(bag_path)
         else:
-            self.console.print("[red]Unknown bags command. Use: list, add <path>, clear[/red]")
+            self.ui.msg.error("Unknown bags command. Use: list, add <path>, clear")
     
     def handle_topics(self, args: str):
         """Handle topic operations"""
         if not self.state.current_bags:
-            self.console.print("[yellow]No bags loaded. Use /bags to add bag files first.[/yellow]")
+            self.ui.msg.warning("No bags loaded. Use /bags to add bag files first.")
             return
         
         self._show_topics_interactive()
@@ -398,38 +399,151 @@ class RunCommandHandlers:
         return suggestions[:3]  # Limit to top 3 suggestions
     
     def _show_status_summary(self):
-        """Show concise status summary"""
-        status = Text()
-        status.append("Current Status:\n", style="bold")
+        """Show comprehensive status summary with command recommendations"""
+        self.ui.msg.section_header("Rose Interactive Environment Status")
+        self.ui.print_empty_line()
+        
+        # System Paths
+        self.ui.msg.subsection_header("System Paths")
+        self.ui.msg.status_item("Rose Directory", self.rose_dirs.rose_dir, "directory")
+        self.ui.msg.status_item("Config Directory", self.rose_dirs.config_dir, "directory")
+        self.ui.msg.status_item("Cache Directory", self.rose_dirs.cache_dir, "directory")
+        self.ui.msg.status_item("Logs Directory", self.rose_dirs.logs_dir, "directory")
+        self.ui.msg.tip("Use /configuration to edit settings")
+        self.ui.print_empty_line()
         
         # Workspace info
-        status.append(f"📁 Workspace: {os.path.basename(self.state.workspace_path)}\n", style="dim")
+        self.ui.msg.subsection_header("Workspace")
+        self.ui.msg.status_item("Current Directory", Path.cwd(), "directory")
+        self.ui.print_empty_line()
         
-        # Bags info
+        # Loaded Bags
+        self.ui.msg.subsection_header("Loaded Bags")
         if self.state.current_bags:
-            status.append(f"📦 Bags: {len(self.state.current_bags)} loaded", style="green")
-            if len(self.state.current_bags) <= 3:
-                bag_names = [Path(bag).name for bag in self.state.current_bags]
-                status.append(f" ({', '.join(bag_names)})", style="dim")
-            status.append("\n")
+            self.ui.msg.status_item("Count", len(self.state.current_bags), "success")
+            for i, bag_path in enumerate(self.state.current_bags, 1):
+                bag_size = self._get_file_size_str(bag_path)
+                self.ui.msg.file_item(bag_path, bag_size)
+            self.ui.msg.tip("Use /data info to view bag details")
         else:
-            status.append("📦 Bags: None loaded\n", style="yellow")
+            self.ui.msg.status_item("Status", "None", "warning")
+            self.ui.msg.tip("Use /load to load bag files")
+        self.ui.print_empty_line()
         
-        # Topics info
+        # Selected Topics
+        self.ui.msg.subsection_header("Selected Topics")
         if self.state.selected_topics:
-            status.append(f"🏷️  Topics: {len(self.state.selected_topics)} selected", style="green")
-            if len(self.state.selected_topics) <= 3:
-                status.append(f" ({', '.join(self.state.selected_topics)})", style="dim")
-            status.append("\n")
+            self.ui.msg.status_item("Count", len(self.state.selected_topics), "success")
+            for i, topic in enumerate(self.state.selected_topics, 1):
+                self.ui.msg.topic_item(topic)
+            self.ui.msg.tip("Use /data export to export topic data")
+        else:
+            self.ui.msg.status_item("Status", "None", "warning")
+            self.ui.msg.tip("Load bags first, then use /extract to select topics")
+        self.ui.print_empty_line()
         
-        # Tasks info
+        # Cache Information
+        self.ui.msg.subsection_header("Cache Information")
+        try:
+            cache_size = self._get_cache_size_info()
+            self.ui.msg.status_item("Cache Size", cache_size, "accent")
+            
+            # Count cached bags
+            cache_entries = self._count_cached_bags()
+            self.ui.msg.status_item("Cached Bags", cache_entries, "success")
+            
+            if cache_entries > 0:
+                self.ui.msg.tip("Use /cache list to view cached bags, /cache clear to clean up")
+            else:
+                self.ui.msg.tip("Cache will be populated as you analyze bags")
+        except Exception as e:
+            self.ui.msg.status_item("Status", f"Error reading cache ({str(e)})", "error")
+        self.ui.print_empty_line()
+        
+        # Running Tasks
         if self.running_tasks:
-            status.append(f"⚡ Tasks: {len(self.running_tasks)} running\n", style="cyan")
+            self.ui.msg.subsection_header("Running Tasks")
+            for task_id, task in self.running_tasks.items():
+                elapsed = time.time() - (task.start_time or time.time())
+                self.ui.msg.task_status(task_id, task.command, elapsed)
+            self.ui.print_empty_line()
         
-        # Notes info
+        # Configuration Status
+        self.ui.msg.subsection_header("Configuration")
+        config_files = [
+            self.rose_dirs.rose_dir / "config.json",
+            self.rose_dirs.rose_dir / "config.yaml",
+            self.rose_dirs.rose_dir / "config.yml"
+        ]
         
-        panel = Panel(status, title="Workspace Status", border_style=get_color('primary'))
-        self.console.print(panel)
+        config_found = False
+        for config_file in config_files:
+            if config_file.exists():
+                self.ui.msg.status_item("Config File", config_file, "file")
+                config_found = True
+                break
+        
+        if not config_found:
+            self.ui.msg.status_item("Config File", "Not found (using defaults)", "warning")
+        
+        self.ui.msg.tip("Use /configuration to edit configuration")
+        self.ui.print_empty_line()
+        
+        # Quick Actions Summary
+        self.ui.msg.section_header("Quick Actions")
+        if not self.state.current_bags:
+            self.ui.msg.command_help("/load *.bag", "Load bag files from current directory")
+        else:
+            self.ui.msg.command_help("/data info", "View detailed bag information")
+            if not self.state.selected_topics:
+                self.ui.msg.command_help("/extract", "Select topics for analysis")
+            else:
+                self.ui.msg.command_help("/data export", "Export selected topic data")
+        
+        self.ui.msg.command_help("/help", "Show detailed help documentation")
+        self.ui.msg.muted("Type any command for more options")
+    
+    def _get_file_size_str(self, file_path: str) -> str:
+        """Get human-readable file size string"""
+        try:
+            size = Path(file_path).stat().st_size
+            for unit in ['B', 'KB', 'MB', 'GB']:
+                if size < 1024:
+                    return f"{size:.1f}{unit}"
+                size /= 1024
+            return f"{size:.1f}TB"
+        except Exception:
+            return "Unknown"
+    
+    def _get_cache_size_info(self) -> str:
+        """Get cache directory size information"""
+        try:
+            total_size = 0
+            cache_path = Path(self.rose_dirs.cache_dir)
+            if cache_path.exists():
+                for file_path in cache_path.rglob('*'):
+                    if file_path.is_file():
+                        total_size += file_path.stat().st_size
+            
+            # Convert to human readable
+            for unit in ['B', 'KB', 'MB', 'GB']:
+                if total_size < 1024:
+                    return f"{total_size:.1f}{unit}"
+                total_size /= 1024
+            return f"{total_size:.1f}TB"
+        except Exception:
+            return "Unknown"
+    
+    def _count_cached_bags(self) -> int:
+        """Count number of cached bag analyses"""
+        try:
+            cache_path = Path(self.rose_dirs.cache_dir)
+            if cache_path.exists():
+                # Count .json files in cache directory (assuming each represents a cached bag analysis)
+                return len(list(cache_path.rglob('*.json')))
+            return 0
+        except Exception:
+            return 0
     
     def _show_run_help(self):
         """Show help for /run command with actual CLI command support"""
@@ -715,7 +829,7 @@ All operations use interactive prompts for parameter collection.
                 all_topics.update(bag_topics)
         
         if not all_topics:
-            self.console.print("[yellow]No topics available. Load bags first.[/yellow]")
+            self.ui.msg.warning("No topics available. Load bags first.")
             return None
         
         topics_list = sorted(list(all_topics))
@@ -777,7 +891,7 @@ All operations use interactive prompts for parameter collection.
                 all_topics.update(bag_topics)
         
         if not all_topics:
-            self.console.print("[yellow]No topics available. Load bags first.[/yellow]")
+            self.ui.msg.warning("No topics available. Load bags first.")
             return
         
         topics_list = sorted(list(all_topics))
@@ -810,49 +924,48 @@ All operations use interactive prompts for parameter collection.
     def _list_current_bags(self):
         """List currently loaded bags"""
         if not self.state.current_bags:
-            self.console.print("[yellow]No bags loaded in workspace[/yellow]")
+            self.ui.msg.warning("No bags loaded in workspace")
             return
         
-        self.console.print("\n[bold]Loaded Bags:[/bold]")
+        self.ui.print_empty_line()
+        self.ui.msg.section_header("Loaded Bags")
         
         for i, bag_path in enumerate(self.state.current_bags, 1):
             bag_name = Path(bag_path).name
             
             if bag_path in self.state.loaded_bags:
                 bag_info = self.state.loaded_bags[bag_path]
-                status = "[green]✓ Cached[/green]"
                 topics_count = len(bag_info.get('topics', []))
                 size_mb = bag_info.get('file_size_mb', 0)
                 size_str = f"{size_mb:.1f} MB"
+                details = f"✓ Cached ({topics_count} topics, {size_str})"
                 
                 self.console.print(
-                    f"  {i:2d}. [cyan]{bag_name}[/cyan] - {status} "
-                    f"({topics_count} topics, {size_str})"
+                    f"  {i:2d}. [{get_color('file')}]{bag_name}[/{get_color('file')}] - [{get_color('success')}]{details}[/{get_color('success')}]"
                 )
             else:
-                status = "[yellow]⏳ Loading...[/yellow]"
                 self.console.print(
-                    f"  {i:2d}. [cyan]{bag_name}[/cyan] - {status}"
+                    f"  {i:2d}. [{get_color('file')}]{bag_name}[/{get_color('file')}] - [{get_color('warning')}]⏳ Loading...[/{get_color('warning')}]"
                 )
     
     def _add_bag_to_workspace(self, bag_path: str):
         """Add bag file to workspace"""
         if bag_path in self.state.current_bags:
-            self.console.print(f"[yellow]Bag already in workspace: {Path(bag_path).name}[/yellow]")
+            self.ui.msg.warning(f"Bag already in workspace: {Path(bag_path).name}")
             return
         
         self.state.current_bags.append(bag_path)
-        self.console.print(f"[green]✓ Added bag to workspace: {Path(bag_path).name}[/green]")
+        self.ui.msg.completion_message(f"Added bag to workspace: {Path(bag_path).name}")
         
         # Suggest loading if not cached
         cached_entry = self.cache_manager.get_analysis(Path(bag_path))
         if not cached_entry or not cached_entry.is_valid(Path(bag_path)):
-            self.console.print(f"[cyan]💡 Tip: Use '/run load {bag_path}' to load it into cache[/cyan]")
+            self.ui.msg.info(f"💡 Tip: Use '/run load {bag_path}' to load it into cache")
     
     def _remove_bag_interactive(self):
         """Remove bag file interactively"""
         if not self.state.current_bags:
-            self.console.print("[yellow]No bags to remove[/yellow]")
+            self.ui.msg.warning("No bags to remove")
             return
         
         choices = [Choice(value=bag, name=Path(bag).name) for bag in self.state.current_bags]
@@ -866,7 +979,7 @@ All operations use interactive prompts for parameter collection.
             self.state.current_bags.remove(selected)
             if selected in self.state.loaded_bags:
                 del self.state.loaded_bags[selected]
-            self.console.print(f"[green]✓ Removed bag: {Path(selected).name}[/green]")
+            self.ui.msg.completion_message(f"Removed bag: {Path(selected).name}")
     
     
     # =============================================================================
@@ -909,18 +1022,18 @@ All operations use interactive prompts for parameter collection.
                 break
         
         if not editor:
-            self.console.print("[red]No suitable editor found. Please install nano, vim, or code[/red]")
-            self.console.print(f"[yellow]Configuration file location: {config_file}[/yellow]")
+            self.ui.msg.error("No suitable editor found. Please install nano, vim, or code")
+            self.ui.msg.warning(f"Configuration file location: {config_file}")
             return
         
         try:
-            self.console.print(f"[cyan]Opening Rose configuration with {editor}...[/cyan]")
+            self.ui.msg.info(f"Opening Rose configuration with {editor}...")
             subprocess.run([editor, str(config_file)], check=True)
-            self.console.print(f"[green]✓ Configuration file edited[/green]")
+            self.ui.msg.completion_message("Configuration file edited")
         except subprocess.CalledProcessError:
-            self.console.print(f"[red]Failed to open editor[/red]")
+            self.ui.msg.error("Failed to open editor")
         except KeyboardInterrupt:
-            self.console.print(f"[yellow]Editor cancelled[/yellow]")
+            self.ui.msg.warning("Editor cancelled")
     
     def _create_default_config(self, config_file: Path):
         """Create default configuration file"""
@@ -950,7 +1063,7 @@ All operations use interactive prompts for parameter collection.
         with open(config_file, 'w') as f:
             json.dump(default_config, f, indent=2)
         
-        self.console.print(f"[green]✓ Created default configuration: {config_file}[/green]")
+        self.ui.msg.completion_message(f"Created default configuration: {config_file}")
 
     # =============================================================================
     # Export Functions

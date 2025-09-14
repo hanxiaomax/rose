@@ -36,6 +36,7 @@ from ...core.util import get_logger
 from ...ui.common_ui import Message
 from ...ui.theme import get_color
 from ..util import filter_topics, check_and_load_bag_cache
+from .interactive_ui import InteractiveUI
 
 logger = get_logger("run")
 
@@ -84,6 +85,7 @@ class InteractiveRunner:
     
     def __init__(self):
         self.console = Console()
+        self.ui = InteractiveUI(self.console)
         self.rose_dirs = get_rose_directories()
         self.parser = create_parser()
         self.cache_manager = create_bag_cache_manager()
@@ -295,14 +297,14 @@ class InteractiveRunner:
                     self._dispatch_command(user_input)
                     
                 except KeyboardInterrupt:
-                    self.console.print("\n[yellow]Use /exit to quit[/yellow]")
+                    self.ui.msg.warning("Use /exit to quit")
                     continue
                 except EOFError:
-                    self.console.print("\n[cyan]Goodbye![/cyan]")
+                    self.ui.msg.info("Goodbye!")
                     break
         
         except Exception as e:
-            self.console.print(f"[red]Unexpected error: {e}[/red]")
+            self.ui.msg.error(f"Unexpected error: {e}")
             logger.error(f"Interactive runner error: {e}", exc_info=True)
         finally:
             self._cleanup()
@@ -312,10 +314,6 @@ class InteractiveRunner:
         # Display the beautiful ROSE banner first
         from ..util import build_banner
         self.console.print(build_banner())
-        
-        # Generate command list dynamically
-        welcome = Text()
-        welcome.append("Available commands:\n", style="bold")
         
         # Define command categories and descriptions
         command_descriptions = {
@@ -342,28 +340,22 @@ class InteractiveRunner:
             "/exit": "Exit interactive mode",
         }
         
-        # Display commands that are actually available
-        for cmd in sorted(self.commands.keys()):
-            if cmd in command_descriptions:
-                # Format command with proper spacing
-                cmd_text = f"{cmd:<12}"
-                desc_text = command_descriptions[cmd]
-                welcome.append(f"{cmd_text} - {desc_text}\n", style="dim")
+        # Filter to only show available commands
+        available_commands = {cmd: desc for cmd, desc in command_descriptions.items() 
+                            if cmd in self.commands}
         
-        # Add usage tips
-        welcome.append("\n", style="dim")
-        welcome.append("Features:\n", style="green")
-        welcome.append("  • Tab completion for commands and file paths\n", style="dim")
-        welcome.append("  • Natural language queries (just ask questions!)\n", style="dim")
-        welcome.append("  • @ symbol for cached bags (@test.bag)\n", style="dim")
-        welcome.append("  • ! symbol for shell commands (!ls -la)\n", style="dim")
-        welcome.append("  • Background task execution\n", style="dim")
+        # Features list
+        features = [
+            "Tab completion for commands and file paths",
+            "Natural language queries (just ask questions!)",
+            "@ symbol for cached bags (@test.bag)",
+            "! symbol for shell commands (!ls -la)",
+            "Background task execution"
+        ]
         
-        welcome.append("\nTry: ", style="dim")
-        welcome.append("'/help'", style="italic")
-        
-        panel = Panel(welcome, title="Interactive Environment", border_style=get_color('primary'))
-        self.console.print(panel)
+        # Use the new UI method
+        self.ui.show_welcome("Interactive Environment", available_commands, features)
+        self.ui.msg.muted("Try: '/help' for detailed documentation")
     
     def _get_prompt_text(self) -> str:
         """Generate context-aware prompt"""
@@ -520,7 +512,7 @@ class InteractiveRunner:
                     # Call handler directly (they're all methods of this class)
                     handler(args)
                 except Exception as e:
-                    self.console.print(f"[red]Command error: {e}[/red]")
+                    self.ui.msg.error(f"Command error: {e}")
                     logger.error(f"Command {cmd_prefix} error: {e}", exc_info=True)
                 return
         
@@ -535,43 +527,42 @@ class InteractiveRunner:
         # Check if user might have meant a valid command without the slash
         command_suggestions = self._get_command_suggestions(user_input)
         
-        self.console.print(f"[yellow]'{user_input}' is not recognized as a command.[/yellow]")
-        self.console.print("[cyan]Rose Interactive Environment only supports commands starting with '/'[/cyan]")
+        self.ui.msg.warning(f"'{user_input}' is not recognized as a command.")
+        self.ui.msg.info("Rose Interactive Environment only supports commands starting with '/'")
         
         if command_suggestions:
-            self.console.print(f"[dim]Did you mean: {', '.join(command_suggestions)}?[/dim]")
+            self.ui.msg.muted(f"Did you mean: {', '.join(command_suggestions)}?")
         
-        self.console.print()
+        self.ui.print_empty_line()
         
         # Show available commands
-        self.console.print("[bold cyan]Available commands:[/bold cyan]")
+        self.ui.msg.section_header("Available commands:")
         
         # Core commands
-        self.console.print("[dim]Core Operations:[/dim]")
-        self.console.print("  [green]/load[/green]     - Load bag files")
-        self.console.print("  [green]/status[/green]   - Check system status")
-        self.console.print("  [green]/help[/green]     - Show detailed help")
+        self.ui.msg.muted("Core Operations:")
+        self.ui.msg.command_help("/load", "Load bag files")
+        self.ui.msg.command_help("/status", "Check system status")
+        self.ui.msg.command_help("/help", "Show detailed help")
         
         # Data operations
-        self.console.print("[dim]Data Operations:[/dim]")
-        self.console.print("  [green]/data[/green]     - Data export and info")
-        self.console.print("  [green]/extract[/green]  - Extract topics")
-        self.console.print("  [green]/convert[/green]  - Convert bag format")
-        self.console.print("  [green]/compress[/green] - Compress bag files")
+        self.ui.msg.muted("Data Operations:")
+        self.ui.msg.command_help("/data", "Data export and info")
+        self.ui.msg.command_help("/extract", "Extract topics")
+        self.ui.msg.command_help("/compress", "Compress bag files")
         
         # System operations
-        self.console.print("[dim]System Operations:[/dim]")
-        self.console.print("  [green]/cache[/green]    - Cache management")
-        self.console.print("  [green]/plugin[/green]   - Plugin system")
-        self.console.print("  [green]/configuration[/green] - Edit configuration")
+        self.ui.msg.muted("System Operations:")
+        self.ui.msg.command_help("/cache", "Cache management")
+        self.ui.msg.command_help("/plugin", "Plugin system")
+        self.ui.msg.command_help("/configuration", "Edit configuration")
         
         # Utility commands
-        self.console.print("[dim]Utility:[/dim]")
-        self.console.print("  [green]/clear[/green]    - Clear screen")
-        self.console.print("  [green]/exit[/green]     - Exit Rose")
+        self.ui.msg.muted("Utility:")
+        self.ui.msg.command_help("/clear", "Clear screen")
+        self.ui.msg.command_help("/exit", "Exit Rose")
         
-        self.console.print()
-        self.console.print("[dim]Type '/help' for detailed documentation or '/help <command>' for specific help.[/dim]")
+        self.ui.print_empty_line()
+        self.ui.msg.muted("Type '/help' for detailed documentation or '/help <command>' for specific help.")
     
     def _get_command_suggestions(self, user_input: str) -> List[str]:
         """Get command suggestions based on user input"""
@@ -642,16 +633,15 @@ class InteractiveRunner:
     def _handle_shell_command(self, command: str):
         """Handle native shell command execution"""
         if not command:
-            self.console.print("[yellow]Usage: !<command>[/yellow]")
-            self.console.print("[dim]Example: !ls -la[/dim]")
+            self.ui.msg.warning("Usage: !<command>")
+            self.ui.msg.muted("Example: !ls -la")
             return
         
         try:
             import subprocess
-            import shlex
             
             # Show what command we're executing
-            self.console.print(f"[dim]$ {command}[/dim]")
+            self.ui.msg.shell_command(command)
             
             # Execute command in native shell
             result = subprocess.run(
@@ -667,14 +657,14 @@ class InteractiveRunner:
                 self.console.print(result.stdout.rstrip())
             
             if result.stderr:
-                self.console.print(f"[red]{result.stderr.rstrip()}[/red]")
+                self.ui.msg.error(result.stderr.rstrip())
             
             # Show exit code if non-zero
             if result.returncode != 0:
-                self.console.print(f"[red]Command exited with code {result.returncode}[/red]")
+                self.ui.msg.error(f"Command exited with code {result.returncode}")
                 
         except Exception as e:
-            self.console.print(f"[red]Shell command error: {e}[/red]")
+            self.ui.msg.error(f"Shell command error: {e}")
             logger.error(f"Shell command error: {e}", exc_info=True)
     
     # =============================================================================
@@ -746,12 +736,11 @@ class InteractiveRunner:
     
     def _show_operation_result(self, operation: str, result: Dict[str, Any]):
         """Display operation result with appropriate formatting"""
-        if result.get('success'):
-            message = result.get('message', f'{operation.title()} completed successfully')
-            self.console.print(f"[green]SUCCESS: {message}[/green]")
-        else:
-            error = result.get('error', 'Unknown error')
-            self.console.print(f"[red]ERROR: {operation.title()} failed: {error}[/red]")
+        success = result.get('success', False)
+        message = result.get('message', f'{operation.title()} completed successfully')
+        error = result.get('error', 'Unknown error')
+        
+        self.ui.msg.operation_result(operation, success, message, error)
     
     
     def handle_status(self, args: str):
@@ -800,7 +789,7 @@ class InteractiveRunner:
     
     def handle_exit(self, args: str):
         """Handle exit command - quit the interactive environment"""
-        self.console.print("[cyan]Goodbye![/cyan]")
+        self.ui.msg.info("Goodbye!")
         try:
             self._cleanup()
         except Exception as e:
