@@ -144,15 +144,9 @@ class RunCommandHandlers:
         # Show recent completed tasks
     
     
-    def handle_workspace(self, args: str):
-        """Handle workspace operations"""
-        if args == "info":
-            self._show_workspace_info()
-        elif args.startswith("cd "):
-            new_path = args[3:].strip()
-            self._change_workspace(new_path)
-        else:
-            self._show_workspace_info()
+    def handle_configuration(self, args: str):
+        """Handle configuration management - open config file in editor"""
+        self._open_rose_config()
     
     def handle_bags(self, args: str):
         """Handle bag file operations"""
@@ -911,36 +905,90 @@ All operations use interactive prompts for parameter collection.
                 del self.state.loaded_bags[selected]
             self.console.print(f"[green]✓ Removed bag: {Path(selected).name}[/green]")
     
-    def _show_workspace_info(self):
-        """Show detailed workspace information"""
-        info = Text()
-        info.append("Workspace Information:\n\n", style="bold")
-        info.append(f"📁 Path: {self.state.workspace_path}\n")
-        info.append(f"⏰ Session started: {time.ctime(self.state.created_at)}\n")
-        info.append(f"📦 Loaded bags: {len(self.state.current_bags)}\n")
-        info.append(f"🏷️  Selected topics: {len(self.state.selected_topics)}\n")
-        
-        panel = Panel(info, title="Workspace", border_style=get_color('accent'))
-        self.console.print(panel)
     
-    def _change_workspace(self, new_path: str):
-        """Change workspace directory"""
-        new_path = Path(new_path).expanduser().resolve()
+    # =============================================================================
+    # Configuration Management Functions
+    # =============================================================================
+    
+    def _open_rose_config(self):
+        """Open Rose configuration file in default editor"""
+        import subprocess
+        import shutil
+        from pathlib import Path
         
-        if not new_path.exists():
-            self.console.print(f"[red]Directory does not exist: {new_path}[/red]")
+        # Look for existing config files
+        rose_dir = Path.home() / ".rose"
+        config_files = [
+            rose_dir / "config.json",
+            rose_dir / "config.yaml",
+            rose_dir / "config.yml"
+        ]
+        
+        # Use the first existing config file
+        config_file = None
+        for cf in config_files:
+            if cf.exists():
+                config_file = cf
+                break
+        
+        # If no config file exists, create default JSON config
+        if config_file is None:
+            config_file = rose_dir / "config.json"
+            self._create_default_config(config_file)
+        
+        # Try to find a suitable editor
+        editors = ['nano', 'vim', 'vi', 'code', 'notepad']
+        editor = None
+        
+        for ed in editors:
+            if shutil.which(ed):
+                editor = ed
+                break
+        
+        if not editor:
+            self.console.print("[red]No suitable editor found. Please install nano, vim, or code[/red]")
+            self.console.print(f"[yellow]Configuration file location: {config_file}[/yellow]")
             return
         
-        if not new_path.is_dir():
-            self.console.print(f"[red]Not a directory: {new_path}[/red]")
-            return
-        
-        old_path = self.state.workspace_path
-        self.state.workspace_path = str(new_path)
-        os.chdir(new_path)
-        
-        self.console.print(f"[green]✓ Changed workspace: {old_path} → {new_path}[/green]")
+        try:
+            self.console.print(f"[cyan]Opening Rose configuration with {editor}...[/cyan]")
+            subprocess.run([editor, str(config_file)], check=True)
+            self.console.print(f"[green]✓ Configuration file edited[/green]")
+        except subprocess.CalledProcessError:
+            self.console.print(f"[red]Failed to open editor[/red]")
+        except KeyboardInterrupt:
+            self.console.print(f"[yellow]Editor cancelled[/yellow]")
     
+    def _create_default_config(self, config_file: Path):
+        """Create default configuration file"""
+        import json
+        
+        # Ensure .rose directory exists
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        default_config = {
+            "cache": {
+                "max_size_gb": 10,
+                "auto_cleanup": True
+            },
+            "processing": {
+                "default_workers": 4,
+                "compression": "lz4"
+            },
+            "ui": {
+                "theme": "default",
+                "show_progress": True
+            },
+            "paths": {
+                "default_output_dir": "~/rose_output"
+            }
+        }
+        
+        with open(config_file, 'w') as f:
+            json.dump(default_config, f, indent=2)
+        
+        self.console.print(f"[green]✓ Created default configuration: {config_file}[/green]")
+
     # =============================================================================
     # Export Functions
     # =============================================================================

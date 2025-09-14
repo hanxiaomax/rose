@@ -113,12 +113,13 @@ class InteractiveRunner:
             "/cache": self.handle_cache,
             "/plugin": self.handle_plugin,
             "/status": self.handle_status,
-            "/workspace": self.handle_workspace,
             "/bags": self.handle_bags,
             "/topics": self.handle_topics,
+            "/configuration": self.handle_configuration,
             "/help": self.handle_help,
             "/clear": self.handle_clear,
             "/exit": self.handle_exit,
+            "/quit": self.handle_exit,
         }
         
         # Setup prompt session
@@ -333,7 +334,7 @@ class InteractiveRunner:
             "/status": "Show workspace status and running tasks",
             "/bags": "Manage loaded bags",
             "/topics": "Manage topic selection",
-            "/workspace": "Workspace operations",
+            "/configuration": "Open Rose configuration file in editor",
             
             # System operations
             "/clear": "Clear console",
@@ -649,12 +650,12 @@ class InteractiveRunner:
             self.console.print("[yellow]Status: Interactive environment running[/yellow]")
     
     
-    def handle_workspace(self, args: str):
-        """Handle workspace command"""
+    def handle_configuration(self, args: str):
+        """Handle configuration command"""
         if hasattr(self, 'handlers'):
-            self.handlers.handle_workspace(args)
+            self.handlers.handle_configuration(args)
         else:
-            self.console.print("[yellow]Workspace management not available yet[/yellow]")
+            self.console.print("[yellow]Configuration management not available yet[/yellow]")
     
     def handle_bags(self, args: str):
         """Handle bags command"""

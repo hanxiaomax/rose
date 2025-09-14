@@ -31,7 +31,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - `/status` - Show workspace status and running tasks
 - `/bags` - Manage loaded bags
 - `/topics` - Manage topic selection
-- `/workspace` - Workspace operations
+- `/configuration` - Open Rose configuration file in editor
 
 ### System Operations
 - `/clear` - Clear console
@@ -109,11 +109,10 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > !ls -la *.csv             # Check exported files
 ```
 
-### Workspace Management
+### Configuration Management
 ```
-> /load project_bags/*.bag
-> /workspace info
-> /status
+> /configuration             # Open config file in editor
+> /status                    # Check system status
 ```
 
 ### Using Special Symbols
@@ -142,7 +141,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 ### Debugging and Monitoring
 - Check running tasks: `/status`
-- View workspace info: `/workspace info`
+- Edit configuration: `/configuration`
 
 ## Troubleshooting
 
