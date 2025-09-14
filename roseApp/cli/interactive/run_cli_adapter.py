@@ -40,14 +40,63 @@ class CLIAdapter:
                 return {'success': False, 'error': f'Command failed with code {result.returncode}'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+    
+    def _select_input_bag(self, message: str = "Select bag file:") -> Optional[str]:
+        """Common method to select input bag file with completion support"""
+        # First try to use loaded bags
+        if self.runner.state.current_bags:
+            if len(self.runner.state.current_bags) == 1:
+                # Only one loaded bag, use it
+                return self.runner.state.current_bags[0]
+            else:
+                # Multiple loaded bags, let user choose
+                choices = [Choice(value=bag, name=Path(bag).name) for bag in self.runner.state.current_bags]
+                choices.append(Choice(value='__browse__', name='Browse for different file...'))
+                
+                selected = inquirer.select(
+                    message=message,
+                    choices=choices
+                ).execute()
+                
+                if selected and selected != '__browse__':
+                    return selected
         
-        # Initialize path selector for enhanced file completion
+        # No loaded bags or user chose to browse - use unified path input with completion
+        return self._ask_for_path(
+            message="Enter bag file path (Tab for completion):",
+            default="*.bag",
+            file_type="bag"
+        )
+    
+    def _ask_for_path(self, message: str, default: str = "", file_type: str = "bag") -> Optional[str]:
+        """Unified path input function with completion support (like /load command)"""
         try:
-            from .run_path_completer import InteractivePathSelector
-            self.path_selector = InteractivePathSelector(self.console)
+            # Choose appropriate completer based on file type
+            if file_type == "bag":
+                from .run_path_completer import BagFileCompleter
+                completer = BagFileCompleter()
+            else:
+                # For other file types, use BagFileCompleter as it provides general path completion
+                from .run_path_completer import BagFileCompleter
+                completer = BagFileCompleter()
+            
+            path = inquirer.text(
+                message=message,
+                default=default,
+                completer=completer
+            ).execute()
+            
+            return path if path and path.strip() else None
+            
         except Exception as e:
-            logger.warning(f"Could not initialize path selector: {e}")
-            self.path_selector = None
+            logger.warning(f"Path completion failed: {e}")
+            # Fallback to simple text input without completion
+            path = inquirer.text(
+                message=message,
+                default=default
+            ).execute()
+            
+            return path if path and path.strip() else None
     
     # =============================================================================
     # Load Command Adaptation
@@ -158,12 +207,8 @@ class CLIAdapter:
             # Use first loaded bag
             bag_file = self.runner.state.current_bags[0]
         else:
-            # Prompt for bag file
-            from .run_path_completer import BagFileCompleter
-            bag_file = inquirer.text(
-                message="Enter bag file path:",
-                completer=BagFileCompleter()
-            ).execute()
+            # Prompt for bag file using unified path input
+            bag_file = self._ask_for_path("Enter bag file path (Tab for completion):")
             
             if not bag_file:
                 return {'success': False, 'error': 'No bag file specified'}
@@ -295,11 +340,7 @@ class CLIAdapter:
                 return self._proxy_to_native_cli(cmd_args)
             else:
                 # Prompt for bag file
-                from .run_path_completer import BagFileCompleter
-                bag_file = inquirer.text(
-                    message="Enter bag file path:",
-                    completer=BagFileCompleter()
-                ).execute()
+                bag_file = self._ask_for_path("Enter bag file path (Tab for completion):")
                 
                 if not bag_file:
                     return {'success': False, 'error': 'No bag file specified'}
@@ -381,11 +422,7 @@ class CLIAdapter:
                 return self._proxy_to_native_cli(['inspect', bag_file])
             else:
                 # Prompt for bag file
-                from .run_path_completer import BagFileCompleter
-                bag_file = inquirer.text(
-                    message="Enter bag file path:",
-                    completer=BagFileCompleter()
-                ).execute()
+                bag_file = self._ask_for_path("Enter bag file path (Tab for completion):")
                 
                 if not bag_file:
                     return {'success': False, 'error': 'No bag file specified'}
@@ -441,12 +478,21 @@ class CLIAdapter:
     # =============================================================================
     
     def interactive_data(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive version of data command - proxy to native CLI"""
+        """Interactive version of data command"""
         if not args:
             return self._show_data_menu()
         
-        # Proxy directly to native CLI
-        return self._proxy_to_native_cli(['data'] + args)
+        # Handle subcommands
+        subcommand = args[0]
+        remaining_args = args[1:]
+        
+        if subcommand == 'export':
+            return self._data_export(remaining_args)
+        elif subcommand == 'info':
+            return self._data_info(remaining_args)
+        else:
+            # Unknown subcommand, proxy to CLI for error handling
+            return self._proxy_to_native_cli(['data'] + args)
     
     def _show_data_menu(self) -> Dict[str, Any]:
         """Show data command menu"""
@@ -466,37 +512,79 @@ class CLIAdapter:
         return {'success': False, 'error': 'No operation selected'}
     
     def _data_export(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive data export"""
+        """Interactive data export - builds CLI command"""
         try:
-            from ..data import export as data_export_cmd
+            # If bag file provided as argument, use it; otherwise collect parameters
+            if args and not args[0].startswith('-'):
+                # Bag file provided as argument
+                input_bag = args[0]
+                # Remove bag file from args for parameter collection
+                remaining_args = args[1:]
+            else:
+                # No bag file provided, need to collect parameters including bag selection
+                input_bag = None
+                remaining_args = args
             
             # Collect parameters
-            params = self._collect_data_export_parameters(args)
+            params = self._collect_data_export_parameters(remaining_args, input_bag)
             if not params:
                 return {'success': False, 'error': 'Operation cancelled'}
             
-            # Data export only supports single bag, use first one
-            input_bag = params['input_bags'][0] if params['input_bags'] else ""
-            data_export_cmd(
-                input_bag=input_bag,
-                topics=params['topics'],
-                output_csv=params['output']
-            )
+            # Build CLI command arguments
+            cli_args = ['data', 'export']
             
-            return {'success': True, 'message': 'Data export completed'}
+            # Add input bag (data export only supports single bag)
+            input_bag = params['input_bag']
+            if input_bag:
+                cli_args.append(input_bag)
+            
+            # Add topics
+            if params.get('topics'):
+                for topic in params['topics']:
+                    cli_args.extend(['-t', topic])
+            
+            # Add output file
+            if params.get('output'):
+                cli_args.extend(['-o', params['output']])
+            
+            # Add time filters if specified
+            if params.get('start_time'):
+                cli_args.extend(['--start-time', params['start_time']])
+            
+            if params.get('end_time'):
+                cli_args.extend(['--end-time', params['end_time']])
+            
+            # Add search filter if specified
+            if params.get('search'):
+                cli_args.extend(['--search', params['search']])
+            
+            # Add auto-yes flag for smoother experience
+            cli_args.append('-y')
+            
+            # Show constructed command for debugging
+            cmd_str = ' '.join(cli_args)
+            self.console.print(f"[dim]Executing: rose {cmd_str}[/dim]")
+            
+            # Execute via CLI proxy
+            return self._proxy_to_native_cli(cli_args)
+            
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
-    def _collect_data_export_parameters(self, args: List[str]) -> Optional[Dict[str, Any]]:
+    def _collect_data_export_parameters(self, args: List[str], provided_bag: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Collect data export parameters"""
         params = {}
         
-        # Input bags
-        if self.runner.state.current_bags:
-            params['input_bags'] = self.runner.state.current_bags
+        # Input bag
+        if provided_bag:
+            # Bag file was provided as argument
+            params['input_bag'] = provided_bag
         else:
-            self.console.print("[yellow]No bags loaded. Use /load first.[/yellow]")
-            return None
+            # Need to select bag file
+            input_bag = self._select_input_bag("Select bag file for data export:")
+            if not input_bag:
+                return None
+            params['input_bag'] = input_bag
         
         # Topics selection
         if self.runner.state.selected_topics:
@@ -528,65 +616,66 @@ class CLIAdapter:
                 default="bag_data_{timestamp}.csv"
             ).execute()
         
-        # Format selection
-        params['format'] = inquirer.select(
-            message="Export format:",
-            choices=[
-                Choice(value='csv', name='CSV format'),
-                Choice(value='json', name='JSON format')
-            ],
-            default='csv'
-        ).execute()
-        
-        # Advanced options
-        if inquirer.confirm("Configure advanced options?", default=False).execute():
-            params['workers'] = inquirer.number(
-                message="Number of workers:",
-                default=None,
-                min_allowed=1,
-                max_allowed=16
+        # Advanced filtering options
+        if inquirer.confirm("Configure time filters or search?", default=False).execute():
+            # Time filters
+            start_time = inquirer.text(
+                message="Start time (ISO format or seconds, leave empty to skip):",
+                default=""
             ).execute()
+            if start_time:
+                params['start_time'] = start_time
             
-            params['verbose'] = inquirer.confirm("Verbose output?", default=False).execute()
+            end_time = inquirer.text(
+                message="End time (ISO format or seconds, leave empty to skip):",
+                default=""
+            ).execute()
+            if end_time:
+                params['end_time'] = end_time
+            
+            # Search filter
+            search_text = inquirer.text(
+                message="Search text in string columns (leave empty to skip):",
+                default=""
+            ).execute()
+            if search_text:
+                params['search'] = search_text
         
         return params
     
     def _data_info(self, args: List[str]) -> Dict[str, Any]:
-        """Interactive data info"""
+        """Interactive data info - builds CLI command"""
         try:
-            from ..data import info as data_info_cmd
-            
-            # Select bag file
-            if self.runner.state.current_bags:
-                if len(self.runner.state.current_bags) == 1:
-                    input_bag = self.runner.state.current_bags[0]
-                else:
-                    choices = [Choice(value=bag, name=Path(bag).name) for bag in self.runner.state.current_bags]
-                    input_bag = inquirer.select(
-                        message="Select bag file for data info:",
-                        choices=choices
-                    ).execute()
-                    if not input_bag:
-                        return {'success': False, 'error': 'No bag selected'}
+            # Get input bag file
+            if args and not args[0].startswith('-'):
+                # Bag file provided as argument
+                input_bag = args[0]
+                remaining_args = args[1:]
             else:
-                self.console.print("[yellow]No bags loaded. Use /load first.[/yellow]")
-                return {'success': False, 'error': 'No bags loaded'}
+                # Need to select bag file
+                input_bag = self._select_input_bag("Select bag file for data info:")
+                if not input_bag:
+                    return {'success': False, 'error': 'No bag selected'}
+                remaining_args = args
+            
+            # Build CLI command arguments
+            cli_args = ['data', 'info', str(input_bag)]
             
             # Advanced options
-            show_columns = False
-            show_sample = False
             if inquirer.confirm("Show advanced data info?", default=False).execute():
-                show_columns = inquirer.confirm("Show DataFrame columns?", default=False).execute()
-                show_sample = inquirer.confirm("Show sample data?", default=False).execute()
+                if inquirer.confirm("Show DataFrame columns?", default=False).execute():
+                    cli_args.append('-c')
+                
+                if inquirer.confirm("Show sample data?", default=False).execute():
+                    cli_args.append('-s')
             
-            data_info_cmd(
-                input_bag=input_bag,
-                topics=None,  # Show all topics
-                show_columns=show_columns,
-                show_sample=show_sample
-            )
+            # Show constructed command for debugging
+            cmd_str = ' '.join(cli_args)
+            self.console.print(f"[dim]Executing: rose {cmd_str}[/dim]")
             
-            return {'success': True, 'message': 'Data info completed'}
+            # Execute via CLI proxy
+            return self._proxy_to_native_cli(cli_args)
+            
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
@@ -671,10 +760,7 @@ class CLIAdapter:
                         return {'success': False, 'error': 'No bag selected'}
                 else:
                     # Manual input
-                    bag_path = inquirer.text(
-                        message="Enter bag file path:",
-                        default=""
-                    ).execute()
+                    bag_path = self._ask_for_path("Enter bag file path (Tab for completion):")
                     
                     if bag_path:
                         # Ensure bag_path is a string, not OptionInfo object
@@ -732,10 +818,7 @@ class CLIAdapter:
                         return {'success': False, 'error': 'No bag selected'}
                 else:
                     # Manual input
-                    bag_path = inquirer.text(
-                        message="Enter bag file path:",
-                        default=""
-                    ).execute()
+                    bag_path = self._ask_for_path("Enter bag file path (Tab for completion):")
                     if bag_path:
                         export_params['bag_path'] = bag_path
                     else:

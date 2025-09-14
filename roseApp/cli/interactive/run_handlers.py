@@ -43,44 +43,7 @@ class RunCommandHandlers:
     # Core Command Handlers
     # =============================================================================
     
-    def handle_ask(self, query: str):
-        """Handle ask/help queries with intelligent suggestions"""
-        if not query:
-            self.console.print("[yellow]What would you like to know? Try asking about bag operations, or use /help for commands.[/yellow]")
-            return
-        
-        # Analyze query and provide contextual help
-        suggestions = self._analyze_query_and_suggest(query)
-        
-        if suggestions:
-            self.console.print(f"[cyan]Based on your question about '{query}', here are some suggestions:[/cyan]\n")
-            
-            for i, suggestion in enumerate(suggestions, 1):
-                self.console.print(f"{i}. {suggestion['description']}")
-                self.console.print(f"   Command: [bold]{suggestion['command']}[/bold]")
-                if suggestion.get('example'):
-                    self.console.print(f"   Example: [dim]{suggestion['example']}[/dim]")
-                self.console.print()
-            
-            # Ask if user wants to run any suggestion
-            if len(suggestions) == 1:
-                if confirm(f"Would you like to run: {suggestions[0]['command']}?"):
-                    self.runner._dispatch_command(suggestions[0]['command'])
-            elif len(suggestions) > 1:
-                choices = [Choice(value=s['command'], name=f"{i+1}. {s['description']}") 
-                          for i, s in enumerate(suggestions)]
-                choices.append(Choice(value=None, name="Cancel"))
-                
-                selected = inquirer.select(
-                    message="Select a command to run:",
-                    choices=choices
-                ).execute()
-                
-                if selected:
-                    self.runner._dispatch_command(selected)
-        else:
-            self.console.print(f"[yellow]I'm not sure how to help with '{query}'. Try /help for available commands.[/yellow]")
-    
+
     def handle_run(self, operation: str):
         """Handle background task execution"""
         if not operation:

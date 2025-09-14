@@ -524,9 +524,121 @@ class InteractiveRunner:
                     logger.error(f"Command {cmd_prefix} error: {e}", exc_info=True)
                 return
         
-        # Default to ask handler for natural language
-        self.handle_ask(resolved_input)
+        # Handle non-slash commands with helpful message
+        if not resolved_input.startswith('/'):
+            self._handle_non_slash_input(resolved_input)
+        else:
+            self.handle_help(resolved_input)
     
+    def _handle_non_slash_input(self, user_input: str):
+        """Handle non-slash input with helpful guidance"""
+        # Check if user might have meant a valid command without the slash
+        command_suggestions = self._get_command_suggestions(user_input)
+        
+        self.console.print(f"[yellow]'{user_input}' is not recognized as a command.[/yellow]")
+        self.console.print("[cyan]Rose Interactive Environment only supports commands starting with '/'[/cyan]")
+        
+        if command_suggestions:
+            self.console.print(f"[dim]Did you mean: {', '.join(command_suggestions)}?[/dim]")
+        
+        self.console.print()
+        
+        # Show available commands
+        self.console.print("[bold cyan]Available commands:[/bold cyan]")
+        
+        # Core commands
+        self.console.print("[dim]Core Operations:[/dim]")
+        self.console.print("  [green]/load[/green]     - Load bag files")
+        self.console.print("  [green]/status[/green]   - Check system status")
+        self.console.print("  [green]/help[/green]     - Show detailed help")
+        
+        # Data operations
+        self.console.print("[dim]Data Operations:[/dim]")
+        self.console.print("  [green]/data[/green]     - Data export and info")
+        self.console.print("  [green]/extract[/green]  - Extract topics")
+        self.console.print("  [green]/convert[/green]  - Convert bag format")
+        self.console.print("  [green]/compress[/green] - Compress bag files")
+        
+        # System operations
+        self.console.print("[dim]System Operations:[/dim]")
+        self.console.print("  [green]/cache[/green]    - Cache management")
+        self.console.print("  [green]/plugin[/green]   - Plugin system")
+        self.console.print("  [green]/configuration[/green] - Edit configuration")
+        
+        # Utility commands
+        self.console.print("[dim]Utility:[/dim]")
+        self.console.print("  [green]/clear[/green]    - Clear screen")
+        self.console.print("  [green]/exit[/green]     - Exit Rose")
+        
+        self.console.print()
+        self.console.print("[dim]Type '/help' for detailed documentation or '/help <command>' for specific help.[/dim]")
+    
+    def _get_command_suggestions(self, user_input: str) -> List[str]:
+        """Get command suggestions based on user input"""
+        # Extract the first word as potential command
+        first_word = user_input.split()[0].lower() if user_input.strip() else ""
+        
+        # Available commands (without the slash for matching)
+        available_commands = [
+            'load', 'status', 'help', 'data', 'extract', 'convert', 
+            'compress', 'cache', 'plugin', 'configuration', 'clear', 'exit'
+        ]
+        
+        # Common aliases and synonyms
+        command_aliases = {
+            'info': 'status',
+            'state': 'status',
+            'check': 'status',
+            'show': 'status',
+            'export': 'data',
+            'save': 'data',
+            'config': 'configuration',
+            'settings': 'configuration',
+            'setup': 'configuration',
+            'cls': 'clear',
+            'clean': 'clear',
+            'quit': 'exit',
+            'close': 'exit',
+            'bye': 'exit',
+            'stop': 'exit',
+            'open': 'load',
+            'read': 'load',
+            'import': 'load',
+            'zip': 'compress',
+            'pack': 'compress',
+        }
+        
+        suggestions = []
+        
+        # Check aliases first
+        if first_word in command_aliases:
+            mapped_command = command_aliases[first_word]
+            suggestions.append(f'/{mapped_command}')
+        
+        # Exact match
+        if first_word in available_commands:
+            suggestions.append(f'/{first_word}')
+        
+        # Partial matches (starts with)
+        if not suggestions:
+            for cmd in available_commands:
+                if cmd.startswith(first_word) and len(first_word) >= 2:
+                    suggestions.append(f'/{cmd}')
+        
+        # Fuzzy matches (contains)
+        if not suggestions and len(first_word) >= 3:
+            for cmd in available_commands:
+                if first_word in cmd or cmd in first_word:
+                    suggestions.append(f'/{cmd}')
+        
+        # Remove duplicates while preserving order
+        unique_suggestions = []
+        for suggestion in suggestions:
+            if suggestion not in unique_suggestions:
+                unique_suggestions.append(suggestion)
+        
+        return unique_suggestions[:3]  # Limit to top 3 suggestions
+        
     def _handle_shell_command(self, command: str):
         """Handle native shell command execution"""
         if not command:
