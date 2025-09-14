@@ -390,7 +390,8 @@ async def _compress_bags_impl(
     # Perform compression
     Message.info(f"Compressing {len(valid_bags)} bag file(s) with {workers} worker(s) (using {compression} compression)...", console)
     
-    # Track results
+    # Track timing and results
+    compression_start_time = time.time()
     results = []
     
     # Use ThreadPoolExecutor for parallel processing
@@ -539,6 +540,9 @@ async def _compress_bags_impl(
                 Message.error(f"  {len(invalid_files)} bag(s) failed validation", console)
                 for v in invalid_files:
                     Message.error(f"    {Path(v['file']).name}: {v['error']}", console)
+    
+    # Calculate total time
+    total_time = time.time() - compression_start_time
     
     # Use new UI components for display
     from ..ui.compress_ui import CompressUI

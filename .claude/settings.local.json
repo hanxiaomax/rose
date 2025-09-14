@@ -9,7 +9,25 @@
       "Bash(python -m pytest test_bag_manager.py::TestBagManager -v)",
       "Bash(python -m pytest test_bag_manager.py::TestBagInfo test_bag_manager.py::TestBag -v)",
       "Bash(python -m pytest test_bag_manager.py -v --tb=short)",
-      "Bash(python -m pytest test_bag_manager.py -v)"
+      "Bash(python -m pytest test_bag_manager.py -v)",
+      "Bash(rg:*)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(pip install:*)",
+      "Bash(/dev/null)",
+      "Bash(rose:*)",
+      "Bash(timeout:*)",
+      "Bash(ls:*)",
+      "Bash(. /opt/homebrew/bin/brew)",
+      "Bash(brew:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__filesystem__create_directory",
+      "Bash(rm:*)",
+      "Bash(sed:*)",
+      "mcp__filesystem__edit_file",
+      "Bash(cat:*)",
+      "Bash(tty)"
     ],
     "deny": []
   }

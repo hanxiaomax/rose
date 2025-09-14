@@ -1,0 +1,109 @@
+{
+  "export_timestamp": 1754098603.282221,
+  "cache_entries": {
+    "bag_cd4058d36b095f1ef1857fd9cf801217": {
+      "location": "file",
+      "type": "BagCacheEntry",
+      "timestamp": 1754098603.2846515,
+      "bag_info": {
+        "cache_timestamp": 1754098557.557907,
+        "file_mtime": 1741614974.4809816,
+        "file_size": 729967395,
+        "bag_info": {
+          "file_path": "roseApp/tests/demo.bag",
+          "analysis_level": "full",
+          "last_updated": 1754098557.5556984,
+          "topics": [
+            "/tf",
+            "/image_raw",
+            "/velodyne_packets",
+            "/velodyne_points",
+            "/radar/points",
+            "/radar/range",
+            "/radar/tracks",
+            "/diagnostics_toplevel_state",
+            "/diagnostics_agg",
+            "/obs1/gps/time",
+            "/gps/time",
+            "/gps/fix",
+            "/obs1/gps/rtkfix",
+            "/gps/rtkfix",
+            "/diagnostics",
+            "/velodyne_nodelet_manager/bond",
+            "/obs1/gps/fix"
+          ],
+          "connections": {
+            "/tf": "tf2_msgs/msg/TFMessage",
+            "/image_raw": "sensor_msgs/msg/Image",
+            "/velodyne_packets": "velodyne_msgs/msg/VelodyneScan",
+            "/velodyne_points": "sensor_msgs/msg/PointCloud2",
+            "/radar/points": "sensor_msgs/msg/PointCloud2",
+            "/radar/range": "sensor_msgs/msg/Range",
+            "/radar/tracks": "radar_driver/msg/RadarTracks",
+            "/diagnostics_toplevel_state": "diagnostic_msgs/msg/DiagnosticStatus",
+            "/diagnostics_agg": "diagnostic_msgs/msg/DiagnosticArray",
+            "/obs1/gps/time": "sensor_msgs/msg/TimeReference",
+            "/gps/time": "sensor_msgs/msg/TimeReference",
+            "/gps/fix": "sensor_msgs/msg/NavSatFix",
+            "/obs1/gps/rtkfix": "nav_msgs/msg/Odometry",
+            "/gps/rtkfix": "nav_msgs/msg/Odometry",
+            "/diagnostics": "diagnostic_msgs/msg/DiagnosticArray",
+            "/velodyne_nodelet_manager/bond": "bond/msg/Status",
+            "/obs1/gps/fix": "sensor_msgs/msg/NavSatFix"
+          },
+          "time_range": [
+            [
+              1490150278,
+              1878520
+            ],
+            [
+              1490150297,
+              996942589
+            ]
+          ],
+          "duration_seconds": 19.995064069,
+          "total_messages": 5390,
+          "total_size": 729261724,
+          "message_counts": {
+            "/tf": 1986,
+            "/image_raw": 600,
+            "/velodyne_packets": 200,
+            "/velodyne_points": 200,
+            "/radar/points": 400,
+            "/radar/range": 400,
+            "/radar/tracks": 400,
+            "/diagnostics_toplevel_state": 40,
+            "/diagnostics_agg": 40,
+            "/obs1/gps/time": 136,
+            "/gps/time": 192,
+            "/gps/fix": 146,
+            "/obs1/gps/rtkfix": 200,
+            "/gps/rtkfix": 200,
+            "/diagnostics": 140,
+            "/velodyne_nodelet_manager/bond": 80,
+            "/obs1/gps/fix": 30
+          },
+          "topic_sizes": {
+            "/tf": 186684,
+            "/image_raw": 430112400,
+            "/velodyne_packets": 43952400,
+            "/velodyne_points": 254050424,
+            "/radar/points": 122600,
+            "/radar/range": 15200,
+            "/radar/tracks": 305250,
+            "/diagnostics_toplevel_state": 1240,
+            "/diagnostics_agg": 102295,
+            "/obs1/gps/time": 4624,
+            "/gps/time": 6528,
+            "/gps/fix": 17374,
+            "/obs1/gps/rtkfix": 140600,
+            "/gps/rtkfix": 140600,
+            "/diagnostics": 90295,
+            "/velodyne_nodelet_manager/bond": 9640,
+            "/obs1/gps/fix": 3570
+          }
+        }
+      }
+    }
+  }
+}

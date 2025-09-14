@@ -31,8 +31,7 @@ class CompressUI:
             Message.success("\n✓ Compression completed successfully", self.console)
             
             # Create compression results table
-            table = self.table_ui.create_compression_summary_table(successful)
-            self.console.print(table)
+            self.table_ui.display_compression_summary_list(successful)
             
         if failed:
             self.display_failed_compressions(failed)

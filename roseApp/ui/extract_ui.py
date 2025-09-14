@@ -63,8 +63,22 @@ class ExtractUI:
     
     def display_batch_results(self, results: List[Dict[str, Any]], total_time: float) -> None:
         """Display batch extraction results."""
-        successful = [r for r in results if r.get('success', False)]
-        failed = [r for r in results if not r.get('success', False)]
+        # Handle both old format (success/input_file) and new format (status/path)
+        successful = []
+        failed = []
+        
+        for r in results:
+            # New format from extract.py
+            if 'status' in r:
+                if r['status'] == 'extracted':
+                    successful.append(r)
+                else:
+                    failed.append(r)
+            # Old format (fallback)
+            elif r.get('success', False):
+                successful.append(r)
+            else:
+                failed.append(r)
         
         # Show progress summary
         self.progress_ui.show_batch_results(len(successful), len(failed), total_time)
@@ -81,8 +95,7 @@ class ExtractUI:
         if not results:
             return
             
-        table = self.table_ui.create_compression_summary_table(results)
-        self.console.print(table)
+        self.table_ui.display_compression_summary_list(results)
     
     def display_failed_files(self, failed_results: List[Dict[str, Any]]) -> None:
         """Display failed extraction files."""
@@ -91,9 +104,23 @@ class ExtractUI:
             
         Message.error(f"Failed to extract {len(failed_results)} file(s):")
         for result in failed_results:
-            file_name = Path(result.get('input_file', '')).name
-            error = result.get('error', 'Unknown error')
-            self.console.print(f"  • {file_name}: {error}")
+            # Handle both old and new result formats
+            if 'path' in result:
+                # New format from extract.py
+                file_path = result.get('path', '')
+                error_msg = result.get('message', 'Unknown error')
+            else:
+                # Old format (fallback)
+                file_path = result.get('input_file', '')
+                error_msg = result.get('error', 'Unknown error')
+            
+            # Extract filename from path
+            if file_path:
+                file_name = Path(file_path).name
+            else:
+                file_name = 'Unknown file'
+                
+            self.console.print(f"  • {file_name}: {error_msg}")
     
     def display_topics_selection(self, topics: List[str], selected_topics: List[str]) -> None:
         """Display topic selection summary."""

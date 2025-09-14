@@ -225,18 +225,14 @@ class ProgressUI:
     
     def show_batch_results(self, success_count: int, fail_count: int, total_time: float) -> None:
         """Display batch processing results."""
-        table = Table(title="Processing Summary")
-        table.add_column("Status", style="bold")
-        table.add_column("Count", justify="right")
+        self.console.print("\n[bold]Processing Summary:[/bold]")
         
         if success_count > 0:
-            table.add_row("✓ Successful", str(success_count), style="green")
+            self.console.print(f"  • [green]✓ Successful: {success_count}[/green]")
         if fail_count > 0:
-            table.add_row("✗ Failed", str(fail_count), style="red")
+            self.console.print(f"  • [red]✗ Failed: {fail_count}[/red]")
         
-        table.add_row("⏱ Total Time", f"{total_time:.2f}s", style="cyan")
-        
-        self.console.print(table)
+        self.console.print(f"  • [cyan]⏱ Total Time: {total_time:.2f}s[/cyan]")
 
 
 class TableUI:
@@ -245,70 +241,70 @@ class TableUI:
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
     
-    def create_topics_table(self, topics_data: List[Dict[str, Any]], verbose: bool = False) -> Table:
-        """Create table for displaying topics."""
-        table = Table(title="Topics")
+    def create_topics_list(self, topics_data: List[Dict[str, Any]], verbose: bool = False) -> None:
+        """Display topics as a list."""
+        if not topics_data:
+            return
+            
+        self.console.print("\n[bold]Topics:[/bold]")
         
-        if verbose:
-            table.add_column("Topic", style="cyan", no_wrap=True)
-            table.add_column("Type", style="magenta")
-            table.add_column("Messages", justify="right", style="green")
-            table.add_column("Frequency", justify="right", style="blue")
-            table.add_column("Size", justify="right", style="yellow")
-        else:
-            table.add_column("Topic", style="cyan")
-            table.add_column("Type", style="magenta")
-        
-        for topic in topics_data:
+        for i, topic in enumerate(topics_data, 1):
+            name = topic.get('name', '')
+            msg_type = topic.get('message_type', '')
+            
             if verbose:
-                table.add_row(
-                    topic.get('name', ''),
-                    topic.get('message_type', ''),
-                    str(topic.get('message_count', 0)),
-                    f"{topic.get('frequency', 0):.1f} Hz",
-                    CommonUI.format_file_size(topic.get('size_bytes', 0))
+                messages = topic.get('message_count', 0)
+                frequency = topic.get('frequency', 0)
+                size = CommonUI.format_file_size(topic.get('size_bytes', 0))
+                self.console.print(
+                    f"  {i:2d}. [cyan]{name}[/cyan] "
+                    f"([magenta]{msg_type}[/magenta]) "
+                    f"- [green]{messages} messages[/green] "
+                    f"@ [blue]{frequency:.1f} Hz[/blue] "
+                    f"([yellow]{size}[/yellow])"
                 )
             else:
-                table.add_row(
-                    topic.get('name', ''),
-                    topic.get('message_type', '')
+                self.console.print(
+                    f"  {i:2d}. [cyan]{name}[/cyan] "
+                    f"([magenta]{msg_type}[/magenta])"
                 )
-        
-        return table
     
-    def create_compression_summary_table(self, results: List[Dict[str, Any]]) -> Table:
-        """Create table for compression results."""
-        table = Table(title="Compression Results")
-        table.add_column("File", style="cyan")
-        table.add_column("Original", justify="right", style="red")
-        table.add_column("Compressed", justify="right", style="green")
-        table.add_column("Reduction", justify="right", style="blue")
+    def display_compression_summary_list(self, results: List[Dict[str, Any]]) -> None:
+        """Display compression results as a list."""
+        if not results:
+            return
+            
+        self.console.print("\n[bold]Compression Results:[/bold]")
         
         total_original = 0
         total_compressed = 0
         
-        for result in results:
+        for i, result in enumerate(results, 1):
             if result.get('success'):
                 original_size = Path(result['input_file']).stat().st_size
                 compressed_size = Path(result['output_file']).stat().st_size
                 
-                table.add_row(
-                    Path(result['input_file']).name,
-                    CommonUI.format_file_size(original_size),
-                    CommonUI.format_file_size(compressed_size),
-                    CommonUI.format_compression_ratio(original_size, compressed_size)
+                filename = Path(result['input_file']).name
+                original_str = CommonUI.format_file_size(original_size)
+                compressed_str = CommonUI.format_file_size(compressed_size)
+                reduction = CommonUI.format_compression_ratio(original_size, compressed_size)
+                
+                self.console.print(
+                    f"  {i:2d}. [cyan]{filename}[/cyan]: "
+                    f"[red]{original_str}[/red] → [green]{compressed_str}[/green] "
+                    f"([blue]{reduction}[/blue])"
                 )
                 
                 total_original += original_size
                 total_compressed += compressed_size
         
         if len(results) > 1:
-            table.add_section()
-            table.add_row(
-                "TOTAL",
-                CommonUI.format_file_size(total_original),
-                CommonUI.format_file_size(total_compressed),
-                CommonUI.format_compression_ratio(total_original, total_compressed)
+            total_original_str = CommonUI.format_file_size(total_original)
+            total_compressed_str = CommonUI.format_file_size(total_compressed)
+            total_reduction = CommonUI.format_compression_ratio(total_original, total_compressed)
+            
+            self.console.print(
+                f"\n  [bold]TOTAL:[/bold] "
+                f"[red]{total_original_str}[/red] → [green]{total_compressed_str}[/green] "
+                f"([blue]{total_reduction}[/blue])"
             )
-        
-        return table
