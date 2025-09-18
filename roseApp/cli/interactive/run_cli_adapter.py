@@ -325,8 +325,72 @@ class CLIAdapter:
             console=self.console,
             topics=sorted(list(all_topics)),
             message="Select topics to extract:",
-            require_selection=True
+            require_selection=True,
+            show_instructions=True
         )
+    
+    def _select_topics_from_bag(self, bag_path: str) -> List[str]:
+        """Select topics from a specific bag file"""
+        try:
+            # First try to get topics from cache if bag is already loaded
+            if bag_path in self.runner.state.loaded_bags:
+                bag_info = self.runner.state.loaded_bags[bag_path]
+                topics = bag_info.get('topics', [])
+                if topics:
+                    from ..util import ask_topics_with_fuzzy
+                    return ask_topics_with_fuzzy(
+                        console=self.console,
+                        topics=sorted(topics),
+                        message="Select topics for data export:",
+                        require_selection=True,
+                        show_instructions=True
+                    )
+            
+            # If not in cache, try to get topics from cache manager
+            from pathlib import Path
+            cached_entry = self.runner.cache_manager.get_analysis(Path(bag_path))
+            if cached_entry and cached_entry.is_valid(Path(bag_path)):
+                bag_info = cached_entry.bag_info
+                if bag_info and bag_info.topics:
+                    topics = [topic.name if hasattr(topic, 'name') else str(topic) 
+                             for topic in bag_info.topics]
+                    if topics:
+                        from ..util import ask_topics_with_fuzzy
+                        return ask_topics_with_fuzzy(
+                            console=self.console,
+                            topics=sorted(topics),
+                            message="Select topics for data export:",
+                            require_selection=True,
+                            show_instructions=True
+                        )
+            
+            # Last resort: load bag file to get topics
+            self.ui.msg.info(f"Loading bag file to get topics: {Path(bag_path).name}")
+            try:
+                # Use parser to get basic bag info
+                bag_info, _ = self.runner.parser._analyze_bag_quick(bag_path)
+                if bag_info and bag_info.topics:
+                    topics = [topic.name if hasattr(topic, 'name') else str(topic) 
+                             for topic in bag_info.topics]
+                    if topics:
+                        from ..util import ask_topics_with_fuzzy
+                        return ask_topics_with_fuzzy(
+                            console=self.console,
+                            topics=sorted(topics),
+                            message="Select topics for data export:",
+                            require_selection=True,
+                            show_instructions=True
+                        )
+            except Exception as e:
+                logger.warning(f"Could not load bag file {bag_path}: {e}")
+            
+            self.ui.msg.warning(f"No topics found in bag file: {Path(bag_path).name}")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error selecting topics from bag {bag_path}: {e}")
+            self.ui.msg.error(f"Error reading bag file: {e}")
+            return []
     
     # =============================================================================
     # Compress Command Adaptation
@@ -589,7 +653,7 @@ class CLIAdapter:
                 return None
             params['input_bag'] = input_bag
         
-        # Topics selection
+        # Topics selection - get topics from the specific bag file
         if self.runner.state.selected_topics:
             use_selected = inquirer.confirm(
                 f"Use selected topics ({len(self.runner.state.selected_topics)})?",
@@ -599,25 +663,18 @@ class CLIAdapter:
             if use_selected:
                 params['topics'] = self.runner.state.selected_topics
             else:
-                params['topics'] = self._select_topics_for_extract()
+                params['topics'] = self._select_topics_from_bag(params['input_bag'])
         else:
-            params['topics'] = self._select_topics_for_extract()
+            params['topics'] = self._select_topics_from_bag(params['input_bag'])
         
         if not params['topics']:
             return None
         
-        # Output file with path completion
-        if self.path_selector:
-            params['output'] = self.path_selector.select_output_path(
-                message="Output file path:",
-                default="bag_data_{timestamp}.csv",
-                extension=".csv"
-            )
-        else:
-            params['output'] = inquirer.text(
-                message="Output file path:",
-                default="bag_data_{timestamp}.csv"
-            ).execute()
+        # Output file
+        params['output'] = inquirer.text(
+            message="Output file path:",
+            default="bag_data_{timestamp}.csv"
+        ).execute()
         
         # Advanced filtering options
         if inquirer.confirm("Configure time filters or search?", default=False).execute():
