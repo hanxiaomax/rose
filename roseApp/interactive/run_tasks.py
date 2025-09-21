@@ -8,9 +8,9 @@ import time
 import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from ...core.parser import ExtractOption
-from ...core.util import get_logger
-from ..util import check_and_load_bag_cache
+from roseApp.core.parser import ExtractOption
+from roseApp.core.util import get_logger
+from roseApp.cli.util import check_and_load_bag_cache
 from .run_output import StreamingRenderer, StreamingProgress, ResultFormatter
 
 logger = get_logger("run_tasks")
@@ -361,7 +361,7 @@ class TaskExecutor:
             
             # Use existing data export functionality
             # This is a simplified implementation
-            from ..data import DataProcessor
+            from roseApp.data import DataProcessor
             
             processor = DataProcessor()
             

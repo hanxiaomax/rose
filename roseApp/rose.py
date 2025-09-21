@@ -20,7 +20,7 @@ from roseApp.cli.cache import app as cache_app
 
 from roseApp.cli.load import load as load_main
 from roseApp.cli.plugin import app as plugin_app
-from roseApp.cli.interactive.run import app as run_app
+from roseApp.interactive.run import app as run_app
 # from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
 # from roseApp.tui.tui import app as tui_app
 
@@ -75,7 +75,7 @@ def callback(
     
     # If no subcommand is provided, start interactive mode
     if ctx.invoked_subcommand is None:
-        from roseApp.cli.interactive.run import InteractiveRunner
+        from roseApp.interactive.run import InteractiveRunner
         runner = InteractiveRunner()
         runner.run_interactive()
     

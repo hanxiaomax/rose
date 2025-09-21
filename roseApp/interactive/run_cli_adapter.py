@@ -11,7 +11,7 @@ from rich.console import Console
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from ...core.util import get_logger
+from roseApp.core.util import get_logger
 from .interactive_ui import InteractiveUI
 
 logger = get_logger("run_cli_adapter")
@@ -106,7 +106,7 @@ class CLIAdapter:
     
     def interactive_load(self, args: List[str]) -> Dict[str, Any]:
         """Interactive version of load command"""
-        from ..load import load as load_command
+        from roseApp.cli.load import load as load_command
         
         # Collect parameters interactively
         params = self._collect_load_parameters(args)
@@ -320,7 +320,7 @@ class CLIAdapter:
             return []
         
         # Use fuzzy search
-        from ..util import ask_topics_with_fuzzy
+        from roseApp.util import ask_topics_with_fuzzy
         return ask_topics_with_fuzzy(
             console=self.console,
             topics=sorted(list(all_topics)),
@@ -337,7 +337,7 @@ class CLIAdapter:
                 bag_info = self.runner.state.loaded_bags[bag_path]
                 topics = bag_info.get('topics', [])
                 if topics:
-                    from ..util import ask_topics_with_fuzzy
+                    from roseApp.util import ask_topics_with_fuzzy
                     return ask_topics_with_fuzzy(
                         console=self.console,
                         topics=sorted(topics),
@@ -355,7 +355,7 @@ class CLIAdapter:
                     topics = [topic.name if hasattr(topic, 'name') else str(topic) 
                              for topic in bag_info.topics]
                     if topics:
-                        from ..util import ask_topics_with_fuzzy
+                        from roseApp.util import ask_topics_with_fuzzy
                         return ask_topics_with_fuzzy(
                             console=self.console,
                             topics=sorted(topics),
@@ -373,7 +373,7 @@ class CLIAdapter:
                     topics = [topic.name if hasattr(topic, 'name') else str(topic) 
                              for topic in bag_info.topics]
                     if topics:
-                        from ..util import ask_topics_with_fuzzy
+                        from roseApp.util import ask_topics_with_fuzzy
                         return ask_topics_with_fuzzy(
                             console=self.console,
                             topics=sorted(topics),
@@ -520,7 +520,7 @@ class CLIAdapter:
         else:
             bag_files = list(Path('.').glob('*.bag'))
             if not bag_files:
-                from ...ui.theme import get_color
+                from roseApp.ui.theme import get_color
                 self.console.print(f"[{get_color('warning')}]No bag files found in current directory[/{get_color('warning')}]")
                 return None
             
@@ -784,7 +784,7 @@ class CLIAdapter:
     def _cache_clear(self) -> Dict[str, Any]:
         """Clear cache interactively"""
         try:
-            from ..cache import cache_clear as cache_clear_cmd
+            from roseApp.cli.cache import cache_clear as cache_clear_cmd
             
             # Ask what to clear
             clear_type = inquirer.select(
@@ -840,7 +840,7 @@ class CLIAdapter:
     def _cache_export(self) -> Dict[str, Any]:
         """Export cache data"""
         try:
-            from ..cache import cache_export as cache_export_cmd
+            from roseApp.cli.cache import cache_export as cache_export_cmd
             from pathlib import Path
             
             # Get export parameters
@@ -992,7 +992,7 @@ class CLIAdapter:
     def _plugin_list(self) -> Dict[str, Any]:
         """List available plugins"""
         try:
-            from ..plugin import list_plugins as plugin_list_cmd
+            from roseApp.cli.plugin import list_plugins as plugin_list_cmd
             plugin_list_cmd()
             return {'success': True, 'message': 'Plugin list displayed'}
         except Exception as e:
@@ -1001,7 +1001,7 @@ class CLIAdapter:
     def _plugin_info(self, args: List[str]) -> Dict[str, Any]:
         """Show plugin info"""
         try:
-            from ..plugin import info as plugin_info_cmd
+            from roseApp.cli.plugin import info as plugin_info_cmd
             
             if not args:
                 # Interactive plugin selection
@@ -1020,7 +1020,7 @@ class CLIAdapter:
     def _plugin_run(self, args: List[str]) -> Dict[str, Any]:
         """Run plugin interactively"""
         try:
-            from ..plugin import run as plugin_run_cmd
+            from roseApp.cli.plugin import run as plugin_run_cmd
             
             if not args:
                 plugin_name = inquirer.text(
@@ -1046,7 +1046,7 @@ class CLIAdapter:
     def _plugin_enable(self, args: List[str]) -> Dict[str, Any]:
         """Enable a plugin"""
         try:
-            from ..plugin import enable as plugin_enable_cmd
+            from roseApp.cli.plugin import enable as plugin_enable_cmd
             
             if not args:
                 plugin_name = inquirer.text(
@@ -1064,7 +1064,7 @@ class CLIAdapter:
     def _plugin_disable(self, args: List[str]) -> Dict[str, Any]:
         """Disable a plugin"""
         try:
-            from ..plugin import disable as plugin_disable_cmd
+            from roseApp.cli.plugin import disable as plugin_disable_cmd
             
             if not args:
                 plugin_name = inquirer.text(
@@ -1082,7 +1082,7 @@ class CLIAdapter:
     def _plugin_reload(self, args: List[str]) -> Dict[str, Any]:
         """Reload plugins"""
         try:
-            from ..plugin import reload as plugin_reload_cmd
+            from roseApp.cli.plugin import reload as plugin_reload_cmd
             plugin_reload_cmd()
             return {'success': True, 'message': 'Plugins reloaded'}
         except Exception as e:
@@ -1091,7 +1091,7 @@ class CLIAdapter:
     def _plugin_install(self, args: List[str]) -> Dict[str, Any]:
         """Install a plugin"""
         try:
-            from ..plugin import install as plugin_install_cmd
+            from roseApp.cli.plugin import install as plugin_install_cmd
             
             if not args:
                 plugin_path = inquirer.text(
@@ -1109,7 +1109,7 @@ class CLIAdapter:
     def _plugin_uninstall(self, args: List[str]) -> Dict[str, Any]:
         """Uninstall a plugin"""
         try:
-            from ..plugin import uninstall as plugin_uninstall_cmd
+            from roseApp.cli.plugin import uninstall as plugin_uninstall_cmd
             
             if not args:
                 plugin_name = inquirer.text(
@@ -1127,7 +1127,7 @@ class CLIAdapter:
     def _plugin_create(self, args: List[str]) -> Dict[str, Any]:
         """Create a new plugin"""
         try:
-            from ..plugin import create as plugin_create_cmd
+            from roseApp.cli.plugin import create as plugin_create_cmd
             
             if not args:
                 plugin_name = inquirer.text(

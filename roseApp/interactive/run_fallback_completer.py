@@ -8,7 +8,7 @@ from pathlib import Path
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.completion import WordCompleter
 
-from ...core.util import get_logger
+from roseApp.core.util import get_logger
 
 logger = get_logger("run_fallback_completer")
 

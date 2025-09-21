@@ -16,7 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.live import Live
 from rich.layout import Layout
 
-from ...ui.theme import get_color
+from roseApp.ui.theme import get_color
 
 
 @dataclass

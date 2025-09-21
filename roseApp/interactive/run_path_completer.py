@@ -13,7 +13,7 @@ from prompt_toolkit.document import Document
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from ...core.util import get_logger
+from roseApp.core.util import get_logger
 
 logger = get_logger("run_path_completer")
 
@@ -476,7 +476,7 @@ class EnhancedRoseCompleter(Completer):
     def _get_cached_bags(self):
         """Get bags from cache directly (more reliable than runner state)"""
         try:
-            from ...core.cache import get_cache
+            from roseApp.core.cache import get_cache
             cache = get_cache()
             
             # Get all cache files

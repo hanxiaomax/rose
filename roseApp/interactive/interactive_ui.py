@@ -12,8 +12,8 @@ from rich.table import Table
 from rich.tree import Tree
 from pathlib import Path
 
-from ...ui.theme import get_color
-from ...ui.common_ui import Message as BaseMessage
+from roseApp.ui.theme import get_color
+from roseApp.ui.common_ui import Message as BaseMessage
 
 
 class InteractiveMessage:

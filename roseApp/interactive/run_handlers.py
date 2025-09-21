@@ -17,10 +17,10 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 import typer
 
-from ...ui.theme import get_color
-from ...ui.common_ui import Message
-from ...core.util import get_logger
-from ..util import check_and_load_bag_cache
+from roseApp.ui.theme import get_color
+from roseApp.ui.common_ui import Message
+from roseApp.core.util import get_logger
+from roseApp.cli.util import check_and_load_bag_cache
 from .run_cli_adapter import CLIAdapter
 from .interactive_ui import InteractiveUI
 
@@ -835,7 +835,7 @@ All operations use interactive prompts for parameter collection.
         topics_list = sorted(list(all_topics))
         
         # Use fuzzy selector
-        from ..util import ask_topics_with_fuzzy
+        from roseApp.util import ask_topics_with_fuzzy
         
         selected_topics = ask_topics_with_fuzzy(
             console=self.console,

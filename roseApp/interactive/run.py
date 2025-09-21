@@ -29,13 +29,13 @@ from prompt_toolkit.shortcuts import confirm
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from ...core.parser import create_parser
-from ...core.cache import create_bag_cache_manager
-from ...core.directories import get_rose_directories
-from ...core.util import get_logger
-from ...ui.common_ui import Message
-from ...ui.theme import get_color
-from ..util import filter_topics, check_and_load_bag_cache
+from roseApp.core.parser import create_parser
+from roseApp.core.cache import create_bag_cache_manager
+from roseApp.core.directories import get_rose_directories
+from roseApp.core.util import get_logger
+from roseApp.ui.common_ui import Message
+from roseApp.ui.theme import get_color
+from roseApp.cli.util import filter_topics, check_and_load_bag_cache
 from .interactive_ui import InteractiveUI
 from .core import InteractiveRunner as NewInteractiveRunner
 
@@ -313,7 +313,7 @@ class InteractiveRunner:
     def _show_welcome(self):
         """Show welcome message and interface overview"""
         # Display the beautiful ROSE banner first
-        from ..util import build_banner
+        from roseApp.cli.util import build_banner
         self.console.print(build_banner())
         
         # Define command categories and descriptions
@@ -426,7 +426,7 @@ class InteractiveRunner:
     def _get_cached_bags(self):
         """Get cached bags (same logic as in completer)"""
         try:
-            from ...core.cache import get_cache
+            from roseApp.core.cache import get_cache
             cache = get_cache()
             
             cached_bags = []
