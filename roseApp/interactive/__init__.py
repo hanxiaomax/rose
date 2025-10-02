@@ -6,8 +6,8 @@ This module contains all interactive command-line interface components,
 including the main interactive runner, CLI adapters, handlers, and utilities.
 """
 
-from .run import app as run_app
+from .core import InteractiveRunner
 
-__all__ = ['run_app']
+__all__ = ['InteractiveRunner']
 
 

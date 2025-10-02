@@ -23,16 +23,25 @@ class ConfigurationCommand(BaseCommand):
         This is an internal command that opens the configuration file
         """
         try:
-            config_file = self._find_config_file()
+            # Look for existing config files using the same logic as run_handlers.py
+            rose_dir = Path.home() / ".rose"
+            config_files = [
+                rose_dir / "config.json",
+                rose_dir / "config.yaml", 
+                rose_dir / "config.yml"
+            ]
             
-            if not config_file:
-                return {
-                    'success': False,
-                    'error': 'Rose configuration file not found',
-                    'stdout': '',
-                    'stderr': 'No configuration file found',
-                    'returncode': 1
-                }
+            # Use the first existing config file
+            config_file = None
+            for cf in config_files:
+                if cf.exists():
+                    config_file = cf
+                    break
+            
+            # If no config file exists, create default JSON config
+            if config_file is None:
+                config_file = rose_dir / "config.json"
+                self._create_default_config(config_file)
             
             editor = self._find_editor()
             
@@ -65,70 +74,35 @@ class ConfigurationCommand(BaseCommand):
                 'returncode': -1
             }
     
-    def _find_config_file(self) -> Path:
-        """Find Rose configuration file"""
-        # Look for configuration files in common locations
-        possible_configs = [
-            Path.cwd() / "rose.conf",
-            Path.cwd() / "rose.config",
-            Path.cwd() / ".rose.conf",
-            Path.cwd() / "config" / "rose.conf",
-            Path.home() / ".rose" / "config",
-            Path.home() / ".config" / "rose" / "config"
-        ]
-        
-        for config_path in possible_configs:
-            if config_path.exists():
-                return config_path
-        
-        # If no config file exists, create a default one
-        default_config = Path.cwd() / "rose.conf"
-        self._create_default_config(default_config)
-        return default_config
     
     def _create_default_config(self, config_path: Path):
         """Create a default configuration file"""
-        default_content = """# Rose Configuration File
-# This file contains configuration settings for Rose ROS bag processing tool
-
-[general]
-# Default compression for bag files (none, lz4, bz2)
-compression = lz4
-
-# Number of parallel workers for processing
-workers = 4
-
-# Default output directory for exports
-output_dir = ./output
-
-[cache]
-# Enable caching for bag metadata
-enabled = true
-
-# Cache directory (relative to current working directory)
-cache_dir = .rose_cache
-
-# Cache expiration time in seconds (0 = never expire)
-expire_time = 0
-
-[ui]
-# Default theme for interactive mode (cassette-walkman, cassette-dark)
-theme = cassette-walkman
-
-# Enable color output
-color = true
-
-[plugins]
-# Plugin directory
-plugin_dir = ./plugins
-
-# Enable plugin system
-enabled = true
-"""
+        import json
+        
+        # Ensure .rose directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        default_config = {
+            "cache": {
+                "max_size_gb": 10,
+                "auto_cleanup": True
+            },
+            "processing": {
+                "default_workers": 4,
+                "compression": "lz4"
+            },
+            "ui": {
+                "theme": "default",
+                "show_progress": True
+            },
+            "paths": {
+                "default_output_dir": "~/rose_output"
+            }
+        }
         
         try:
             with open(config_path, 'w') as f:
-                f.write(default_content)
+                json.dump(default_config, f, indent=2)
             self.result_formatter.format_info(f"Created default configuration file: {config_path}")
         except Exception as e:
             self.result_formatter.format_warning(f"Could not create config file: {e}")
@@ -139,8 +113,8 @@ enabled = true
         if 'EDITOR' in os.environ:
             return os.environ['EDITOR']
         
-        # Try common editors in order of preference
-        editors = ['code', 'nano', 'vim', 'vi', 'gedit', 'notepad']
+        # Try common editors in order of preference (vim first as per original implementation)
+        editors = ['vim', 'vi', 'nano', 'code', 'gedit', 'notepad']
         
         for editor in editors:
             try:

@@ -27,7 +27,6 @@ def inspect(
     sort_by: str = typer.Option("size", "--sort", help="Sort topics by (name, count, frequency, size)"),
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
 
-    interactive: bool = typer.Option(False, "--interactive", "-i", help="Enter interactive TUI mode"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
@@ -39,16 +38,9 @@ def inspect(
     If the bag file is not in cache, you will be prompted to load it automatically.
     This command uses cached bag analysis for fast inspection.
     """
-    # Handle interactive mode
-    if interactive:
-        from ..ui.inspect_tui import run_inspect_tui
-        bag_files = [str(bag_path)] if bag_path else []
-        run_inspect_tui(bag_files)
-        return
-    
     # Validate bag file exists for non-interactive mode
     if not bag_path:
-        Message.error("Bag file path is required for non-interactive mode", ui.console)
+        Message.error("Bag file path is required", ui.console)
         raise typer.Exit(1)
     
     # Use CommonUI for unified output management

@@ -4,6 +4,8 @@ Topics Command - Internal topic management
 """
 
 from typing import Dict, Any, List
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 from .base_command import BaseCommand
 
 
@@ -26,7 +28,21 @@ class TopicsCommand(BaseCommand):
         try:
             args = interactive_args.strip().split() if interactive_args.strip() else []
             
-            if not args or args[0] == "list":
+            # Check if bags are loaded first
+            if not self.runner_state or not self.runner_state.current_bags:
+                self.result_formatter.format_warning("No bags loaded. Use /load to add bag files first.")
+                return {
+                    'success': False,
+                    'error': 'No bags loaded',
+                    'stdout': '',
+                    'stderr': '',
+                    'returncode': 1
+                }
+            
+            if not args:
+                # No arguments - show interactive interface
+                self._show_topics_interactive()
+            elif args[0] == "list":
                 self._show_topics_list()
             elif args[0] == "select":
                 self._select_topics(args[1:])
@@ -54,6 +70,47 @@ class TopicsCommand(BaseCommand):
                 'stderr': str(e),
                 'returncode': -1
             }
+    
+    def _show_topics_interactive(self):
+        """Interactive topic management interface"""
+        # Get all available topics
+        all_topics = set()
+        for bag_path in self.runner_state.current_bags:
+            if bag_path in (self.runner_state.loaded_bags or {}):
+                bag_info = self.runner_state.loaded_bags[bag_path]
+                bag_topics = bag_info.get('topics', [])
+                all_topics.update(bag_topics)
+        
+        if not all_topics:
+            self.result_formatter.format_warning("No topics available. Load bags first.")
+            return
+        
+        topics_list = sorted(list(all_topics))
+        
+        action = inquirer.select(
+            message="Topic Operations:",
+            choices=[
+                Choice(value="select", name="1. Select topics for operations"),
+                Choice(value="show", name="2. Show selected topics"),
+                Choice(value="clear", name="3. Clear topic selection"),
+                Choice(value="back", name="4. Back")
+            ]
+        ).execute()
+        
+        if action == "select":
+            selected = self._select_topics_for_operation("selection", topics_list)
+            if selected:
+                self.result_formatter.format_info(f"Selected {len(selected)} topics")
+        elif action == "show":
+            if self.runner_state.selected_topics:
+                self.result_formatter.format_section_header("Selected Topics")
+                for topic in self.runner_state.selected_topics:
+                    self.result_formatter.console.print(f"  • {topic}")
+            else:
+                self.result_formatter.format_warning("No topics selected")
+        elif action == "clear":
+            self.runner_state.selected_topics.clear()
+            self.result_formatter.format_info("Cleared topic selection")
     
     def _show_topics_list(self):
         """Display list of selected topics"""
@@ -199,3 +256,36 @@ Operations:
   clear    - Clear all selected topics
 
 This is an internal command for topic selection management."""
+    
+    def _select_topics_for_operation(self, operation: str, topics_list: List[str]) -> List[str]:
+        """Interactive topic selection for operations using fuzzy search"""
+        try:
+            # Try to use fuzzy selector from util
+            from ...util import ask_topics_with_fuzzy
+            
+            selected_topics = ask_topics_with_fuzzy(
+                console=self.result_formatter.console,
+                topics=topics_list,
+                message=f"Select topics for {operation}:",
+                require_selection=True,
+                show_instructions=True
+            )
+            
+            if selected_topics:
+                self.runner_state.selected_topics = selected_topics
+            
+            return selected_topics
+            
+        except ImportError:
+            # Fallback to simple multi-select
+            selected_topics = inquirer.checkbox(
+                message=f"Select topics for {operation}:",
+                choices=topics_list,
+                validate=lambda result: len(result) > 0,
+                invalid_message="At least one topic must be selected"
+            ).execute()
+            
+            if selected_topics:
+                self.runner_state.selected_topics = selected_topics
+            
+            return selected_topics

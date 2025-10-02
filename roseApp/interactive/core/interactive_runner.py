@@ -33,6 +33,7 @@ from ..commands.exit_command import ExitCommand
 from ...core.directories import get_rose_directories
 from ...core.util import get_logger
 from roseApp.cli.util import build_banner
+from ..interactive_ui import InteractiveUI
 
 logger = get_logger("interactive_runner")
 
@@ -70,6 +71,7 @@ class InteractiveRunner:
         self.cli_executor = CLIExecutor()
         self.path_completer = PathCompleter()
         self.result_formatter = ResultFormatter(self.console)
+        self.ui = InteractiveUI(self.console)
         
         # Command router and registry
         self.router = CommandRouter()
@@ -89,8 +91,14 @@ class InteractiveRunner:
         self.router.register_command('/cache', CacheCommand(self.cli_executor))
         self.router.register_command('/plugin', PluginCommand(self.cli_executor))
         
-        # Internal commands
-        self.router.register_command('/status', StatusCommand(self.cli_executor, self.state))
+        # Internal commands (pass additional context)
+        self.router.register_command('/status', StatusCommand(
+            self.cli_executor, 
+            self.state, 
+            self.rose_dirs, 
+            getattr(self, 'cache_manager', None), 
+            getattr(self, 'running_tasks', {})
+        ))
         self.router.register_command('/bags', BagsCommand(self.cli_executor, self.state))
         self.router.register_command('/topics', TopicsCommand(self.cli_executor, self.state))
         self.router.register_command('/configuration', ConfigurationCommand(self.cli_executor))
@@ -160,14 +168,14 @@ class InteractiveRunner:
                     self._dispatch_command(user_input)
                     
                 except KeyboardInterrupt:
-                    self.result_formatter.format_warning("Use /exit to quit")
+                    self.ui.msg.warning("Use /exit to quit")
                     continue
                 except EOFError:
-                    self.result_formatter.format_info("Goodbye!")
+                    self.ui.msg.info("Goodbye!")
                     break
         
         except Exception as e:
-            self.result_formatter.format_error("", f"Unexpected error: {e}")
+            self.ui.msg.error(f"Unexpected error: {e}")
             logger.error(f"Interactive runner error: {e}", exc_info=True)
         finally:
             self._cleanup()
@@ -210,33 +218,10 @@ class InteractiveRunner:
             "Background task execution"
         ]
         
-        # Show welcome with command descriptions
-        self._show_welcome_display("Interactive Environment", command_descriptions, features)
-        self.result_formatter.format_muted("Try: '/help' for detailed documentation")
+        # Show welcome with command descriptions using InteractiveUI
+        self.ui.show_welcome("Interactive Environment", command_descriptions, features)
+        self.ui.msg.muted("Try: '/help' for detailed documentation")
     
-    def _show_welcome_display(self, title: str, commands: Dict[str, str], features: list):
-        """Display welcome information"""
-        self.result_formatter.format_section_header(f"Rose {title}")
-        
-        # Show commands by category
-        categories = {
-            "Core Operations": ["/load", "/extract", "/inspect", "/compress"],
-            "Data Operations": ["/data", "/cache", "/plugin"],
-            "Session Management": ["/status", "/bags", "/topics", "/configuration"],
-            "System Operations": ["/clear", "/help", "/exit"]
-        }
-        
-        for category, cmd_list in categories.items():
-            self.console.print(f"\n[bold cyan]{category}:[/bold cyan]")
-            for cmd in cmd_list:
-                if cmd in commands:
-                    self.result_formatter.format_command_help(cmd, commands[cmd])
-        
-        # Show features
-        if features:
-            self.result_formatter.format_section_header("Features")
-            for feature in features:
-                self.console.print(f"  • {feature}")
     
     def _get_prompt_text(self) -> str:
         """Generate context-aware prompt"""
@@ -284,15 +269,15 @@ class InteractiveRunner:
                     # Exit command raises EOFError to exit the loop - this is expected
                     raise
                 except Exception as e:
-                    self.result_formatter.format_error("", f"Command error: {e}")
+                    self.ui.msg.error(f"Command error: {e}")
                     logger.error(f"Command {command_prefix} error: {e}", exc_info=True)
         else:
             # Handle non-slash commands with helpful message
             if not resolved_input.startswith('/'):
                 self._handle_non_slash_input(resolved_input)
             else:
-                self.result_formatter.format_warning(f"Unknown command: {resolved_input}")
-                self.result_formatter.format_info("Use '/help' to see available commands")
+                self.ui.msg.warning(f"Unknown command: {resolved_input}")
+                self.ui.msg.info("Use '/help' to see available commands")
     
     def _show_command_result(self, command: str, result: Dict[str, Any]):
         """Display command execution result"""
@@ -302,27 +287,28 @@ class InteractiveRunner:
             if result.get('stdout'):
                 self.console.print(result['stdout'])
             elif result.get('message'):
-                self.result_formatter.format_success(result['message'])
+                self.ui.msg.success(result['message'])
         else:
             error_msg = result.get('error', 'Unknown error')
-            self.result_formatter.format_error(result.get('stderr', ''), error_msg)
+            self.ui.msg.error(error_msg)
     
     def _handle_non_slash_input(self, user_input: str):
         """Handle non-slash input with helpful guidance"""
-        self.result_formatter.format_warning(f"'{user_input}' is not recognized as a command.")
-        self.result_formatter.format_info("Rose Interactive Environment only supports commands starting with '/'")
+        self.ui.msg.warning(f"'{user_input}' is not recognized as a command.")
+        self.ui.msg.info("Rose Interactive Environment only supports commands starting with '/'")
         
         # Show some basic commands
-        self.console.print("\n[bold]Try these commands:[/bold]")
-        self.result_formatter.format_command_help("/help", "Show all available commands")
-        self.result_formatter.format_command_help("/load", "Load bag files")
-        self.result_formatter.format_command_help("/status", "Check system status")
+        from ...ui.theme import get_color
+        self.console.print(f"\n[bold {get_color('primary')}]Try these commands:[/bold {get_color('primary')}]")
+        self.ui.msg.command_help("/help", "Show all available commands")
+        self.ui.msg.command_help("/load", "Load bag files")
+        self.ui.msg.command_help("/status", "Check system status")
     
     def _handle_shell_command(self, command: str):
         """Handle native shell command execution"""
         if not command:
-            self.result_formatter.format_warning("Usage: !<command>")
-            self.result_formatter.format_muted("Example: !ls -la")
+            self.ui.msg.warning("Usage: !<command>")
+            self.ui.msg.muted("Example: !ls -la")
             return
         
         try:
@@ -345,14 +331,14 @@ class InteractiveRunner:
                 self.console.print(result.stdout.rstrip())
             
             if result.stderr:
-                self.result_formatter.format_error("", result.stderr.rstrip())
+                self.ui.msg.error(result.stderr.rstrip())
             
             # Show exit code if non-zero
             if result.returncode != 0:
-                self.result_formatter.format_error("", f"Command exited with code {result.returncode}")
+                self.ui.msg.error(f"Command exited with code {result.returncode}")
                 
         except Exception as e:
-            self.result_formatter.format_error("", f"Shell command error: {e}")
+            self.ui.msg.error(f"Shell command error: {e}")
             logger.error(f"Shell command error: {e}", exc_info=True)
     
     def _cleanup(self):

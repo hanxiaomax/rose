@@ -21,7 +21,7 @@ from roseApp.ui.theme import get_color
 from roseApp.ui.common_ui import Message
 from roseApp.core.util import get_logger
 from roseApp.cli.util import check_and_load_bag_cache
-from .run_cli_adapter import CLIAdapter
+# CLIAdapter removed - commands now handled directly
 from .interactive_ui import InteractiveUI
 
 logger = get_logger("run_handlers")
@@ -35,7 +35,7 @@ class RunCommandHandlers:
         self.console = runner.console
         self.ui = runner.ui  # Use the UI from runner
         self.state = runner.state
-        self.cli_adapter = CLIAdapter(runner)
+        # CLIAdapter removed - commands now handled directly
         self.cache_manager = runner.cache_manager
         self.task_queue = runner.task_queue
         self.running_tasks = runner.running_tasks
@@ -61,37 +61,23 @@ class RunCommandHandlers:
         op_type = parts[0]
         
         if op_type == "load":
-            result = self.cli_adapter.interactive_load(parts[1:])
-            self._show_operation_result('load', result)
+            self._run_load_operation(parts[1:])
         elif op_type == "extract":
-            result = self.cli_adapter.interactive_extract(parts[1:])
-            self._show_operation_result('extract', result)
+            self._run_extract_operation(parts[1:])
         elif op_type == "inspect":
-            result = self.cli_adapter.interactive_inspect(parts[1:])
-            self._show_operation_result('inspect', result)
+            self._run_inspect_operation(parts[1:])
         elif op_type == "compress":
-            result = self.cli_adapter.interactive_compress(parts[1:])
-            self._show_operation_result('compress', result)
+            self._run_compress_operation(parts[1:])
         elif op_type == "data":
-            result = self.cli_adapter.interactive_data(parts[1:])
-            self._show_operation_result('data', result)
+            self._run_data_operation(parts[1:])
         elif op_type == "cache":
-            result = self.cli_adapter.interactive_cache(parts[1:])
-            self._show_operation_result('cache', result)
+            self._run_cache_operation(parts[1:])
         elif op_type == "plugin":
-            result = self.cli_adapter.interactive_plugin(parts[1:])
-            self._show_operation_result('plugin', result)
+            self._run_plugin_operation(parts[1:])
         else:
             self.ui.msg.error(f"Unknown operation: {op_type}")
             self._show_run_help()
     
-    def _show_operation_result(self, operation: str, result: Dict[str, Any]):
-        """Display operation result with appropriate formatting"""
-        success = result.get('success', False)
-        message = result.get('message', f'{operation.title()} completed successfully')
-        error = result.get('error', 'Unknown error')
-        
-        self.ui.msg.operation_result(operation, success, message, error)
     
     
     def handle_status(self, args: str):
@@ -327,6 +313,152 @@ class RunCommandHandlers:
         ))
         
         self.console.print(f"[cyan]🔄 Started exporting data for {len(topics)} topics (task: {task_id})[/cyan]")
+    
+    def _run_cache_operation(self, args: List[str]):
+        """Handle cache operation"""
+        if not args:
+            self._show_cache_menu()
+        else:
+            subcommand = args[0]
+            if subcommand == "clear":
+                self._cache_clear()
+            elif subcommand == "info":
+                self._cache_info()
+            elif subcommand == "list":
+                self._cache_list()
+            else:
+                self._show_cache_menu()
+    
+    def _run_plugin_operation(self, args: List[str]):
+        """Handle plugin operation"""
+        if not args:
+            self._show_plugin_menu()
+        else:
+            subcommand = args[0]
+            if subcommand == "list":
+                self._plugin_list()
+            elif subcommand == "info":
+                self._plugin_info(args[1:])
+            elif subcommand == "run":
+                self._plugin_run(args[1:])
+            else:
+                self._show_plugin_menu()
+    
+    def _show_cache_menu(self):
+        """Show cache management menu"""
+        choices = [
+            Choice(value='info', name='ℹ️  Info - Show cache information'),
+            Choice(value='list', name='📋 List - List cached bags'),
+            Choice(value='clear', name='🗑️  Clear - Clear cache')
+        ]
+        
+        selected = inquirer.select(
+            message="Select cache operation:",
+            choices=choices
+        ).execute()
+        
+        if selected:
+            getattr(self, f'_cache_{selected}')()
+    
+    def _show_plugin_menu(self):
+        """Show plugin management menu"""
+        choices = [
+            Choice(value='list', name='📋 List - List available plugins'),
+            Choice(value='info', name='ℹ️  Info - Show plugin information'),
+            Choice(value='run', name='▶️  Run - Execute a plugin')
+        ]
+        
+        selected = inquirer.select(
+            message="Select plugin operation:",
+            choices=choices
+        ).execute()
+        
+        if selected == 'list':
+            self._plugin_list()
+        elif selected == 'info':
+            self._plugin_info([])
+        elif selected == 'run':
+            self._plugin_run([])
+    
+    def _cache_clear(self):
+        """Clear cache interactively"""
+        try:
+            from roseApp.cli.cache import clear as cache_clear_cmd
+            
+            if inquirer.confirm("Clear all cache data?", default=False).execute():
+                cache_clear_cmd(yes=True)
+                self.ui.msg.success("Cache cleared")
+            else:
+                self.ui.msg.warning("Operation cancelled")
+        except Exception as e:
+            self.ui.msg.error(f"Cache clear error: {e}")
+    
+    def _cache_info(self):
+        """Show cache info"""
+        try:
+            from roseApp.cli.cache import info as cache_info_cmd
+            cache_info_cmd()
+        except Exception as e:
+            self.ui.msg.error(f"Cache info error: {e}")
+    
+    def _cache_list(self):
+        """List cached bags"""
+        try:
+            from roseApp.cli.cache import list_cache as cache_list_cmd
+            cache_list_cmd()
+        except Exception as e:
+            self.ui.msg.error(f"Cache list error: {e}")
+    
+    def _plugin_list(self):
+        """List available plugins"""
+        try:
+            from roseApp.cli.plugin import list_plugins as plugin_list_cmd
+            plugin_list_cmd()
+        except Exception as e:
+            self.ui.msg.error(f"Plugin list error: {e}")
+    
+    def _plugin_info(self, args: List[str]):
+        """Show plugin info"""
+        try:
+            from roseApp.cli.plugin import info as plugin_info_cmd
+            
+            if not args:
+                plugin_name = inquirer.text(
+                    message="Enter plugin name for info:"
+                ).execute()
+                if not plugin_name:
+                    self.ui.msg.warning("No plugin specified")
+                    return
+                args = [plugin_name]
+            
+            plugin_info_cmd(plugin_name=args[0])
+        except Exception as e:
+            self.ui.msg.error(f"Plugin info error: {e}")
+    
+    def _plugin_run(self, args: List[str]):
+        """Run plugin interactively"""
+        try:
+            from roseApp.cli.plugin import run as plugin_run_cmd
+            
+            if not args:
+                plugin_name = inquirer.text(
+                    message="Enter plugin name to run:"
+                ).execute()
+                if not plugin_name:
+                    self.ui.msg.warning("No plugin specified")
+                    return
+                args = [plugin_name]
+            
+            # For simplicity, run with current bags if available
+            bag_files = self.state.current_bags if self.state.current_bags else []
+            
+            plugin_run_cmd(
+                plugin_name=args[0],
+                input=bag_files,
+                verbose=False
+            )
+        except Exception as e:
+            self.ui.msg.error(f"Plugin run error: {e}")
     
     # =============================================================================
     # Helper Methods
