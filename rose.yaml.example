@@ -1,0 +1,187 @@
+# Rose ROS Bag Processing Tool - Configuration File
+# 
+# This is an example configuration file. Copy it to one of the following locations:
+#   1. ./rose.yaml (project directory) - Highest priority
+#   2. ~/.config/rose/config.yaml (user config)
+#   3. /etc/rose/config.yaml (system config)
+#
+# You can also override any setting with environment variables:
+#   ROSE_<SETTING_NAME>=value (e.g., ROSE_PARALLEL_WORKERS=8)
+#
+# Configuration Hierarchy (highest to lowest priority):
+#   1. Command-line arguments
+#   2. Environment variables
+#   3. Project config (./rose.yaml)
+#   4. User config (~/.config/rose/config.yaml)
+#   5. System config (/etc/rose/config.yaml)
+#   6. Built-in defaults
+
+# ==============================================================================
+# Performance Settings
+# ==============================================================================
+
+# Number of parallel workers for bag processing
+# Default: CPU count - 2 (minimum 1)
+parallel_workers: 4
+
+# Cache time-to-live in seconds (300 = 5 minutes)
+# Cached bag analysis will expire after this time
+cache_ttl_seconds: 300
+
+# Memory limit for message buffering in MB
+# Used during extraction to prevent OOM errors
+memory_limit_mb: 512
+
+# ==============================================================================
+# Default Behaviors
+# ==============================================================================
+
+# Enable verbose output by default
+# Can be overridden with --verbose flag
+verbose_default: false
+
+# Build pandas DataFrame index by default during load
+# Enables data analysis commands but takes longer
+build_index_default: false
+
+# Automatically cache loaded bags
+# If false, bags won't be cached unless explicitly requested
+auto_cache_default: true
+
+# Default compression type for extracted bags
+# Options: none, bz2, lz4
+compression_default: none
+
+# ==============================================================================
+# File and Directory Settings
+# ==============================================================================
+
+# Default output directory for extracted bags
+# Relative to current working directory
+output_directory: "output"
+
+# Temporary directory for intermediate files
+# Leave empty to use system temp directory
+temp_directory: ""
+
+# Cache directory for bag analysis
+# Leave empty to use default (~/.cache/rose)
+cache_directory: ""
+
+# ==============================================================================
+# Feature Flags
+# ==============================================================================
+
+# Enable plugin system
+# If false, all plugins will be disabled
+enable_plugins: true
+
+# Enable analytics and telemetry
+# Currently not implemented
+enable_analytics: false
+
+# Enable experimental features
+# May include unstable functionality
+enable_experimental: false
+
+# ==============================================================================
+# Logging Configuration
+# ==============================================================================
+
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level: "INFO"
+
+# Write logs to file
+# If false, logs only go to console
+log_to_file: true
+
+# Log file directory
+# Leave empty to use default (./logs)
+log_directory: ""
+
+# Maximum log file size in MB before rotation
+log_max_size_mb: 10
+
+# Number of log files to keep
+log_backup_count: 3
+
+# ==============================================================================
+# UI and Theme Settings
+# ==============================================================================
+
+# Default theme: cassette-walkman (light) or cassette-dark (dark)
+theme: "cassette-walkman"
+
+# Enable colored output
+# If false, plain text will be used
+enable_colors: true
+
+# Progress bar style
+# Options: bars, spinner, simple
+progress_style: "bars"
+
+# ==============================================================================
+# Plugin Settings
+# ==============================================================================
+
+# Plugin discovery paths
+# Directories to search for plugins (comma-separated)
+plugin_paths:
+  - "~/.rose/plugins"
+  - "./plugins"
+
+# Disabled plugins
+# List plugin names to disable
+disabled_plugins: []
+
+# ==============================================================================
+# Advanced Settings
+# ==============================================================================
+
+# Rosbags parser options
+parser_options:
+  # Use message count as fallback for progress
+  use_message_count: true
+  
+  # Skip message deserialization if not needed
+  skip_deserialization: false
+
+# Cache options
+cache_options:
+  # Automatically clean expired cache entries
+  auto_cleanup: true
+  
+  # Maximum cache size in MB (0 = unlimited)
+  max_size_mb: 0
+
+# Extraction options
+extract_options:
+  # Show progress bars during extraction
+  show_progress: true
+  
+  # Validate extracted bags after creation
+  validate_output: true
+  
+  # Overwrite existing files without prompting
+  force_overwrite: false
+
+# ==============================================================================
+# Example Configurations
+# ==============================================================================
+
+# High-performance configuration (for powerful machines):
+# parallel_workers: 8
+# memory_limit_mb: 2048
+# cache_ttl_seconds: 600
+
+# Low-resource configuration (for limited hardware):
+# parallel_workers: 1
+# memory_limit_mb: 256
+# cache_ttl_seconds: 60
+
+# Developer configuration (for debugging):
+# verbose_default: true
+# log_level: "DEBUG"
+# enable_experimental: true
+
+

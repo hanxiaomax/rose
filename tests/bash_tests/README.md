@@ -1,26 +1,34 @@
-# Rose Command Test Suite
+# Rose Command Smoke Tests
 
-这个目录包含了 Rose 所有命令的 bash 测试脚本，用于验证各个命令和选项的功能。
+这个目录包含了 Rose 所有命令的简单烟雾测试脚本，用于快速验证基本功能。
 
 ## 测试文件
 
 | 测试文件 | 测试命令 | 描述 |
 |---------|---------|------|
-| `test_load.sh` | `rose load` | 测试 bag 文件加载功能 |
-| `test_extract.sh` | `rose extract` | 测试主题提取功能 |
-| `test_compress.sh` | `rose compress` | 测试 bag 文件压缩功能 |
-| `test_inspect.sh` | `rose inspect` | 测试 bag 文件检查功能 |
-| `test_data.sh` | `rose data` | 测试数据操作命令 |
-| `test_cache.sh` | `rose cache` | 测试缓存管理功能 |
-| `test_plugin.sh` | `rose plugin` | 测试插件系统功能 |
+| `quick_test.sh` | 所有命令 | 快速烟雾测试 |
+| `test_load.sh` | `rose load` | 加载命令基本功能 |
+| `test_extract.sh` | `rose extract` | 提取命令基本功能 |
+| `test_compress.sh` | `rose compress` | 压缩命令基本功能 |
+| `test_inspect.sh` | `rose inspect` | 检查命令基本功能 |
+| `test_data.sh` | `rose data` | 数据命令基本功能 |
+| `test_cache.sh` | `rose cache` | 缓存命令基本功能 |
+| `test_plugin.sh` | `rose plugin` | 插件命令基本功能 |
 | `run_all_tests.sh` | - | 运行所有测试的主脚本 |
 
 ## 使用方法
 
-### 运行所有测试
+### 快速烟雾测试
 
 ```bash
 # 从 Rose 根目录运行
+cd /workspaces/rose
+bash tests/bash_tests/quick_test.sh
+```
+
+### 运行所有测试
+
+```bash
 cd /workspaces/rose
 bash tests/bash_tests/run_all_tests.sh
 ```
@@ -28,120 +36,76 @@ bash tests/bash_tests/run_all_tests.sh
 ### 运行单个测试
 
 ```bash
-# 运行特定命令的测试
 cd /workspaces/rose
 bash tests/bash_tests/test_load.sh
-bash tests/bash_tests/test_extract.sh
-# ... 其他测试文件
 ```
 
-## 测试内容
+## 测试特点
 
-每个测试脚本都会测试以下内容：
+### 简单直接
+- 只测试基本功能，不做复杂测试
+- 快速执行，适合CI/CD
+- 重点验证命令能正常启动和运行
 
-### 基本功能测试
+### 烟雾测试内容
 - 命令帮助信息显示
 - 基本命令执行
-- 各种选项组合
+- 错误处理验证
+- 核心选项测试
 
-### 错误处理测试
-- 无效参数处理
-- 不存在的文件处理
-- 权限错误处理
-
-### 选项组合测试
-- 单个选项使用
-- 多个选项组合使用
-- 边界情况测试
-
-## 测试数据
-
+### 测试数据
 所有测试使用 `roseApp/tests/demo3.bag` 作为输入文件。
+
+## 测试覆盖
+
+### load 命令 (已迁移到新系统)
+- 帮助显示
+- 基本加载
+- verbose, force, dry-run, build-index, workers 选项
+- 错误处理
+
+### 其他命令
+- 帮助显示
+- 基本功能验证
+- 简单错误处理测试
 
 ## 输出
 
-测试脚本会：
-- 显示彩色输出，便于识别成功/失败
-- 创建临时输出文件用于验证
-- 自动清理测试生成的文件
-- 提供详细的测试进度信息
+测试脚本特点：
+- 彩色输出，清晰显示成功/失败
+- 简洁的进度信息
+- 自动清理临时文件
+- 快速执行
 
-## 测试覆盖的命令选项
+## 适配当前系统
 
-### load 命令
-- `--verbose`, `--force`, `--dry-run`
-- `--build-index`, `--workers`
-- 文件模式匹配
+这些测试已经适配当前的CLI系统：
+- 支持新的错误处理系统
+- 支持配置管理系统
+- 兼容迁移后的命令结构
+- 简化测试逻辑，专注核心功能
 
-### extract 命令  
-- `--topics`, `--output`, `--compression`
-- `--reverse`, `--workers`, `--verbose`
-- `--dry-run`, `--yes`
+## 运行要求
 
-### compress 命令
-- `--compression` (lz4, bz2)
-- `--output`, `--workers`, `--verbose`
-- `--validate`, `--dry-run`, `--yes`
-
-### inspect 命令
-- `--topics`, `--show-fields`, `--sort`
-- `--reverse`, `--output`, `--verbose`
-- `--debug`
-
-### data 命令
-- `data info`: `--topic`, `--columns`, `--sample`
-- `data export`: `--topics`, `--output`, `--start-time`
-- `--end-time`, `--search`, `--include-index`
-- `--interactive`, `--yes`
-
-### cache 命令
-- `--content`, `--verbose`
-- `cache export`: `--output`
-- `cache clear`: `--yes`, 特定文件清理
-
-### plugin 命令
-- `list`: `--verbose`, `--enabled`, `--type`
-- `info`, `create`, `run`, `enable/disable`
-- `reload`, `install/uninstall`
-
-## 错误处理
-
-测试脚本包含以下错误处理：
-- 优雅处理不存在的文件
-- 测试无效参数的处理
-- 验证错误消息的适当性
-- 确保程序不会崩溃
-
-## 清理机制
-
-每个测试脚本都会：
-- 在开始前清理可能的残留文件
-- 在测试过程中创建必要的临时文件
-- 在结束时清理所有测试生成的文件
-
-## 注意事项
-
-1. 测试需要在 Rose 根目录下运行
+1. 在 Rose 根目录下运行
 2. 确保 `roseApp/tests/demo3.bag` 文件存在
-3. 某些测试可能需要一定的执行时间
-4. 插件测试会创建和删除临时插件
-5. 缓存测试会清理现有缓存数据
-
-## 扩展测试
-
-要添加新的测试：
-
-1. 创建新的 `test_<command>.sh` 文件
-2. 遵循现有测试的结构和风格
-3. 在 `run_all_tests.sh` 中添加新测试脚本
-4. 更新此 README 文件
+3. Python环境已正确配置
+4. 所需依赖已安装
 
 ## 故障排除
 
 如果测试失败：
 
-1. 检查 Rose 是否正确安装
-2. 确认测试 bag 文件存在
-3. 检查文件权限
-4. 查看详细的错误输出
-5. 运行单个测试脚本进行调试
+1. 检查CLI是否能正常启动：`python -m roseApp.rose --help`
+2. 确认测试bag文件存在
+3. 检查Python依赖是否完整
+4. 查看具体错误输出
+
+## 扩展测试
+
+要添加新测试：
+
+1. 保持简单直接的原则
+2. 只测试核心功能
+3. 遵循现有测试风格
+4. 更新此README文件

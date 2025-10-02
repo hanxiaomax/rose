@@ -124,7 +124,7 @@ class BagManager:
         else:
             self._parser = parser
             
-        self._processed_count = 0  # 添加处理计数器
+        self._processed_count = 0  # Add processing counter
         self.compression = CompressionType.NONE.value  # Default: no compression
 
     def __repr__(self) -> str:
@@ -188,7 +188,7 @@ class BagManager:
     def clear_bags(self) -> None:
         self.bags.clear()
         self.selected_topics.clear()
-        self.reset_processed_count()  # 清空时重置计数器
+        self.reset_processed_count()  # Reset counter when clearing
     
     @publish
     def select_topic(self, topic: str) -> None:
@@ -206,19 +206,19 @@ class BagManager:
         self.populate_selected_topics()
     
     def get_common_topics(self) -> Set[str]:
-        """获取所有bag文件共有的topics
+        """Get topics common to all bag files
         
         Returns:
-            Set[str]: 所有bag文件共有的topics
+            Set[str]: Topics common to all bag files
         """
         if not self.bags:
             return set()
         
-        # 获取第一个bag的topics作为起始点
+        # Get topics from the first bag as starting point
         first_bag = next(iter(self.bags.values()))
         common_topics = set(first_bag.info.get_topic_names())
         
-        # 与其他bag的topics取交集
+        # Intersect with topics from other bags
         for bag in list(self.bags.values())[1:]:
             bag_topics = set(bag.info.get_topic_names())
             common_topics = common_topics.intersection(bag_topics)
@@ -226,10 +226,10 @@ class BagManager:
         return common_topics
     
     def get_topic_summary(self) -> 'dict[str, int]':
-        """获取所有topics的统计信息
+        """Get statistical information for all topics
         
         Returns:
-            dict[str, int]: topic名称到出现次数的映射
+            dict[str, int]: Mapping from topic name to occurrence count
         """
         topic_counts = {}
         for bag in self.bags.values():
@@ -263,18 +263,18 @@ class BagManager:
         self.bags[bag_path].set_size_after_filter(size_after_filter)
     
     def get_processed_count(self) -> int:
-        """获取已处理的bag数量"""
+        """Get the number of processed bags"""
         return self._processed_count
     
     def reset_processed_count(self) -> None:
-        """重置已处理的bag数量"""
+        """Reset the number of processed bags"""
         self._processed_count = 0
     
     def set_compression_type(self, compression: str) -> None:
-        """设置压缩类型
+        """Set compression type
         
         Args:
-            compression: 压缩类型 ('none', 'bz2', 'lz4')
+            compression: Compression type ('none', 'bz2', 'lz4')
         """
         from roseApp.core.util import validate_compression_type
         
@@ -285,10 +285,10 @@ class BagManager:
         self.compression = compression
     
     def get_compression_type(self) -> str:
-        """获取当前压缩类型
+        """Get current compression type
         
         Returns:
-            str: 当前压缩类型
+            str: Current compression type
         """
         return self.compression
     
@@ -336,10 +336,10 @@ class BagManager:
             raise Exception(f"Error processing bag {bag_path}: {str(e)}")
     
     def get_parser_type(self) -> str:
-        """获取当前使用的parser类型
+        """Get the type of parser currently in use
         
         Returns:
-            str: parser类型名称 (always 'rosbags')
+            str: Parser type name (always 'rosbags')
         """
         parser_class = self._parser.__class__.__name__
         if parser_class == 'RosbagsBagParser':

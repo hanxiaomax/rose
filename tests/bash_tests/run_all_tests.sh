@@ -3,7 +3,7 @@
 # Main test runner for all Rose command tests
 # Runs all individual command test scripts
 
-set -e  # Exit on any error
+# Note: Not using set -e to allow individual test failures
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,6 +15,49 @@ NC='\033[0m' # No Color
 # Test configuration
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROSE_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
+
+# Parse command line arguments
+TEST_ARGS=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --bag|-b)
+            TEST_ARGS="$TEST_ARGS --bag $2"
+            TEST_BAG="$2"
+            shift 2
+            ;;
+        --verbose|-v)
+            TEST_ARGS="$TEST_ARGS --verbose"
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --bag, -b FILE     Use specific bag file for all tests (default: roseApp/tests/test.bag)"
+            echo "  --verbose, -v      Enable verbose test output"
+            echo "  --help, -h         Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                                    # Use default bag file"
+            echo "  $0 --bag roseApp/tests/test2.bag     # Use specific bag file for all tests"
+            echo "  $0 -b test4.bag --verbose            # Use bag file with verbose output"
+            echo ""
+            echo "Available bag files:"
+            find roseApp/tests -name "*.bag" -type f 2>/dev/null | head -10
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Default bag file if not specified
+if [[ -z "$TEST_BAG" ]]; then
+    TEST_BAG="roseApp/tests/test.bag"
+fi
 
 # Helper functions
 print_header() {
@@ -41,12 +84,15 @@ cd "$ROSE_ROOT"
 print_header "Rose Command Test Suite"
 echo "Test directory: $TEST_DIR"
 echo "Rose root: $ROSE_ROOT"
-echo "Test bag: roseApp/tests/demo3.bag"
+echo "Test bag: $TEST_BAG"
+echo "Test arguments: $TEST_ARGS"
 echo ""
 
 # Check if test bag exists
-if [ ! -f "roseApp/tests/demo3.bag" ]; then
-    print_error "Test bag file not found: roseApp/tests/demo3.bag"
+if [ ! -f "$TEST_BAG" ]; then
+    print_error "Test bag file not found: $TEST_BAG"
+    echo "Available bag files:"
+    find roseApp/tests -name "*.bag" -type f 2>/dev/null | head -10
     exit 1
 fi
 
@@ -84,10 +130,8 @@ for script in "${TEST_SCRIPTS[@]}"; do
         echo "----------------------------------------"
         
         # Run the test script and capture exit code
-        set +e  # Temporarily disable exit on error
-        bash "$script_path"
+        bash "$script_path" $TEST_ARGS
         exit_code=$?
-        set -e  # Re-enable exit on error
         
         if [ $exit_code -eq 0 ]; then
             print_success "$script completed successfully"

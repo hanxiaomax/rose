@@ -165,35 +165,35 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    # 创建无边框表格
+    # Create borderless table
     table = Table(
         show_header=True,
         header_style="bold",
-        box=None,  # 无边框
+        box=None,  # No borders
         padding=(0, 2),
         collapse_padding=True
     )
     
-    # 添加三列，第一列较窄
-    table.add_column("", style=f"{get_color('primary')}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{get_color('primary')}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    # Add three columns, first column narrower
+    table.add_column("", style=f"{get_color('primary')}", width=4)  # For input/output labels
+    table.add_column("file", style=f"{get_color('primary')}", justify="left")  # Filename column
+    table.add_column("size", style=f"{get_color('primary')}", justify="left", width=20)  # Increase size column width for additional info
     
-    # 添加input行
+    # Add input row
     table.add_row(
         "In",
         os.path.basename(input_bag),
         f"{input_size_mb:.0f}MB"
     )
     
-    # 添加output行，包含缩小百分比，使用ACCENT颜色
+    # Add output row with reduction percentage, using ACCENT color
     table.add_row(
         f"[{get_color('accent')}]Out[/{get_color('accent')}]",
         f"[{get_color('accent')}]{os.path.basename(output_bag)}[/{get_color('accent')}]", 
         f"[{get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{get_color('accent')}]"  
     )
     
-    # 将表格放在面板中显示
+    # Display table in a panel
     console.print(Panel(table, title="Filter Results", border_style=f"bold {get_color('accent')}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
@@ -420,11 +420,11 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
     """
     return PanelProgress(
         TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),  # 设置为 None 以自适应宽度
+        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),  # Set to None for adaptive width
         TaskProgressColumn(),
         TimeRemainingColumn(),
         title=title,
-        transient=dismiss,  # 设置为 False 以保持任务完成后的显示
+        transient=dismiss,  # Set to False to keep display after task completion
     )
 
 def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False):

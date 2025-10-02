@@ -2,5 +2,5 @@
 Rose - A modern CLI/TUI tool for ROS bag file analysis and filtering
 """
 
-# 导入和设置日志级别，确保在包导入时就设置正确的日志行为
-# 注意：具体的日志配置在 core/util.py 中完成，这里不再重复设置
+# Import and setup logging level to ensure correct logging behavior when package is imported
+# Note: Detailed logging configuration is in core/util.py, no need to repeat here

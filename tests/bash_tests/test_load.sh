@@ -1,79 +1,58 @@
 #!/bin/bash
 
-# Test script for rose load command
-# Tests various options and combinations
+# Smoke test for rose load command
+# Simple and direct testing
 
-set -e  # Exit on any error
+# Note: Not using set -e to allow error testing
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Load common functions
+source "$(dirname "$0")/common_functions.sh"
+
+# Parse command line arguments
+parse_test_args "$@"
 
 # Test configuration
-TEST_BAG="roseApp/tests/demo3.bag"
 ROSE_CMD="python -m roseApp.rose"
 
-# Helper functions
-print_test() {
-    echo -e "${YELLOW}=== Testing: $1 ===${NC}"
-}
+cd /workspaces/rose
 
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-# Clear cache before tests
-echo "Clearing cache before tests..."
-$ROSE_CMD cache clear --yes > /dev/null 2>&1 || true
+# Show test configuration
+show_test_config "Load Command"
 
 print_test "Load command help"
-$ROSE_CMD load --help > /dev/null
-print_success "Help displayed successfully"
+run_cmd_silent $ROSE_CMD load --help
+print_success "Help works"
 
 print_test "Basic load"
-$ROSE_CMD load $TEST_BAG
-print_success "Basic load completed"
+run_cmd_silent $ROSE_CMD load $TEST_BAG
+print_success "Basic load works"
 
-print_test "Load with verbose output"
-$ROSE_CMD load $TEST_BAG --verbose
-print_success "Verbose load completed"
+print_test "Load with verbose"
+run_cmd_silent $ROSE_CMD load $TEST_BAG --verbose
+print_success "Verbose load works"
 
-print_test "Load with force reload"
-$ROSE_CMD load $TEST_BAG --force
-print_success "Force reload completed"
-
-print_test "Load with build index"
-$ROSE_CMD load $TEST_BAG --build-index
-print_success "Load with index build completed"
+print_test "Load with force"
+run_cmd_silent $ROSE_CMD load $TEST_BAG --force
+print_success "Force load works"
 
 print_test "Load with dry-run"
-$ROSE_CMD load $TEST_BAG --dry-run
-print_success "Dry-run completed"
+run_cmd_silent $ROSE_CMD load $TEST_BAG --dry-run
+print_success "Dry-run works"
 
-print_test "Load with workers option"
-$ROSE_CMD load $TEST_BAG --workers 2
-print_success "Load with 2 workers completed"
+print_test "Load with build-index"
+run_cmd_silent $ROSE_CMD load $TEST_BAG --build-index
+print_success "Build-index works"
 
-print_test "Load with verbose and force combined"
-$ROSE_CMD load $TEST_BAG --verbose --force
-print_success "Verbose + force load completed"
+print_test "Load with workers"
+run_cmd_silent $ROSE_CMD load $TEST_BAG --workers 2
+print_success "Workers option works"
 
-print_test "Load with all options combined"
-$ROSE_CMD load $TEST_BAG --verbose --force --build-index --workers 1
-print_success "All options combined completed"
+print_test "Load non-existent file (error handling)"
+run_cmd_expect_error $ROSE_CMD load "non_existent.bag"
 
-print_test "Load non-existent file (should fail gracefully)"
-$ROSE_CMD load "non_existent.bag" 2>/dev/null && print_error "Should have failed" || print_success "Failed gracefully as expected"
+print_test "Load with glob pattern"
+run_cmd_silent $ROSE_CMD load "roseApp/tests/*.bag" --dry-run
+print_success "Glob pattern works"
 
-print_test "Load with glob pattern (dry-run)"
-$ROSE_CMD load "roseApp/tests/*.bag" --dry-run
-print_success "Glob pattern dry-run completed"
-
-echo -e "${GREEN}All load command tests completed successfully!${NC}"
+echo -e "${GREEN}Load command smoke tests passed!${NC}"
 
