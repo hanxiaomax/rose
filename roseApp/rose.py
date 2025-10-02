@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-
-from typing import List, Optional, Tuple
 import sys
 
 import typer
@@ -15,12 +13,10 @@ from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.compress import compress as compress_main
 from roseApp.cli.inspect import app as inspect_app
 from roseApp.cli.data import app as data_app
-# from roseApp.cli.plot import app as plot_app
 from roseApp.cli.cache import app as cache_app
 
 from roseApp.cli.load import load as load_main
 from roseApp.cli.plugin import app as plugin_app
-# from roseApp.cli.profile import app as profile_app  # Temporarily disabled due to API migration
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -52,21 +48,13 @@ def configure_logging(verbosity: int):
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)"),
-    profile: bool = typer.Option(False, "--profile", help="Enable performance profiling for analysis operations")
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)")
 ):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
     # Set application mode to CLI (removing TUI support)
     set_app_mode(AppMode.CLI)
         
     configure_logging(verbose)
-    
-    # Set up profiling if requested
-    if profile:
-        from .core.cache import get_cache
-        cache = get_cache()
-        # cache.enable_profiling()  # Enable if profiling method exists
-        logger.info("Performance profiling enabled")
     
     # If no subcommand is provided, start interactive mode
     if ctx.invoked_subcommand is None:
