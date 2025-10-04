@@ -462,17 +462,20 @@ Rose uses a simple YAML-based theme system for customizing UI colors.
      timestamp: gray         # Timestamps
    ```
 
-3. Configure in `rose.yaml`:
+3. Configure in `rose.config.yaml`:
    ```yaml
    theme_file: "rose.theme.custom.yaml"
    ```
 
+**Note**: Theme files are automatically searched in the same directory as `rose.config.yaml`, so you can keep your theme and config files together.
+
 **Theme File Search Paths**:
 
-1. Current directory (`.`)
-2. Project root (where `pyproject.toml` is)
-3. User config (`~/.rose/`)
-4. System config (`/etc/rose/`)
+1. Same directory as `rose.config.yaml` (highest priority)
+2. Current directory (`.`)
+3. Project root (where `pyproject.toml` is)
+4. User config (`~/.rose/`)
+5. System config (`/etc/rose/`)
 
 **Available Colors**:
 

@@ -20,26 +20,34 @@ class ThemeLoader:
         """Find theme file based on configuration
         
         Priority:
-        1. Theme file specified in rose.yaml (theme_file setting)
-        2. rose.theme.default.yaml in search paths
-        3. Built-in defaults
+        1. Theme file specified in rose.config.yaml (theme_file setting)
+        2. rose.theme.default.yaml in same directory as rose.config.yaml
+        3. rose.theme.default.yaml in fallback search paths
+        4. Built-in defaults
         
         Search paths:
-        1. Current directory
-        2. Project root
-        3. User config (~/.rose/)
-        4. System config (/etc/rose/)
+        1. Same directory as rose.config.yaml (if found)
+        2. Current directory
+        3. Project root
+        4. User config (~/.rose/)
+        5. System config (/etc/rose/)
         
         Returns:
             Path to theme file or None if not found
         """
         # Try to load theme file from configuration
         theme_filename = None
+        config_dir = None
+        
         try:
             from ..core.config import get_config
             config = get_config()
             if hasattr(config, 'theme_file'):
                 theme_filename = config.theme_file
+            
+            # Get config file directory if available
+            if hasattr(config, '_loaded_config_path') and config._loaded_config_path:
+                config_dir = Path(config._loaded_config_path).parent
         except Exception:
             pass
         
@@ -47,13 +55,20 @@ class ThemeLoader:
         if not theme_filename:
             theme_filename = "rose.theme.default.yaml"
         
-        # Build search paths
-        search_dirs = [
+        # Build search paths with config directory first
+        search_dirs = []
+        
+        # Priority 1: Same directory as rose.config.yaml
+        if config_dir:
+            search_dirs.append(config_dir)
+        
+        # Priority 2-5: Other search paths
+        search_dirs.extend([
             Path.cwd(),
             Path(__file__).parent.parent.parent,
             Path.home() / ".rose",
             Path("/etc/rose"),
-        ]
+        ])
         
         # Search for the theme file
         for base_dir in search_dirs:
