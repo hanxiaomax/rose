@@ -70,11 +70,7 @@ class Message:
         """Display accent message"""
         Message._print_styled(text, get_color('accent'), console)
     
-    @staticmethod
-    def claude(text: str, console: Optional[Console] = None) -> None:
-        """Display Claude signature message"""
-        Message._print_styled(text, get_color('claude'), console, bold=True)
-    
+
     @staticmethod
     def muted(text: str, console: Optional[Console] = None) -> None:
         """Display muted message"""
@@ -182,7 +178,7 @@ class CommonUI:
         Message.info(f"Topics ({len(topics)}):", self.console)
         for topic in sorted(topics):
             if message_types and topic in message_types:
-                msg_type = Text(f" ({message_types[topic]})", style="dim")
+                msg_type = Text(f" ({message_types[topic]})", style=get_color('muted'))
                 topic_text = Text(f"  • {topic}", style="bold cyan")
                 topic_text.append(msg_type)
                 self.console.print(topic_text)

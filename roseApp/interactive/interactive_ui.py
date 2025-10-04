@@ -239,12 +239,12 @@ class InteractiveUI:
         # Commands
         welcome_text.append("Available commands:\n", style="bold")
         for cmd, desc in commands.items():
-            welcome_text.append(f"{cmd:<12} - {desc}\n", style="dim")
+            welcome_text.append(f"{cmd:<12} - {desc}\n", style=get_color('muted'))
         
         # Features
         welcome_text.append("\nFeatures:\n", style=get_color('success'))
         for feature in features:
-            welcome_text.append(f"  • {feature}\n", style="dim")
+            welcome_text.append(f"  • {feature}\n", style=get_color('muted'))
         
         panel = Panel(welcome_text, title="Interactive Environment", border_style=get_color('primary'))
         self.console.print(panel)

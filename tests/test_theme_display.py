@@ -73,10 +73,7 @@ def display_semantic_colors(console: Console):
     console.print("\n[bold]Semantic Colors[/bold]\n")
     
     colors = [
-        ('file', 'File names'),
-        ('directory', 'Directory names'),
-        ('topic', 'ROS topics'),
-        ('timestamp', 'Timestamps'),
+        ('path', 'File and directory paths'),
     ]
     
     table = Table(show_header=True, header_style="bold")
@@ -124,19 +121,19 @@ def display_ui_components(console: Console):
     
     console.print()
     
-    # File items
-    console.print(f"[bold {get_color('info')}]File Listings:[/bold {get_color('info')}]")
-    console.print(f"  [{get_color('file')}]demo.bag[/{get_color('file')}] [{get_color('muted')}](1.2 GB)[/{get_color('muted')}]")
-    console.print(f"  [{get_color('file')}]sensor_data.bag[/{get_color('file')}] [{get_color('muted')}](500 MB)[/{get_color('muted')}]")
-    console.print(f"  [{get_color('directory')}]output/[/{get_color('directory')}]")
+    # File and directory items
+    console.print(f"[bold {get_color('info')}]Path Listings:[/bold {get_color('info')}]")
+    console.print(f"  [{get_color('path')}]demo.bag[/{get_color('path')}] [{get_color('muted')}](1.2 GB)[/{get_color('muted')}]")
+    console.print(f"  [{get_color('path')}]sensor_data.bag[/{get_color('path')}] [{get_color('muted')}](500 MB)[/{get_color('muted')}]")
+    console.print(f"  [{get_color('path')}]output/[/{get_color('path')}]")
     
     console.print()
     
     # Topics
     console.print(f"[bold {get_color('info')}]Topic Listings:[/bold {get_color('info')}]")
-    console.print(f"  [{get_color('topic')}]/camera/image_raw[/{get_color('topic')}] [{get_color('muted')}](sensor_msgs/Image)[/{get_color('muted')}]")
-    console.print(f"  [{get_color('topic')}]/imu/data[/{get_color('topic')}] [{get_color('muted')}](sensor_msgs/Imu)[/{get_color('muted')}]")
-    console.print(f"  [{get_color('topic')}]/gps/fix[/{get_color('topic')}] [{get_color('muted')}](sensor_msgs/NavSatFix)[/{get_color('muted')}]")
+    console.print(f"  [{get_color('accent')}]/camera/image_raw[/{get_color('accent')}] [{get_color('muted')}](sensor_msgs/Image)[/{get_color('muted')}]")
+    console.print(f"  [{get_color('accent')}]/imu/data[/{get_color('accent')}] [{get_color('muted')}](sensor_msgs/Imu)[/{get_color('muted')}]")
+    console.print(f"  [{get_color('accent')}]/gps/fix[/{get_color('accent')}] [{get_color('muted')}](sensor_msgs/NavSatFix)[/{get_color('muted')}]")
 
 
 def display_panel_example(console: Console):
@@ -155,14 +152,14 @@ def display_panel_example(console: Console):
     content.append("3 entries, 2.5 MB\n\n", style=get_color('accent'))
     
     content.append("Available commands:\n", style="bold")
-    content.append("/load        - Load bag files\n", style="dim")
-    content.append("/extract     - Extract topics\n", style="dim")
-    content.append("/inspect     - Inspect contents\n\n", style="dim")
+    content.append("/load        - Load bag files\n", style=get_color('muted'))
+    content.append("/extract     - Extract topics\n", style=get_color('muted'))
+    content.append("/inspect     - Inspect contents\n\n", style=get_color('muted'))
     
     content.append("Features:\n", style=f"bold {get_color('success')}")
-    content.append("  • Tab completion\n", style="dim")
-    content.append("  • Background tasks\n", style="dim")
-    content.append("  • Smart caching\n", style="dim")
+    content.append("  • Tab completion\n", style=get_color('muted'))
+    content.append("  • Background tasks\n", style=get_color('muted'))
+    content.append("  • Smart caching\n", style=get_color('muted'))
     
     panel = Panel(content, title="Interactive Environment", border_style=get_color('primary'))
     console.print(panel)
@@ -179,7 +176,7 @@ def display_table_example(console: Console):
         border_style=get_color('accent')
     )
     
-    table.add_column("Topic", style=get_color('topic'))
+    table.add_column("Topic", style=get_color('accent'))
     table.add_column("Type", style=get_color('muted'))
     table.add_column("Count", style=get_color('info'), justify="right")
     table.add_column("Status", justify="center")
@@ -224,7 +221,7 @@ def display_color_grid(console: Console):
     
     color_names = [
         'primary', 'accent', 'success', 'warning', 'error', 'info',
-        'muted', 'highlight', 'file', 'directory', 'topic', 'timestamp'
+        'muted', 'highlight', 'path'
     ]
     
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -248,7 +245,7 @@ def display_theme_info(console: Console, theme_file: Optional[str] = None):
     console.print("\n[bold]Theme Information[/bold]\n")
     
     if theme_file:
-        console.print(f"Theme File: [{get_color('file')}]{theme_file}[/{get_color('file')}]")
+        console.print(f"Theme File: [{get_color('path')}]{theme_file}[/{get_color('path')}]")
     else:
         console.print(f"Theme File: [{get_color('muted')}]Default (rose.theme.default.yaml)[/{get_color('muted')}]")
     

@@ -34,7 +34,7 @@ class CacheUI:
         table.add_column("Topics", style="blue", justify="right")
         table.add_column("Messages", style="magenta", justify="right")
         table.add_column("Duration", style="yellow", justify="right")
-        table.add_column("Modified", style="dim")
+        table.add_column("Modified", style=get_color('muted'))
         
         for entry in cache_entries:
             file_path = entry.get('file_path', '')

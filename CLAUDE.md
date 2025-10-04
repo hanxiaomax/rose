@@ -11,8 +11,9 @@ ROSE is a high-performance ROS bag filtering tool with distinctive cassette futu
 ### Core Components
 - **Entry Point**: `roseApp/rose.py:app` - Main Typer CLI dispatcher with subcommands
 - **Core Engine**: `roseApp/core/` - Bag file parsing, filtering, and compression logic
-- **CLI Tools**: `roseApp/cli/` - Command-line utilities and interactive interfaces  
-- **TUI Interface**: `roseApp/tui/` - Textual-based terminal UI with retro styling
+- **CLI Tools**: `roseApp/cli/` - Command-line utilities (load, extract, compress, inspect, data, cache, plugin)
+- **Interactive CLI**: `roseApp/interactive/` - Guided CLI operations with command routing
+- **TUI Interface**: `roseApp/ui/` - Textual-based terminal UI with retro styling
 - **Plugin System**: `roseApp/core/plugins/` - Extensible plugin architecture with hooks and scripts
 
 ### Key Classes
@@ -49,26 +50,23 @@ rose --help
 
 ### Testing
 ```bash
-# Run all tests using pytest
-pytest roseApp/tests/ -v
-
-# Run tests with coverage
-pytest --cov=roseApp --cov-report=html roseApp/tests/
-
-# Run specific test module
-pytest roseApp/tests/test_bag_manager.py -v
-
-# Run single test method
-pytest roseApp/tests/test_bag_manager.py::TestBagManager::test_load_bag -v
-
-# Run bash integration tests
+# Run bash integration tests (primary testing method)
 cd tests/bash_tests && ./run_all_tests.sh
 
 # Run individual bash tests
 cd tests/bash_tests && ./test_inspect.sh
+cd tests/bash_tests && ./test_load.sh
+cd tests/bash_tests && ./test_extract.sh
+cd tests/bash_tests && ./test_compress.sh
+cd tests/bash_tests && ./test_data.sh
+cd tests/bash_tests && ./test_cache.sh
+cd tests/bash_tests && ./test_plugin.sh
 
 # Run example test demos
 python example/test_parser_cache_demo.py
+
+# Quick test script
+cd tests/bash_tests && ./quick_test.sh
 ```
 
 ### Development Workflow
@@ -129,6 +127,9 @@ docker run -it --rm -v $(pwd):/data -v $(pwd)/roseApp/tests:/data/roseApp/tests 
 - Guided workflows for filtering and whitelist management
 - Batch processing capabilities
 - Progress indicators and detailed results
+- **Command Router**: `roseApp/interactive/core/command_router.py` - Routes commands to handlers
+- **Command Handlers**: `roseApp/interactive/commands/` - Individual command implementations
+- **Components**: `roseApp/interactive/components/` - Reusable UI components
 
 ### 3. Direct CLI Commands
 - `rose filter` - Filter bags with topics/whitelists and compression options
@@ -141,7 +142,7 @@ docker run -it --rm -v $(pwd):/data -v $(pwd)/roseApp/tests:/data/roseApp/tests 
 ## Configuration
 
 ### TUI Configuration
-File: `roseApp/tui/config.json`
+File: `roseApp/ui/config.json`
 ```json
 {
     "show_splash_screen": true,
@@ -186,24 +187,22 @@ export ROSE_LOG_LEVEL=DEBUG
 ## Testing Structure
 
 ### Test Organization
-- **Unit tests**: `roseApp/tests/test_*.py`
-- **Integration tests**: Marked with `@pytest.mark.integration`
-- **Slow tests**: Marked with `@pytest.mark.slow`
+- **Bash integration tests**: `tests/bash_tests/` - Comprehensive command testing
 - **Test data**: Sample bag files in `roseApp/tests/`
-- **Bash tests**: Integration tests in `tests/bash_tests/`
+- **Example demos**: `example/` - Usage examples and performance testing
 
 ### Test Commands
 ```bash
-# Run specific test categories
-python -m pytest roseApp/tests/ -k "test_parser" -v
-python -m pytest roseApp/tests/ -m "integration" -v
-python -m pytest roseApp/tests/ -m "slow" -v
+# Run all bash tests
+cd tests/bash_tests && ./run_all_tests.sh
 
-# Run with specific Python path
-PYTHONPATH=. python -m pytest roseApp/tests/ -v
+# Run specific command tests
+cd tests/bash_tests && ./test_inspect.sh
+cd tests/bash_tests && ./test_load.sh
+cd tests/bash_tests && ./test_extract.sh
 
 # Run tests with specific log level
-ROSE_LOG_LEVEL=DEBUG python -m pytest roseApp/tests/ -v
+ROSE_LOG_LEVEL=DEBUG bash tests/bash_tests/test_inspect.sh
 ```
 
 ## Deployment
@@ -273,7 +272,20 @@ docker run -it --rm -v $(pwd):/app -w /app python:3.11 bash
 - **Integration**: Reference in `roseApp/tui/config.json` for TUI access
 - **CLI management**: Create, view, and manage via interactive CLI
 
-## Development Tips
+## Development Guidelines
+
+### Code Style & Patterns
+- **CLI/Interactive Parity**: Same parameters and validation logic for both CLI and interactive modes
+- **Error Handling**: Use `log_cli_error()` for consistent error reporting
+- **Type Hints**: Always use type hints for function parameters and return values
+- **Rich Formatting**: Use rich console for colored output and progress indicators
+- **Dry Run Support**: All destructive operations must support `--dry-run`
+
+### Architecture Patterns
+- **Factory Pattern**: Use `create_parser()` for parser instantiation
+- **Interface-based Design**: Abstract base classes for extensibility
+- **Cache-first Strategy**: Persistent metadata caching for performance
+- **Modular Design**: Separate concerns between parsing, filtering, UI, and plugins
 
 ### Debugging
 ```bash

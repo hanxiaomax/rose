@@ -16,16 +16,6 @@ muted: bright_black
 highlight: bright_white
 
 # Semantic colors - Context-specific styling
-file: bright_cyan
-directory: bright_blue
-topic: orange1
-timestamp: bright_black
-
-# Aliases for convenience
-claude: orange1
-emphasis: orange1
-thinking: orange1
-dim: bright_black
-path: bright_cyan
+path: bright_cyan  # For file and directory paths
 
 

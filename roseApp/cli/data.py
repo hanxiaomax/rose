@@ -239,7 +239,7 @@ def _display_data_info(bag_info: ComprehensiveBagInfo, topics: List[TopicInfo], 
                     
                     # Create a simple table for sample data
                     sample_table = Table()
-                    sample_table.add_column("Index", style="dim")
+                    sample_table.add_column("Index", style=get_color('muted'))
                     for col in sample_df.columns:
                         sample_table.add_column(col, style="white")
                     
@@ -892,7 +892,7 @@ def info(
                         
                         # Create a simple table for sample data
                         sample_table = Table()
-                        sample_table.add_column("Index", style="dim")
+                        sample_table.add_column("Index", style=get_color('muted'))
                         for col in sample_df.columns:
                             sample_table.add_column(col, style="white")
                         

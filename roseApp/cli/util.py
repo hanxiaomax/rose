@@ -38,7 +38,7 @@ def build_banner():
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
     subtitle.append("Github", style=f"{get_color('primary')} link https://github.com/hanxiaomax/rose")
-    subtitle.append(" • ", style="dim")
+    subtitle.append(" • ", style=get_color('muted'))
     subtitle.append("Author", style=f"{get_color('primary')} link https://github.com/hanxiaomax")
 
     # Create banner content
@@ -138,7 +138,7 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             
             for topic in sorted(filtered_topics):
                 filtered_info.append(f"• {topic:<40}", style=get_color('primary'))
-                filtered_info.append(f"{connections[topic]}\n", style="dim")
+                filtered_info.append(f"{connections[topic]}\n", style=get_color('muted'))
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",

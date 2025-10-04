@@ -482,7 +482,7 @@ Rose uses a simple YAML-based theme system for customizing UI colors.
 - **Primary**: `primary`, `accent` - Main accent colors
 - **Status**: `success`, `warning`, `error`, `info` - Status indicators
 - **UI**: `muted`, `highlight` - UI elements
-- **Semantic**: `file`, `directory`, `topic`, `timestamp` - Context-specific colors
+- **Semantic**: `path` - File and directory paths
 
 ##### Advanced Usage
 

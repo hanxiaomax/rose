@@ -130,17 +130,7 @@ class ThemeLoader:
             'highlight': 'bright_white',
             
             # Semantic colors
-            'file': 'bright_cyan',
-            'directory': 'bright_blue',
-            'topic': 'orange1',
-            'timestamp': 'bright_black',
-            
-            # Aliases
-            'claude': 'orange1',
-            'emphasis': 'orange1',
-            'thinking': 'orange1',
-            'dim': 'bright_black',
-            'path': 'bright_cyan',
+            'path': 'bright_cyan',  # For file and directory paths
         }
     
     @classmethod

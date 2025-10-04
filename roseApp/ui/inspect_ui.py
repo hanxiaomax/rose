@@ -37,7 +37,7 @@ class InspectUI:
         for topic in topics:
             topic_line = Text()
             topic_line.append(f"  • {topic['name']}", style=f"bold {get_color('primary')}")
-            topic_line.append(f" ({topic['message_type']})", style="dim")
+            topic_line.append(f" ({topic['message_type']})", style=get_color('muted'))
             self.console.print(topic_line)
     
     def display_inspection_result(self, result: Dict[str, Any], display_config: Dict[str, Any]) -> None:
@@ -101,7 +101,7 @@ class InspectUI:
         for topic in topics:
             topic_line = Text()
             topic_line.append(f"  • {topic['name']}", style="bold cyan")
-            topic_line.append(f" ({topic['message_type']})", style="dim")
+            topic_line.append(f" ({topic['message_type']})", style=get_color('muted'))
             self.console.print(topic_line)
     
     def display_field_analysis(self, field_analysis: Dict[str, Any], topics: List[Dict[str, Any]]) -> None:

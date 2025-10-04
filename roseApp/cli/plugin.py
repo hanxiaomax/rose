@@ -68,7 +68,7 @@ def list_plugins(
     table.add_column("Description", style="white")
     
     if verbose:
-        table.add_column("Author", style="dim")
+        table.add_column("Author", style=get_color('muted'))
         table.add_column("Hooks", style="yellow")
     
     for plugin in plugins:
@@ -152,18 +152,18 @@ def info(
     # Show different information based on plugin type
     if isinstance(plugin, BaseScriptPlugin):
         info_text.append("Plugin Type: Script Plugin\n", style="bold green")
-        info_text.append("Execution: Can be run as standalone script\n", style="dim")
+        info_text.append("Execution: Can be run as standalone script\n", style=get_color('muted'))
     else:
         if info.supported_hooks:
             info_text.append("Supported Hooks:\n", style="bold")
             for hook in info.supported_hooks:
-                info_text.append(f"  • {hook.value}\n", style="dim")
+                info_text.append(f"  • {hook.value}\n", style=get_color('muted'))
         else:
-            info_text.append("Supported Hooks: None\n", style="dim")
+            info_text.append("Supported Hooks: None\n", style=get_color('muted'))
     
     # Show plugin file path
     if plugin_name in manager.plugin_paths:
-        info_text.append(f"\nFile: {manager.plugin_paths[plugin_name]}", style="dim")
+        info_text.append(f"\nFile: {manager.plugin_paths[plugin_name]}", style=get_color('muted'))
     
     panel = Panel(info_text, title=f"Plugin Information", border_style=get_color('primary'))
     console.print(panel)
