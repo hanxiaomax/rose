@@ -41,7 +41,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 - 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
    - 🌟 parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
-- 🌟 cassette futurism theme for dark and light mode
+- 🌟 Customizable cassette futurism theme via YAML configuration
 - 🌟 **Plugin System** - Extensible architecture for custom functionality
   - 🔌 Hot-loadable plugins with hook system
   - 📊 Data interface for safe bag data access
@@ -170,6 +170,56 @@ Key features:
 #### Multi-Bag Processing
 ![asciicast](screen-shots/multi-bag.gif)
 
+### Interactive Environment
+
+Rose also provides a powerful REPL-style interactive environment:
+
+```bash
+# Launch the interactive environment
+rose interactive
+```
+
+**Features:**
+- **Automatic Workspace Status**: See your working directory, configuration, cache, loaded bags, and selected topics at startup
+- **Background Task Execution**: Long operations don't block the interface
+- **Smart Auto-completion**: Tab completion for commands, files, and topics
+- **Natural Language Queries**: Ask questions directly without commands
+- **Session Management**: Context-aware commands that adapt to your current state
+
+**Workspace Status Display:**
+
+On startup, Rose displays comprehensive workspace information:
+
+```
+╭───────────────── Interactive Environment ─────────────────╮
+│ Interactive Environment                                   │
+│                                                           │
+│ Workspace Status:                                         │
+│   Working Directory: /workspaces/rose                     │
+│   Configuration: rose.config.yaml                         │
+│   Cache: 3 entries, 2.5 MB                                │
+│   Loaded Bags: 2 bag(s)                                   │
+│   Selected Topics: 5 topic(s)                             │
+│                                                           │
+│ Available commands:                                       │
+│   /load      - Load bag files                             │
+│   /extract   - Extract topics from bags                   │
+│   /inspect   - Inspect bag contents                       │
+│   ...                                                     │
+╰───────────────────────────────────────────────────────────╯
+```
+
+**Key Commands:**
+- `/load [files]` - Load bag files with glob pattern support
+- `/extract` - Extract topics with interactive selection
+- `/inspect` - Inspect bag contents and statistics
+- `/bags` - Manage loaded bags in workspace
+- `/topics` - Manage topic selection
+- `/cache` - Cache management operations
+- `/help` - Show comprehensive help
+
+See [Interactive Help](roseApp/interactive/help.md) for detailed documentation.
+
 ### Plugin System
 
 Rose features a powerful plugin system that allows you to extend functionality without modifying core code:
@@ -292,38 +342,167 @@ rose filter input.bag output.bag -w whitelist.txt -c lz4
 
 #### Configuration
 
-Rose is configured with `roseApp/config.json`.
-```json
-{
-    "show_splash_screen": true,
-    "theme": "cassette-walkman",
-    "whitelists": {
-        "demo": "./whitelists/demo.txt",
-        "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt"
-    }
-}
+Rose uses a unified configuration system with automatic validation. Configuration is loaded from `rose.config.yaml` in your project directory.
+
+**Quick Start:**
+```bash
+# Copy example configuration
+cp rose.config.yaml.example rose.config.yaml
+
+# Edit configuration
+nano rose.config.yaml
 ```
 
-- `show_splash_screen`: whether to show the splash screen, default is true
-- `theme`: the theme of the TUI, default is `cassette-walkman`, check [Theme](#theme) for more details
-- `whitelists`: the whitelists of the TUI, default is empty, check [Whitelist](#whitelist) for more details
+**Example Configuration:**
+```yaml
+# Performance Settings
+parallel_workers: 4
+memory_limit_mb: 512
 
-#### Theme
-RoseApp TUI provides two built-in themes: `cassette-walkman` (default light theme) and `cassette-dark`. You can configure the theme in two ways:
+# Feature Toggles
+enable_cache: true
+enable_plugins: true
 
-| cassette-walkman | cassette-dark |
-|------------|-------------|
-| ![Light Theme TUI](screen-shots/main-light.png) | ![Dark Theme TUI](screen-shots/main-dark.png) |
+# Default Behavior
+compression_default: none
+verbose_default: false
+build_index_default: false
 
-1. Modify `config.json` to specify your preferred theme:
+# Logging Settings
+log_level: INFO
+log_to_file: true
 
-```json
-{
-    "theme": "cassette-dark",
-}
+# UI Settings
+theme_file: rose.theme.default.yaml
+enable_colors: true
+
+# Directory Settings
+output_directory: output
 ```
-2. Switch Theme in TUI with command palette(the buttom in bottom right corner or keybinding ^p)
+
+**Configuration Hierarchy:**
+1. Command-line arguments (highest priority)
+2. Environment variables (`ROSE_*` prefix)
+3. Configuration file (`rose.config.yaml`)
+4. System defaults (lowest priority)
+
+**Environment Variable Override:**
+```bash
+# Override parallel workers
+export ROSE_PARALLEL_WORKERS=8
+
+# Change log level
+export ROSE_LOG_LEVEL=DEBUG
+
+# Run Rose
+rose load demo.bag
+```
+
+**Automatic Validation:**
+
+Rose validates configuration on startup and displays warnings for potential issues:
+
+```
+Config: rose.config.yaml
+Warning: Workers (32) > CPU count (8)
+Warning: Theme file not found: custom-theme.yaml
+```
+
+See [Configuration Guide](docs/CONFIGURATION.md) for complete reference.
+
+#### Theme System
+
+Rose CLI uses a simple and powerful YAML-based theme system with support for multiple named themes.
+
+##### Quick Start
+
+**View available themes:**
+```bash
+rose theme list-themes
+```
+
+**Switch themes:**
+```bash
+rose theme use blue      # Switch to blue theme
+rose theme use orange    # Switch to orange theme
+rose theme use green     # Switch to green theme
+```
+
+##### Simple Theme System
+
+Rose uses a simple YAML-based theme system for customizing UI colors.
+
+**Default Theme**: Rose uses `rose.theme.default.yaml` (orange cassette aesthetic)
+
+**Create Custom Theme**:
+
+1. Copy the default theme:
+   ```bash
+   cp rose.theme.default.yaml rose.theme.custom.yaml
+   ```
+
+2. Edit colors in `rose.theme.custom.yaml`:
+   ```yaml
+   # Custom theme colors
+   colors:
+     primary: blue           # Main accent color
+     accent: cyan            # Secondary accent
+     
+     success: green          # Success messages
+     warning: yellow         # Warning messages
+     error: red              # Error messages
+     info: cyan              # Info messages
+     
+     muted: gray             # Muted text
+     highlight: white        # Highlighted text
+     
+     file: cyan              # File names
+     directory: blue         # Directory names
+     topic: magenta          # ROS topics
+     timestamp: gray         # Timestamps
+   ```
+
+3. Configure in `rose.yaml`:
+   ```yaml
+   theme_file: "rose.theme.custom.yaml"
+   ```
+
+**Theme File Search Paths**:
+
+1. Current directory (`.`)
+2. Project root (where `pyproject.toml` is)
+3. User config (`~/.rose/`)
+4. System config (`/etc/rose/`)
+
+**Available Colors**:
+
+- **Primary**: `primary`, `accent` - Main accent colors
+- **Status**: `success`, `warning`, `error`, `info` - Status indicators
+- **UI**: `muted`, `highlight` - UI elements
+- **Semantic**: `file`, `directory`, `topic`, `timestamp` - Context-specific colors
+
+##### Advanced Usage
+
+**Per-project themes:**
+```bash
+# Use different themes for different projects
+cd project1/
+rose theme use blue
+
+cd project2/
+rose theme use green
+```
+
+**Share custom themes:**
+```bash
+# Export your theme
+cp ~/.rose/theme.custom.yaml my-theme.yaml
+
+# Share with team
+# Others can copy to their ~/.rose/ directory
+```
+
+For more details, see [Theme Quick Start Guide](docs/THEME_QUICKSTART.md).
 
 
 ### Whitelist
