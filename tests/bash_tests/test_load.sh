@@ -20,39 +20,31 @@ cd /workspaces/rose
 show_test_config "Load Command"
 
 print_test "Load command help"
-run_cmd_silent $ROSE_CMD load --help
-print_success "Help works"
+run_cmd_silent "$ROSE_CMD load --help" "Help works" "Help failed"
 
 print_test "Basic load"
-run_cmd_silent $ROSE_CMD load $TEST_BAG
-print_success "Basic load works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG" "Basic load works" "Basic load failed"
 
 print_test "Load with verbose"
-run_cmd_silent $ROSE_CMD load $TEST_BAG --verbose
-print_success "Verbose load works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG --verbose" "Verbose load works" "Verbose load failed"
 
 print_test "Load with force"
-run_cmd_silent $ROSE_CMD load $TEST_BAG --force
-print_success "Force load works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG --force" "Force load works" "Force load failed"
 
 print_test "Load with dry-run"
-run_cmd_silent $ROSE_CMD load $TEST_BAG --dry-run
-print_success "Dry-run works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG --dry-run" "Dry-run works" "Dry-run failed"
 
 print_test "Load with build-index"
-run_cmd_silent $ROSE_CMD load $TEST_BAG --build-index
-print_success "Build-index works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG --build-index" "Build-index works" "Build-index failed"
 
 print_test "Load with workers"
-run_cmd_silent $ROSE_CMD load $TEST_BAG --workers 2
-print_success "Workers option works"
+run_cmd_silent "$ROSE_CMD load $TEST_BAG --workers 2" "Workers option works" "Workers option failed"
 
 print_test "Load non-existent file (error handling)"
-run_cmd_expect_error $ROSE_CMD load "non_existent.bag"
+run_cmd_expect_error "$ROSE_CMD load non_existent.bag" "Error handling works" "Should fail with non-existent file"
 
 print_test "Load with glob pattern"
-run_cmd_silent $ROSE_CMD load "roseApp/tests/*.bag" --dry-run
-print_success "Glob pattern works"
+run_cmd_silent "$ROSE_CMD load 'roseApp/tests/*.bag' --dry-run" "Glob pattern works" "Glob pattern failed"
 
 echo -e "${GREEN}Load command smoke tests passed!${NC}"
 

@@ -258,7 +258,7 @@ Key Features:
         self.result_formatter.format_section_header("Getting More Help")
         self.result_formatter.console.print("• Use '/help <command>' for detailed command help")
         self.result_formatter.console.print("• Use '<command> --help' to see CLI options")
-        self.result_formatter.console.print("• Use '/status' to check current workspace state")
+        self.result_formatter.console.print("• Use '/bags' or '/topics' to manage your workspace")
     
     def _show_command_categories(self):
         """Display command categories with rich formatting"""
@@ -279,7 +279,6 @@ Key Features:
                 "/plugin": "Plugin system operations"
             },
             "Session Management": {
-                "/status": "Show workspace status and running tasks",
                 "/bags": "Manage loaded bags in workspace",
                 "/topics": "Manage topic selection for operations",
                 "/configuration": "Open Rose configuration file in editor"
@@ -310,7 +309,7 @@ Key Features:
             ("Inspect bag", "/inspect @test --topics", "Show topics in cached bag"),
             ("Run shell command", "!ls -la *.bag", "List bag files using shell"),
             ("Get command help", "/load --help", "Show detailed load command options"),
-            ("Check status", "/status", "Show current workspace state")
+            ("Manage bags", "/bags", "View and manage loaded bags")
         ]
         
         for description, command, explanation in examples:

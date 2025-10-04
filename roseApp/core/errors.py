@@ -136,14 +136,11 @@ class RoseError(Exception):
         self.context = context or {}
         self.cause = cause
         
-        # Format message
+        # Format message (keep it clean, details handled separately)
         self.message = error_code.format_message(*args)
         
-        # Add details if provided
-        if details:
-            self.message = f"{self.message}\nDetails: {details}"
-        
-        # Initialize exception
+        # Initialize exception with message only
+        # Details are stored separately and displayed by error handler
         super().__init__(self.message)
     
     @property
@@ -152,8 +149,12 @@ class RoseError(Exception):
         return self.error_code.code
     
     def __str__(self) -> str:
-        """String representation of error"""
+        """String representation of error (message only, without details)"""
         return self.message
+    
+    def __repr__(self) -> str:
+        """Representation of error for debugging (compact format)"""
+        return f"{self.__class__.__name__}({self.error_code.name}): {self.message}"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert error to dictionary for logging/serialization"""
@@ -233,30 +234,53 @@ def handle_cli_error(error: Exception, verbose: bool = False) -> int:
         Exit code (0-255)
     """
     from rich.console import Console
-    from roseApp.core.util import log_cli_error
+    import traceback as tb
     
     console = Console()
     
     if isinstance(error, RoseError):
-        # Rose-specific error - format nicely
+        # Rose-specific error - format nicely for user
         console.print(f"[red]Error ({error.code}): {error.message}[/red]")
         
-        if verbose and error.details:
+        if error.details and not verbose:
+            # Show details in normal mode
+            console.print(f"Details: {error.details}")
+        elif error.details and verbose:
+            # Show details with formatting in verbose mode
             console.print(f"[yellow]Details: {error.details}[/yellow]")
         
-        if verbose and error.context:
-            console.print(f"[dim]Context: {error.context}[/dim]")
+        # Show stack trace only in verbose mode
+        if verbose:
+            if error.context:
+                console.print(f"[dim]Context: {error.context}[/dim]")
+            
+            # Show traceback in verbose mode
+            import traceback
+            console.print("[dim]--- Traceback ---[/dim]")
+            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
         
-        # Log full error
-        log_cli_error(error)
+        # Log to logger only (to file, not console) to avoid duplication
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Error ({error.code}): {error.message}", exc_info=verbose)
         
         # Return error code (modulo 256 for valid exit code)
         return error.code % 256
     
     else:
         # Generic error
-        console.print(f"[red]Error: {str(error)}[/red]")
-        log_cli_error(error)
+        console.print(f"[red]Unexpected error: {str(error)}[/red]")
+        
+        if verbose:
+            import traceback
+            console.print("[dim]--- Traceback ---[/dim]")
+            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
+        
+        # Log to logger only
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error: {str(error)}", exc_info=verbose)
+        
         return 1
 
 
@@ -425,5 +449,6 @@ class ErrorContext:
             context=self.context,
             cause=exc_val
         ) from exc_val
+
 
 

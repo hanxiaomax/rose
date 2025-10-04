@@ -23,24 +23,11 @@ class ConfigurationCommand(BaseCommand):
         This is an internal command that opens the configuration file
         """
         try:
-            # Look for existing config files using the same logic as run_handlers.py
-            rose_dir = Path.home() / ".rose"
-            config_files = [
-                rose_dir / "config.json",
-                rose_dir / "config.yaml", 
-                rose_dir / "config.yml"
-            ]
+            # Use the new unified configuration system
+            config_file = Path("rose.config.yaml")
             
-            # Use the first existing config file
-            config_file = None
-            for cf in config_files:
-                if cf.exists():
-                    config_file = cf
-                    break
-            
-            # If no config file exists, create default JSON config
-            if config_file is None:
-                config_file = rose_dir / "config.json"
+            # If config file doesn't exist in current directory, create it
+            if not config_file.exists():
                 self._create_default_config(config_file)
             
             editor = self._find_editor()
@@ -77,35 +64,54 @@ class ConfigurationCommand(BaseCommand):
     
     def _create_default_config(self, config_path: Path):
         """Create a default configuration file"""
-        import json
+        import yaml
         
-        # Ensure .rose directory exists
-        config_path.parent.mkdir(parents=True, exist_ok=True)
+        # Copy from example if available, otherwise create basic config
+        example_path = Path("rose.config.yaml.example")
         
-        default_config = {
-            "cache": {
-                "max_size_gb": 10,
-                "auto_cleanup": True
-            },
-            "processing": {
-                "default_workers": 4,
-                "compression": "lz4"
-            },
-            "ui": {
-                "theme": "default",
-                "show_progress": True
-            },
-            "paths": {
-                "default_output_dir": "~/rose_output"
+        if example_path.exists():
+            # Copy from example
+            import shutil
+            shutil.copy2(example_path, config_path)
+            self.result_formatter.format_info(f"Created configuration file from example: {config_path}")
+        else:
+            # Create basic configuration
+            default_config = {
+                "# Rose Configuration File": None,
+                "# Basic configuration for Rose ROS Bag Processing Tool": None,
+                "": None,
+                "# Performance settings": None,
+                "parallel_workers": 4,
+                "cache_ttl_seconds": 300,
+                "memory_limit_mb": 512,
+                "": None,
+                "# Default behaviors": None,
+                "verbose_default": False,
+                "build_index_default": False,
+                "auto_cache_default": True,
+                "compression_default": "none",
+                "": None,
+                "# File settings": None,
+                "output_directory": "output",
+                "": None,
+                "# Feature flags": None,
+                "enable_plugins": True,
+                "": None,
+                "# Logging": None,
+                "log_level": "INFO",
+                "log_to_file": True,
+                "": None,
+                "# UI settings": None,
+                "theme_file": "rose.theme.default.yaml",
+                "enable_colors": True
             }
-        }
-        
-        try:
-            with open(config_path, 'w') as f:
-                json.dump(default_config, f, indent=2)
-            self.result_formatter.format_info(f"Created default configuration file: {config_path}")
-        except Exception as e:
-            self.result_formatter.format_warning(f"Could not create config file: {e}")
+            
+            try:
+                with open(config_path, 'w') as f:
+                    yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
+                self.result_formatter.format_info(f"Created default configuration file: {config_path}")
+            except Exception as e:
+                self.result_formatter.format_warning(f"Could not create config file: {e}")
     
     def _find_editor(self) -> str:
         """Find suitable editor"""
@@ -132,16 +138,17 @@ class ConfigurationCommand(BaseCommand):
 
 Usage: /configuration
 
-Opens the Rose configuration file in your default editor.
+Opens the Rose configuration file (rose.config.yaml) in your default editor.
 The configuration file controls:
-- Default compression settings
-- Cache behavior
-- UI theme and preferences
+- Performance settings (workers, memory limits)
+- Default behaviors (compression, caching)
+- UI settings (theme, colors)
 - Plugin system settings
+- Logging configuration
 
 If no configuration file exists, a default one will be created.
 
 Environment variables:
   EDITOR - Preferred editor (e.g., export EDITOR=nano)
 
-Fallback editors: code, nano, vim, vi, gedit, notepad"""
+Fallback editors: vim, vi, nano, code, gedit, notepad"""

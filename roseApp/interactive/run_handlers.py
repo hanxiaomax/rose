@@ -79,21 +79,6 @@ class RunCommandHandlers:
             self._show_run_help()
     
     
-    
-    def handle_status(self, args: str):
-        """Show current status and running tasks"""
-        self._show_status_summary()
-        
-        # Show running tasks
-        if self.running_tasks:
-            self.console.print("\n[bold]Running Tasks:[/bold]")
-            for task_id, task in self.running_tasks.items():
-                elapsed = time.time() - (task.start_time or time.time())
-                self.console.print(f"  {task_id}: {task.command} ([yellow]{elapsed:.1f}s[/yellow])")
-        
-        # Show recent completed tasks
-    
-    
     def handle_configuration(self, args: str):
         """Handle configuration management - open config file in editor"""
         self._open_rose_config()
@@ -505,13 +490,6 @@ class RunCommandHandlers:
                 'example': 'Will prompt for topics and export settings'
             })
         
-        # Session operations
-        if any(word in query_lower for word in ['status', 'running', 'task']):
-            suggestions.append({
-                'description': 'Show current workspace status and running tasks',
-                'command': '/status',
-                'example': 'Shows loaded bags, selected topics, and task status'
-            })
         
         if any(word in query_lower for word in ['note', 'remember', 'write']):
             suggestions.append({
@@ -529,111 +507,6 @@ class RunCommandHandlers:
             })
         
         return suggestions[:3]  # Limit to top 3 suggestions
-    
-    def _show_status_summary(self):
-        """Show comprehensive status summary with command recommendations"""
-        self.ui.msg.section_header("Rose Interactive Environment Status")
-        self.ui.print_empty_line()
-        
-        # System Paths
-        self.ui.msg.subsection_header("System Paths")
-        self.ui.msg.status_item("Rose Directory", self.rose_dirs.rose_dir, "directory")
-        self.ui.msg.status_item("Config Directory", self.rose_dirs.config_dir, "directory")
-        self.ui.msg.status_item("Cache Directory", self.rose_dirs.cache_dir, "directory")
-        self.ui.msg.status_item("Logs Directory", self.rose_dirs.logs_dir, "directory")
-        self.ui.msg.tip("Use /configuration to edit settings")
-        self.ui.print_empty_line()
-        
-        # Workspace info
-        self.ui.msg.subsection_header("Workspace")
-        self.ui.msg.status_item("Current Directory", Path.cwd(), "directory")
-        self.ui.print_empty_line()
-        
-        # Loaded Bags
-        self.ui.msg.subsection_header("Loaded Bags")
-        if self.state.current_bags:
-            self.ui.msg.status_item("Count", len(self.state.current_bags), "success")
-            for i, bag_path in enumerate(self.state.current_bags, 1):
-                bag_size = self._get_file_size_str(bag_path)
-                self.ui.msg.file_item(bag_path, bag_size)
-            self.ui.msg.tip("Use /data info to view bag details")
-        else:
-            self.ui.msg.status_item("Status", "None", "warning")
-            self.ui.msg.tip("Use /load to load bag files")
-        self.ui.print_empty_line()
-        
-        # Selected Topics
-        self.ui.msg.subsection_header("Selected Topics")
-        if self.state.selected_topics:
-            self.ui.msg.status_item("Count", len(self.state.selected_topics), "success")
-            for i, topic in enumerate(self.state.selected_topics, 1):
-                self.ui.msg.topic_item(topic)
-            self.ui.msg.tip("Use /data export to export topic data")
-        else:
-            self.ui.msg.status_item("Status", "None", "warning")
-            self.ui.msg.tip("Load bags first, then use /extract to select topics")
-        self.ui.print_empty_line()
-        
-        # Cache Information
-        self.ui.msg.subsection_header("Cache Information")
-        try:
-            cache_size = self._get_cache_size_info()
-            self.ui.msg.status_item("Cache Size", cache_size, "accent")
-            
-            # Count cached bags
-            cache_entries = self._count_cached_bags()
-            self.ui.msg.status_item("Cached Bags", cache_entries, "success")
-            
-            if cache_entries > 0:
-                self.ui.msg.tip("Use /cache list to view cached bags, /cache clear to clean up")
-            else:
-                self.ui.msg.tip("Cache will be populated as you analyze bags")
-        except Exception as e:
-            self.ui.msg.status_item("Status", f"Error reading cache ({str(e)})", "error")
-        self.ui.print_empty_line()
-        
-        # Running Tasks
-        if self.running_tasks:
-            self.ui.msg.subsection_header("Running Tasks")
-            for task_id, task in self.running_tasks.items():
-                elapsed = time.time() - (task.start_time or time.time())
-                self.ui.msg.task_status(task_id, task.command, elapsed)
-            self.ui.print_empty_line()
-        
-        # Configuration Status
-        self.ui.msg.subsection_header("Configuration")
-        config_files = [
-            self.rose_dirs.rose_dir / "config.json",
-            self.rose_dirs.rose_dir / "config.yaml",
-            self.rose_dirs.rose_dir / "config.yml"
-        ]
-        
-        config_found = False
-        for config_file in config_files:
-            if config_file.exists():
-                self.ui.msg.status_item("Config File", config_file, "file")
-                config_found = True
-                break
-        
-        if not config_found:
-            self.ui.msg.status_item("Config File", "Not found (using defaults)", "warning")
-        
-        self.ui.msg.tip("Use /configuration to edit configuration")
-        self.ui.print_empty_line()
-        
-        # Quick Actions Summary
-        self.ui.msg.section_header("Quick Actions")
-        if not self.state.current_bags:
-            self.ui.msg.command_help("/load *.bag", "Load bag files from current directory")
-        else:
-            self.ui.msg.command_help("/data info", "View detailed bag information")
-            if not self.state.selected_topics:
-                self.ui.msg.command_help("/extract", "Select topics for analysis")
-            else:
-                self.ui.msg.command_help("/data export", "Export selected topic data")
-        
-        self.ui.msg.command_help("/help", "Show detailed help documentation")
-        self.ui.msg.muted("Type any command for more options")
     
     def _get_file_size_str(self, file_path: str) -> str:
         """Get human-readable file size string"""
@@ -901,11 +774,11 @@ All operations use interactive prompts for parameter collection.
         
         # Show available commands dynamically
         for cmd in sorted(self.runner.commands.keys()):
-            if cmd in ['/help', '/exit', '/status', '/clear']:
+            if cmd in ['/help', '/exit', '/clear']:
                 basic_help.append(f"  {cmd}\n", style="dim")
         
         basic_help.append("\nFor comprehensive help, ensure help.md file is available.\n", style="yellow")
-        basic_help.append("Try: '/status' to see current state or ask questions directly.", style="green")
+        basic_help.append("Try: '/help' to see all commands or ask questions directly.", style="green")
         
         panel = Panel(basic_help, title="Basic Help", border_style=get_color('primary'))
         self.console.print(panel)
@@ -1124,12 +997,9 @@ All operations use interactive prompts for parameter collection.
         import shutil
         from pathlib import Path
         
-        # Look for existing config files
-        rose_dir = Path.home() / ".rose"
+        # Look for existing config files  
         config_files = [
-            rose_dir / "config.json",
-            rose_dir / "config.yaml",
-            rose_dir / "config.yml"
+            Path("rose.config.yaml"),  # New unified config file
         ]
         
         # Use the first existing config file
@@ -1139,9 +1009,9 @@ All operations use interactive prompts for parameter collection.
                 config_file = cf
                 break
         
-        # If no config file exists, create default JSON config
+        # If no config file exists, create default config
         if config_file is None:
-            config_file = rose_dir / "config.json"
+            config_file = Path("rose.config.yaml")
             self._create_default_config(config_file)
         
         # Try to find a suitable editor
@@ -1169,33 +1039,53 @@ All operations use interactive prompts for parameter collection.
     
     def _create_default_config(self, config_file: Path):
         """Create default configuration file"""
-        import json
+        import yaml
         
-        # Ensure .rose directory exists
-        config_file.parent.mkdir(parents=True, exist_ok=True)
+        # Copy from example if available, otherwise create basic config
+        example_path = Path("rose.config.yaml.example")
         
-        default_config = {
-            "cache": {
-                "max_size_gb": 10,
-                "auto_cleanup": True
-            },
-            "processing": {
-                "default_workers": 4,
-                "compression": "lz4"
-            },
-            "ui": {
-                "theme": "default",
-                "show_progress": True
-            },
-            "paths": {
-                "default_output_dir": "~/rose_output"
-            }
-        }
-        
-        with open(config_file, 'w') as f:
-            json.dump(default_config, f, indent=2)
-        
-        self.ui.msg.completion_message(f"Created default configuration: {config_file}")
+        if example_path.exists():
+            # Copy from example
+            import shutil
+            shutil.copy2(example_path, config_file)
+            self.ui.msg.info(f"Created configuration file from example: {config_file}")
+        else:
+            # Create basic configuration using YAML format
+            default_config_content = """# Rose Configuration File
+# Basic configuration for Rose ROS Bag Processing Tool
+
+# Performance settings
+parallel_workers: 4
+cache_ttl_seconds: 300
+memory_limit_mb: 512
+
+# Default behaviors
+verbose_default: false
+build_index_default: false
+auto_cache_default: true
+compression_default: none
+
+# File settings
+output_directory: "output"
+
+# Feature flags
+enable_plugins: true
+
+# Logging
+log_level: "INFO"
+log_to_file: true
+
+# UI settings
+theme_file: "rose.theme.default.yaml"
+enable_colors: true
+"""
+            
+            try:
+                with open(config_file, 'w') as f:
+                    f.write(default_config_content)
+                self.ui.msg.completion_message(f"Created default configuration: {config_file}")
+            except Exception as e:
+                self.ui.msg.warning(f"Could not create config file: {e}")
 
     # =============================================================================
     # Export Functions

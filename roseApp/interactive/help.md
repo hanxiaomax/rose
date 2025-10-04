@@ -6,6 +6,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 
 ## Core Features
 
+- **Workspace Status Display**: Automatic status display on startup showing working directory, configuration, cache, and session info
 - **Natural Language Queries**: Ask questions directly without commands
 - **Background Task Execution**: Long operations don't block the interface  
 - **Smart Auto-completion**: Tab completion for commands, files, and topics
@@ -28,7 +29,6 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - `/plugin [list|info|run|enable|disable|reload|install|uninstall|create]` - Plugin operations
 
 ### Session Management
-- `/status` - Show workspace status and running tasks
 - `/bags` - Manage loaded bags
 - `/topics` - Manage topic selection
 - `/configuration` - Open Rose configuration file in editor
@@ -69,8 +69,8 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 3. **Background Tasks**: Long operations run in background
    ```
    > /load large_dataset.bag    # Runs in background
-   > /status                    # Check progress
-   > What's the status?         # Ask naturally
+   > /bags                      # Check loaded bags
+   > /topics                    # View selected topics
    ```
 
 4. **Context Awareness**: Commands adapt based on current state
@@ -92,7 +92,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 > /load data/*.bag
 > What topics are available?
 > /inspect
-> /status
+> /bags
 ```
 
 ### Topic Extraction
@@ -112,7 +112,7 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 ### Configuration Management
 ```
 > /configuration             # Open config file in editor
-> /status                    # Check system status
+> /bags                      # Check loaded bags
 ```
 
 ### Using Special Symbols
@@ -135,28 +135,54 @@ Rose Interactive Environment provides a powerful REPL-style interface for ROS ba
 - Create new plugins: `/plugin create`
 
 ### Cache Management
-- View cache status: `/cache info`
+- View cache info: `/cache`
 - List cached files: `/cache list`
 - Clear old cache: `/cache clear`
 
 ### Debugging and Monitoring
-- Check running tasks: `/status`
 - Edit configuration: `/configuration`
+
+## Workspace Information
+
+On startup, Rose displays comprehensive workspace status in the welcome panel:
+
+```
+Interactive Environment
+
+Workspace Status:
+  Working Directory: /workspaces/rose
+  Configuration: rose.config.yaml
+  Cache: 3 entries, 2.5 MB
+  Loaded Bags: 2 bag(s)
+  Selected Topics: 5 topic(s)
+
+Available commands:
+  ...
+```
+
+This provides instant visibility into:
+- Current working directory
+- Active configuration file
+- Cache size and entries
+- Loaded bag files (when present)
+- Selected topics (when present)
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Tab completion not working**: Restart the session
-2. **Bag file not found**: Use absolute paths or check current directory
-3. **Long operations stuck**: Check `/status` for current operations
-4. **Cache issues**: Try `/cache clear` to reset
+2. **Bag file not found**: Use absolute paths or check current directory (shown in startup status)
+3. **Long operations stuck**: Check workspace status displayed on startup for loaded bags and topics
+4. **Cache issues**: Try `/cache clear` to reset (current cache size shown in startup status)
+5. **Configuration not found**: Check the configuration path shown in startup status
 
 ### Getting Help
 
 - Type your question naturally: "How do I extract specific topics?"
 - Use `/help` for this comprehensive guide
-- Check `/status` for current workspace state
+- Check `/bags` and `/topics` for detailed workspace management
+- Workspace status is automatically shown on startup and after `/clear`
 
 ---
 

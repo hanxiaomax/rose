@@ -23,7 +23,6 @@ from ..commands.compress_command import CompressCommand
 from ..commands.data_command import DataCommand
 from ..commands.cache_command import CacheCommand
 from ..commands.plugin_command import PluginCommand
-from ..commands.status_command import StatusCommand
 from ..commands.bags_command import BagsCommand
 from ..commands.topics_command import TopicsCommand
 from ..commands.configuration_command import ConfigurationCommand
@@ -92,13 +91,6 @@ class InteractiveRunner:
         self.router.register_command('/plugin', PluginCommand(self.cli_executor))
         
         # Internal commands (pass additional context)
-        self.router.register_command('/status', StatusCommand(
-            self.cli_executor, 
-            self.state, 
-            self.rose_dirs, 
-            getattr(self, 'cache_manager', None), 
-            getattr(self, 'running_tasks', {})
-        ))
         self.router.register_command('/bags', BagsCommand(self.cli_executor, self.state))
         self.router.register_command('/topics', TopicsCommand(self.cli_executor, self.state))
         self.router.register_command('/configuration', ConfigurationCommand(self.cli_executor))
@@ -181,9 +173,37 @@ class InteractiveRunner:
             self._cleanup()
     
     def _show_welcome(self):
-        """Show welcome message and interface overview"""
+        """Show welcome message and interface overview with workspace status"""
+        from ...core.config import get_config
+        
         # Display the beautiful ROSE banner first
         self.console.print(build_banner())
+        
+        # Prepare workspace status information
+        config = get_config()
+        
+        workspace_info = {
+            "Working Directory": str(Path.cwd()),
+            "Configuration": str(getattr(config, '_loaded_config_path', 'Using defaults')),
+        }
+        
+        # Add cache info
+        try:
+            cache_dir = config.cache_dir
+            if cache_dir.exists():
+                cache_files = list(cache_dir.glob("*.cache"))
+                cache_size = sum(f.stat().st_size for f in cache_files) / (1024 * 1024)
+                workspace_info["Cache"] = f"{len(cache_files)} entries, {cache_size:.1f} MB"
+            else:
+                workspace_info["Cache"] = "Empty"
+        except Exception:
+            workspace_info["Cache"] = "N/A"
+        
+        # Add session info if available
+        if self.state.current_bags:
+            workspace_info["Loaded Bags"] = f"{len(self.state.current_bags)} bag(s)"
+        if self.state.selected_topics:
+            workspace_info["Selected Topics"] = f"{len(self.state.selected_topics)} topic(s)"
         
         # Define command descriptions
         command_descriptions = {
@@ -199,7 +219,6 @@ class InteractiveRunner:
             "/plugin": "Plugin system operations",
             
             # Session management
-            "/status": "Show workspace status and running tasks",
             "/bags": "Manage loaded bags",
             "/topics": "Manage topic selection",
             "/configuration": "Open Rose configuration file in editor",
@@ -218,8 +237,9 @@ class InteractiveRunner:
             "Background task execution"
         ]
         
-        # Show welcome with command descriptions using InteractiveUI
-        self.ui.show_welcome("Interactive Environment", command_descriptions, features)
+        # Show welcome with workspace status, command descriptions and features
+        self.ui.show_welcome("Interactive Environment", command_descriptions, features, workspace_info)
+        
         self.ui.msg.muted("Try: '/help' for detailed documentation")
     
     
@@ -302,7 +322,8 @@ class InteractiveRunner:
         self.console.print(f"\n[bold {get_color('primary')}]Try these commands:[/bold {get_color('primary')}]")
         self.ui.msg.command_help("/help", "Show all available commands")
         self.ui.msg.command_help("/load", "Load bag files")
-        self.ui.msg.command_help("/status", "Check system status")
+        self.ui.msg.command_help("/bags", "View loaded bags")
+        self.ui.msg.command_help("/topics", "Manage topic selection")
     
     def _handle_shell_command(self, command: str):
         """Handle native shell command execution"""

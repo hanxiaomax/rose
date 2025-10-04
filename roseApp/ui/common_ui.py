@@ -89,6 +89,19 @@ class CommonUI:
         self.console = Console()
     
     @staticmethod
+    def get_theme_colors():
+        """Get theme colors (simplified).
+        
+        Returns dictionary of color mappings from theme.yaml.
+        This maintains compatibility with code expecting color access.
+        
+        Returns:
+            Dictionary of color name to Rich color value mappings
+        """
+        from .theme import list_colors
+        return list_colors()
+    
+    @staticmethod
     def format_file_size(size_bytes: int) -> str:
         """Format file size in human-readable format."""
         if size_bytes == 0:

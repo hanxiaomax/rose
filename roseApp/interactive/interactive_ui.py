@@ -222,10 +222,19 @@ class InteractiveUI:
         """Print empty line"""
         self.console.print()
     
-    def show_welcome(self, title: str, commands: Dict[str, str], features: List[str]):
-        """Show welcome message with commands and features"""
+    def show_welcome(self, title: str, commands: Dict[str, str], features: List[str], 
+                     workspace_info: Optional[Dict[str, str]] = None):
+        """Show welcome message with workspace status, commands and features"""
         welcome_text = Text()
         welcome_text.append(f"{title}\n\n", style=f"bold {get_color('primary')}")
+        
+        # Workspace status section (if provided)
+        if workspace_info:
+            welcome_text.append("Workspace Status:\n", style=f"bold {get_color('info')}")
+            for key, value in workspace_info.items():
+                welcome_text.append(f"  {key}: ", style=get_color('muted'))
+                welcome_text.append(f"{value}\n", style=get_color('accent'))
+            welcome_text.append("\n")
         
         # Commands
         welcome_text.append("Available commands:\n", style="bold")

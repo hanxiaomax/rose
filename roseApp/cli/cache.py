@@ -18,7 +18,7 @@ from rich.text import Text
 from rich.json import JSON
 
 from ..core.cache import get_cache, BagCacheEntry
-from ..core.theme_config import UnifiedThemeManager, ComponentType
+from ..ui.theme import get_color
 
 app = typer.Typer(name="cache", help="Cache management commands")
 
