@@ -11,16 +11,16 @@ from rich.box import SIMPLE
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
-from ..ui.common_ui import CommonUI, Message, SuccessMessage, ErrorMessage, WarningMessage, InfoMessage
+from ..ui.common_ui import CommonUI, Message
 
 
 # Import theme system for colors
-from ..ui.theme import SimpleTheme as Theme
+from ..ui.theme import get_color
 
-WARNING_COLOR = Theme.get_color('warning')
-PRIMARY_COLOR = Theme.get_color('primary')
-ACCENT_COLOR = Theme.get_color('accent')
-SUCCESS_COLOR = Theme.get_color('success')
+WARNING_COLOR = get_color('warning')
+PRIMARY_COLOR = get_color('primary')
+ACCENT_COLOR = get_color('accent')
+SUCCESS_COLOR = get_color('success')
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -37,21 +37,21 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax/rose")
-    subtitle.append(" • ", style="dim")
-    subtitle.append("Author", style=f"{Theme.get_color('primary')} link https://github.com/hanxiaomax")
+    subtitle.append("Github", style=f"{get_color('primary')} link https://github.com/hanxiaomax/rose")
+    subtitle.append(" • ", style=get_color('muted'))
+    subtitle.append("Author", style=f"{get_color('primary')} link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
-    content.append(ROSE_BANNER, style="")
-    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{Theme.get_color('primary')}")
+    content.append(ROSE_BANNER, style=f"{get_color('primary')}")
+    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{get_color('primary')}")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=Theme.get_color('warning'),  
+        border_style=get_color('accent'),  # Use Claude's signature color
         highlight=True
     )
     
@@ -60,16 +60,19 @@ def build_banner():
     return panel
   
 def print_usage_instructions(console:Console, is_fuzzy:bool = False):
-    console.print("\nUsage Instructions:",style=f"bold {Theme.get_color('accent')}")
+    ui = CommonUI()
+    ui.console = console
+    
+    Message.accent("Usage Instructions:", console)
     if is_fuzzy:
-        console.print(f"•  [{Theme.get_color('accent')}]Type to search[/{Theme.get_color('accent')}]")
+        Message.accent("•  Type to search", console)
     else:
-        console.print(f"•  [{Theme.get_color('accent')}]Space[/{Theme.get_color('accent')}] to select/unselect") 
-    console.print(f"•  [{Theme.get_color('accent')}]↑/↓[/{Theme.get_color('accent')}] to navigate options")
-    console.print(f"•  [{Theme.get_color('accent')}]Tab[/{Theme.get_color('accent')}] to select and move to next item")
-    console.print(f"•  [{Theme.get_color('accent')}]Shift+Tab[/{Theme.get_color('accent')}] to select and move to previous item")
-    console.print(f"•  [{Theme.get_color('accent')}]Ctrl+A[/{Theme.get_color('accent')}] to select all")
-    console.print(f"•  [{Theme.get_color('accent')}]Enter[/{Theme.get_color('accent')}] to confirm selection\n")
+        Message.accent("•  Space to select/unselect", console) 
+    Message.accent("•  ↑/↓ to navigate options", console)
+    Message.accent("•  Tab to select and move to next item", console)
+    Message.accent("•  Shift+Tab to select and move to previous item", console)
+    Message.accent("•  Ctrl+A to select all", console)
+    Message.accent("•  Enter to confirm selection\n", console)
 
 
 def collect_bag_files(directory: str) -> List[str]:
@@ -89,19 +92,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {Theme.get_color('primary')}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {Theme.get_color('primary')}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=Theme.get_color('accent'))
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {get_color('primary')}")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {get_color('primary')}")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style=get_color('accent'))
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{Theme.get_color('primary')}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {Theme.get_color('primary')}")
+        bag_info.append(f"• {topic:<40}", style=f"{get_color('primary')}")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim {get_color('primary')}")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=Theme.get_color('accent'),
+                  border_style=get_color('accent'),
                   padding=(0, 1))
     
     console.print(panel)
@@ -123,23 +126,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=Theme.get_color('warning'))
+                console.print("No topics selected. Showing all topics.", style=get_color('warning'))
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {Theme.get_color('accent')}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=Theme.get_color('primary'))
-                filtered_info.append(f"{connections[topic]}\n", style="dim")
+                filtered_info.append(f"• {topic:<40}", style=get_color('primary'))
+                filtered_info.append(f"{connections[topic]}\n", style=get_color('muted'))
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=Theme.get_color('primary'),
+                                  border_style=get_color('primary'),
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -162,36 +165,36 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     output_size_mb:float = output_size / (1024 * 1024)
     reduction_ratio = (1 - output_size / input_size) * 100
     
-    # 创建无边框表格
+    # Create borderless table
     table = Table(
         show_header=True,
         header_style="bold",
-        box=None,  # 无边框
+        box=None,  # No borders
         padding=(0, 2),
         collapse_padding=True
     )
     
-    # 添加三列，第一列较窄
-    table.add_column("", style=f"{Theme.get_color('primary')}", width=4)  # 用于input/output标签
-    table.add_column("file", style=f"{Theme.get_color('primary')}", justify="left")  # 文件名列
-    table.add_column("size", style=f"{Theme.get_color('primary')}", justify="left", width=20)  # 增加size列宽度以适应额外信息
+    # Add three columns, first column narrower
+    table.add_column("", style=f"{get_color('primary')}", width=4)  # For input/output labels
+    table.add_column("file", style=f"{get_color('primary')}", justify="left")  # Filename column
+    table.add_column("size", style=f"{get_color('primary')}", justify="left", width=20)  # Increase size column width for additional info
     
-    # 添加input行
+    # Add input row
     table.add_row(
         "In",
         os.path.basename(input_bag),
         f"{input_size_mb:.0f}MB"
     )
     
-    # 添加output行，包含缩小百分比，使用ACCENT颜色
+    # Add output row with reduction percentage, using ACCENT color
     table.add_row(
-        f"[{Theme.get_color('accent')}]Out[/{Theme.get_color('accent')}]",
-        f"[{Theme.get_color('accent')}]{os.path.basename(output_bag)}[/{Theme.get_color('accent')}]", 
-        f"[{Theme.get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{Theme.get_color('accent')}]"  
+        f"[{get_color('accent')}]Out[/{get_color('accent')}]",
+        f"[{get_color('accent')}]{os.path.basename(output_bag)}[/{get_color('accent')}]", 
+        f"[{get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{get_color('accent')}]"  
     )
     
-    # 将表格放在面板中显示
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {Theme.get_color('accent')}"))
+    # Display table in a panel
+    console.print(Panel(table, title="Filter Results", border_style=f"bold {get_color('accent')}"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -210,9 +213,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=Theme.get_color('success'))
+        console.print(summary, style=get_color('success'))
     else:
-        console.print(summary, style=Theme.get_color('accent'))
+        console.print(summary, style=get_color('accent'))
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -416,12 +419,12 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
         PanelProgress: A progress bar wrapped in a panel with optional title
     """
     return PanelProgress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),  # 设置为 None 以自适应宽度
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),  # Set to None for adaptive width
         TaskProgressColumn(),
         TimeRemainingColumn(),
         title=title,
-        transient=dismiss,  # 设置为 False 以保持任务完成后的显示
+        transient=dismiss,  # Set to False to keep display after task completion
     )
 
 def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False):
@@ -435,8 +438,8 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
         TimedPanelProgress: A progress bar wrapped in a panel with timing functionality
     """
     return TimedPanelProgress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
+        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
+        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         title=title,
@@ -470,7 +473,9 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     if cached_entry and cached_entry.is_valid(bag_path):
         if verbose:
             console = Console()
-            console.print(f"[green]✓[/green] Using cached bag analysis for [bold]{bag_path}[/bold]")
+            ui = CommonUI()
+            ui.console = console
+            Message.success(f"✓ Using cached bag analysis for {bag_path}", console)
         return True
     
     if not auto_load and not force_load:
@@ -482,21 +487,21 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
     
     should_load = force_load
     if not force_load:
-        console.print(f"[yellow]⚠[/yellow] Bag file [bold]{bag_path}[/bold] is not loaded in cache.")
+        Message.warning(f"⚠ Bag file {bag_path} is not loaded in cache.", console)
         
         # Different prompts based on build_index mode
         if build_index:
-            console.print("[blue]Note:[/blue] Verbose mode enabled - will build DataFrame index for detailed statistics.")
+            Message.info("Note: Verbose mode enabled - will build DataFrame index for detailed statistics.", console)
             should_load = typer.confirm("Would you like to load it with DataFrame indexing now?", default=True)
         else:
             should_load = typer.confirm("Would you like to load it now?", default=True)
         
         if not should_load:
-            console.print("[yellow]Operation cancelled. Please load the bag first using:[/yellow] [bold]rose load {bag_path}[/bold]")
+            Message.warning(f"Operation cancelled. Please load the bag first using: rose load {bag_path}", console)
             return False
     
     # Load the bag
-    console.print(f"[blue]Loading bag file into cache...[/blue]")
+    Message.info("Loading bag file into cache...", console)
     
     try:
         # Use async loading
@@ -508,10 +513,10 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
                 # Simple progress indication
                 if isinstance(current, (int, float)) and isinstance(total, (int, float)) and total > 0:
                     percentage = (current / total) * 100
-                    console.print(f"[blue]Loading... {percentage:.1f}%[/blue]", end="\r")
+                    console.print(f"Loading... {percentage:.1f}%", end="\r")
                 else:
                     # Handle string descriptions
-                    console.print(f"[blue]{current}[/blue]", end="\r")
+                    console.print(f"{current}", end="\r")
             
             bag_info, elapsed_time = await parser.load_bag_async(
                 str(bag_path), 
@@ -531,13 +536,13 @@ def check_and_load_bag_cache(bag_path: Path, auto_load: bool = True, verbose: bo
         bag_info, elapsed_time = loop.run_until_complete(load_bag())
         
         if bag_info:
-            console.print(f"[green]✓[/green] Successfully loaded bag into cache in {elapsed_time:.2f}s")
+            Message.success(f"✓ Successfully loaded bag into cache in {elapsed_time:.2f}s", console)
             if verbose:
                 console.print(f"  Topics: {len(bag_info.topics) if bag_info.topics else 0}")
                 console.print(f"  Duration: {bag_info.duration_seconds:.2f}s" if bag_info.duration_seconds else "  Duration: Unknown")
             return True
         else:
-            console.print("[red]✗[/red] Failed to load bag into cache")
+            Message.error("✗ Failed to load bag into cache", console)
             return False
             
     except Exception as e:

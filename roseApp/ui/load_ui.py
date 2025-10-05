@@ -11,20 +11,25 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI
+from .interactive_common import InteractiveCommon, BagLoader
+from .command_builder import CommandBuilder, InteractiveWizard
 
 
 class LoadUI:
     """UI components specifically for the load command."""
     
-    def __init__(self):
-        self.console = Console()
+    def __init__(self, console: Optional[Console] = None):
+        self.console = console or Console()
         self.common_ui = CommonUI()
         self.progress_ui = ProgressUI()
+        self.interactive = InteractiveCommon(self.console)
+        self.bag_loader = BagLoader(self.console)
+        self.wizard = InteractiveWizard("load", self.console)
     
     def display_loading_started(self, file_count: int, build_index: bool) -> None:
         """Display loading started message."""
         index_text = "with DataFrame indexing" if build_index else "without indexing"
-        self.common_ui.show_info(f"Loading {file_count} bag file(s) {index_text}...")
+        Message.info(f"Loading {file_count} bag file(s, self.console) {index_text}...")
     
     def display_loading_progress(self, current: int, total: int, file_path: str) -> None:
         """Display loading progress for individual file."""
@@ -39,14 +44,14 @@ class LoadUI:
         """Display successful file loading."""
         file_name = Path(file_path).name
         details = f"{topics_count} topics, {messages_count} messages" if topics_count > 0 else ""
-        self.common_ui.show_success(
-            f"✓ Loaded {file_name} in {elapsed_time:.2f}s {details}"
-        )
+        Message.success(
+            f"Loaded {file_name} in {elapsed_time:.2f}s {details}"
+        , self.console)
     
     def display_loading_failed(self, file_path: str, error: str) -> None:
         """Display failed file loading."""
         file_name = Path(file_path).name
-        self.common_ui.show_error(f"✗ Failed to load {file_name}: {error}")
+        Message.error(f"✗ Failed to load {file_name}: {error}", self.console)
     
     def display_batch_results(self, results: List[Dict[str, Any]], total_time: float) -> None:
         """Display batch loading results."""
@@ -85,7 +90,7 @@ class LoadUI:
     
     def display_failed_summary(self, failed: List[Dict[str, Any]]) -> None:
         """Display failed loading summary."""
-        self.common_ui.show_error(f"Failed to load {len(failed)} file(s):")
+        Message.error(f"Failed to load {len(failed)} file(s):")
         for result in failed:
             file_name = Path(result.get('file_path', '')).name
             error = result.get('error', 'Unknown error')
@@ -94,12 +99,12 @@ class LoadUI:
     def display_found_files(self, files: List[str], patterns: List[str]) -> None:
         """Display found files."""
         if not files:
-            self.common_ui.show_warning("No bag files found matching patterns")
+            Message.warning("No bag files found matching patterns", self.console)
             for pattern in patterns:
                 self.console.print(f"  Pattern: {pattern}")
             return
         
-        self.common_ui.show_info(f"Found {len(files)} bag file(s):")
+        Message.info(f"Found {len(files)} bag file(s):")
         for file_path in files:
             file_path_obj = Path(file_path)
             if file_path_obj.exists():
@@ -112,9 +117,9 @@ class LoadUI:
         """Display already cached file status."""
         file_name = Path(file_path).name
         if is_valid:
-            self.common_ui.show_info(f"{file_name} is already cached and valid")
+            Message.info(f"{file_name} is already cached and valid", self.console)
         else:
-            self.common_ui.show_warning(f"{file_name} is cached but invalid - will reload")
+            Message.warning(f"{file_name} is cached but invalid - will reload", self.console)
     
     def display_reload_confirmation(self, file_path: str) -> bool:
         """Display reload confirmation."""
@@ -126,14 +131,14 @@ class LoadUI:
     
     def display_force_reload_info(self, count: int) -> None:
         """Display force reload information."""
-        self.common_ui.show_info(f"Force reloading {count} file(s)...")
+        Message.info(f"Force reloading {count} file(s, self.console)...")
     
     def display_indexing_info(self, enabled: bool) -> None:
         """Display indexing configuration."""
         if enabled:
-            self.common_ui.show_info("Building DataFrame indexes for enhanced analysis")
+            Message.info("Building DataFrame indexes for enhanced analysis", self.console)
         else:
-            self.common_ui.show_info("Loading without DataFrame indexing (faster)")
+            Message.info("Loading without DataFrame indexing (faster, self.console)")
     
     def display_progress_header(self, total_files: int, build_index: bool) -> None:
         """Display progress header."""
@@ -156,7 +161,7 @@ class LoadUI:
     def display_cache_miss(self, file_path: str) -> None:
         """Display cache miss information."""
         file_name = Path(file_path).name
-        self.common_ui.show_info(f"Loading {file_name} into cache")
+        Message.info(f"Loading {file_name} into cache", self.console)
     
     def display_cache_hit(self, file_path: str, is_valid: bool) -> None:
         """Display cache hit information."""
@@ -175,19 +180,19 @@ class LoadUI:
     
     def display_loading_cancelled(self) -> None:
         """Display loading cancelled message."""
-        self.common_ui.show_warning("Loading cancelled by user")
+        Message.warning("Loading cancelled by user", self.console)
     
     def display_validation_start(self, file_count: int) -> None:
         """Display validation start message."""
-        self.common_ui.show_info(f"Validating {file_count} bag file(s)...")
+        Message.info(f"Validating {file_count} bag file(s, self.console)...")
     
     def display_validation_result(self, file_path: str, is_valid: bool, error: str = None) -> None:
         """Display validation result."""
         file_name = Path(file_path).name
         if is_valid:
-            self.console.print(f"  ✓ {file_name}")
+            self.console.print(f"  {file_name} - Valid")
         else:
-            self.console.print(f"  ✗ {file_name}: {error}")
+            self.console.print(f"  {file_name}: {error} - Invalid")
     
     def display_validation_summary(self, valid_count: int, invalid_count: int) -> None:
         """Display validation summary."""
@@ -195,20 +200,20 @@ class LoadUI:
         self.console.print(f"\nValidation complete: {valid_count}/{total} files valid")
         
         if invalid_count > 0:
-            self.common_ui.show_warning(f"{invalid_count} file(s) failed validation")
+            Message.warning(f"{invalid_count} file(s, self.console) failed validation")
     
     def display_cleanup_info(self, removed_count: int, freed_space: int) -> None:
         """Display cleanup information."""
         if removed_count > 0:
-            self.common_ui.show_info(
+            Message.info(
                 f"Cleanup: removed {removed_count} invalid entries, "
                 f"freed {self.common_ui.format_file_size(freed_space)}"
             )
     
     def display_memory_warning(self, estimated_memory: int) -> None:
         """Display memory usage warning."""
-        self.common_ui.show_warning(
-            f"Estimated memory usage: {self.common_ui.format_file_size(estimated_memory)}. "
+        Message.warning(
+            f"Estimated memory usage: {self.common_ui.format_file_size(estimated_memory, self.console)}. "
             f"Consider using --no-index for large files."
         )
     
@@ -219,7 +224,7 @@ class LoadUI:
     def display_loading_error_summary(self, errors: List[str]) -> None:
         """Display loading error summary."""
         if errors:
-            self.common_ui.show_error("Loading errors:")
+            Message.error("Loading errors:", self.console)
             for error in errors[:5]:  # Show first 5 errors
                 self.console.print(f"  • {error}")
             if len(errors) > 5:
@@ -247,10 +252,154 @@ class LoadUI:
     def display_file_already_loaded(self, file_path: str) -> None:
         """Display file already loaded message."""
         file_name = Path(file_path).name
-        self.common_ui.show_info(f"{file_name} is already loaded")
+        Message.info(f"{file_name} is already loaded", self.console)
     
     def display_loading_start(self, file_path: str, build_index: bool) -> None:
         """Display loading start message."""
         file_name = Path(file_path).name
         index_text = " with indexing" if build_index else ""
-        self.common_ui.show_info(f"Loading {file_name}{index_text}")
+        Message.info(f"Loading {file_name}{index_text}", self.console)
+    
+    def run_interactive(self) -> None:
+        """Run interactive load command wizard - builds and executes load commands"""
+        from InquirerPy import inquirer
+        from InquirerPy.base.control import Choice
+        import os
+        import subprocess
+        import sys
+        
+        self.wizard.show_welcome("Load ROS bag files into cache for faster operations")
+        
+        while True:
+            # Ask for input source
+            input_source = inquirer.select(
+                message="Select input source:",
+                choices=[
+                    Choice(value="file", name="Single bag file"),
+                    Choice(value="directory", name="Directory with bag files"),
+                    Choice(value="pattern", name="File pattern (glob/regex)"),
+                    Choice(value="exit", name="Exit")
+                ]
+            ).execute()
+            
+            if input_source == "exit" or input_source is None:
+                break
+            
+            # Get bag files based on selection
+            bag_files = []
+            
+            if input_source == "file":
+                bag_file = self.interactive.ask_for_bag_file("Select bag file to load:")
+                if bag_file:
+                    bag_files = [bag_file]
+            
+            elif input_source == "directory":
+                directory = inquirer.filepath(
+                    message="Select directory containing bag files:",
+                    validate=lambda x: os.path.isdir(x) or "Must be a valid directory"
+                ).execute()
+                
+                if directory:
+                    selected_files = self.interactive.ask_for_bag_files_from_directory(directory)
+                    if selected_files:
+                        bag_files = selected_files
+            
+            elif input_source == "pattern":
+                pattern = inquirer.text(
+                    message="Enter file pattern (supports glob and regex):",
+                    default="*.bag",
+                    validate=lambda x: len(x.strip()) > 0 or "Pattern cannot be empty"
+                ).execute()
+                
+                if pattern:
+                    from ..cli.load import find_bag_files
+                    bag_files = find_bag_files([pattern])
+                    
+                    if not bag_files:
+                        Message.warning("No files found matching pattern", self.console)
+                        continue
+                    
+                    # Show found files and ask for confirmation
+                    self.display_found_files(bag_files, [pattern])
+                    if not self.interactive.confirm_operation("Load these files?"):
+                        continue
+            
+            if not bag_files:
+                continue
+            
+            # Ask for loading options
+            self.console.print("\nLoading Options:")
+            
+            # Build index option
+            build_index = inquirer.confirm(
+                message="Build DataFrame index for data analysis? (slower but enables data commands)",
+                default=False
+            ).execute()
+            
+            # Force reload option
+            force = inquirer.confirm(
+                message="Force reload even if files are already cached?",
+                default=False
+            ).execute()
+            
+            # Workers option
+            workers = self.interactive.ask_for_workers_count()
+            
+            # Verbose option
+            verbose = inquirer.confirm(
+                message="Show detailed loading information?",
+                default=True
+            ).execute()
+            
+            # Dry run option
+            dry_run = inquirer.confirm(
+                message="Dry run (preview only, don't actually load)?",
+                default=False
+            ).execute()
+            
+            # Build and execute command
+            options = {
+                "workers": workers,
+                "verbose": verbose,
+                "force": force,
+                "dry_run": dry_run,
+                "build_index": build_index
+            }
+            
+            # Show summary
+            summary = {
+                "Input files": len(bag_files),
+                "Build index": "Yes" if build_index else "No",
+                "Force reload": "Yes" if force else "No",
+                "Workers": workers or "Default",
+                "Dry run": "Yes" if dry_run else "No"
+            }
+            self.wizard.show_summary(summary)
+            
+            # Build and execute command
+            success = self.wizard.command_builder.build_and_execute_command(
+                "load", bag_files, options
+            )
+            
+            # Ask if user wants to continue
+            if not inquirer.confirm(
+                message="Load more files?",
+                default=False
+            ).execute():
+                break
+        
+        self.wizard.show_exit_message()
+    
+    def _create_await_sync(self):
+        """Create async helper function"""
+        import asyncio
+        
+        def await_sync(coro):
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            return loop.run_until_complete(coro)
+        
+        return await_sync

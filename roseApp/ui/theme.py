@@ -1,195 +1,226 @@
 """
-Simple, unified theme system for Rose CLI tools.
-Inspired by vim color schemes - provides minimal but consistent styling.
-
-This module provides a single source of truth for all CLI colors and styling,
-ensuring consistent appearance across all CLI commands without exposing
-implementation details to individual UI components.
+Simple theme system for Rose CLI.
+Loads colors from rose.theme.yaml configuration file.
 """
 
-from enum import Enum
+import os
+from pathlib import Path
 from typing import Dict, Optional
-from dataclasses import dataclass
+import yaml
 
 
-class ThemeMode(Enum):
-    """Simple theme modes"""
-    AUTO = "auto"
-    LIGHT = "light"
-    DARK = "dark"
-
-
-@dataclass
-class ThemeColors:
-    """Simple color palette for CLI"""
+class ThemeLoader:
+    """Load and manage theme colors from YAML configuration"""
     
-    # Base colors
-    primary: str = "cyan"
-    secondary: str = "blue"
-    accent: str = "yellow"
-    
-    # Status colors
-    success: str = "green"
-    warning: str = "yellow"
-    error: str = "red"
-    info: str = "blue"
-    
-    # Neutral colors
-    muted: str = "dim"
-    dim: str = "dim"
-    
-    # Special colors
-    highlight: str = "bright_white"
-    background: str = "black"
-    foreground: str = "white"
-    
-    # File operations
-    file: str = "cyan"
-    directory: str = "blue"
-    executable: str = "green"
-    link: str = "magenta"
-
-
-class SimpleTheme:
-    """Simple theme system without complexity"""
-    
-    # Standard color palette
-    _colors = ThemeColors()
-    
-    # Vim-inspired color mappings
-    _color_map = {
-        # Status messages
-        'ok': _colors.success,
-        'success': _colors.success,
-        'good': _colors.success,
-        'pass': _colors.success,
-        
-        'warn': _colors.warning,
-        'warning': _colors.warning,
-        'caution': _colors.warning,
-        
-        'error': _colors.error,
-        'fail': _colors.error,
-        'bad': _colors.error,
-        'critical': _colors.error,
-        
-        'info': _colors.info,
-        'note': _colors.info,
-        'debug': _colors.muted,
-        
-        # UI elements
-        'title': _colors.primary,
-        'header': _colors.primary,
-        'label': _colors.secondary,
-        'value': _colors.foreground,
-        'path': _colors.file,
-        'topic': _colors.accent,
-        
-        # Operations
-        'processing': _colors.accent,
-        'loading': _colors.muted,
-        'complete': _colors.success,
-        'skip': _colors.muted,
-        
-        # File types
-        'file': _colors.file,
-        'directory': _colors.directory,
-        'size': _colors.muted,
-        'time': _colors.muted,
-        
-        # Special
-        'highlight': _colors.highlight,
-        'dim': _colors.dim,
-        'muted': _colors.muted,
-    }
+    _colors: Optional[Dict[str, str]] = None
+    _theme_file: Optional[Path] = None
     
     @classmethod
-    def get_color(cls, color_name: str) -> str:
-        """Get color by name - simple lookup without complexity"""
-        return cls._color_map.get(color_name.lower(), cls._colors.foreground)
+    def _find_theme_file(cls) -> Optional[Path]:
+        """Find theme file based on configuration
+        
+        Priority:
+        1. Theme file specified in rose.config.yaml (theme_file setting)
+        2. rose.theme.default.yaml in same directory as rose.config.yaml
+        3. rose.theme.default.yaml in fallback search paths
+        4. Built-in defaults
+        
+        Search paths:
+        1. Same directory as rose.config.yaml (if found)
+        2. Current directory
+        3. Project root
+        4. User config (~/.rose/)
+        5. System config (/etc/rose/)
+        
+        Returns:
+            Path to theme file or None if not found
+        """
+        # Try to load theme file from configuration
+        theme_filename = None
+        config_dir = None
+        
+        try:
+            from ..core.config import get_config
+            config = get_config()
+            if hasattr(config, 'theme_file'):
+                theme_filename = config.theme_file
+            
+            # Get config file directory if available
+            if hasattr(config, '_loaded_config_path') and config._loaded_config_path:
+                config_dir = Path(config._loaded_config_path).parent
+        except Exception:
+            pass
+        
+        # Default to rose.theme.default.yaml if not specified
+        if not theme_filename:
+            theme_filename = "rose.theme.default.yaml"
+        
+        # Build search paths with config directory first
+        search_dirs = []
+        
+        # Priority 1: Same directory as rose.config.yaml
+        if config_dir:
+            search_dirs.append(config_dir)
+        
+        # Priority 2-5: Other search paths
+        search_dirs.extend([
+            Path.cwd(),
+            Path(__file__).parent.parent.parent,
+            Path.home() / ".rose",
+            Path("/etc/rose"),
+        ])
+        
+        # Search for the theme file
+        for base_dir in search_dirs:
+            theme_file = base_dir / theme_filename
+            if theme_file.exists() and theme_file.is_file():
+                return theme_file
+        
+        return None
     
     @classmethod
-    def get_style(cls, style_name: str) -> str:
-        """Get style by name - same as color for simplicity"""
-        return cls.get_color(style_name)
+    def _load_colors(cls) -> Dict[str, str]:
+        """Load colors from theme YAML file
+        
+        Returns:
+            Dictionary of color name to Rich color value mappings
+        """
+        theme_file = cls._find_theme_file()
+        
+        if theme_file is None:
+            # Fallback to default colors if no theme file found
+            return cls._get_default_colors()
+        
+        try:
+            with open(theme_file, 'r', encoding='utf-8') as f:
+                colors = yaml.safe_load(f)
+                
+            if not isinstance(colors, dict):
+                # Invalid format, use defaults
+                return cls._get_default_colors()
+            
+            cls._theme_file = theme_file
+            return colors
+            
+        except Exception as e:
+            # Error reading file, use defaults
+            print(f"Warning: Error loading theme file {theme_file}: {e}")
+            return cls._get_default_colors()
     
     @classmethod
-    def style_text(cls, text: str, color_name: str, modifier: str = "") -> str:
-        """Apply style to text"""
-        color = cls.get_color(color_name)
-        if modifier:
-            return f"[{modifier} {color}]{text}[/{modifier} {color}]"
-        return f"[{color}]{text}[/{color}]"
-    
-    @classmethod
-    def get_all_colors(cls) -> Dict[str, str]:
-        """Get all available color names"""
-        return cls._color_map.copy()
-
-
-# Message styles for different contexts
-class MessageStyle:
-    """Predefined message styles for consistency"""
-    
-    @staticmethod
-    def success(text: str) -> str:
-        return SimpleTheme.style_text(text, "success")
-    
-    @staticmethod
-    def error(text: str) -> str:
-        return SimpleTheme.style_text(text, "error")
-    
-    @staticmethod
-    def warning(text: str) -> str:
-        return SimpleTheme.style_text(text, "warning")
-    
-    @staticmethod
-    def info(text: str) -> str:
-        return SimpleTheme.style_text(text, "info")
-    
-    @staticmethod
-    def title(text: str) -> str:
-        return SimpleTheme.style_text(text, "title", "bold")
-    
-    @staticmethod
-    def path(text: str) -> str:
-        return SimpleTheme.style_text(text, "path")
-    
-    @staticmethod
-    def topic(text: str) -> str:
-        return SimpleTheme.style_text(text, "topic")
-    
-    @staticmethod
-    def dim(text: str) -> str:
-        return SimpleTheme.style_text(text, "dim")
-    
-    @staticmethod
-    def get_message(text: str, message_type: str) -> str:
-        """Get styled message based on type"""
-        type_map = {
-            "success": MessageStyle.success,
-            "error": MessageStyle.error,
-            "warning": MessageStyle.warning,
-            "info": MessageStyle.info,
-            "title": MessageStyle.title,
-            "path": MessageStyle.path,
-            "topic": MessageStyle.topic,
-            "dim": MessageStyle.dim,
+    def _get_default_colors(cls) -> Dict[str, str]:
+        """Get default color scheme (fallback)
+        
+        Returns:
+            Dictionary of default colors
+        """
+        return {
+            # Primary colors
+            'primary': 'orange1',
+            'accent': 'orange1',
+            
+            # Status colors
+            'success': 'dark_cyan',
+            'warning': 'bright_yellow',
+            'error': 'bright_red',
+            'info': 'bright_cyan',
+            
+            # UI colors
+            'muted': 'bright_black',
+            'highlight': 'bright_white',
+            
+            # Semantic colors
+            'path': 'bright_cyan',  # For file and directory paths
         }
+    
+    @classmethod
+    def get_colors(cls) -> Dict[str, str]:
+        """Get current color configuration
         
-        style_func = type_map.get(message_type, MessageStyle.info)
-        return style_func(text)
+        Returns:
+            Dictionary of color mappings
+        """
+        if cls._colors is None:
+            cls._colors = cls._load_colors()
+        return cls._colors
+    
+    @classmethod
+    def reload(cls):
+        """Reload colors from theme file"""
+        cls._colors = None
+        cls._theme_file = None
+    
+    @classmethod
+    def get_theme_file(cls) -> Optional[Path]:
+        """Get path to currently loaded theme file
+        
+        Returns:
+            Path to theme file or None if using defaults
+        """
+        if cls._colors is None:
+            cls.get_colors()  # Load colors to set theme_file
+        return cls._theme_file
 
 
-# Global theme instance
-THEME = SimpleTheme()
+def get_color(color_name: str, default: str = 'orange1') -> str:
+    """Get color value by name
+    
+    Args:
+        color_name: Name of the color to retrieve
+        default: Default color if name not found
+        
+    Returns:
+        Rich color string
+        
+    Examples:
+        >>> get_color('primary')
+        'orange1'
+        >>> get_color('success')
+        'dark_cyan'
+        >>> get_color('unknown', 'white')
+        'white'
+    """
+    colors = ThemeLoader.get_colors()
+    return colors.get(color_name.lower(), default)
 
 
-def get_color(color_name: str) -> str:
-    """Global function to get color by name"""
-    return THEME.get_color(color_name)
+def list_colors() -> Dict[str, str]:
+    """List all available colors
+    
+    Returns:
+        Dictionary of all color mappings
+    """
+    return ThemeLoader.get_colors().copy()
 
 
-def style_text(text: str, color_name: str, modifier: str = "") -> str:
-    """Global function to style text"""
-    return THEME.style_text(text, color_name, modifier)
+def get_theme_file() -> Optional[Path]:
+    """Get path to current theme file
+    
+    Returns:
+        Path to theme file or None if using defaults
+    """
+    return ThemeLoader.get_theme_file()
+
+
+def reload_theme():
+    """Reload theme from file
+    
+    Use this to pick up changes to theme file without restarting.
+    """
+    ThemeLoader.reload()
+
+
+def get_theme_info() -> Dict[str, any]:
+    """Get theme information
+    
+    Returns:
+        Dictionary with file path and color count
+    """
+    theme_file = get_theme_file()
+    colors = list_colors()
+    
+    return {
+        'theme_file': str(theme_file) if theme_file else 'Built-in defaults',
+        'color_count': len(colors),
+        'colors': colors
+    }

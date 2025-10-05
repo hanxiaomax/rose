@@ -11,6 +11,7 @@ from rich.text import Text
 from rich.panel import Panel
 from .common_ui import Message
 from .common_ui import CommonUI
+from .theme import get_color
 
 
 class InspectUI:
@@ -35,8 +36,8 @@ class InspectUI:
         self.console.print(f"\nTopics:")
         for topic in topics:
             topic_line = Text()
-            topic_line.append(f"  • {topic['name']}", style="bold cyan")
-            topic_line.append(f" ({topic['message_type']})", style="dim")
+            topic_line.append(f"  • {topic['name']}", style=f"bold {get_color('primary')}")
+            topic_line.append(f" ({topic['message_type']})", style=get_color('muted'))
             self.console.print(topic_line)
     
     def display_inspection_result(self, result: Dict[str, Any], display_config: Dict[str, Any]) -> None:
@@ -70,38 +71,37 @@ class InspectUI:
     def display_verbose_topics(self, topics: List[Dict[str, Any]]) -> None:
         """Display topics with detailed information."""
         if not topics:
-            self.common_ui.show_info("No topics found.")
+            Message.info("No topics found.", self.console)
             return
         
-        table = Table(title="Topics")
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Type", style="magenta")
-        table.add_column("Messages", justify="right", style="green")
-        table.add_column("Frequency", justify="right", style="blue")
-        table.add_column("Size", justify="right", style="yellow")
+        self.console.print("\n[bold]Topics:[/bold]")
         
-        for topic in topics:
-            table.add_row(
-                topic.get('name', ''),
-                topic.get('message_type', ''),
-                str(topic.get('message_count', 0)),
-                f"{topic.get('frequency', 0):.1f} Hz" if 'frequency' in topic else "-",
-                self.common_ui.format_file_size(topic.get('size_bytes', 0))
+        for i, topic in enumerate(topics, 1):
+            name = topic.get('name', '')
+            msg_type = topic.get('message_type', '')
+            messages = topic.get('message_count', 0)
+            frequency = f"{topic.get('frequency', 0):.1f} Hz" if 'frequency' in topic else "-"
+            size = self.common_ui.format_file_size(topic.get('size_bytes', 0))
+            
+            self.console.print(
+                f"  {i:2d}. [{get_color('primary')}]{name}[/{get_color('primary')}] "
+                f"([{get_color('accent')}]{msg_type}[/{get_color('accent')}]) "
+                f"- [{get_color('success')}]{messages} messages[/{get_color('success')}] "
+                f"@ [{get_color('info')}]{frequency}[/{get_color('info')}] "
+                f"([{get_color('warning')}]{size}[/{get_color('warning')}])"
             )
-        
-        self.console.print(table)
     
     def display_simple_topics(self, topics: List[Dict[str, Any]]) -> None:
         """Display topics in simple format."""
         if not topics:
-            self.common_ui.show_info("No topics found.")
+            Message.info("No topics found.", self.console)
             return
         
-        self.common_ui.show_info(f"Topics ({len(topics)}):")
+        Message.info(f"Topics ({len(topics)}):")
         for topic in topics:
             topic_line = Text()
             topic_line.append(f"  • {topic['name']}", style="bold cyan")
-            topic_line.append(f" ({topic['message_type']})", style="dim")
+            topic_line.append(f" ({topic['message_type']})", style=get_color('muted'))
             self.console.print(topic_line)
     
     def display_field_analysis(self, field_analysis: Dict[str, Any], topics: List[Dict[str, Any]]) -> None:
@@ -126,25 +126,25 @@ class InspectUI:
     def display_export_success(self, output_file: Optional[Path]) -> None:
         """Display export success message."""
         if output_file:
-            self.common_ui.show_success(f"Export saved to: {output_file}")
+            Message.success(f"Export saved to: {output_file}", self.console)
     
     def display_export_failed(self) -> None:
         """Display export failure message."""
-        self.common_ui.show_error("Failed to export results")
+        Message.error("Failed to export results", self.console)
     
     def display_cache_status(self, cached: bool, file_path: str) -> None:
         """Display cache status information."""
         if cached:
-            self.common_ui.show_info(f"Loaded from cache: {file_path}")
+            Message.info(f"Loaded from cache: {file_path}", self.console)
         else:
-            self.common_ui.show_info(f"Loaded fresh: {file_path}")
+            Message.info(f"Loaded fresh: {file_path}", self.console)
     
     def display_loading_message(self, file_path: str) -> None:
         """Display loading message."""
-        self.common_ui.show_info(f"Loading bag file: {file_path}")
+        Message.info(f"Loading bag file: {file_path}", self.console)
     
     def display_filtering_topics(self, filtered_topics: List[str], original_count: int) -> None:
         """Display topic filtering results."""
-        self.common_ui.show_info(
+        Message.info(
             f"Filtered to {len(filtered_topics)} topics from {original_count} total"
         )

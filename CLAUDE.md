@@ -11,13 +11,24 @@ ROSE is a high-performance ROS bag filtering tool with distinctive cassette futu
 ### Core Components
 - **Entry Point**: `roseApp/rose.py:app` - Main Typer CLI dispatcher with subcommands
 - **Core Engine**: `roseApp/core/` - Bag file parsing, filtering, and compression logic
-- **CLI Tools**: `roseApp/cli/` - Command-line utilities and interactive interfaces  
-- **TUI Interface**: `roseApp/tui/` - Textual-based terminal UI with retro styling
+- **CLI Tools**: `roseApp/cli/` - Command-line utilities (load, extract, compress, inspect, data, cache, plugin)
+- **Interactive CLI**: `roseApp/interactive/` - Guided CLI operations with command routing
+- **TUI Interface**: `roseApp/ui/` - Textual-based terminal UI with retro styling
+- **Plugin System**: `roseApp/core/plugins/` - Extensible plugin architecture with hooks and scripts
 
 ### Key Classes
 - **BagManager** (`roseApp/core/BagManager.py`) - Central orchestrator for bag operations
 - **Parser** (`roseApp/core/parser.py`) - ROS bag file parsing using rosbags
-- **ExportManager** (`roseApp/core/export_manager.py`) - Handles filtered bag output
+- **ExportManager** (`roseApp/core/export_manager.py`) - Handles filtered bag output and format exports
+- **CacheManager** (`roseApp/core/cache.py`) - Persistent caching for parsed bag metadata
+- **PluginManager** (`roseApp/core/plugins/manager.py`) - Plugin loading and execution
+- **TUIApp** (`roseApp/tui/tui.py`) - Main TUI application with theme management
+
+### Data Flow Architecture
+- **Parser** → **BagManager** → **ExportManager**: Bag files are parsed into metadata, filtered by topics/time, then exported with optional compression
+- **Cache System**: `roseApp/core/cache.py` provides persistent caching for parsed bag metadata to accelerate repeated operations
+- **Plugin System**: Hot-loadable plugins with hook system for extending functionality
+- **Theme System**: Multiple themes including cassette futurism and Claude-inspired themes
 
 ## Development Commands
 
@@ -30,31 +41,43 @@ pip install -r requirements-dev.txt
 # Install locally for development
 pip install -e .
 
+# Alternative: use install script
+./install.sh
+
 # Verify installation
 rose --help
 ```
 
 ### Testing
 ```bash
-# Run all tests with coverage
-python roseApp/tests/run_tests.py
+# Run bash integration tests (primary testing method)
+cd tests/bash_tests && ./run_all_tests.sh
 
-# Run specific test file
-python roseApp/tests/run_tests.py --file test_bag_manager
+# Run individual bash tests
+cd tests/bash_tests && ./test_inspect.sh
+cd tests/bash_tests && ./test_load.sh
+cd tests/bash_tests && ./test_extract.sh
+cd tests/bash_tests && ./test_compress.sh
+cd tests/bash_tests && ./test_data.sh
+cd tests/bash_tests && ./test_cache.sh
+cd tests/bash_tests && ./test_plugin.sh
 
-# Run fast unit tests only
-python roseApp/tests/run_tests.py --fast
+# Run example test demos
+python example/test_parser_cache_demo.py
 
-# Run tests with coverage report
-python roseApp/tests/run_tests.py --coverage
+# Quick test script
+cd tests/bash_tests && ./quick_test.sh
 ```
 
 ### Development Workflow
 ```bash
+# Install in development mode
+pip install -e .
+
 # Run TUI in dev mode (with hot reload)
 textual run --dev roseApp.tui.tui:app
 
-# CLI commands
+# CLI commands for testing
 rose tui                    # Launch TUI
 rose cli                    # Interactive CLI mode
 rose filter input.bag output.bag -w whitelist.txt
@@ -63,35 +86,63 @@ rose filter input.bag output.bag -w whitelist.txt
 rose inspect topics input.bag
 rose inspect info input.bag
 
-# Extract specific data
-rose extract --help
+# Plugin management
+rose plugin list            # List available plugins
+rose plugin create my_plugin --template basic
+
+# Build package
+hatch build
+
+# Publish to PyPI
+hatch publish
+
+# Run basic syntax check
+python -m py_compile roseApp/**/*.py
+```
+
+### Docker Development
+```bash
+# Build Docker image
+docker build -t rose-bag .
+
+# Run with Docker
+docker run -it --rm -v $(pwd):/data rose-bag rose tui
+
+# Development with Docker
+docker run -it --rm -v $(pwd):/data -v $(pwd)/roseApp/tests:/data/roseApp/tests rose-bag bash
 ```
 
 ## Interface Modes
 
 ### 1. TUI Mode (`rose tui`)
 - Cassette futurism themes (`cassette-walkman`, `cassette-dark`)
+- Claude-inspired themes (`claude-dark`, `claude-light`, `claude-midnight`, `claude-high-contrast`)
 - Fuzzy topic search with real-time filtering
-- Multi-selection batch processing
+- Multi-selection batch processing with parallel execution
 - Whitelist management (load/save)
 - Compression options (BZ2, LZ4, none)
 
 ### 2. Interactive CLI (`rose cli`)
-- Menu-driven interface
-- Guided workflows for filtering
+- Menu-driven interface with InquirerPy
+- Guided workflows for filtering and whitelist management
 - Batch processing capabilities
-- Whitelist creation and management
+- Progress indicators and detailed results
+- **Command Router**: `roseApp/interactive/core/command_router.py` - Routes commands to handlers
+- **Command Handlers**: `roseApp/interactive/commands/` - Individual command implementations
+- **Components**: `roseApp/interactive/components/` - Reusable UI components
 
 ### 3. Direct CLI Commands
-- `rose filter` - Filter bags with topics/whitelists
-- `rose inspect` - Analyze bag contents
-- `rose extract` - Extract specific data
+- `rose filter` - Filter bags with topics/whitelists and compression options
+- `rose inspect` - Analyze bag contents and metadata
+- `rose extract` - Extract specific data to various formats
 - `rose cache` - Manage parser cache
+- `rose plugin` - Plugin management and execution
+- `rose data` - Data analysis and visualization commands
 
 ## Configuration
 
 ### TUI Configuration
-File: `roseApp/tui/config.json`
+File: `roseApp/ui/config.json`
 ```json
 {
     "show_splash_screen": true,
@@ -106,6 +157,10 @@ File: `roseApp/tui/config.json`
 ```bash
 # Ensure proper terminal colors
 export TERM=xterm-256color
+
+# For development debugging
+export ROSE_DEBUG=1
+export ROSE_LOG_LEVEL=DEBUG
 ```
 
 ## Key Features
@@ -120,21 +175,34 @@ export TERM=xterm-256color
 - Time range filtering (TUI only)
 - Parallel processing for batch operations
 - Dry-run mode for previewing operations
+- Multiple output formats via ExportManager (JSON, YAML, CSV, XML, HTML, Markdown)
+
+### Plugin System
+- **Hot-loadable plugins**: Load and reload without restarting
+- **Hook system**: Execute custom logic before/after Rose operations
+- **Data interface**: Safe access to bag data and DataFrames
+- **Custom CLI commands**: Plugins can provide their own commands
+- **Multiple templates**: Basic, data_processor, and hook examples
 
 ## Testing Structure
 
 ### Test Organization
-- **Unit tests**: `roseApp/tests/test_*.py`
-- **Integration tests**: Marked with `@pytest.mark.integration`
-- **Slow tests**: Marked with `@pytest.mark.slow`
+- **Bash integration tests**: `tests/bash_tests/` - Comprehensive command testing
 - **Test data**: Sample bag files in `roseApp/tests/`
+- **Example demos**: `example/` - Usage examples and performance testing
 
 ### Test Commands
 ```bash
-# Run specific test categories
-python roseApp/tests/run_tests.py --file test_parser
-python roseApp/tests/run_tests.py --fast
-python roseApp/tests/run_tests.py --coverage
+# Run all bash tests
+cd tests/bash_tests && ./run_all_tests.sh
+
+# Run specific command tests
+cd tests/bash_tests && ./test_inspect.sh
+cd tests/bash_tests && ./test_load.sh
+cd tests/bash_tests && ./test_extract.sh
+
+# Run tests with specific log level
+ROSE_LOG_LEVEL=DEBUG bash tests/bash_tests/test_inspect.sh
 ```
 
 ## Deployment
@@ -144,15 +212,21 @@ python roseApp/tests/run_tests.py --coverage
 # Update version in pyproject.toml
 hatch build
 hatch publish
+
+# Test build locally
+hatch build && pip install dist/*.whl
 ```
 
 ### Docker Support
 ```bash
-# Build Docker image
+# Build optimized Docker image
 docker build -t rose-bag .
 
-# Run with Docker
-docker run -it --rm -v $(pwd):/data rose-bag rose tui
+# Run with volume mounting
+docker run -it --rm -v $(pwd)/data:/data rose-bag rose tui
+
+# Development with source code mounting
+docker run -it --rm -v $(pwd):/app -w /app python:3.11 bash
 ```
 
 ## Dependencies
@@ -163,7 +237,86 @@ docker run -it --rm -v $(pwd):/data rose-bag rose tui
 - **typer**: CLI framework
 - **rich**: Terminal formatting
 - **pydantic**: Data validation
+- **InquirerPy**: Interactive CLI prompts
 
 ### Optional Dependencies
 - **lz4**: LZ4 compression support
 - **matplotlib/plotly**: Visualization features
+- **pandas**: Data analysis and DataFrame support
+- **yaml**: YAML export support
+
+## Build Configuration
+- Uses hatchling build system with pyproject.toml
+- Tests and development files excluded from wheel
+- Supports Python 3.8+
+- Includes TCSS files and JSON configs in package
+
+## Advanced Features
+
+### Cache System
+- **Persistent caching**: Parsed bag metadata cached in `~/.cache/rose/`
+- **Automatic invalidation**: Cache invalidates when bag files are modified
+- **Performance optimization**: Dramatically reduces repeated parse operations
+
+### Theme System
+- **cassette-walkman**: Light theme with retro styling
+- **cassette-dark**: Dark theme variant
+- **claude-dark**: Claude-inspired dark theme with signature purple/blue colors
+- **claude-light**: Claude-inspired light theme
+- **claude-midnight**: High-contrast midnight theme
+- **claude-high-contrast**: Accessibility-focused high contrast theme
+
+### Whitelist Management
+- **Format**: Text files with one topic per line
+- **Location**: `whitelists/` directory
+- **Integration**: Reference in `roseApp/tui/config.json` for TUI access
+- **CLI management**: Create, view, and manage via interactive CLI
+
+## Development Guidelines
+
+### Code Style & Patterns
+- **CLI/Interactive Parity**: Same parameters and validation logic for both CLI and interactive modes
+- **Error Handling**: Use `log_cli_error()` for consistent error reporting
+- **Type Hints**: Always use type hints for function parameters and return values
+- **Rich Formatting**: Use rich console for colored output and progress indicators
+- **Dry Run Support**: All destructive operations must support `--dry-run`
+
+### Architecture Patterns
+- **Factory Pattern**: Use `create_parser()` for parser instantiation
+- **Interface-based Design**: Abstract base classes for extensibility
+- **Cache-first Strategy**: Persistent metadata caching for performance
+- **Modular Design**: Separate concerns between parsing, filtering, UI, and plugins
+
+### Debugging
+```bash
+# Enable debug logging
+export ROSE_DEBUG=1
+export ROSE_LOG_LEVEL=DEBUG
+
+# Run with debug output
+rose --help --verbose
+
+# Check cache directory
+ls ~/.cache/rose/
+```
+
+### Performance Testing
+```bash
+# Test with large bag files
+time rose filter large.bag filtered.bag -w whitelist.txt
+
+# Test cache performance
+rm ~/.cache/rose/* && time rose inspect info test.bag
+```
+
+### Plugin Development
+```bash
+# Create new plugin
+rose plugin create my_analyzer --template data_processor
+
+# Test plugin
+rose plugin run my_analyzer process --help
+
+# Install plugin from file
+rose plugin install plugins/my_custom_plugin.py
+```

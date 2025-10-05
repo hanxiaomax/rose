@@ -10,6 +10,7 @@ from rich.table import Table
 from rich.text import Text
 from .common_ui import Message
 from .common_ui import CommonUI, ProgressUI, TableUI
+from .theme import get_color
 
 
 class CompressUI:
@@ -27,11 +28,10 @@ class CompressUI:
         failed = [r for r in results if not r.get('success', False)]
         
         if successful:
-            self.console.print(f"\n[bold green]✓[/bold green] Compression completed successfully")
+            Message.success("\n✓ Compression completed successfully", self.console)
             
             # Create compression results table
-            table = self.table_ui.create_compression_summary_table(successful)
-            self.console.print(table)
+            self.table_ui.display_compression_summary_list(successful)
             
         if failed:
             self.display_failed_compressions(failed)
@@ -41,7 +41,7 @@ class CompressUI:
         if not failed_results:
             return
             
-        self.common_ui.show_error(f"Failed to compress {len(failed_results)} file(s):")
+        Message.error(f"Failed to compress {len(failed_results)} file(s):")
         for result in failed_results:
             file_name = Path(result.get('input_file', '')).name
             error = result.get('error', 'Unknown error')
@@ -75,7 +75,7 @@ class CompressUI:
     
     def display_dry_run_preview(self, files: List[str], output_pattern: str, compression: str) -> None:
         """Display dry run preview of compression operations."""
-        self.common_ui.show_warning("DRY RUN - Preview of compression operations:")
+        Message.warning("DRY RUN - Preview of compression operations:", self.console)
         
         for file_path in files:
             input_path = Path(file_path)
@@ -110,10 +110,10 @@ class CompressUI:
         self.console.print(f"\n[bold]Validation Summary[/bold]")
         
         if valid_files:
-            self.common_ui.show_success(f"  {len(valid_files)} bag(s) passed validation")
+            Message.success(f"  {len(valid_files)} bag(s) passed validation")
             
         if invalid_files:
-            self.common_ui.show_error(f"  {len(invalid_files)} bag(s) failed validation")
+            Message.error(f"  {len(invalid_files)} bag(s) failed validation")
             for v in invalid_files:
                 file_name = Path(v.get('file', '')).name
                 error = v.get('error', 'Unknown error')
@@ -122,10 +122,10 @@ class CompressUI:
     def display_found_files(self, files: List[Path]) -> None:
         """Display found bag files."""
         if not files:
-            self.common_ui.show_info("No bag files found")
+            Message.info("No bag files found", self.console)
             return
             
-        self.common_ui.show_info(f"Found {len(files)} bag file(s):")
+        Message.info(f"Found {len(files)} bag file(s):")
         for file in files:
             if file.exists():
                 size = self.common_ui.format_file_size(file.stat().st_size)
@@ -136,17 +136,17 @@ class CompressUI:
     def display_cache_loading(self, uncached_files: List[Path]) -> None:
         """Display cache loading status."""
         if uncached_files:
-            self.common_ui.show_warning(f"{len(uncached_files)} bag(s) not in cache. Loading...")
+            Message.warning(f"{len(uncached_files)} bag(s) not in cache. Loading...")
             for file in uncached_files:
                 self.console.print(f"  Loading: {file.name}")
     
     def display_loading_complete(self, file_path: str, elapsed_time: float) -> None:
         """Display successful cache loading."""
-        self.common_ui.show_success(f"✓ Successfully loaded {Path(file_path).name} into cache in {elapsed_time:.2f}s")
+        Message.success(f"✓ Successfully loaded {Path(file_path, self.console).name} into cache in {elapsed_time:.2f}s")
     
     def display_loading_failed(self, file_path: str, error: str) -> None:
         """Display failed cache loading."""
-        self.common_ui.show_error(f"✗ Failed to load {Path(file_path).name}: {error}")
+        Message.error(f"✗ Failed to load {Path(file_path, self.console).name}: {error}")
     
     def confirm_compression(self, total_files: int, compression: str) -> bool:
         """Confirm compression operation."""
@@ -164,25 +164,25 @@ class CompressUI:
     
     def display_compression_options(self, available: List[str]) -> None:
         """Display available compression options."""
-        self.common_ui.show_info("Available compression types:")
+        Message.info("Available compression types:", self.console)
         for comp in available:
             self.console.print(f"  • {comp.upper()}")
     
     def display_invalid_compression(self, compression: str, valid: List[str]) -> None:
         """Display invalid compression error."""
-        self.common_ui.show_error(
+        Message.error(
             f"Invalid compression '{compression}'. Valid options: {', '.join(valid)}"
         )
     
     def display_file_not_found(self, patterns: List[str]) -> None:
         """Display file not found message."""
-        self.common_ui.show_error("No bag files found matching the specified patterns")
+        Message.error("No bag files found matching the specified patterns", self.console)
         for pattern in patterns:
             self.console.print(f"  Pattern: {pattern}")
     
     def display_compression_started(self, files: List[str], workers: int, compression: str) -> None:
         """Display compression start message."""
-        self.common_ui.show_info(
+        Message.info(
             f"Compressing {len(files)} bag file(s) with {workers} worker(s) (using {compression.upper()} compression)..."
         )
     
@@ -204,9 +204,9 @@ class CompressUI:
     def display_final_summary(self, successful: int, failed: int, compression: str) -> None:
         """Display final compression summary."""
         if successful > 0:
-            self.common_ui.show_success(
-                f"Success: {successful} bag(s) compressed with {compression.upper()} compression"
+            Message.success(
+                f"Success: {successful} bag(s, self.console) compressed with {compression.upper()} compression"
             )
         
         if failed > 0:
-            self.common_ui.show_error(f"Failed: {failed} bag(s) could not be compressed")
+            Message.error(f"Failed: {failed} bag(s, self.console) could not be compressed")

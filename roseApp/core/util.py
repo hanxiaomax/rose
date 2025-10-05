@@ -25,7 +25,7 @@ _log_file_path = None
 _app_mode = AppMode.TUI  
 
 def set_app_mode(mode: str):
-    """设置应用程序模式 (TUI 或 CLI)"""
+    """Set application mode (TUI or CLI)"""
     global _app_mode
     if mode in [AppMode.TUI, AppMode.CLI]:
         _app_mode = mode
@@ -49,39 +49,39 @@ def _setup_logging():
     """Configure application logging settings"""
     global _log_file_path
     
-    # 创建日志目录
+    # Create log directory
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
-    # 定义日志文件路径
+    # Define log file path
     if _app_mode == AppMode.TUI:
         _log_file_path = log_dir / "rose_tui.log"
-    else:  # CLI模式使用临时日志文件
+    else:  # CLI mode uses temporary log file
         temp_dir = log_dir / "temp"
         temp_dir.mkdir(exist_ok=True)
         _log_file_path = temp_dir / f"rose_cli_{int(time.time())}.log"
     
-    # 创建格式化程序
+    # Create formatter
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # 文件处理程序
+    # File handler
     file_handler = logging.FileHandler(_log_file_path)
     file_handler.setFormatter(formatter)
     
-    # 配置根日志记录器
+    # Configure root logger
     root_logger = logging.getLogger()
     
-    # 清除现有处理程序
+    # Clear existing handlers
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
         
-    # 添加文件处理程序
+    # Add file handler
     root_logger.addHandler(file_handler)
-    root_logger.setLevel(logging.INFO)  # 默认级别设置为INFO
+    root_logger.setLevel(logging.INFO)  # Default level set to INFO
     
-    # 如果是TUI模式，添加Textual处理程序
+    # If TUI mode, add Textual handler
     if _app_mode == AppMode.TUI:
         try:
             textual_handler = TextualHandler()
@@ -90,18 +90,18 @@ def _setup_logging():
         except ImportError:
             pass
     
-    # 将ROS相关日志重定向到文件而不是终端
+    # Redirect ROS-related logs to file instead of terminal
     for logger_name in ["rospy", "rosout", "gnupg", "rosbag", "rosbags", "roslib", "topicmanager", "rosmaster"]:
         ros_logger = logging.getLogger(logger_name)
         
-        # 清除现有处理程序
+        # Clear existing handlers
         for handler in ros_logger.handlers[:]:
             ros_logger.removeHandler(handler)
             
-        # 添加文件处理程序
+        # Add file handler
         ros_logger.addHandler(file_handler)
         
-        # 设置级别并禁止传播
+        # Set level and disable propagation
         ros_logger.setLevel(logging.INFO) 
         ros_logger.propagate = False  
     

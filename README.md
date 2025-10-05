@@ -41,7 +41,12 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 - 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
    - 🌟 parallel processing for Multi-selection mode
 - Docker support for cross-platform usage
-- 🌟 cassette futurism theme for dark and light mode
+- 🌟 Customizable cassette futurism theme via YAML configuration
+- 🌟 **Plugin System** - Extensible architecture for custom functionality
+  - 🔌 Hot-loadable plugins with hook system
+  - 📊 Data interface for safe bag data access
+  - 🛠️ Custom CLI commands support
+  - 📝 Multiple plugin templates (basic, data_processor, hook_example)
 - 🚧 Message view in TUI
 - 🚧 Support dynamic file/whitelist refresh in TUI
 
@@ -81,119 +86,332 @@ No ROS bag file? No problem! Download [webviz demo.bag](https://storage.googleap
 
 ## Usage
 
+Rose provides multiple interfaces for different workflows:
+- **Direct CLI**: Quick operations with direct commands
+- **Interactive Mode**: REPL-style environment with tab completion and workspace management
 
 ### Command Line Interface
 
-### Inline CLI
-
-Rose provides a command-line tool for direct bag file operations. Currently, it supports the filter command:
+Rose offers a comprehensive set of CLI commands for ROS bag file operations:
 
 ```bash
-# Basic usage for single file
-rose filter <input_bag> <output_bag> [OPTIONS]
+# Show all available commands
+rose --help
 
-# Basic usage for directory
-rose filter <input_directory> <output_directory> [OPTIONS]
+# Show help for specific command
+rose <command> --help
 ```
 
-**Parameters:**
+#### Available Commands
 
-- `<input_bag/directory>`: Path to the input bag file or directory containing bag files (required)
-- `<output_bag/directory>`: Path to the output bag file (for single file) or directory (required for directory input)
+| Command | Description |
+|---------|-------------|
+| `load` | Load bag files into cache for faster operations |
+| `extract` | Extract specific topics from bag files |
+| `compress` | Compress bag files with different algorithms |
+| `inspect` | Inspect bag file contents and statistics |
+| `data` | Data manipulation and export commands |
+| `cache` | Cache management operations |
+| `plugin` | Plugin system management |
+
+#### Load Command
+
+Load bag files into cache for faster subsequent operations:
+
+```bash
+# Load all bag files in current directory
+rose load "*.bag"
+
+# Load specific files
+rose load bag1.bag bag2.bag
+
+# Load with parallel processing
+rose load "*.bag" --workers 4
+
+# Force reload even if cached
+rose load "*.bag" --force
+
+# Build message index for data analysis
+rose load "*.bag" --build-index
+
+# Preview what would be loaded
+rose load "*.bag" --dry-run
+```
+
+#### Extract Command
+
+Extract specific topics from bag files:
+
+```bash
+# Extract from all bag files
+rose extract "*.bag" --topics gps imu
+
+# Extract from single file with output pattern
+rose extract input.bag --topics /gps/fix -o "{input}_filtered.bag"
+
+# Extract from multiple files, exclude topics
+rose extract bag1.bag bag2.bag --topics tf --reverse
+
+# Parallel extraction with compression
+rose extract "*.bag" --topics gps --compression lz4 --workers 4
+
+# Preview without extraction
+rose extract "*.bag" --topics gps --dry-run
+```
 
 **Options:**
+- `--topics`: Topics to keep (supports fuzzy matching, use multiple times)
+- `--reverse`: Exclude specified topics instead of including them
+- `--compression`: Compression type (none, bz2, lz4)
+- `--output, -o`: Output pattern (use `{input}` for filename, `{timestamp}` for timestamp)
+- `--workers, -w`: Number of parallel workers
+- `--dry-run`: Preview without executing
+- `--yes, -y`: Answer yes to all prompts
+- `--interactive, -i`: Enter interactive mode
 
-- `-w, --whitelist TEXT`: Specify a topic whitelist file path
-- `-t, --topics TEXT`: Specify topics to include, can be used multiple times to add multiple topics
-- `-p, --parallel`: Process files in parallel when input is a directory
-- `--workers INTEGER`: Number of parallel workers (default: CPU count - 2)
-- `--dry-run`: Preview the operation without actually executing it
-- `--help`: Show help information
+#### Compress Command
 
-**Usage Examples:**
-
-1. Filter a single bag file using a whitelist:
-   ```bash
-   rose filter input.bag output.bag -w whitelist.txt
-   ```
-
-2. Filter specific topics from a single file:
-   ```bash
-   rose filter input.bag output.bag -t /topic1 -t /topic2 -t /topic3
-   ```
-
-3. Process all bag files in a directory:
-   ```bash
-   rose filter input_dir/ output_dir/ -w whitelist.txt
-   ```
-
-4. Process directory with parallel execution:
-   ```bash
-   rose filter input_dir/ output_dir/ -w whitelist.txt --parallel
-   ```
-
-5. Preview filtering results without execution:
-   ```bash
-   rose filter input.bag output.bag -w whitelist.txt --dry-run
-   ```
-
-
-### Interactive CLI
-
-For a guided experience with interactive prompts:
+Compress bag files with different algorithms:
 
 ```bash
-# Launch the interactive CLI tool
-rose cli
+# Compress all bag files with LZ4
+rose compress "*.bag" --compression lz4
+
+# Compress single file with BZ2
+rose compress input.bag --compression bz2 -o "{input}_{compression}.bag"
+
+# Parallel compression
+rose compress bag1.bag bag2.bag --compression lz4 --workers 4
+
+# Preview compression
+rose compress "*.bag" --compression bz2 --dry-run
 ```
 
-The interactive CLI provides:
-- Menu-driven interface for bag file operations
-- Guided workflow for filtering and whitelist management
-- Batch processing capabilities for multiple files
-- Progress indicators and detailed results
+**Options:**
+- `--compression, -c`: Compression type (bz2, lz4) [default: lz4]
+- `--output, -o`: Output pattern (use `{input}`, `{timestamp}`, `{compression}`)
+- `--workers, -w`: Number of parallel workers
+- `--validate`: Validate compressed files after compression
+- `--dry-run`: Preview without compressing
 
-Key features:
-- Load single bag files or entire directories
-- Select topics with fuzzy search
-- Create, view, and manage whitelists
-- Process multiple files in batch mode
+#### Inspect Command
 
-#### Single Bag Processing
-![asciicast](screen-shots/single-bag.gif)
-
-#### Multi-Bag Processing
-![asciicast](screen-shots/multi-bag.gif)
-
-
-### TUI Interface
-
-> [!IMPORTANT]
-> If you experience color display issues in your terminal, set the following environment variable:
-> ```bash
-> export TERM=xterm-256color
-> ```
-> This ensures proper color rendering in both CLI and TUI interfaces.
-
-For a full-featured terminal user interface:
+Inspect bag file contents and display comprehensive analysis:
 
 ```bash
-# Launch the TUI
-rose tui
+# Inspect a bag file
+rose inspect demo.bag
+
+# Filter specific topics
+rose inspect demo.bag --topics gps imu
+
+# Show field analysis for messages
+rose inspect demo.bag --show-fields
+
+# Sort topics by different criteria
+rose inspect demo.bag --sort frequency --reverse
+
+# Save inspection results to file
+rose inspect demo.bag -o report.txt
 ```
-![asciicast](screen-shots/tui.gif)
 
+**Options:**
+- `--topics, -t`: Filter specific topics
+- `--show-fields`: Show field analysis for messages
+- `--sort`: Sort topics by (name, count, frequency, size) [default: size]
+- `--reverse`: Reverse sort order
+- `--output, -o`: Save output to file
 
-Key bindings:
-- `q`: to quit
-- `f`: to filter bag files
-- `w`: to load whitelist
-- `s`: to save whitelist
-- `a`: to toggle select all topics
+#### Cache Command
+
+Manage cache data:
+
+```bash
+# Show cache status
+rose cache
+
+# Show detailed cache content
+rose cache --content
+
+# Export cache entries to file
+rose cache export output.json
+
+# Clear cache data
+rose cache clear
+
+# Clear cache for specific files
+rose cache clear --bags bag1.bag bag2.bag
+```
+
+#### Data Command
+
+Data manipulation and export:
+
+```bash
+# Show data information
+rose data info demo.bag
+
+# Export bag data to CSV
+rose data export demo.bag --topics /gps/fix --output gps_data.csv
+
+# Export with time filtering
+rose data export demo.bag --topics imu --start-time 1.0 --end-time 10.0
+
+# Merge multiple topics
+rose data export demo.bag --topics gps imu --merge
+```
+
+#### Plugin Command
+
+Plugin system management:
+
+```bash
+# List all available plugins
+rose plugin list
+
+# Show plugin information
+rose plugin info my_plugin
+
+# Create a new plugin
+rose plugin create my_plugin --template basic
+
+# Install plugin from file
+rose plugin install /path/to/plugin.py
+
+# Run plugin command
+rose plugin run my_plugin hello
+
+# Enable/disable plugins
+rose plugin enable my_plugin
+rose plugin disable my_plugin
+
+# Reload plugin
+rose plugin reload my_plugin
+```
+
+### Interactive Environment
+
+Rose provides a powerful REPL-style interactive environment for bag file operations:
+
+```bash
+# Launch interactive mode (default when no command specified)
+rose
+
+# Or explicitly
+rose --help  # Shows you can just run 'rose' for interactive mode
+```
+
+**Key Features:**
+- **Automatic Workspace Status**: See working directory, configuration, cache, loaded bags, and selected topics at startup
+- **Background Task Execution**: Long operations don't block the interface
+- **Smart Auto-completion**: Tab completion for commands, files, and topics
+- **Natural Language Queries**: Ask questions directly without commands
+- **Session Management**: Context-aware commands that adapt to your current state
+
+**Workspace Status Display:**
+
+On startup, Rose displays comprehensive workspace information:
+
+```
+╭───────────────── Interactive Environment ─────────────────╮
+│ Interactive Environment                                   │
+│                                                           │
+│ Workspace Status:                                         │
+│   Working Directory: /workspaces/rose                     │
+│   Configuration: rose.config.yaml                         │
+│   Cache: 3 entries, 2.5 MB                                │
+│   Loaded Bags: 2 bag(s)                                   │
+│   Selected Topics: 5 topic(s)                             │
+│                                                           │
+│ Available commands:                                       │
+│   /load      - Load bag files                             │
+│   /extract   - Extract topics from bags                   │
+│   /inspect   - Inspect bag contents                       │
+│   ...                                                     │
+╰───────────────────────────────────────────────────────────╯
+```
+
+**Interactive Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/load [files]` | Load bag files with glob pattern support |
+| `/extract` | Extract topics with interactive selection |
+| `/compress` | Compress bag files interactively |
+| `/inspect` | Inspect bag contents and statistics |
+| `/bags` | Manage loaded bags in workspace |
+| `/topics` | Manage topic selection |
+| `/cache` | Cache management operations |
+| `/data` | Data export and analysis |
+| `/plugin` | Plugin management |
+| `/configuration` | Edit configuration file |
+| `/help` | Show comprehensive help |
+| `/clear` | Clear console screen |
+| `/exit` or `/quit` | Exit interactive mode |
+
+**Workflow Example:**
+
+```bash
+# Start Rose
+rose
+
+# Load bag files
+> /load *.bag
+
+# Inspect a specific bag
+> /inspect demo.bag
+
+# Extract topics
+> /extract
+# (Interactive prompts guide you through selection)
+
+# Check cache status
+> /cache
+
+# Exit
+> /exit
+```
+
+See [Interactive Help](roseApp/interactive/help.md) for detailed documentation.
+
+### Plugin System
+
+Rose features a powerful plugin system for extending functionality. See [Plugin System](#plugin-command) section above for command-line usage.
+
+**Plugin Features:**
+- 🔌 **Hot-loadable plugins**: Load and reload plugins without restarting
+- 🎣 **Hook system**: Execute custom logic before/after Rose operations
+- 📊 **Data interface**: Safe access to bag data and DataFrames
+- 🛠️ **Custom CLI commands**: Plugins can provide their own commands
+- 📝 **Multiple templates**: Basic, data processor, and hook examples
+
+**Plugin Templates:**
+- `basic` - Simple plugin with CLI commands
+- `data_processor` - Advanced data analysis and processing
+- `hook_example` - Demonstrates hook system usage
+
+**Quick Start:**
+
+```bash
+# Create a new plugin
+rose plugin create my_analyzer --template data_processor
+
+# List available plugins
+rose plugin list
+
+# Enable/disable plugins
+rose plugin enable my_analyzer
+rose plugin disable my_analyzer
+
+# Run plugin
+rose plugin run my_analyzer process demo.bag
+```
+
+See [Plugin Documentation](docs/PLUGIN_README.md) for detailed guides and examples.
 
 ## Compression Support
 
-Rose supports automatic compression of filtered bag files to significantly reduce file sizes. This is especially useful for storing and transferring large bag files.
+Rose supports compression of bag files to significantly reduce file sizes. This is especially useful for storing and transferring large bag files.
 
 ### Available Compression Types
 
@@ -203,24 +421,44 @@ Rose supports automatic compression of filtered bag files to significantly reduc
 | `bz2` | BZ2 compression | ~80-90% | Slower | Best for long-term storage |
 | `lz4` | LZ4 compression | ~60-70% | Faster | Good balance of speed and compression |
 
-### Using Compression
-
-Compression options are presented to users during the filtering process. By default, Rose uses no compression for fastest processing speed. Users can choose from:
-
-- **No compression**: Fastest processing, largest files
-- **BZ2 compression**: Best compression ratio, slower processing  
-- **LZ4 compression**: Balanced speed and compression
-
 **Example compression results:**
 - Original bag file: 696.15 MB
 - After BZ2 compression: 92.03 MB  
 - **Compression ratio: 86.8%**
 
-### Programmatic Usage
+### Using Compression
+
+**Via CLI:**
+
+```bash
+# Compress bag files directly
+rose compress "*.bag" --compression lz4
+
+# Extract with compression
+rose extract input.bag --topics gps --compression bz2
+
+# Compress multiple files in parallel
+rose compress *.bag --compression lz4 --workers 4
+```
+
+**Via Interactive Mode:**
+
+```bash
+rose
+
+> /compress
+# (Interactive prompts guide you through compression)
+
+> /extract
+# (Option to compress during extraction)
+```
+
+**Programmatic Usage:**
 
 ```python
-from roseApp.core.BagManager import BagManager, CompressionType
+from roseApp.core.BagManager import BagManager
 from roseApp.core.parser import create_parser, ParserType
+from pathlib import Path
 
 # Create parser and bag manager
 parser = create_parser(ParserType.PYTHON)
@@ -238,90 +476,194 @@ config = bag.get_filter_config(compression="bz2")  # or "none", "lz4"
 bag_manager.filter_bag(Path("input.bag"), config, Path("output.bag"))
 ```
 
-### Command Line Usage
-
-```bash
-# Filter with BZ2 compression
-rose filter input.bag output.bag -w whitelist.txt -c bz2
-
-# Filter with no compression (fastest)
-rose filter input.bag output.bag -w whitelist.txt -c none
-
-# Filter with LZ4 compression (balanced)
-rose filter input.bag output.bag -w whitelist.txt -c lz4
-```
-
 > **Note**: LZ4 compression requires additional system dependencies. If LZ4 is not available, BZ2 compression will be used as fallback.
 
 #### Configuration
 
-Rose is configured with `roseApp/config.json`.
-```json
-{
-    "show_splash_screen": true,
-    "theme": "cassette-walkman",
-    "whitelists": {
-        "demo": "./whitelists/demo.txt",
-        "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt"
-    }
-}
-```
+Rose uses a unified configuration system with automatic validation. Configuration is loaded from `rose.config.yaml` in your project directory.
 
-- `show_splash_screen`: whether to show the splash screen, default is true
-- `theme`: the theme of the TUI, default is `cassette-walkman`, check [Theme](#theme) for more details
-- `whitelists`: the whitelists of the TUI, default is empty, check [Whitelist](#whitelist) for more details
-
-#### Theme
-RoseApp TUI provides two built-in themes: `cassette-walkman` (default light theme) and `cassette-dark`. You can configure the theme in two ways:
-
-| cassette-walkman | cassette-dark |
-|------------|-------------|
-| ![Light Theme TUI](screen-shots/main-light.png) | ![Dark Theme TUI](screen-shots/main-dark.png) |
-
-1. Modify `config.json` to specify your preferred theme:
-
-```json
-{
-    "theme": "cassette-dark",
-}
-```
-2. Switch Theme in TUI with command palette(the buttom in bottom right corner or keybinding ^p)
-
-
-### Whitelist
-
-You can filter bag files with pre-configured whitelist. To select pre-configured whitelists, press `w` in TUI. But before that, you need to create your own whitelist.
-
-You can create your own whitelist in 3 ways:
-
-#### 1. Create topic whitelist with your favorite text editor and save it to `whitelist/`:
-
-
-#### 2. Create whitelist with interactive cli and choose **2. whitelist**:
+**Quick Start:**
 ```bash
-rose cli
+# Copy example configuration
+cp rose.config.yaml.example rose.config.yaml
+
+# Edit configuration
+nano rose.config.yaml
 ```
 
-![asciicast](screen-shots/whitelist.gif)
+**Example Configuration:**
+```yaml
+# Performance Settings
+parallel_workers: 4
+memory_limit_mb: 512
 
-#### 3. Create topic in TUI by press `s` to save current selected topics as whitelist file to `whitelist/` directory:
+# Feature Toggles
+enable_cache: true
+enable_plugins: true
 
-you can create/view/delete whitelists
+# Default Behavior
+compression_default: none
+verbose_default: false
+build_index_default: false
 
-![asciicast](screen-shots/tui-whitelist.gif)
+# Logging Settings
+log_level: INFO
+log_to_file: true
 
+# UI Settings
+theme_file: rose.theme.default.yaml
+enable_colors: true
 
-After whitelist created, add it to `config.json` so RoseApp can find it:
-```json
-{
-    "whitelists": {
-        "demo": "./whitelists/demo.txt",
-        "radar": "./whitelists/radar.txt",
-        "invalid": "./whitelists/invalid.txt"
-    }
-}
+# Directory Settings
+output_directory: output
 ```
+
+**Configuration Hierarchy:**
+1. Command-line arguments (highest priority)
+2. Environment variables (`ROSE_*` prefix)
+3. Configuration file (`rose.config.yaml`)
+4. System defaults (lowest priority)
+
+**Environment Variable Override:**
+```bash
+# Override parallel workers
+export ROSE_PARALLEL_WORKERS=8
+
+# Change log level
+export ROSE_LOG_LEVEL=DEBUG
+
+# Run Rose
+rose load demo.bag
+```
+
+**Automatic Validation:**
+
+Rose validates configuration on startup and displays warnings for potential issues:
+
+```
+Config: rose.config.yaml
+Warning: Workers (32) > CPU count (8)
+Warning: Theme file not found: custom-theme.yaml
+```
+
+See [Configuration Guide](docs/CONFIGURATION.md) for complete reference.
+
+## Theme System
+
+Rose uses a simple YAML-based theme system to customize UI colors. By default, Rose uses an **orange cassette futurism** theme inspired by 1980s computing.
+
+### Creating a Custom Theme
+
+**Quick Start:**
+
+1. Copy the default theme file:
+   ```bash
+   cp rose.theme.default.yaml rose.theme.custom.yaml
+   ```
+
+2. Edit the colors in `rose.theme.custom.yaml`:
+   ```yaml
+   # Primary colors
+   primary: blue
+   accent: cyan
+   
+   # Status colors
+   success: green
+   warning: yellow
+   error: red
+   info: cyan
+   
+   # UI colors
+   muted: grey50
+   highlight: white
+   path: cyan
+   ```
+
+3. Update `rose.config.yaml` to use your theme:
+   ```yaml
+   theme_file: rose.theme.custom.yaml
+   ```
+
+That's it! Run any Rose command to see your new theme.
+
+### Available Color Names
+
+You can use standard terminal color names:
+- Basic: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
+- Bright: `bright_red`, `bright_green`, `bright_cyan`, etc.
+- Grey: `grey0` to `grey100`
+- RGB: `rgb(255,128,0)` or `#ff8000`
+
+### Terminal Color Support
+
+If colors don't display correctly, ensure your terminal supports 256 colors:
+
+```bash
+# Add to your .bashrc or .zshrc
+export TERM=xterm-256color
+```
+
+### Tips
+
+- Keep your theme file in the same directory as `rose.config.yaml` for easy portability
+- Use the default theme as a reference when creating custom themes
+- Test your theme in different lighting conditions for better readability
+
+
+## Working with Topics
+
+### Topic Selection Methods
+
+Rose provides flexible ways to select topics for extraction:
+
+**1. Direct Topic Specification:**
+```bash
+# Specify exact topic names
+rose extract demo.bag --topics /gps/fix /imu/data
+
+# Use partial matching (fuzzy search)
+rose extract demo.bag --topics gps imu
+```
+
+**2. Interactive Selection:**
+```bash
+# Use interactive mode for guided selection
+rose extract demo.bag --interactive
+
+# Or in interactive environment
+rose
+> /extract
+```
+
+**3. Reverse Selection (Exclude Topics):**
+```bash
+# Extract all topics except specified ones
+rose extract demo.bag --topics tf --reverse
+```
+
+### Topic Whitelists
+
+You can create reusable topic lists for repeated operations:
+
+**1. Create a whitelist file:**
+```bash
+# Create a text file with one topic per line
+cat > my_topics.txt << EOF
+/gps/fix
+/imu/data
+/camera/image_raw
+EOF
+```
+
+**2. Use the whitelist:**
+```bash
+# Load topics from file using shell redirection
+rose extract demo.bag --topics $(cat my_topics.txt | xargs)
+```
+
+**3. Save selected topics:**
+
+In interactive mode, after selecting topics for operations, you can document your workflow for future reference.
 
 ## Development
 
