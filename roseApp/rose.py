@@ -17,7 +17,6 @@ from roseApp.cli.cache import app as cache_app
 
 from roseApp.cli.load import load as load_main
 from roseApp.cli.plugin import app as plugin_app
-from roseApp.cli.config import app as config_app
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -37,23 +36,11 @@ def configure_logging(verbosity: int):
         3: logging.DEBUG,    # -vvv (more details in formatter)
     }
     level = levels.get(min(verbosity, 3), logging.DEBUG)
-    
-    # Set level for all loggers
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    
-    # Set level for all handlers
-    for handler in root_logger.handlers:
-        handler.setLevel(level)
-    
-    # Set level for Rose-specific loggers
-    for logger_name in ["RoseCLI", "config", "parser", "cache", "interactive_runner"]:
-        specific_logger = logging.getLogger(logger_name)
-        specific_logger.setLevel(level)
+    logger.setLevel(level)
     
     if verbosity >= 3:
         # Add more detailed format for high verbosity
-        for handler in root_logger.handlers:
+        for handler in logger.handlers:
             handler.setFormatter(logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
             ))
@@ -86,7 +73,6 @@ app.add_typer(inspect_app)
 app.add_typer(data_app, name="data")
 app.add_typer(cache_app)
 app.add_typer(plugin_app, name="plugin")
-app.add_typer(config_app, name="config")
 
 if __name__ == '__main__':
     try:

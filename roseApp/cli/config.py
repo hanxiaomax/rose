@@ -360,3 +360,5 @@ def _show_available_keys():
     
     for key, type_name, description in keys:
         console.print(f"  [{get_color('accent')}]{key}[/{get_color('accent')}] ([{get_color('muted')}]{type_name}[/{get_color('muted')}]) - {description}")
+
+
