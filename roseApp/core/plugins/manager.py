@@ -48,7 +48,7 @@ class PluginManager:
         self.load_all_plugins()
         self._initialized = True
         total_plugins = len(self.hook_plugins) + len(self.script_plugins)
-        logger.info(f"PluginManager initialized with {total_plugins} plugins ({len(self.hook_plugins)} hook, {len(self.script_plugins)} script)")
+        logger.debug(f"PluginManager initialized with {total_plugins} plugins ({len(self.hook_plugins)} hook, {len(self.script_plugins)} script)")
     
     def discover_plugins(self) -> List[Path]:
         """

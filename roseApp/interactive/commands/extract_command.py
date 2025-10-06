@@ -47,18 +47,21 @@ class ExtractCommand(BaseCommand):
     
     def _prompt_and_execute(self) -> Dict[str, Any]:
         """
-        Prompt user for bag files and execute extract command
+        Prompt user for bag files and execute extract command with default config support
         
         Returns:
             Execution result dictionary
         """
         try:
             from rich.console import Console
-            from ..components import InputPrompter
+            from InquirerPy import inquirer
+            from InquirerPy.base.control import Choice
+            from ..components import InputPrompter, create_config_prompter
             from ...ui.common_ui import Message
             
             console = Console()
             prompter = InputPrompter(console)
+            config_prompter = create_config_prompter(console)
             
             Message.info("No input bag files specified. Please select bag files:", console)
             bag_paths = prompter.prompt_for_bag_files(
@@ -77,10 +80,51 @@ class ExtractCommand(BaseCommand):
                     'returncode': 0
                 }
             
-            # Convert Path objects to strings and execute
-            # Extract command needs topics, so just pass the bag files
-            # The CLI will prompt for topics
+            # Ask if user wants to use default configuration
+            use_defaults = config_prompter.prompt_use_defaults('extract')
+            
             args = [str(p) for p in bag_paths]
+            
+            if not use_defaults:
+                # Prompt for each parameter
+                compression = inquirer.select(
+                    message="Select compression type:",
+                    choices=[
+                        Choice("none", "No compression (fastest)"),
+                        Choice("lz4", "LZ4 compression (balanced)"),
+                        Choice("bz2", "BZ2 compression (best ratio)")
+                    ],
+                    default="none"
+                ).execute()
+                
+                output_pattern = inquirer.text(
+                    message="Output file pattern:",
+                    default="{input}_extracted_{timestamp}.bag"
+                ).execute()
+                
+                verbose = inquirer.confirm(
+                    message="Enable verbose output?",
+                    default=False
+                ).execute()
+                
+                # Add flags based on user choices
+                if compression != 'none':
+                    args.extend(['--compression', compression])
+                if output_pattern:
+                    args.extend(['--output', output_pattern])
+                if verbose:
+                    args.append('--verbose')
+            else:
+                # Use defaults from configuration
+                defaults = config_prompter.get_command_defaults('extract')
+                compression = defaults.get('compression', 'none')
+                if compression != 'none':
+                    args.extend(['--compression', compression])
+                output_pattern = defaults.get('output_pattern')
+                if output_pattern:
+                    args.extend(['--output', output_pattern])
+                if defaults.get('verbose', False):
+                    args.append('--verbose')
             
             # Use interactive execution to allow real-time output and prompts
             result = self.cli_executor.execute_command_interactive(self.get_command_name(), args)

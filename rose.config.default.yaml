@@ -1,0 +1,136 @@
+# Rose ROS Bag Processing Tool - Configuration File
+#
+# This file defines the configuration for Rose.
+# All settings are optional - defaults will be used if not specified.
+#
+# You can also override settings with environment variables:
+#   ROSE_<SETTING_NAME>=value (e.g., ROSE_PARALLEL_WORKERS=8)
+#
+# Configuration hierarchy (highest to lowest priority):
+#   1. Command-line arguments
+#   2. Environment variables (ROSE_*)
+#   3. Configuration file (rose.config.yaml)
+#   4. System defaults
+
+# ==============================================================================
+# Performance Settings
+# ==============================================================================
+
+# Number of parallel workers for bag processing
+# Default: 4
+parallel_workers: 4
+
+# Memory limit for operations in MB
+# Range: 128-8192, Default: 512
+memory_limit_mb: 512
+
+# ==============================================================================
+# Feature Toggles
+# ==============================================================================
+
+# Enable caching system
+# Default: true
+enable_cache: true
+
+# Enable plugin system
+# Default: true
+enable_plugins: true
+
+# ==============================================================================
+# Default Behavior
+# ==============================================================================
+
+# Default compression type for extracted bags
+# Options: none, bz2, lz4
+# Default: none
+compression_default: none
+
+# Enable verbose output by default
+# Default: false
+verbose_default: false
+
+# Build pandas DataFrame index by default during load
+# Default: false
+build_index_default: false
+
+# ==============================================================================
+# Logging Settings
+# ==============================================================================
+
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# Default: INFO
+log_level: INFO
+
+# Write logs to file
+# Default: true
+log_to_file: true
+
+# ==============================================================================
+# UI Settings
+# ==============================================================================
+
+# Path to theme YAML file
+# Default: rose.theme.default.yaml
+theme_file: rose.theme.default.yaml
+
+# Enable colored output
+# Default: true
+enable_colors: true
+
+# ==============================================================================
+# Directory Settings
+# ==============================================================================
+
+# Default output directory for extracted bags
+# Default: output
+output_directory: output
+
+# Directory for cache storage
+# Default: ~/.cache/rose
+# cache_dir: ~/.cache/rose
+
+# Directory for log files
+# Default: logs
+# logs_dir: logs
+
+# Directory for user plugins
+# Default: ~/.rose/plugins
+# plugins_dir: ~/.rose/plugins
+
+# ==============================================================================
+# Interactive Command Defaults
+# ==============================================================================
+# Default configurations for interactive commands
+# These will be prompted to the user before executing each command
+
+interactive_defaults:
+  # Load command defaults
+  load:
+    build_index: false
+    verbose: false
+    auto_cache: true
+  
+  # Extract command defaults
+  extract:
+    compression: none
+    output_pattern: "{input}_extracted_{timestamp}.bag"
+    parallel: false
+    verbose: false
+  
+  # Inspect command defaults
+  inspect:
+    verbose: true
+    show_timeline: false
+    show_statistics: true
+  
+  # Compress command defaults
+  compress:
+    compression: lz4
+    output_pattern: "{input}_{compression}_{timestamp}.bag"
+    parallel: false
+  
+  # Data command defaults
+  data:
+    format: csv
+    output_pattern: "bag_data_{timestamp}.csv"
+    include_header: true

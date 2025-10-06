@@ -45,18 +45,21 @@ class LoadCommand(BaseCommand):
     
     def _prompt_and_execute(self) -> Dict[str, Any]:
         """
-        Prompt user for bag files and execute load command
+        Prompt user for bag files and execute load command with default config support
         
         Returns:
             Execution result dictionary
         """
         try:
             from rich.console import Console
-            from ..components import InputPrompter
+            from InquirerPy import inquirer
+            from InquirerPy.base.control import Choice
+            from ..components import InputPrompter, create_config_prompter
             from ...ui.common_ui import Message
             
             console = Console()
             prompter = InputPrompter(console)
+            config_prompter = create_config_prompter(console)
             
             Message.info("No input bag files specified. Please select bag files:", console)
             bag_paths = prompter.prompt_for_bag_files(
@@ -75,8 +78,35 @@ class LoadCommand(BaseCommand):
                     'returncode': 0
                 }
             
-            # Convert Path objects to strings and execute
+            # Ask if user wants to use default configuration
+            use_defaults = config_prompter.prompt_use_defaults('load')
+            
             args = [str(p) for p in bag_paths]
+            
+            if not use_defaults:
+                # Prompt for each parameter
+                build_index = inquirer.confirm(
+                    message="Build DataFrame index for detailed statistics?",
+                    default=False
+                ).execute()
+                
+                verbose = inquirer.confirm(
+                    message="Enable verbose output?",
+                    default=False
+                ).execute()
+                
+                # Add flags based on user choices
+                if build_index:
+                    args.append('--build-index')
+                if verbose:
+                    args.append('--verbose')
+            else:
+                # Use defaults from configuration
+                defaults = config_prompter.get_command_defaults('load')
+                if defaults.get('build_index', False):
+                    args.append('--build-index')
+                if defaults.get('verbose', False):
+                    args.append('--verbose')
             
             # Use interactive execution to allow real-time output
             result = self.cli_executor.execute_command_interactive(self.get_command_name(), args)

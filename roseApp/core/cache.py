@@ -83,7 +83,7 @@ class UnifiedCache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._memory_cache: Dict[str, _CacheEntry] = {}
         
-        _logger.info(f"Initialized UnifiedCache with dir: {cache_dir}")
+        _logger.debug(f"Initialized UnifiedCache with dir: {cache_dir}")
     
     def _get_file_path(self, key: str) -> Path:
         """Get file path for cache key"""

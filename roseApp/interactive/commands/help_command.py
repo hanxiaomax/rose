@@ -309,7 +309,6 @@ Key Features:
             ("Inspect bag", "/inspect @test --topics", "Show topics in cached bag"),
             ("Run shell command", "!ls -la *.bag", "List bag files using shell"),
             ("Get command help", "/load --help", "Show detailed load command options"),
-            ("Manage bags", "/bags", "View and manage loaded bags")
         ]
         
         for description, command, explanation in examples:
