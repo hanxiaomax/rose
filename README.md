@@ -784,8 +784,6 @@ project_root/
 
 ### Development Notes
 
-![1](docs/notes/sketch.png)
-
 >[!TIP]
 > Rose uses Rich and Textual for enhanced terminal output and help documentation:
 >
