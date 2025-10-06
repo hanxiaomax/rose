@@ -174,14 +174,15 @@ def load(
     verbose: Optional[bool] = typer.Option(None, "--verbose", "-v", help="Show detailed loading information (default: from config)"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
-    build_index: Optional[bool] = typer.Option(None, "--build-index", help="Build message index as pandas DataFrame (default: from config)"),
-    interactive: bool = typer.Option(False, "--interactive", "-i", help="Enter interactive mode for bag selection and options")
+    build_index: Optional[bool] = typer.Option(None, "--build-index", help="Build message index as pandas DataFrame (default: from config)")
 ):
     """
     Load ROS bag files into cache for faster operations.
     
     This command processes bag files and stores their analysis in cache,
     making subsequent inspect and extract operations much faster.
+    
+    If bag files are not provided, you will be prompted to select them interactively.
     
     Examples:
         rose load "*.bag"                       # Load all bag files in current directory
@@ -198,6 +199,42 @@ def load(
         # Get configuration with defaults
         config = get_config()
         
+        # Auto-prompt for input bags if not provided
+        if not input:
+            # Check if we're in a TTY (interactive terminal)
+            import sys
+            if sys.stdin.isatty():
+                from ..interactive.components import InputPrompter
+                prompter = InputPrompter(console)
+                
+                Message.info("No input bag files specified. Please select bag files:", console)
+                bag_paths = prompter.prompt_for_bag_files(
+                    message="Enter bag file pattern or path:",
+                    allow_multiple=True,
+                    required=True
+                )
+                
+                if not bag_paths:
+                    Message.warning("No bag files selected. Operation cancelled.", console)
+                    raise typer.Exit(0)
+                
+                # Convert Path objects to strings for processing
+                input = [str(p) for p in bag_paths]
+            else:
+                # Non-interactive mode without input - show error
+                error = RoseError(
+                    code=ErrorCode.INVALID_ARGUMENT,
+                    message="No bag files specified",
+                    details="At least one bag file pattern must be provided",
+                    suggestions=[
+                        "Provide bag file patterns as arguments: rose load '*.bag'",
+                        "Use specific file paths: rose load input.bag",
+                        "Run in an interactive terminal to use the file selection prompt"
+                    ]
+                )
+                console.print(error.format_message())
+                raise typer.Exit(1)
+        
         # Apply config defaults if not provided
         if verbose is None:
             verbose = config.verbose_default
@@ -206,23 +243,9 @@ def load(
         if workers is None:
             workers = config.parallel_workers
         
-        # Handle interactive mode
-        if interactive:
-            from ..ui.load_ui import LoadUI
-            load_ui = LoadUI(console)
-            return load_ui.run_interactive()
-        
         # Initialize UI
         ui = CommonUI()
         ui.console = console
-        
-        # Check if input patterns are provided
-        if not input:
-            raise BagFileError(
-                ErrorCode.INVALID_ARGUMENT,
-                "input",
-                details="At least one bag file pattern must be provided. Use 'rose load --help' for usage examples."
-            )
         
         # Find bag files using patterns
         valid_bags = find_bag_files(input)

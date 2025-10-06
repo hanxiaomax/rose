@@ -309,8 +309,15 @@ class InteractiveRunner:
             elif result.get('message'):
                 self.ui.msg.success(result['message'])
         else:
+            # For failed commands, show the error content
             error_msg = result.get('error', 'Unknown error')
-            self.ui.msg.error(error_msg)
+            
+            # Filter out config messages from error display
+            if error_msg and not error_msg.startswith('Config:'):
+                self.ui.msg.error(error_msg)
+            else:
+                # If only config message, show a more helpful error
+                self.ui.msg.error(f"Command '{command}' failed. Use '{command} --help' for usage information.")
     
     def _handle_non_slash_input(self, user_input: str):
         """Handle non-slash input with helpful guidance"""

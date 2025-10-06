@@ -594,13 +594,14 @@ def export(
     end_time: Optional[str] = typer.Option(None, "--end-time", help="End time filter (ISO format or seconds)"),
     search: Optional[str] = typer.Option(None, "--search", help="Search text in string columns"),
     include_index: bool = typer.Option(True, "--include-index/--no-index", help="Include timestamp index in CSV"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (auto-load cache, etc.)"),
-    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode")
+    yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (auto-load cache, etc.)")
 ):
     """Export bag data to CSV format with filtering and merging options
     
     If the bag file is not in cache, you will be prompted to load it automatically.
     This command requires DataFrame indexing for full functionality.
+    
+    Use --topics to select specific topics, or you will be prompted to select them interactively.
     """
     
     if not PANDAS_AVAILABLE:
@@ -671,40 +672,51 @@ def export(
         # Get all available topics
         available_topics = [t.name if isinstance(t, TopicInfo) else str(t) for t in bag_info.topics]
         
-        # Interactive mode
-        if interactive:
-            topics, output_csv, filters = _interactive_export_config(
-                bag_info, output_csv, topics, start_time, end_time, search
-            )
-            
-            if not topics:
-                console.print("[yellow]No topics selected. Exiting.[/yellow]")
-                return
-        else:
-            # Non-interactive mode
-            if not topics:
-                # Export all topics
+        # Handle topic selection
+        if not topics:
+            # Check if we're in a TTY (interactive terminal)
+            import sys
+            if sys.stdin.isatty():
+                # Prompt user to select topics interactively
+                from InquirerPy import inquirer
+                from InquirerPy.base.control import Choice
+                
+                console.print(f"\n[{get_color('info')}]No topics specified. Please select topics to export:[/{get_color('info')}]")
+                selected_topics = inquirer.checkbox(
+                    message="Select topics (Space to select, Enter to confirm):",
+                    choices=[Choice(t, name=t) for t in available_topics],
+                    validate=lambda result: len(result) > 0,
+                    invalid_message="At least one topic must be selected"
+                ).execute()
+                
+                if not selected_topics:
+                    console.print(f"[{get_color('warning')}]No topics selected. Exiting.[/{get_color('warning')}]")
+                    return
+                
+                topics = selected_topics
+            else:
+                # Export all topics in non-interactive mode
                 topics = available_topics
                 console.print(f"No topics specified, exporting all {len(topics)} topics")
-            else:
-                # Apply fuzzy matching to topic patterns
-                matched_topics = filter_topics(available_topics, topics)
-                if not matched_topics:
-                    console.print(f"[red]Error: No topics match the patterns: {', '.join(topics)}[/red]")
-                    console.print(f"Available topics: {', '.join(available_topics[:10])}{'...' if len(available_topics) > 10 else ''}")
-                    raise typer.Exit(1)
-                
-                topics = matched_topics
-                console.print(f"Matched {len(topics)} topics: {', '.join(topics[:5])}{'...' if len(topics) > 5 else ''}")
+        else:
+            # Apply fuzzy matching to topic patterns
+            matched_topics = filter_topics(available_topics, topics)
+            if not matched_topics:
+                console.print(f"[red]Error: No topics match the patterns: {', '.join(topics)}[/red]")
+                console.print(f"Available topics: {', '.join(available_topics[:10])}{'...' if len(available_topics) > 10 else ''}")
+                raise typer.Exit(1)
             
-            # Set up filters
-            filters = {}
-            if start_time:
-                filters['start_time'] = start_time
-            if end_time:
-                filters['end_time'] = end_time
-            if search:
-                filters['search_text'] = search
+            topics = matched_topics
+            console.print(f"Matched {len(topics)} topics: {', '.join(topics[:5])}{'...' if len(topics) > 5 else ''}")
+        
+        # Set up filters
+        filters = {}
+        if start_time:
+            filters['start_time'] = start_time
+        if end_time:
+            filters['end_time'] = end_time
+        if search:
+            filters['search_text'] = search
         
         # Generate default output path if not provided
         if not output_csv:
