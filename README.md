@@ -1,6 +1,6 @@
 # ROSE - Yet Another ROS Bag Filter Tool
 
-A high-performance ROS bag filtering tool that allows you to extract specific topics from ROSv1 bag files. Built with C++ core and Python interface, it provides both command-line and TUI interfaces for efficient bag file processing.
+A high-performance ROS bag filtering tool that allows you to extract specific topics from ROSv1 bag files. Built with Python and provides both command-line and interactive interfaces for efficient bag file processing.
 
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
@@ -12,7 +12,7 @@ A high-performance ROS bag filtering tool that allows you to extract specific to
 
 > 磁带盒不仅是一种技术遗物，更是复古未来主义的艺术品和精神图腾。简单的按钮、褪色的塑料外壳和有限的存储容量，既是怀旧的载体，也是对数字霸权的温柔反抗。它时刻提醒着我们：技术的突飞猛进不应该以牺牲人性为代价，克制的设计往往更能打动人心。
 
-The TUI embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
+The interface embraces the **cassette futurism** aesthetic - a design philosophy that reimagines future interfaces through the lens of 20th century technological fossils. This intentional retrofuturism features:
 
 - **Nostalgic minimalism**: Low-resolution displays and monochromatic schemes that evoke 1980s computing
 - **Tactile authenticity**: Visual metaphors of physical media like magnetic tapes and CRT textures
@@ -21,45 +21,42 @@ The TUI embraces the **cassette futurism** aesthetic - a design philosophy that 
 More than mere retro styling, this approach serves as poetic resistance to digital hegemony. The cassette tape - our central metaphor - embodies this duality: 
 
 
-![splash](splash.png)
 
-## Key Features and Todos
+## Key Features
 
 - 🎉 ROS Environment independent using [rosbags](https://pypi.org/project/rosbags/)
-- 🌟 Interactive TUI for easy operation
+- 🌟 Interactive Environment with REPL-style interface
 - 🌟 Command-line interface for automation
-- 🌟 Interactive CLI for guided operations
+- 🌟 Tab completion and workspace management
 - Filter ROS bag files 
-  - 🌟 with whitelists 
+  - 🌟 with topic selection (fuzzy matching supported)
   - with manually selected topics
-  - by time range (only TUI tested)
+  - by time range (available in extract command)
 - 🌟 **Bag file compression support** - Reduce file sizes significantly
   - BZ2 compression (best compression ratio)
   - LZ4 compression (faster compression/decompression)
   - No compression (fastest processing)
-- 🌟 Fuzzy search topic in TUI
-- 🌟 Multi-selection mode for batch processing in TUI (note:partially supported, rename and time range based filtering not supported yet) 
-   - 🌟 parallel processing for Multi-selection mode
-- Docker support for cross-platform usage
+- 🌟 Multi-file batch processing with parallel workers
+- 🌟 Docker support for cross-platform usage
 - 🌟 Customizable cassette futurism theme via YAML configuration
 - 🌟 **Plugin System** - Extensible architecture for custom functionality
   - 🔌 Hot-loadable plugins with hook system
   - 📊 Data interface for safe bag data access
   - 🛠️ Custom CLI commands support
   - 📝 Multiple plugin templates (basic, data_processor, hook_example)
-- 🚧 Message view in TUI
-- 🚧 Support dynamic file/whitelist refresh in TUI
 
 ## Getting Started
 
 ### Installation
 
-1. Install rose-bag from pypi
+#### Option 1: Install from PyPI
+
 ```bash
 pip install rose-bag
 ```
 
-2. Install from the source
+#### Option 2: Install from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/hanxiaomax/rose.git
@@ -69,7 +66,43 @@ cd rose
 pip install -r requirements.txt
 ```
 
-To uninstall Rose, run the following command:
+#### Option 3: Docker Installation
+
+For cross-platform usage or isolated environments:
+
+```bash
+# Clone the repository
+git clone https://github.com/hanxiaomax/rose.git
+cd rose
+
+# Build Docker image
+./docker/build.sh
+
+# Run Rose in Docker container
+./docker/go_docker.sh
+```
+
+The Docker container includes:
+- All required dependencies pre-installed
+- ROS bag processing libraries (rosbags, rosbag)
+- Interactive terminal with color support
+- Volume mounting for accessing local bag files
+
+**Docker Usage Examples:**
+
+```bash
+# After running ./docker/go_docker.sh, you're inside the container
+
+# Process bag files in your mounted directory
+rose load *.bag
+rose inspect demo.bag
+rose extract input.bag --topics gps imu
+
+# Interactive mode
+rose
+```
+
+To uninstall Rose, run:
 ```bash
 pip uninstall rose-bag
 ```
@@ -708,24 +741,33 @@ hatch publish
 project_root/
 ├── roseApp/                # Python application
 │   ├── rose.py             # Main entry script
-│   ├── cli/                # CLI tools
-│   │   ├── cli_tool.py     # Interactive CLI implementation
-│   │   ├── theme.py        # CLI theme and color configuration
-│   │   └── <inline-cmd>.py # Command-line commands implementation
+│   ├── cli/                # CLI commands
+│   │   ├── load.py         # Load command implementation
+│   │   ├── extract.py      # Extract command implementation
+│   │   ├── compress.py     # Compress command implementation
+│   │   ├── inspect.py      # Inspect command implementation
+│   │   ├── data.py         # Data manipulation commands
+│   │   ├── cache.py        # Cache management commands
+│   │   └── plugin.py       # Plugin management commands
+│   ├── interactive/        # Interactive Environment
+│   │   ├── core/           # Interactive core components
+│   │   ├── commands/       # Interactive command handlers
+│   │   └── components/     # UI components and utilities
 │   ├── core/               # Core functionality
 │   │   ├── parser.py       # Bag file parser
-│   │   └── util.py         # Utility functions and logging
-│   ├── tui/                # TUI components
-│   │   ├── tui.py          # Main TUI application
-│   │   └── components/     # Custom widgets
-│   │   ├── config.json     # Configuration file
-│   │   ├── themes/         # TUI themes
-│   │   └── style.tcss          # TUI style sheet
-│   ├── whitelists/         # Topic whitelist folder
-│   │   └── *.txt           # Whitelist files
+│   │   ├── BagManager.py   # Bag management
+│   │   ├── config.py       # Configuration system
+│   │   ├── cache.py        # Caching system
+│   │   ├── errors.py       # Error handling
+│   │   └── plugins/        # Plugin system
+│   ├── ui/                 # UI components
+│   │   ├── theme.py        # Theme system
+│   │   └── *.py            # UI utilities
+│   └── tests/              # Test files
 ├── docker/                 # Docker support
-│   ├── Dockerfile
-│   └── go_docker.sh
+│   ├── Dockerfile          # Docker image definition
+│   ├── build.sh            # Build script
+│   └── go_docker.sh        # Run script
 ├── docs/                   # Documentation
 ├── pyproject.toml          # Project metadata and dependencies
 ├── requirements.txt        # Development dependencies
@@ -734,23 +776,21 @@ project_root/
 
 ### Tech stack
 
-- **[Textual](https://textual.textualize.io/)**: A Python framework for building sophisticated TUI applications. Used for creating the interactive terminal interface.
-- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation in both CLI and TUI.
+- **[Rich](https://rich.readthedocs.io/)**: A Python library for rich text and beautiful formatting in the terminal. Used for enhancing the visual presentation in CLI and interactive interfaces.
 - **[InquirerPy](https://github.com/kazhala/InquirerPy)**: A Python library for building interactive command line interfaces with elegant prompts. Used for the interactive CLI.
-- **[Typer](https://typer.tiangolo.com/)**: A Python library for building CLI applications. Used for building the inline command-line interface.
+- **[Typer](https://typer.tiangolo.com/)**: A Python library for building CLI applications. Used for building the command-line interface.
 - **[rosbags](https://pypi.org/project/rosbags/)**: A pure Python library for reading and writing ROS bag files. Used for ROS bag file processing without ROS dependencies.
+- **[Textual](https://textual.textualize.io/)**: Used for rich text display in help documentation and UI components.
 
-### Rough ideas - data driven rendering
-
-![1](docs/notes/sketch.png)
+### Development Notes
 
 >[!TIP]
-> Before you start with Textual, there are some docs worth reading:
+> Rose uses Rich and Textual for enhanced terminal output and help documentation:
 >
-> - [Textual devtools](https://textual.textualize.io/guide/devtools/) on how to use `textual run <your app> --dev` to go into dev mode and how to handle logs
-> - [Design a layout](https://textual.textualize.io/how-to/design-a-layout/) 、[TextualCSS](https://textual.textualize.io/guide/CSS/) and [CSS Types](https://textual.textualize.io/css_types/) to understand how to design a layout and style your app with CSS. and more tips on [Styles](https://textual.textualize.io/guide/styles/) and its [reference](https://textual.textualize.io/styles/)
-> - [Event and Messages](https://textual.textualize.io/guide/events/) are also important ideas to understand how Textual works so you can handle [actions](https://textual.textualize.io/guide/actions/)
-> - Thanks to [Workers](https://textual.textualize.io/guide/workers/), asynchronous operations never been so easy. it can supppot asyncio or threads.
+> - **Rich** provides beautiful formatting for CLI output, tables, and progress indicators
+> - **Textual** is used for rich text display in help documentation and interactive components
+> - **InquirerPy** powers the interactive prompts and menu systems
+> - All UI components follow the cassette futurism aesthetic with consistent theming
 
 ## Resources
 

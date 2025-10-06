@@ -62,8 +62,10 @@ class CLIExecutor:
             
             # Add error message if command failed
             if not execution_result['success']:
+                # Prefer stdout for error messages (Rose uses stdout for formatted errors)
+                error_content = result.stdout.strip() if result.stdout.strip() else result.stderr.strip()
                 execution_result['error'] = (
-                    result.stderr.strip() if result.stderr.strip() 
+                    error_content if error_content 
                     else f"Command failed with exit code {result.returncode}"
                 )
             

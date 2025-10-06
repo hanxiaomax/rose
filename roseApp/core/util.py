@@ -49,6 +49,15 @@ def _setup_logging():
     """Configure application logging settings"""
     global _log_file_path
     
+    # Get log level from configuration
+    try:
+        from .config import get_config
+        config = get_config()
+        log_level_str = config.log_level
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+    except Exception:
+        log_level = logging.INFO
+    
     # Create log directory
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
@@ -69,6 +78,7 @@ def _setup_logging():
     # File handler
     file_handler = logging.FileHandler(_log_file_path)
     file_handler.setFormatter(formatter)
+    file_handler.setLevel(log_level)
     
     # Configure root logger
     root_logger = logging.getLogger()
@@ -79,13 +89,14 @@ def _setup_logging():
         
     # Add file handler
     root_logger.addHandler(file_handler)
-    root_logger.setLevel(logging.INFO)  # Default level set to INFO
+    root_logger.setLevel(log_level)  # Set root logger to configured level
     
     # If TUI mode, add Textual handler
     if _app_mode == AppMode.TUI:
         try:
             textual_handler = TextualHandler()
             textual_handler.setFormatter(formatter)
+            textual_handler.setLevel(log_level)
             root_logger.addHandler(textual_handler)
         except ImportError:
             pass
@@ -102,7 +113,7 @@ def _setup_logging():
         ros_logger.addHandler(file_handler)
         
         # Set level and disable propagation
-        ros_logger.setLevel(logging.INFO) 
+        ros_logger.setLevel(log_level)  # Set to same level as root logger
         ros_logger.propagate = False  
     
     return root_logger

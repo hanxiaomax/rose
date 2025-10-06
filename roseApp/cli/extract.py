@@ -165,12 +165,12 @@ def extract(
     compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be extracted without doing it"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
-    interactive: bool = typer.Option(False, "--interactive", "-i", help="Enter interactive mode for bag and topic selection")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information")
 ):
     """
     Extract specific topics from ROS bag files (supports multiple files and patterns)
     
+    If bag files are not provided, you will be prompted to select them interactively.
     If bag files are not in cache, you will be prompted to load them automatically.
     
     Examples:
@@ -180,16 +180,44 @@ def extract(
         rose extract "*.bag" --topics gps --compression lz4 --workers 4         # Parallel extraction with compression
         rose extract "*.bag" --topics gps --dry-run                             # Preview without extraction
     """
-    # Handle interactive mode
-    if interactive:
-        from ..ui.extract_ui import ExtractUI
-        extract_ui = ExtractUI()
-        return extract_ui.run_interactive()
+    console = Console()
     
-    # Check if input patterns are provided for non-interactive mode
+    # Auto-prompt for input bags if not provided
     if not input_bags:
-        Message.error("Error: No bag files specified. Provide bag file patterns or use --interactive", Console())
-        raise typer.Exit(1)
+        # Check if we're in a TTY (interactive terminal)
+        import sys
+        if sys.stdin.isatty():
+            from ..interactive.components import InputPrompter
+            prompter = InputPrompter(console)
+            
+            Message.info("No input bag files specified. Please select bag files:", console)
+            bag_paths = prompter.prompt_for_bag_files(
+                message="Enter bag file pattern or path:",
+                allow_multiple=True,
+                required=True
+            )
+            
+            if not bag_paths:
+                Message.warning("No bag files selected. Operation cancelled.", console)
+                raise typer.Exit(0)
+            
+            # Convert Path objects to strings for processing
+            input_bags = [str(p) for p in bag_paths]
+        else:
+            # Non-interactive mode without input - show error
+            from ..core.errors import RoseError, ErrorCategory
+            error = RoseError(
+                category=ErrorCategory.INVALID_ARGUMENT,
+                message="No bag files specified",
+                details="At least one bag file pattern must be provided",
+                suggestions=[
+                    "Provide bag file patterns as arguments: rose extract '*.bag'",
+                    "Use specific file paths: rose extract input.bag",
+                    "Run in an interactive terminal to use the file selection prompt"
+                ]
+            )
+            console.print(error.format_message())
+            raise typer.Exit(1)
     
     _extract_topics_impl(input_bags, topics, output, workers, reverse, compression, dry_run, yes, verbose)
 
