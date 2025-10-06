@@ -47,21 +47,21 @@ class ExtractCommand(BaseCommand):
     
     def _prompt_and_execute(self) -> Dict[str, Any]:
         """
-        Prompt user for bag files and execute extract command with default config support
+        Prompt user for bag files and execute extract command with interactive parameter selection
         
         Returns:
             Execution result dictionary
         """
         try:
             from rich.console import Console
-            from InquirerPy import inquirer
             from InquirerPy.base.control import Choice
-            from ..components import InputPrompter, create_config_prompter
+            from ..components import InputPrompter, ParameterDefinition, create_parameter_selector
+            from ..components.bag_loader import create_bag_loader
             from ...ui.common_ui import Message
+            from pathlib import Path
             
             console = Console()
             prompter = InputPrompter(console)
-            config_prompter = create_config_prompter(console)
             
             Message.info("No input bag files specified. Please select bag files:", console)
             bag_paths = prompter.prompt_for_bag_files(
@@ -80,51 +80,102 @@ class ExtractCommand(BaseCommand):
                     'returncode': 0
                 }
             
-            # Ask if user wants to use default configuration
-            use_defaults = config_prompter.prompt_use_defaults('extract')
+            # Load first bag to get topics (for topic selection)
+            bag_loader = create_bag_loader(console)
+            bag_info = bag_loader.load_bag_interactive(Path(bag_paths[0]))
             
-            args = [str(p) for p in bag_paths]
+            if not bag_info:
+                Message.error("Failed to load bag file for topic selection", console)
+                return {
+                    'success': False,
+                    'error': 'Bag loading failed',
+                    'stdout': '',
+                    'stderr': '',
+                    'returncode': 1
+                }
             
-            if not use_defaults:
-                # Prompt for each parameter
-                compression = inquirer.select(
-                    message="Select compression type:",
+            # Define extract command parameters
+            parameters = {
+                'topics': ParameterDefinition(
+                    name='topics',
+                    display_name='Topics to Extract',
+                    param_type='topics',
+                    default=[],
+                    message="Select topics to extract:",
+                    help_text="Choose which topics to include in extracted bag"
+                ),
+                'compression': ParameterDefinition(
+                    name='compression',
+                    display_name='Compression Type',
+                    param_type='select',
+                    default='none',
                     choices=[
                         Choice("none", "No compression (fastest)"),
                         Choice("lz4", "LZ4 compression (balanced)"),
                         Choice("bz2", "BZ2 compression (best ratio)")
                     ],
-                    default="none"
-                ).execute()
-                
-                output_pattern = inquirer.text(
+                    message="Select compression type:",
+                    help_text="Compression algorithm for output bag"
+                ),
+                'output_pattern': ParameterDefinition(
+                    name='output_pattern',
+                    display_name='Output Pattern',
+                    param_type='text',
+                    default="{input}_extracted_{timestamp}.bag",
                     message="Output file pattern:",
-                    default="{input}_extracted_{timestamp}.bag"
-                ).execute()
-                
-                verbose = inquirer.confirm(
+                    help_text="Pattern for output filename (supports {input}, {timestamp})"
+                ),
+                'verbose': ParameterDefinition(
+                    name='verbose',
+                    display_name='Verbose Output',
+                    param_type='bool',
+                    default=False,
                     message="Enable verbose output?",
-                    default=False
-                ).execute()
-                
-                # Add flags based on user choices
-                if compression != 'none':
-                    args.extend(['--compression', compression])
-                if output_pattern:
-                    args.extend(['--output', output_pattern])
-                if verbose:
-                    args.append('--verbose')
-            else:
-                # Use defaults from configuration
-                defaults = config_prompter.get_command_defaults('extract')
-                compression = defaults.get('compression', 'none')
-                if compression != 'none':
-                    args.extend(['--compression', compression])
-                output_pattern = defaults.get('output_pattern')
-                if output_pattern:
-                    args.extend(['--output', output_pattern])
-                if defaults.get('verbose', False):
-                    args.append('--verbose')
+                    help_text="Shows detailed processing information"
+                ),
+                'workers': ParameterDefinition(
+                    name='workers',
+                    display_name='Parallel Workers',
+                    param_type='text',
+                    default='',
+                    message="Number of parallel workers (leave empty for default):",
+                    help_text="Number of parallel workers for processing multiple bags (default: CPU count - 2)",
+                    validator=lambda x: x == '' or (x.isdigit() and int(x) > 0)
+                )
+            }
+            
+            # Create parameter selector with loaded bag_info
+            param_selector = create_parameter_selector(console, bag_info)
+            
+            # Interactive parameter selection
+            selected_params = param_selector.select_parameters('extract', parameters)
+            
+            # Build command arguments
+            args = [str(p) for p in bag_paths]
+            
+            # Add topics if specified
+            topics = selected_params.get('topics', [])
+            if topics:
+                args.extend(['--topics'] + topics)
+            
+            # Add compression if not none
+            compression = selected_params.get('compression', 'none')
+            if compression != 'none':
+                args.extend(['--compression', compression])
+            
+            # Add output pattern
+            output_pattern = selected_params.get('output_pattern')
+            if output_pattern:
+                args.extend(['--output', output_pattern])
+            
+            # Add flags
+            if selected_params.get('verbose', False):
+                args.append('--verbose')
+            
+            # Add workers if specified
+            workers = selected_params.get('workers', '')
+            if workers and workers.strip():
+                args.extend(['--workers', workers.strip()])
             
             # Use interactive execution to allow real-time output and prompts
             result = self.cli_executor.execute_command_interactive(self.get_command_name(), args)

@@ -237,11 +237,11 @@ class ProgressUI:
         self.console.print("\n[bold]Processing Summary:[/bold]")
         
         if success_count > 0:
-            self.console.print(f"  • [green]✓ Successful: {success_count}[/green]")
+            self.console.print(f"[green]Successful: {success_count}[/green]")
         if fail_count > 0:
-            self.console.print(f"  • [red]✗ Failed: {fail_count}[/red]")
+            self.console.print(f"[red]Failed: {fail_count}[/red]")
         
-        self.console.print(f"  • [cyan]⏱ Total Time: {total_time:.2f}s[/cyan]")
+        self.console.print(f"[cyan]Total Time: {total_time:.2f}s[/cyan]")
 
 
 class TableUI:
