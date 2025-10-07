@@ -133,6 +133,12 @@ class RoseConfig(BaseSettings):
         description="Directory for user plugins"
     )
     
+    # ===== Interactive Command Defaults =====
+    interactive_defaults: Optional[Dict[str, Dict[str, Any]]] = Field(
+        default=None,
+        description="Default configurations for interactive commands"
+    )
+    
     # ===== Validation =====
     
     @validator('cache_dir', 'logs_dir', 'plugins_dir', pre=True)
@@ -259,8 +265,13 @@ class RoseConfig(BaseSettings):
         """
         Load configuration from YAML file.
         
+        Configuration search order (if path not specified):
+        1. ./rose.config.yaml (current directory)
+        2. ~/.rose/rose.config.yaml (user config)
+        3. Default values
+        
         Args:
-            path: Path to config file (default: rose.config.yaml in current directory)
+            path: Path to config file (default: auto-search)
             
         Returns:
             RoseConfig instance with loaded_config_path attribute
@@ -268,12 +279,21 @@ class RoseConfig(BaseSettings):
         config_data = {}
         loaded_config_path = None
         
-        # Use specified path or default
+        # Determine config file path
         if path is None:
-            path = Path("rose.config.yaml")
+            # Search in priority order
+            search_paths = [
+                Path("rose.config.yaml"),  # Current directory
+                Path.home() / ".rose" / "rose.config.yaml",  # User config
+            ]
+            
+            for search_path in search_paths:
+                if search_path.exists():
+                    path = search_path
+                    break
         
-        # Try to load from file
-        if path.exists():
+        # Try to load from file if found
+        if path and path.exists():
             try:
                 with open(path) as f:
                     config_data = yaml.safe_load(f) or {}
@@ -327,28 +347,15 @@ def get_config() -> RoseConfig:
         _config = RoseConfig.load()
         _config.ensure_directories()
         
-        # Log which config file was loaded (if any)
-        import logging
-        logger = logging.getLogger(__name__)
+        # Note: Don't use logger here before logging system is configured
+        # Logger will be configured based on this config's log_level
         
         loaded_path = getattr(_config, '_loaded_config_path', None)
-        if loaded_path:
-            logger.info(f"Configuration loaded from: {loaded_path}")
-        else:
-            logger.info("Using default configuration (no rose.config.yaml found)")
         
         # Validate configuration
         validation = _config.validate_config()
-        if not validation['valid']:
-            logger.error("Configuration validation failed:")
-            for error in validation['errors']:
-                logger.error(f"  - {error}")
         
-        if validation['warnings']:
-            for warning in validation['warnings']:
-                logger.warning(f"Config: {warning}")
-        
-        # Also log to console for CLI visibility
+        # Only log to console for CLI visibility (not to logger yet)
         from rich.console import Console
         console = Console(stderr=True)
         if loaded_path:
@@ -362,8 +369,31 @@ def get_config() -> RoseConfig:
                 console.print(f"[yellow]Warning: {warning}[/yellow]")
         
         if not validation['valid']:
+            console.print("[red]Configuration validation failed:[/red]")
             for error in validation['errors']:
-                console.print(f"[red]Error: {error}[/red]")
+                console.print(f"[red]  - {error}[/red]")
+        
+        # After config is loaded, reconfigure logging with the correct level
+        from .util import reconfigure_logging
+        reconfigure_logging()
+        
+        # Now we can log with the correct level
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if loaded_path:
+            logger.debug(f"Configuration loaded from: {loaded_path}")
+        else:
+            logger.debug("Using default configuration (no rose.config.yaml found)")
+        
+        if not validation['valid']:
+            logger.error("Configuration validation failed")
+            for error in validation['errors']:
+                logger.error(f"  - {error}")
+        
+        if validation['warnings']:
+            for warning in validation['warnings']:
+                logger.warning(f"Config: {warning}")
             
     return _config
 

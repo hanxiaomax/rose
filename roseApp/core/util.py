@@ -45,6 +45,12 @@ def setup_logging():
     """Backward compatibility function"""
     return get_logger()
 
+def reconfigure_logging():
+    """Reconfigure logging system with current configuration"""
+    global _logger
+    _logger = None
+    return get_logger()
+
 def _setup_logging():
     """Configure application logging settings"""
     global _log_file_path
@@ -53,9 +59,10 @@ def _setup_logging():
     try:
         from .config import get_config
         config = get_config()
-        log_level_str = config.log_level
+        log_level_str = config.log_level.value if hasattr(config.log_level, 'value') else str(config.log_level)
         log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-    except Exception:
+    except Exception as e:
+        # If config loading fails, use INFO as fallback
         log_level = logging.INFO
     
     # Create log directory
@@ -118,7 +125,8 @@ def _setup_logging():
     
     return root_logger
 
-_logger = _setup_logging()
+# Don't initialize logger at module import time - let it be lazy loaded
+# _logger = _setup_logging()
 
 def log_cli_error(e: Exception) -> str:
     global _log_file_path

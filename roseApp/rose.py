@@ -17,6 +17,7 @@ from roseApp.cli.cache import app as cache_app
 
 from roseApp.cli.load import load as load_main
 from roseApp.cli.plugin import app as plugin_app
+from roseApp.cli.config import app as config_app
 
 # Initialize logger
 logger = get_logger("RoseCLI")
@@ -73,6 +74,7 @@ app.add_typer(inspect_app)
 app.add_typer(data_app, name="data")
 app.add_typer(cache_app)
 app.add_typer(plugin_app, name="plugin")
+app.add_typer(config_app, name="config")
 
 if __name__ == '__main__':
     try:

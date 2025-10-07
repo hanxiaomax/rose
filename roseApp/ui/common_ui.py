@@ -154,15 +154,15 @@ class CommonUI:
         for file in files:
             if file.exists():
                 size = self.format_file_size(file.stat().st_size)
-                self.console.print(f"  • {file} ({size})")
+                Message.accent(f"  • {file} ({size})", self.console)
             else:
-                self.console.print(f"  • {file} (not found)")
+                Message.warning(f"  • {file} (not found)", self.console)
     
     def display_summary_table(self, data: Dict[str, Any], title: str = "Summary") -> None:
         """Display key-value data in a formatted table."""
         table = Table(title=title, show_header=False)
-        table.add_column("Key", style="cyan")
-        table.add_column("Value", style="white")
+        table.add_column("Key", style=get_color('accent'))
+        table.add_column("Value", style=get_color('info'))
         
         for key, value in data.items():
             table.add_row(str(key), str(value))
@@ -178,12 +178,9 @@ class CommonUI:
         Message.info(f"Topics ({len(topics)}):", self.console)
         for topic in sorted(topics):
             if message_types and topic in message_types:
-                msg_type = Text(f" ({message_types[topic]})", style=get_color('muted'))
-                topic_text = Text(f"  • {topic}", style="bold cyan")
-                topic_text.append(msg_type)
-                self.console.print(topic_text)
+                Message.accent(f"  • {topic} ({message_types[topic]})", self.console)
             else:
-                self.console.print(f"  • {topic}")
+                Message.accent(f"  • {topic}", self.console)
     
     def ask_confirmation(self, message: str, default: bool = False) -> bool:
         """Standard confirmation prompt."""
@@ -227,21 +224,18 @@ class ProgressUI:
     
     def show_processing_summary(self, total_files: int, workers: int, operation: str) -> None:
         """Display processing summary."""
-        self.console.print(
-            f"\nProcessing {total_files} file(s) with {workers} worker(s) ({operation})...",
-            style="info"
-        )
+        Message.info(f"Processing {total_files} file(s) with {workers} worker(s) ({operation})...", self.console)
     
     def show_batch_results(self, success_count: int, fail_count: int, total_time: float) -> None:
         """Display batch processing results."""
-        self.console.print("\n[bold]Processing Summary:[/bold]")
+        Message.primary("Processing Summary:", self.console)
         
         if success_count > 0:
-            self.console.print(f"  • [green]✓ Successful: {success_count}[/green]")
+            Message.success(f"  Successful: {success_count}", self.console)
         if fail_count > 0:
-            self.console.print(f"  • [red]✗ Failed: {fail_count}[/red]")
+            Message.error(f"  Failed: {fail_count}", self.console)
         
-        self.console.print(f"  • [cyan]⏱ Total Time: {total_time:.2f}s[/cyan]")
+        Message.info(f"  Total Time: {total_time:.2f}s", self.console)
 
 
 class TableUI:
@@ -255,7 +249,7 @@ class TableUI:
         if not topics_data:
             return
             
-        self.console.print("\n[bold]Topics:[/bold]")
+        Message.primary("Topics:", self.console)
         
         for i, topic in enumerate(topics_data, 1):
             name = topic.get('name', '')
@@ -265,25 +259,19 @@ class TableUI:
                 messages = topic.get('message_count', 0)
                 frequency = topic.get('frequency', 0)
                 size = CommonUI.format_file_size(topic.get('size_bytes', 0))
-                self.console.print(
-                    f"  {i:2d}. [cyan]{name}[/cyan] "
-                    f"([magenta]{msg_type}[/magenta]) "
-                    f"- [green]{messages} messages[/green] "
-                    f"@ [blue]{frequency:.1f} Hz[/blue] "
-                    f"([yellow]{size}[/yellow])"
+                Message.info(
+                    f"  {i:2d}. {name} ({msg_type}) - {messages} messages @ {frequency:.1f} Hz ({size})",
+                    self.console
                 )
             else:
-                self.console.print(
-                    f"  {i:2d}. [cyan]{name}[/cyan] "
-                    f"([magenta]{msg_type}[/magenta])"
-                )
+                Message.accent(f"  {i:2d}. {name} ({msg_type})", self.console)
     
     def display_compression_summary_list(self, results: List[Dict[str, Any]]) -> None:
         """Display compression results as a list."""
         if not results:
             return
             
-        self.console.print("\n[bold]Compression Results:[/bold]")
+        Message.primary("Compression Results:", self.console)
         
         total_original = 0
         total_compressed = 0
@@ -298,10 +286,9 @@ class TableUI:
                 compressed_str = CommonUI.format_file_size(compressed_size)
                 reduction = CommonUI.format_compression_ratio(original_size, compressed_size)
                 
-                self.console.print(
-                    f"  {i:2d}. [cyan]{filename}[/cyan]: "
-                    f"[red]{original_str}[/red] → [green]{compressed_str}[/green] "
-                    f"([blue]{reduction}[/blue])"
+                Message.success(
+                    f"  {i:2d}. {filename}: {original_str} → {compressed_str} ({reduction})",
+                    self.console
                 )
                 
                 total_original += original_size
@@ -312,8 +299,7 @@ class TableUI:
             total_compressed_str = CommonUI.format_file_size(total_compressed)
             total_reduction = CommonUI.format_compression_ratio(total_original, total_compressed)
             
-            self.console.print(
-                f"\n  [bold]TOTAL:[/bold] "
-                f"[red]{total_original_str}[/red] → [green]{total_compressed_str}[/green] "
-                f"([blue]{total_reduction}[/blue])"
+            Message.success(
+                f"  TOTAL: {total_original_str} → {total_compressed_str} ({total_reduction})",
+                self.console
             )

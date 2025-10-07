@@ -8,13 +8,16 @@ and validation.
 """
 
 from pathlib import Path
-from typing import List, Optional, Callable, Union
+from typing import List, Optional, Callable, Union, TYPE_CHECKING
 from InquirerPy import inquirer
 from InquirerPy.validator import PathValidator
 from rich.console import Console
 
 from ...core.util import get_logger
 from ...ui.theme import get_color
+
+if TYPE_CHECKING:
+    from ...core.model import ComprehensiveBagInfo
 
 logger = get_logger("input_prompter")
 
@@ -336,4 +339,72 @@ class InputPrompter:
         self.console.print(f"  1. [{get_color('accent')}]rose {command_name} *.bag[/{get_color('accent')}] - Use glob patterns")
         self.console.print(f"  2. [{get_color('accent')}]rose {command_name} file.bag[/{get_color('accent')}] - Specify file directly")
         self.console.print(f"  3. [{get_color('accent')}]rose {command_name} --help[/{get_color('accent')}] - Show full usage information")
+    
+    def prompt_and_load_bag(
+        self,
+        message: str = "Select bag file:",
+        allow_multiple: bool = False,
+        auto_load: bool = True
+    ) -> Union[Optional['ComprehensiveBagInfo'], List['ComprehensiveBagInfo']]:
+        """
+        Unified workflow: prompt for bag file(s) and load with cache check.
+        
+        This is the recommended way to handle bag input in interactive commands.
+        
+        Workflow:
+        1. Prompt user to select bag file(s)
+        2. For each bag:
+           a. Check if in cache
+           b. If cached: Load from cache
+           c. If not cached: Ask user to load (with/without index)
+        3. Return loaded bag info
+        
+        Args:
+            message: Prompt message for file selection
+            allow_multiple: Whether to allow multiple file selection
+            auto_load: Whether to automatically load bags (prompt user for options)
+            
+        Returns:
+            Single ComprehensiveBagInfo, List of ComprehensiveBagInfo, or None
+        """
+        from .bag_loader import create_bag_loader
+        from roseApp.core.model import ComprehensiveBagInfo
+        
+        # Step 1: Prompt for bag files
+        bag_paths = self.prompt_for_bag_files(
+            message=message,
+            allow_multiple=allow_multiple,
+            required=True
+        )
+        
+        if not bag_paths:
+            return [] if allow_multiple else None
+        
+        # Step 2: Load bags with cache check
+        bag_loader = create_bag_loader(self.console)
+        loaded_bags = []
+        
+        for bag_path in bag_paths:
+            if auto_load:
+                # Interactive load with cache check
+                bag_info = bag_loader.load_bag_interactive(bag_path, force_reload=False)
+                if bag_info:
+                    loaded_bags.append(bag_info)
+                else:
+                    from ...ui.common_ui import Message
+                    Message.warning(f"Skipping bag: {bag_path.name}", self.console)
+            else:
+                # Just return paths without loading
+                loaded_bags.append(bag_path)
+        
+        if not loaded_bags:
+            from ...ui.common_ui import Message
+            Message.error("No bags were successfully loaded", self.console)
+            return [] if allow_multiple else None
+        
+        # Return single or list based on allow_multiple
+        if allow_multiple:
+            return loaded_bags
+        else:
+            return loaded_bags[0] if loaded_bags else None
 

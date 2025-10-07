@@ -45,14 +45,14 @@ class LoadCommand(BaseCommand):
     
     def _prompt_and_execute(self) -> Dict[str, Any]:
         """
-        Prompt user for bag files and execute load command
+        Prompt user for bag files and execute load command with interactive parameter selection
         
         Returns:
             Execution result dictionary
         """
         try:
             from rich.console import Console
-            from ..components import InputPrompter
+            from ..components import InputPrompter, ParameterDefinition, create_parameter_selector
             from ...ui.common_ui import Message
             
             console = Console()
@@ -75,8 +75,49 @@ class LoadCommand(BaseCommand):
                     'returncode': 0
                 }
             
-            # Convert Path objects to strings and execute
+            # Define load command parameters
+            parameters = {
+                'build_index': ParameterDefinition(
+                    name='build_index',
+                    display_name='Build Index',
+                    param_type='bool',
+                    default=False,
+                    message="Build DataFrame index for detailed statistics?",
+                    help_text="Creates detailed statistics with DataFrame indexing"
+                ),
+                'verbose': ParameterDefinition(
+                    name='verbose',
+                    display_name='Verbose Output',
+                    param_type='bool',
+                    default=False,
+                    message="Enable verbose output?",
+                    help_text="Shows detailed processing information"
+                ),
+                'auto_cache': ParameterDefinition(
+                    name='auto_cache',
+                    display_name='Auto Cache',
+                    param_type='bool',
+                    default=True,
+                    message="Enable automatic caching?",
+                    help_text="Automatically cache bag metadata for faster loading"
+                )
+            }
+            
+            # Create parameter selector (no bag_info needed for load command)
+            param_selector = create_parameter_selector(console, bag_info=None)
+            
+            # Interactive parameter selection
+            selected_params = param_selector.select_parameters('load', parameters)
+            
+            # Build command arguments
             args = [str(p) for p in bag_paths]
+            
+            if selected_params.get('build_index', False):
+                args.append('--build-index')
+            if selected_params.get('verbose', False):
+                args.append('--verbose')
+            if not selected_params.get('auto_cache', True):
+                args.append('--no-cache')
             
             # Use interactive execution to allow real-time output
             result = self.cli_executor.execute_command_interactive(self.get_command_name(), args)

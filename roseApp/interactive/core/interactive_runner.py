@@ -22,9 +22,6 @@ from ..commands.inspect_command import InspectCommand
 from ..commands.compress_command import CompressCommand
 from ..commands.data_command import DataCommand
 from ..commands.cache_command import CacheCommand
-from ..commands.plugin_command import PluginCommand
-from ..commands.bags_command import BagsCommand
-from ..commands.topics_command import TopicsCommand
 from ..commands.configuration_command import ConfigurationCommand
 from ..commands.help_command import HelpCommand
 from ..commands.clear_command import ClearCommand
@@ -88,11 +85,6 @@ class InteractiveRunner:
         self.router.register_command('/compress', CompressCommand(self.cli_executor))
         self.router.register_command('/data', DataCommand(self.cli_executor))
         self.router.register_command('/cache', CacheCommand(self.cli_executor))
-        self.router.register_command('/plugin', PluginCommand(self.cli_executor))
-        
-        # Internal commands (pass additional context)
-        self.router.register_command('/bags', BagsCommand(self.cli_executor, self.state))
-        self.router.register_command('/topics', TopicsCommand(self.cli_executor, self.state))
         self.router.register_command('/configuration', ConfigurationCommand(self.cli_executor))
         
         # Get command registry for help command
@@ -216,11 +208,8 @@ class InteractiveRunner:
             # Data operations
             "/data": "Data operations with CSV/JSON export",
             "/cache": "Cache management operations",
-            "/plugin": "Plugin system operations",
             
-            # Session management
-            "/bags": "Manage loaded bags",
-            "/topics": "Manage topic selection",
+            # Configuration
             "/configuration": "Open Rose configuration file in editor",
             
             # System operations
@@ -245,18 +234,8 @@ class InteractiveRunner:
     
     def _get_prompt_text(self) -> str:
         """Generate context-aware prompt"""
-        # Build context indicators
-        indicators = []
-        
-        if self.state.current_bags:
-            indicators.append(f"{len(self.state.current_bags)} bags")
-        
-        if self.state.selected_topics:
-            indicators.append(f"{len(self.state.selected_topics)} topics")
-        
-        context = f"[{', '.join(indicators)}]" if indicators else ""
-        
-        return f"rose{context}> "
+        # Simplified prompt without state indicators
+        return "rose> "
     
     def _dispatch_command(self, user_input: str):
         """Dispatch user input to appropriate handler"""
@@ -329,8 +308,8 @@ class InteractiveRunner:
         self.console.print(f"\n[bold {get_color('primary')}]Try these commands:[/bold {get_color('primary')}]")
         self.ui.msg.command_help("/help", "Show all available commands")
         self.ui.msg.command_help("/load", "Load bag files")
-        self.ui.msg.command_help("/bags", "View loaded bags")
-        self.ui.msg.command_help("/topics", "Manage topic selection")
+        self.ui.msg.command_help("/extract", "Extract topics from bags")
+        self.ui.msg.command_help("/inspect", "Inspect bag contents")
     
     def _handle_shell_command(self, command: str):
         """Handle native shell command execution"""
