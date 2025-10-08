@@ -240,13 +240,13 @@ def load(
             )
     
         # Show found files
-        Message.info(f"Found {len(valid_bags)} bag file(s):", console)
+        Message.info(f"Found {len(valid_bags)} bag file(s):")
         for bag in valid_bags:
-            Message.info(f"  {bag}", console)
+            Message.muted(f"  {bag}")
         
         # Handle dry run
         if dry_run:
-            Message.warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)", console)
+            Message.warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)")
             Message.info(f"Build index: {build_index}", console)
             Message.info(f"Workers: {workers}", console)
             return
@@ -260,7 +260,7 @@ def load(
         workers = min(workers, len(valid_bags))
         
         analysis_type = "with index building" if build_index else "quick"
-        Message.info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...", console)
+        Message.info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...")
         
         # Initialize parser
         parser = BagParser()
@@ -268,7 +268,7 @@ def load(
         # If force reload, clear cache for these bags
         if force:
             cache_manager = create_bag_cache_manager()
-            Message.warning("Force reload enabled - clearing cache for these bags", console)
+            Message.warning("Force reload enabled - clearing cache for these bags")
             for bag_path in valid_bags:
                 cache_manager.clear(bag_path)
         
@@ -328,36 +328,29 @@ def load(
                     })
                     Message.error(f"Failed to load {bag_path.name}: {e}")
         
-        # Show summary
+        # Calculate summary (headless: emit structured data, not console print)
         loaded_count = sum(1 for r in results if r['status'] == 'loaded')
         cached_count = sum(1 for r in results if r['status'] == 'already_cached')
         error_count = sum(1 for r in results if r['status'] == 'error')
+        total_ready = loaded_count + cached_count
         
-        Message.info("Loading Summary", console)
-        
-        # Simple text-based summary
-        summary_lines = []
+        # Emit summary as status messages (simple info, not complex formatting)
         if loaded_count > 0:
-            summary_lines.append(f"{loaded_count} bag(s) newly loaded into cache")
+            Message.info(f"{loaded_count} bag(s) newly loaded into cache")
         if cached_count > 0:
-            summary_lines.append(f"{cached_count} bag(s) already in cache")
+            Message.info(f"{cached_count} bag(s) already in cache")
         if error_count > 0:
-            summary_lines.append(f"{error_count} bag(s) failed to load")
+            Message.warning(f"{error_count} bag(s) failed to load")
         
-        for line in summary_lines:
-            console.print(f"  {line}")
-        
-        # Show errors if any
+        # Emit errors as individual messages
         if error_count > 0:
-            Message.error("Errors:", console)
             for result in results:
                 if result['status'] == 'error':
-                    Message.error(f"  {result['path']}: {result['message']}", console)
+                    Message.error(f"{result['path']}: {result['message']}")
         
-        # Show success message
-        total_ready = loaded_count + cached_count
+        # Success message
         if total_ready > 0:
-            Message.success(f"Ready: {total_ready} bag(s) available for inspect and extract commands", console)
+            Message.success(f"Ready: {total_ready} bag(s) available for inspect and extract commands")
         
         # Emit completion event for headless mode
         engine.emit_done({

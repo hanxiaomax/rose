@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Cache command for ROS bag analysis utilities
-Provides cache management, viewing, and export functionality
+Cache command for ROS bag analysis utilities - Simplified for headless engine
+
+All output goes through Message API for proper NDJSON/Prettify handling.
 """
 
 import json
@@ -11,16 +12,11 @@ import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import typer
-from rich.console import Console
 
 from ..core.cache import get_cache, BagCacheEntry
+from ..ui.common_ui import Message
 
 app = typer.Typer(name="cache", help="Cache management commands")
-
-
-# =============================================================================
-# Main Cache Commands
-# =============================================================================
 
 
 @app.callback(invoke_without_command=True)
@@ -29,24 +25,13 @@ def cache_default(
     show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
 ):
-    """
-    Show cache information (default command when no subcommand is provided)
-    
-    Examples:
-        rose cache                    # Show all cache entries
-        rose cache --content          # Show detailed content
-        rose cache --verbose          # Show verbose information
-    """
+    """Show cache information (default command when no subcommand is provided)"""
     if ctx.invoked_subcommand is None:
-        from ..core.output_engine import get_engine
-        engine = get_engine()
-        console = Console()
-        
         try:
             cache = get_cache()
-            _show_cache_info(cache, console, show_content, verbose)
+            _show_cache_info(cache, show_content, verbose)
         except Exception as e:
-            console.print(f"[red]Error showing cache: {e}[/red]")
+            Message.error(f"Error showing cache: {e}")
 
 
 @app.command("export")
@@ -57,24 +42,12 @@ def cache_export(
     format: str = typer.Option("json", "--format", "-f", help="Export format: json, yaml, pickle"),
     include_messages: bool = typer.Option(False, "--messages", "-m", help="Include cached message data")
 ):
-    """
-    Export cache entries to file
-    
-    Examples:
-        rose cache export cache_data.json                    # Export all cache
-        rose cache export cache.json --name cache_key        # Export specific entry
-        rose cache export data.json --bag /path/to.bag       # Export bag cache
-        rose cache export data.pkl --format pickle --messages # Export with messages
-    """
-    from ..core.output_engine import get_engine
-    engine = get_engine()
-    console = Console()
-    
+    """Export cache entries to file"""
     try:
         cache = get_cache()
-        _export_cache_entries(cache, console, output_file, name, bag_path, format, include_messages)
+        _export_cache_entries(cache, output_file, name, bag_path, format, include_messages)
     except Exception as e:
-        console.print(f"[red]Error exporting cache: {e}[/red]")
+        Message.error(f"Error exporting cache: {e}")
 
 
 @app.command("clear")
@@ -82,50 +55,38 @@ def cache_clear(
     bag_path: Optional[str] = typer.Option(None, "--bag", "-b", help="Clear cache for specific bag file"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt")
 ):
-    """
-    Clear cache data
-    
-    Examples:
-        rose cache clear                      # Clear all cache
-        rose cache clear --bag /path/to.bag   # Clear bag cache
-        rose cache clear -y                   # Clear without confirmation
-    """
-    from ..core.output_engine import get_engine
-    engine = get_engine()
-    console = Console()
-    
+    """Clear cache data"""
     try:
         cache = get_cache()
-        _clear_cache_entries(cache, console, bag_path, yes)
+        _clear_cache_entries(cache, bag_path, yes)
     except Exception as e:
-        console.print(f"[red]Error clearing cache: {e}[/red]")
+        Message.error(f"Error clearing cache: {e}")
 
 
 # =============================================================================
-# Helper Functions
+# Helper Functions - All use Message API
 # =============================================================================
 
-def _show_cache_info(cache, console, show_content, verbose):
+def _show_cache_info(cache, show_content, verbose):
     """Show cache information and entries"""
     try:
         stats = cache.get_stats()
         
-        # Display cache statistics
-        console.print("\n[bold cyan]Cache Statistics:[/bold cyan]")
-        console.print(f"  Total Entries: {stats.get('entry_count', 0) + stats.get('memory_entries', 0)}")
-        console.print(f"  Memory Cache: {stats.get('memory_entries', 0)}")
-        console.print(f"  Disk Cache: {stats.get('entry_count', 0)}")
-        console.print(f"  Cache Size: {_format_size(stats.get('cache_size_bytes', 0))}")
-        console.print()
+        # Display cache statistics via Message API
+        Message.info("Cache Statistics:")
+        Message.info(f"  Total Entries: {stats.get('entry_count', 0) + stats.get('memory_entries', 0)}")
+        Message.info(f"  Memory Cache: {stats.get('memory_entries', 0)}")
+        Message.info(f"  Disk Cache: {stats.get('entry_count', 0)}")
+        Message.info(f"  Cache Size: {_format_size(stats.get('cache_size_bytes', 0))}")
         
         # Show cache entries
-        _show_cache_entries(cache, console, show_content, verbose)
+        _show_cache_entries(cache, show_content, verbose)
         
     except Exception as e:
-        console.print(f"[red]Error getting cache info: {e}[/red]")
+        Message.error(f"Error getting cache info: {e}")
 
 
-def _show_cache_entries(cache, console, show_content, verbose):
+def _show_cache_entries(cache, show_content, verbose):
     """Show all cache entries"""
     try:
         # Get memory cache entries
@@ -139,7 +100,6 @@ def _show_cache_entries(cache, console, show_content, verbose):
                 try:
                     with open(file_path, 'rb') as f:
                         value = pickle.load(f)
-                    # Use filename as key (without .pkl extension)
                     key = file_path.stem
                     if key not in seen_keys:
                         file_entries.append((key, value))
@@ -150,10 +110,10 @@ def _show_cache_entries(cache, console, show_content, verbose):
         total_entries = len(memory_entries) + len(file_entries)
         
         if total_entries == 0:
-            console.print("[yellow]Cache is empty[/yellow]")
+            Message.warning("Cache is empty")
             return
         
-        console.print(f"[bold cyan]Cache Entries ({total_entries}):[/bold cyan]\n")
+        Message.info(f"Cache Entries ({total_entries}):")
         
         # Process memory cache entries
         for key, entry in memory_entries:
@@ -164,8 +124,8 @@ def _show_cache_entries(cache, console, show_content, verbose):
                     file_path = getattr(bag_info, 'file_path', 'Unknown')
                     topics_count = len(getattr(bag_info, 'topics', []))
                     duration = getattr(bag_info, 'duration_seconds', 0)
-                    console.print(f"  [cyan]•[/cyan] {file_path}")
-                    console.print(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
+                    Message.info(f"  • {file_path}")
+                    Message.muted(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
             except Exception:
                 continue
         
@@ -177,83 +137,23 @@ def _show_cache_entries(cache, console, show_content, verbose):
                     file_path = getattr(bag_info, 'file_path', 'Unknown')
                     topics_count = len(getattr(bag_info, 'topics', []))
                     duration = getattr(bag_info, 'duration_seconds', 0)
-                    console.print(f"  [cyan]•[/cyan] {file_path}")
-                    console.print(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
+                    Message.info(f"  • {file_path}")
+                    Message.muted(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
             except Exception:
                 continue
         
     except Exception as e:
-        console.print(f"[red]Error showing cache entries: {e}[/red]")
+        Message.error(f"Error showing cache entries: {e}")
 
 
-def _display_cache_entry(console, key, value, cache_type, show_content, verbose):
-    """Display a single cache entry"""
-    try:
-        # Format key display
-        key_display = key[:60] + "..." if len(key) > 60 else key
-        
-        if isinstance(value, BagCacheEntry):
-            # Display bag cache entry
-            bag_info = value.bag_info
-            file_path = getattr(bag_info, 'file_path', 'Unknown')
-            topics_count = len(getattr(bag_info, 'topics', []))
-            duration = getattr(bag_info, 'duration_seconds', 0)
-            
-            console.print(f"  • [{cache_type}] {key_display}")
-            console.print(f"    File: {file_path}")
-            console.print(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
-            
-            if show_content or verbose:
-                console.print(f"    Cache Time: {time.ctime(value.cache_timestamp)}")
-                console.print(f"    File Size: {_format_size(value.file_size)}")
-                
-                if verbose and hasattr(bag_info, 'topics') and bag_info.topics:
-                    # Handle different topic formats
-                    try:
-                        topic_names = []
-                        topics = bag_info.topics
-                        
-                        if isinstance(topics, list):
-                            # List of strings or TopicInfo objects
-                            for topic in topics[:5]:
-                                if isinstance(topic, str):
-                                    topic_names.append(topic)
-                                elif hasattr(topic, 'name'):
-                                    topic_names.append(topic.name)
-                                else:
-                                    topic_names.append(str(topic))
-                        elif isinstance(topics, dict):
-                            # Dictionary of topics
-                            topic_names = list(topics.keys())[:5]
-                        else:
-                            # Single topic or other format
-                            if hasattr(topics, 'name'):
-                                topic_names = [topics.name]
-                            else:
-                                topic_names = [str(topics)]
-                        
-                        console.print(f"    Topics: {', '.join(topic_names)}" + 
-                                    ("..." if len(getattr(bag_info, 'topics', [])) > 5 else ""))
-                    except Exception as e:
-                        console.print(f"    Topics: [Error displaying topics: {e}]")
-        else:
-            # Display generic cache entry
-            content_preview = str(value)[:50] + "..." if len(str(value)) > 50 else str(value)
-            console.print(f"  • [{cache_type}] {key_display}")
-            console.print(f"    Content: {content_preview}")
-            
-    except Exception as e:
-        console.print(f"  • [{cache_type}] {key_display} [red](Error: {e})[/red]")
-
-
-def _clear_cache_entries(cache, console, bag_path, skip_confirm):
+def _clear_cache_entries(cache, bag_path, skip_confirm):
     """Clear cache entries with optional bag path filtering"""
     try:
         stats = cache.get_stats()
         total_entries = stats.get('entry_count', 0) + stats.get('memory_entries', 0)
         
         if total_entries == 0:
-            console.print("[yellow]No cache data to clear[/yellow]")
+            Message.warning("No cache data to clear")
             return
         
         if bag_path:
@@ -261,45 +161,42 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             bag_path_obj = Path(bag_path)
             cache_key = cache.get_bag_cache_key(bag_path_obj)
             
-            # Check if cache exists
             cached_data = cache.get(cache_key)
             if not cached_data:
-                console.print(f"[yellow]No cache found for bag: {bag_path}[/yellow]")
+                Message.warning(f"No cache found for bag: {bag_path}")
                 return
             
-            console.print(f"[bold]Found cache for bag: {bag_path}[/bold]")
+            Message.info(f"Found cache for bag: {bag_path}")
             
             if not skip_confirm:
                 confirm = typer.confirm("Clear this cache entry?")
                 if not confirm:
-                    console.print("Operation cancelled")
+                    Message.info("Operation cancelled")
                     return
             
-            # Clear specific bag cache
             success = cache.delete(cache_key)
             if success:
-                console.print(f"[green]✓ Successfully cleared cache for {bag_path}[/green]")
+                Message.success(f"Successfully cleared cache for {bag_path}")
             else:
-                console.print(f"[red]✗ Failed to clear cache for {bag_path}[/red]")
+                Message.error(f"Failed to clear cache for {bag_path}")
         else:
             # Clear all cache
-            console.print(f"[bold]Found {total_entries:,} cache entries[/bold]")
+            Message.info(f"Found {total_entries:,} cache entries")
             
             if not skip_confirm:
                 confirm = typer.confirm(f"Clear all {total_entries} cache entries?")
                 if not confirm:
-                    console.print("Operation cancelled")
+                    Message.info("Operation cancelled")
                     return
             
-            # Clear all cache
             cache.clear()
-            console.print(f"[green]✓ Successfully cleared {total_entries} cache entries[/green]")
+            Message.success(f"Successfully cleared {total_entries} cache entries")
             
     except Exception as e:
-        console.print(f"[red]Error clearing cache: {e}[/red]")
+        Message.error(f"Error clearing cache: {e}")
 
 
-def _export_cache_entries(cache, console, output_file, name, bag_path, format, include_messages):
+def _export_cache_entries(cache, output_file, name, bag_path, format, include_messages):
     """Export cache entries to file"""
     try:
         # Get all cache entries
@@ -326,7 +223,7 @@ def _export_cache_entries(cache, console, output_file, name, bag_path, format, i
                     continue
         
         if not all_entries:
-            console.print("[yellow]No cache entries to export[/yellow]")
+            Message.warning("No cache entries to export")
             return
         
         # Filter entries if criteria provided
@@ -339,14 +236,12 @@ def _export_cache_entries(cache, console, output_file, name, bag_path, format, i
                     match = True
                 
                 if bag_path and not match:
-                    # Try to match bag path by generating expected cache key
                     try:
                         bag_path_obj = Path(bag_path)
                         expected_key = cache.get_bag_cache_key(bag_path_obj)
                         if key == expected_key:
                             match = True
                     except:
-                        # Fallback to simple string matching
                         if bag_path.lower() in key.lower():
                             match = True
                 
@@ -354,7 +249,7 @@ def _export_cache_entries(cache, console, output_file, name, bag_path, format, i
                     filtered_entries.append((key, value, cache_type))
             
             if not filtered_entries:
-                console.print("[yellow]No matching cache entries found[/yellow]")
+                Message.warning("No matching cache entries found")
                 return
             all_entries = filtered_entries
         
@@ -373,14 +268,14 @@ def _export_cache_entries(cache, console, output_file, name, bag_path, format, i
             with open(output_path, 'wb') as f:
                 pickle.dump(export_data, f)
         else:
-            console.print(f"[red]Unsupported export format: {format}[/red]")
+            Message.error(f"Unsupported export format: {format}")
             return
         
-        console.print(f"[green]✓ Successfully exported {len(all_entries)} cache entries to {output_path}[/green]")
-        console.print(f"[dim]Format: {format}, Messages included: {include_messages}[/dim]")
+        Message.success(f"Successfully exported {len(all_entries)} cache entries to {output_path}")
+        Message.muted(f"Format: {format}, Messages included: {include_messages}")
         
     except Exception as e:
-        console.print(f"[red]Error exporting cache: {e}[/red]")
+        Message.error(f"Error exporting cache: {e}")
 
 
 def _prepare_export_data(all_entries, include_messages):
@@ -402,7 +297,6 @@ def _prepare_export_data(all_entries, include_messages):
                 'timestamp': time.time()
             }
             
-            # Add content based on type
             if isinstance(value, BagCacheEntry):
                 entry_data['content'] = _bag_cache_to_dict(value, include_messages)
             else:
@@ -470,3 +364,4 @@ def _format_size(size_bytes):
 
 if __name__ == "__main__":
     app()
+

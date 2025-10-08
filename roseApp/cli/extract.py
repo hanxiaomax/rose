@@ -14,12 +14,9 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
 from ..core.parser import BagParser, ExtractOption
-from ..ui.common_ui import CommonUI, Message
+from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import filter_topics, check_and_load_bag_cache
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 
 
 # Set to CLI mode
@@ -78,6 +75,18 @@ def find_bag_files(input_patterns: List[str]) -> List[Path]:
     
     return unique_bags
 
+
+
+def __filter_topics(topic_list, pattern, exclude_pattern=None):
+    """Simple topic filtering by regex pattern"""
+    import re
+    if pattern:
+        regex = re.compile(pattern)
+        topic_list = [t for t in topic_list if regex.search(t)]
+    if exclude_pattern:
+        exclude_regex = re.compile(exclude_pattern)
+        topic_list = [t for t in topic_list if not exclude_regex.search(t)]
+    return topic_list
 
 async def extract_single_bag(
     bag_path: Path, 
@@ -206,27 +215,25 @@ def _extract_topics_impl(
     # Get output engine for dual-mode support
     from ..core.output_engine import get_engine
     engine = get_engine()
-    console = Console()
-    
     try:
         # Validate input arguments
         if not topics:
-            Message.error("No topics specified. Use --topics to specify topics", console)
+            Message.error("No topics specified. Use --topics to specify topics")
             raise typer.Exit(1)
         
         # Find bag files using patterns
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
-            Message.error("No bag files found matching the specified patterns", console)
+            Message.error("No bag files found matching the specified patterns")
             for pattern in input_bags:
-                Message.info(f"  Pattern: {pattern}", console)
+                Message.info(f"  Pattern: {pattern}")
             raise typer.Exit(1)
         
         # Show found files
         Message.info(f"Found {len(valid_bags)} bag file(s):", console)
         for bag in valid_bags:
-            Message.primary(f"  {bag}", console)
+            Message.primary(f"  {bag}")
         
         # Check if bags are loaded in cache
         cache_manager = create_bag_cache_manager()
@@ -240,24 +247,24 @@ def _extract_topics_impl(
         if uncached_bags:
             Message.warning(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.", console)
             if not yes and not typer.confirm("Load uncached bags automatically?"):
-                Message.warning("Operation cancelled", console)
+                Message.warning("Operation cancelled")
                 raise typer.Exit(0)
             
             # Load uncached bags directly without additional prompts (could be done in parallel, but for simplicity doing sequentially)
             from ..core.parser import create_parser
             
             for bag_path in uncached_bags:
-                Message.info(f"Loading bag file into cache: {bag_path}", console)
+                Message.info(f"Loading bag file into cache: {bag_path}")
                 start_time = time.time()
                 parser = create_parser()
                 try:
                     # Run async function in event loop
                     asyncio.run(parser.load_bag_async(bag_path, build_index=False))
                     elapsed = time.time() - start_time
-                    Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s", console)
+                    Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s")
                 except Exception as e:
-                    Message.error(f"Failed to load bag: {e}", console)
-                    Message.error(f"Failed to load bag: {bag_path}", console)
+                    Message.error(f"Failed to load bag: {e}")
+                    Message.error(f"Failed to load bag: {bag_path}")
                     raise typer.Exit(1)
         
         # Validate compression option
@@ -273,7 +280,7 @@ def _extract_topics_impl(
             output_pattern = output
         
         # Determine topic filtering from first bag (assuming all bags have similar topics)
-        Message.info("Analyzing topics from bag files...", console)
+        Message.info("Analyzing topics from bag files...")
         
         # Get all unique topics from all bags
         all_topics_set = set()
@@ -286,18 +293,18 @@ def _extract_topics_impl(
         
         all_topics = list(all_topics_set)
         if not all_topics:
-            Message.error("No topics found in cached bag analysis", console)
+            Message.error("No topics found in cached bag analysis")
             raise typer.Exit(1)
         
         # Apply topic filtering using our filter function
         if reverse:
             # Reverse selection: exclude topics that match the patterns
-            topics_to_exclude = filter_topics(all_topics, topics, None)
+            topics_to_exclude = _filter_topics(all_topics, topics, None)
             topics_to_extract = [t for t in all_topics if t not in topics_to_exclude]
             operation_desc = f"Excluding topics matching: {', '.join(topics)}"
         else:
             # Normal selection: include topics that match the patterns
-            topics_to_extract = filter_topics(all_topics, topics, None)
+            topics_to_extract = _filter_topics(all_topics, topics, None)
             operation_desc = f"Including topics matching: {', '.join(topics)}"
         
         if not topics_to_extract:
@@ -306,7 +313,7 @@ def _extract_topics_impl(
             raise typer.Exit(1)
         
         # Show operation description
-        Message.info(operation_desc, console)
+        Message.info(operation_desc)
         Message.success(f"Will extract {len(topics_to_extract)} topic(s): {', '.join(topics_to_extract[:5])}{'...' if len(topics_to_extract) > 5 else ''}", console)
         
         # If dry run, show preview and return
@@ -322,7 +329,7 @@ def _extract_topics_impl(
                 else:
                     preview_output = f"{bag_path.stem}_{output_pattern}_{timestamp}.bag"
                 
-                Message.primary(f"  {bag_path} -> {preview_output}", console)
+                Message.primary(f"  {bag_path} -> {preview_output}")
             Message.info(f"Topics to extract: {', '.join(topics_to_extract)}", console)
             return
         
@@ -391,8 +398,6 @@ def _extract_topics_impl(
                                 'extracted': 'green',
                                 'error': 'red'
                             }.get(result['status'], 'white')
-                            console.print(f"[{status_color}]{result['path']}: {result['message']}[/{status_color}]")
-                            
                     except Exception as e:
                         logger.error(f"Unexpected error extracting {bag_path}: {e}")
                         results.append({
@@ -440,7 +445,7 @@ def _extract_topics_impl(
             details={'verbose': verbose}
         )
         
-        Message.error(f"Error during extraction: {e}", console)
+        Message.error(f"Error during extraction: {e}")
         logger.error(f"Extraction error: {e}", exc_info=True)
         raise typer.Exit(1)
 

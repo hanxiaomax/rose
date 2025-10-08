@@ -13,13 +13,10 @@ import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from ..core.parser import BagParser, ExtractOption
 from ..ui.common_ui import CommonUI, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import check_and_load_bag_cache
 
 
 # Set to CLI mode
@@ -301,15 +298,15 @@ async def _compress_bags_impl(
     valid_bags = find_bag_files(input_bags)
     
     if not valid_bags:
-        Message.error("No bag files found matching the specified patterns", console)
+        Message.error("No bag files found matching the specified patterns")
         for pattern in input_bags:
-            Message.info(f"  Pattern: {pattern}", console)
+            Message.info(f"  Pattern: {pattern}")
         raise typer.Exit(1)
     
     # Show found files
     Message.info(f"Found {len(valid_bags)} bag file(s):", console)
     for bag in valid_bags:
-        Message.primary(f"  {bag}", console)
+        Message.primary(f"  {bag}")
     
     # Check if bags are loaded in cache
     cache_manager = create_bag_cache_manager()
@@ -323,24 +320,24 @@ async def _compress_bags_impl(
     if uncached_bags:
         Message.warning(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.", console)
         if not yes and not typer.confirm("Load uncached bags automatically?"):
-            Message.warning("Operation cancelled", console)
+            Message.warning("Operation cancelled")
             raise typer.Exit(0)
         
         # Load uncached bags directly without additional prompts
         from ..core.parser import create_parser
         
         for bag_path in uncached_bags:
-            Message.info(f"Loading bag file into cache: {bag_path}", console)
+            Message.info(f"Loading bag file into cache: {bag_path}")
             start_time = time.time()
             parser = create_parser()
             try:
                 # Use await since we're already in an async function
                 await parser.load_bag_async(bag_path, build_index=False)
                 elapsed = time.time() - start_time
-                Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s", console)
+                Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s")
             except Exception as e:
-                Message.error(f"Failed to load bag: {e}", console)
-                Message.error(f"Failed to load bag: {bag_path}", console)
+                Message.error(f"Failed to load bag: {e}")
+                Message.error(f"Failed to load bag: {bag_path}")
                 raise typer.Exit(1)
     
     # Validate compression option
@@ -372,9 +369,9 @@ async def _compress_bags_impl(
                 if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
                     preview_output = f"{bag_path.stem}_{compression}_{timestamp}.bag"
             
-            Message.primary(f"  {bag_path} -> {preview_output}", console)
+            Message.primary(f"  {bag_path} -> {preview_output}")
         
-        Message.info(f"Compression: {compression}", console)
+        Message.info(f"Compression: {compression}")
         return
     
     # Determine number of workers - be more conservative for compression
@@ -455,7 +452,7 @@ async def _compress_bags_impl(
         successful_results = [r for r in results if r['success']]
         if successful_results:
             console.print()
-            Message.info("Validating compressed bag files...", console)
+            Message.info("Validating compressed bag files...")
             
             validation_results = []
             with Progress() as progress:
@@ -510,7 +507,7 @@ async def _compress_bags_impl(
             valid_files = [v for v in validation_results if v['valid']]
             invalid_files = [v for v in validation_results if not v['valid']]
             
-            Message.primary("Validation Summary", console)
+            Message.primary("Validation Summary")
             if valid_files:
                 Message.success(f"  {len(valid_files)} bag(s) passed validation", console)
                 if verbose:

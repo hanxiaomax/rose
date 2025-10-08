@@ -9,6 +9,7 @@ import sys
 from enum import Enum
 from typing import Optional, Dict, Any
 from pathlib import Path
+from ..ui.common_ui import Message
 
 
 class ErrorCode(Enum):
@@ -233,31 +234,29 @@ def handle_cli_error(error: Exception, verbose: bool = False) -> int:
     Returns:
         Exit code (0-255)
     """
-    from rich.console import Console
     import traceback as tb
-    
-    console = Console()
+
     
     if isinstance(error, RoseError):
         # Rose-specific error - format nicely for user
-        console.print(f"[red]Error ({error.code}): {error.message}[/red]")
+        Message.error(f"Error ({error.code}): {error.message}")
         
         if error.details and not verbose:
             # Show details in normal mode
-            console.print(f"Details: {error.details}")
+            Message.info(f"Details: {error.details}")
         elif error.details and verbose:
             # Show details with formatting in verbose mode
-            console.print(f"[yellow]Details: {error.details}[/yellow]")
+            Message.warning(f"Details: {error.details}")
         
         # Show stack trace only in verbose mode
         if verbose:
             if error.context:
-                console.print(f"[dim]Context: {error.context}[/dim]")
+                Message.info(f"Context: {error.context}")
             
             # Show traceback in verbose mode
             import traceback
-            console.print("[dim]--- Traceback ---[/dim]")
-            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
+            Message.info(f"--- Traceback ---")
+            Message.info(f"".join(traceback.format_exception(type(error), error, error.__traceback__)))
         
         # Log to logger only (to file, not console) to avoid duplication
         import logging
@@ -269,12 +268,12 @@ def handle_cli_error(error: Exception, verbose: bool = False) -> int:
     
     else:
         # Generic error
-        console.print(f"[red]Unexpected error: {str(error)}[/red]")
+        Message.error(f"Unexpected error: {str(error)}")
         
         if verbose:
             import traceback
-            console.print("[dim]--- Traceback ---[/dim]")
-            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
+            Message.info(f"--- Traceback ---")
+            Message.info(f"".join(traceback.format_exception(type(error), error, error.__traceback__)))
         
         # Log to logger only
         import logging

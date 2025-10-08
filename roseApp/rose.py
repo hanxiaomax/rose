@@ -2,26 +2,22 @@
 import sys
 
 import typer
-from rich.console import Console
 
 # Import logging module first
 import logging
 
 # Import necessary functions from utility modules
 from roseApp.core.util import get_logger, TimeUtil, set_app_mode, AppMode, log_cli_error
+from roseApp.cli.load import load as load_main
 from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.compress import compress as compress_main
 from roseApp.cli.inspect import app as inspect_app
-from roseApp.cli.data import app as data_app
 from roseApp.cli.cache import app as cache_app
-
-from roseApp.cli.load import load as load_main
-from roseApp.cli.plugin import app as plugin_app
 from roseApp.cli.config import app as config_app
 
 # Initialize logger
 logger = get_logger("RoseCLI")
-console = Console()
+
 app = typer.Typer(help="ROS bag filter utility - A powerful tool for ROS bag manipulation")
 
 def configure_logging(verbosity: int):
@@ -79,9 +75,7 @@ app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
 app.command(name="compress")(compress_main)
 app.add_typer(inspect_app)
-app.add_typer(data_app, name="data")
 app.add_typer(cache_app)
-app.add_typer(plugin_app, name="plugin")
 app.add_typer(config_app, name="config")
 
 if __name__ == '__main__':

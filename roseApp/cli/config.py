@@ -13,11 +13,11 @@ from typing import Optional
 import typer
 
 from ..core.util import get_logger, set_app_mode, AppMode
-
+from ..ui.common_ui import Message
 # Initialize
 set_app_mode(AppMode.CLI)
 logger = get_logger(__name__)
-# console deprecated in v2.0
+
 
 app = typer.Typer(help="Configuration management commands")
 
@@ -38,12 +38,13 @@ def init(
     # Create .rose directory if it doesn't exist
     if not rose_dir.exists():
         rose_dir.mkdir(parents=True, exist_ok=True)
-        console.print(f"[cyan]✓[/cyan] Created directory: {rose_dir}")
+        Message.success(f"Created directory: {rose_dir}")
+
     
     # Check if file already exists
     if config_file.exists() and not force:
-        console.print(f"[cyan]Configuration file already exists: {config_file}[/cyan]")
-        console.print(f"Use [cyan]rose config init --force[/cyan] to overwrite")
+        Message.warning(f"Configuration file already exists: {config_file}")
+        Message.warning(f"Use [cyan]rose config init --force[/cyan] to overwrite")
         raise typer.Exit(1)
     
     try:
@@ -61,22 +62,22 @@ def init(
                 break
         
         if not template_file:
-            console.print(f"[cyan]Could not find rose.config.default.yaml template[/cyan]")
-            console.print(f"[cyan]Searched in:[/cyan]")
+            Message.error(f"Could not find rose.config.default.yaml template")
+            Message.error(f"Searched in:")
             for loc in template_locations:
-                console.print(f"  • {loc}")
+                Message.error(f"  • {loc}")
             raise typer.Exit(1)
         
         # Copy the template file
         shutil.copy2(template_file, config_file)
         
-        console.print(f"[cyan]✓[/cyan] Configuration initialized: [cyan]{config_file}[/cyan]")
-        console.print(f"[cyan]Copied from: {template_file}[/cyan]")
-        console.print(f"\n[cyan]Edit your configuration:[/cyan]")
-        console.print(f"  [cyan]rose config edit[/cyan]")
+        Message.success(f"Configuration initialized: {config_file}")
+        Message.info(f"Copied from: {template_file}")
+        Message.info(f"Edit your configuration:")
+        Message.info(f"  [cyan]rose config edit[/cyan]")
         
     except Exception as e:
-        console.print(f"[cyan]Error initializing configuration: {e}[/cyan]")
+        Message.error(f"Error initializing configuration: {e}")
         logger.error(f"Config init error: {e}", exc_info=True)
         raise typer.Exit(1)
 
@@ -92,31 +93,32 @@ def edit():
     
     # Check if config file exists
     if not config_file.exists():
-        console.print(f"[cyan]Configuration file not found: {config_file}[/cyan]")
-        console.print(f"[cyan]Run [cyan]rose config init[/cyan] to create it first[/cyan]")
+        Message.error(f"Configuration file not found: {config_file}")
+        Message.error(f"Run [cyan]rose config init[/cyan] to create it first")
         raise typer.Exit(1)
     
     # Find suitable editor
     editor = _find_editor()
     
     if not editor:
-        console.print(f"[cyan]No suitable editor found[/cyan]")
-        console.print(f"[cyan]Please set EDITOR environment variable or install vim, nano, or code[/cyan]")
-        console.print(f"\n[cyan]You can edit the file manually:[/cyan]")
-        console.print(f"  {config_file}")
+        Message.error(f"No suitable editor found")
+        Message.error(f"Please set EDITOR environment variable or install vim, nano, or code")
+        Message.error(f"You can edit the file manually:")
+        Message.error(f"  {config_file}")
         raise typer.Exit(1)
+
     
     try:
-        console.print(f"[cyan]Opening configuration in {editor}...[/cyan]")
+        Message.info(f"Opening configuration in {editor}...")
         result = subprocess.run([editor, str(config_file)])
         
         if result.returncode == 0:
-            console.print(f"[cyan]✓[/cyan] Configuration file saved")
+            Message.success(f"Configuration file saved")
         
     except KeyboardInterrupt:
-        console.print(f"\n[cyan]Editor cancelled[/cyan]")
+        Message.error(f"Editor cancelled")
     except Exception as e:
-        console.print(f"[cyan]Error opening editor: {e}[/cyan]")
+        Message.error(f"Error opening editor: {e}")
         logger.error(f"Config edit error: {e}", exc_info=True)
         raise typer.Exit(1)
 

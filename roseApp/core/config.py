@@ -21,7 +21,7 @@ except ImportError:
     # Fallback for older pydantic versions
     from pydantic import BaseSettings, Field, validator
 from enum import Enum
-
+from ..ui.common_ui import Message
 
 class CompressionType(str, Enum):
     """Available compression types"""
@@ -375,22 +375,20 @@ def get_config() -> RoseConfig:
         validation = _config.validate_config()
         
         # Only log to console for CLI visibility (not to logger yet)
-        from rich.console import Console
-        console = Console(stderr=True)
         if loaded_path:
-            console.print(f"[dim]Config: {loaded_path}[/dim]")
+            Message.info(f"Config: {loaded_path}")
         else:
-            console.print(f"[dim]Config: Using defaults (no rose.config.yaml)[/dim]")
+            Message.info(f"Config: Using defaults (no rose.config.yaml)")
         
         # Show validation warnings on console
         if validation['warnings']:
             for warning in validation['warnings']:
-                console.print(f"[yellow]Warning: {warning}[/yellow]")
+                Message.warning(f"Warning: {warning}")
         
         if not validation['valid']:
-            console.print("[red]Configuration validation failed:[/red]")
+            Message.error(f"Configuration validation failed:")
             for error in validation['errors']:
-                console.print(f"[red]  - {error}[/red]")
+                Message.error(f"  - {error}")
         
         # After config is loaded, reconfigure logging with the correct level
         from .util import reconfigure_logging

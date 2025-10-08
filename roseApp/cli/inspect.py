@@ -5,8 +5,6 @@ Inspect command for ROS bag files - Using ResultHandler for rendering and export
 import asyncio
 from pathlib import Path
 from typing import Optional, List
-from rich.console import Console
-
 import typer
 from ..core.model import AnalysisLevel
 from ..core.export_manager import OutputFormat, ExportOptions
@@ -14,7 +12,36 @@ from ..ui.common_ui import CommonUI
 from ..ui.common_ui import Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import filter_topics, check_and_load_bag_cache
+
+def __filter_topics(topic_list, pattern, exclude_pattern=None):
+    """Simple topic filtering by regex pattern"""
+    import re
+    if pattern:
+        regex = re.compile(pattern)
+        topic_list = [t for t in topic_list if regex.search(t)]
+    if exclude_pattern:
+        exclude_regex = re.compile(exclude_pattern)
+        topic_list = [t for t in topic_list if not exclude_regex.search(t)]
+    return topic_list
+
+
+def __check_and_load_bag_cache(bag_path, auto_load=True, verbose=False, build_index=False, force_load=False):
+    """Simple cache check and load"""
+    from ..core.cache import create_bag_cache_manager
+    cache_manager = create_bag_cache_manager()
+    
+    if force_load:
+        cache_manager.clear(bag_path)
+    
+    cached_entry = cache_manager.get(bag_path)
+    if cached_entry and cached_entry.is_valid(bag_path):
+        return True
+    
+    if auto_load:
+        # Auto load not supported in headless mode
+        return False
+    return False
+
 app = typer.Typer(help="Inspect ROS bag files")
 
 
@@ -47,8 +74,6 @@ def inspect(
     from ..core.output_engine import get_engine
     engine = get_engine()
     ui = CommonUI()
-    console = Console()
-    
     # Validate bag file exists
     if not bag_path.exists():
         Message.error(f"Bag file not found: {bag_path}", ui.console)
@@ -72,22 +97,19 @@ def inspect(
     if needs_loading:
         # Bag not in cache at all
         build_index = verbose
-        if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=build_index):
-            Message.error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.", console)
+        if not _check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=build_index):
+            Message.error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.")
             raise typer.Exit(1)
         cached_entry = cache_manager.get_analysis(bag_path)
     elif needs_index:
         # Bag in cache but needs DataFrame index for verbose mode
-        console = ui.console
-        console.print(f"[cyan]⚠[/cyan] Verbose mode requires DataFrame index, but cached data doesn't have it.")
         should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
         
         if should_rebuild:
-            console.print(f"[cyan]Rebuilding cache with DataFrame indexing...[/cyan]")
             # Clear current cache entry and reload with index
             cache_manager.clear(bag_path)
-            if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
-                Message.error(f"Failed to rebuild cache with DataFrame indexing.", console)
+            if not _check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
+                Message.error(f"Failed to rebuild cache with DataFrame indexing.")
                 raise typer.Exit(1)
             cached_entry = cache_manager.get_analysis(bag_path)
         else:
@@ -170,7 +192,7 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
         
         # Apply topic filtering if specified
         if options.topics:
-            filtered_topic_names = filter_topics(all_topic_names, options.topics, None)
+            filtered_topic_names = _filter_topics(all_topic_names, options.topics, None)
         else:
             filtered_topic_names = all_topic_names
         
