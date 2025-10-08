@@ -1,1606 +1,1708 @@
-# Rose Headless Engine 设计文档 v2.0
+# Rose 无头引擎设计 v5.0
 
-## 📋 文档信息
+## 文档信息
 
-- **版本**: 2.0 (极简重构版)
-- **状态**: 设计审阅
+- **版本**: 5.0 (纯 NDJSON 架构)
+- **状态**: 设计与实施指南
 - **日期**: 2025-10-08
 - **作者**: AI Assistant
 
-## 🎯 设计哲学
+---
 
-### 核心理念
+## 核心架构概览
+
+### 设计哲学
+
+Rose 采用**纯事件驱动架构**，完全面向机器可读输出：
 
 ```
-默认机器可读，按需人类美化
-Everything is NDJSON by default, prettify on demand
+┌─────────────────────────────────────────────────┐
+│              Rose CLI Application               │
+└───────────────┬─────────────────────────────────┘
+                │
+        ┌───────▼────────┐
+        │  EventEmitter  │  (Pure NDJSON)
+        │                │
+        └───────┬────────┘
+                │
+                ▼
+          stdout (NDJSON)
+            一行一事件
 ```
 
-### 设计原则
+### 核心原则
 
-1. **NDJSON First**: 默认输出结构化的 NDJSON 事件流
-2. **Prettify Optional**: 通过 `--prettify` 选项美化输出为人类可读文本
-3. **Clean Architecture**: 删除所有交互式界面和重度UI依赖
-4. **Minimal Dependencies**: 只保留核心依赖，移除 textual/InquirerPy/rich
-5. **Message API**: 统一的 Message 接口，自动适配输出模式
+1. **纯 NDJSON 输出**: 所有输出均为结构化 JSON 事件流
+2. **无人类可读模式**: 移除所有格式化输出，专注机器接口
+3. **事件驱动**: 统一的事件类型与字段规范
+4. **前端渲染**: 所有显示逻辑由前端负责
+5. **零迭代输出**: CLI 不循环打印，只发射聚合数据
+
+### 关键组件
+
+1. **EventEmitter** (`roseApp/core/event_emitter.py`)
+   - 纯 NDJSON 事件发射器
+   - 统一事件 API: emit_progress, emit_partial, emit_done, emit_error
+   - 直接写入 stdout，每行一个 JSON 对象
+
+2. **CLI Commands** (`roseApp/cli/`)
+   - **load**: 加载 bag 文件到缓存
+   - **extract**: 从 bag 提取 topic
+   - **compress**: 压缩 bag 文件
+   - **inspect**: 分析 bag 内容
+   - **cache**: 缓存管理
+   - **config**: 配置管理
+
+### 当前问题与目标
+
+**当前状态**:
+- ❌ 使用 OutputEngine 双模式（NDJSON + Prettify）
+- ❌ Message API 进行迭代输出（逐行打印）
+- ❌ 混合输出模式，前端难以处理
+
+**目标状态**:
+- ✅ 重命名为 EventEmitter，单一职责
+- ✅ 仅支持 NDJSON 输出
+- ✅ 移除 Message API
+- ✅ 所有数据通过事件聚合发射
+- ✅ 前端完全控制渲染
 
 ---
 
-## 🏗️ 整体架构
+## NDJSON 事件协议 v1-min
 
-### 架构图
+### 协议总览
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Rose CLI Commands                    │
-│         (load/extract/compress/inspect/...)             │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ▼
-              ┌──────────────┐
-              │ Message API  │  (统一输出接口)
-              └──────┬───────┘
-                     │
-                     ▼
-              ┌──────────────┐
-              │OutputEngine  │  (Facade)
-              └──────┬───────┘
-                     │
-         ┌───────────┴──────────┐
-         │                      │
-         ▼                      ▼
-  ┌─────────────┐      ┌──────────────┐
-  │NDJSON Backend│      │Prettify Backend│
-  │  (Default)   │      │  (--prettify) │
-  └──────┬──────┘      └──────┬────────┘
-         │                     │
-         ▼                     ▼
-   JSON Events          Pretty Text
-   (stdout)             (stdout)
-```
+**Rose NDJSON Protocol v1-min** - 简化通用版本
 
-### 关键变化（相比 v1.0）
+- **编码**: UTF-8，每行一个完整 JSON 对象（NDJSON）
+- **输出流**: `stdout` → 事件；`stderr` → 日志
+- **时间格式**: ISO8601 UTC（如 `2025-10-08T10:00:00.123Z`）
+- **退出约束**: 每次执行以 `done` 或 `error` 结束
 
-| 方面 | v1.0 | v2.0 | 变化 |
-|------|------|------|------|
-| **默认输出** | Rich TEXT | NDJSON | 🔄 反转 |
-| **可选模式** | `--as-backend` | `--prettify` | 🔄 反转 |
-| **交互模式** | 支持 | 删除 | ❌ 移除 |
-| **Rich库** | 重度使用 | 完全移除 | ❌ 移除 |
-| **Textual** | 保留 | 删除 | ❌ 移除 |
-| **InquirerPy** | 使用 | 删除 | ❌ 移除 |
-| **Message API** | 直接用Rich | 适配器模式 | ✨ 改进 |
-| **进度条** | 复杂Rich Progress | 简化或无 | ✅ 简化 |
+### 事件基础结构
 
----
+所有事件遵循统一格式：
 
-## 📦 核心组件设计
-
-### 1. OutputEngine (Facade)
-
-```python
-"""
-输出引擎：统一的输出接口门面
-"""
-
-from enum import Enum
-from typing import Optional, Any, Dict
-
-
-class OutputMode(Enum):
-    """输出模式"""
-    NDJSON = "ndjson"      # Default: structured JSON events
-    PRETTIFY = "prettify"  # Optional: human-readable text
-
-
-class OutputEngine:
-    """
-    输出引擎门面
-    
-    提供统一的输出接口，根据模式切换后端：
-    - NDJSON模式（默认）：输出结构化JSON事件流
-    - Prettify模式：输出美化的人类可读文本
-    """
-    
-    def __init__(self, mode: OutputMode = OutputMode.NDJSON):
-        self.mode = mode
-        self._backend: OutputBackend = self._create_backend()
-    
-    def _create_backend(self) -> 'OutputBackend':
-        """创建后端实例"""
-        if self.mode == OutputMode.NDJSON:
-            return NDJSONBackend()
-        else:
-            return PrettifyBackend()
-    
-    def is_ndjson_mode(self) -> bool:
-        """是否为NDJSON模式（默认）"""
-        return self.mode == OutputMode.NDJSON
-    
-    def is_prettify_mode(self) -> bool:
-        """是否为Prettify模式"""
-        return self.mode == OutputMode.PRETTIFY
-    
-    # Event emission methods
-    def emit_progress(self, pct: float, msg: str, 
-                     step: Optional[int] = None,
-                     total_steps: Optional[int] = None) -> None:
-        """发射进度事件"""
-        self._backend.emit_progress(pct, msg, step, total_steps)
-    
-    def emit_partial(self, kind: str, data: Any) -> None:
-        """发射部分结果事件"""
-        self._backend.emit_partial(kind, data)
-    
-    def emit_done(self, data: Optional[Any] = None) -> None:
-        """发射完成事件"""
-        self._backend.emit_done(data)
-    
-    def emit_error(self, code: str, message: str, 
-                  details: Optional[Dict] = None) -> None:
-        """发射错误事件"""
-        self._backend.emit_error(code, message, details)
-    
-    def print_message(self, text: str, level: 'MessageLevel' = None) -> None:
-        """打印消息"""
-        self._backend.print_message(text, level)
-
-
-# 全局单例
-_engine: Optional[OutputEngine] = None
-
-
-def init_engine(mode: OutputMode = OutputMode.NDJSON) -> OutputEngine:
-    """初始化全局输出引擎"""
-    global _engine
-    _engine = OutputEngine(mode)
-    return _engine
-
-
-def get_engine() -> OutputEngine:
-    """获取全局输出引擎"""
-    global _engine
-    if _engine is None:
-        _engine = OutputEngine(OutputMode.NDJSON)  # Default to NDJSON
-    return _engine
-
-
-def reset_engine():
-    """重置引擎（用于测试）"""
-    global _engine
-    _engine = None
-```
-
-### 2. OutputBackend (抽象接口)
-
-```python
-"""
-输出后端抽象接口
-"""
-
-from abc import ABC, abstractmethod
-from typing import Optional, Any, Dict
-from enum import Enum
-
-
-class MessageLevel(Enum):
-    """消息级别"""
-    SUCCESS = "success"
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
-    PRIMARY = "primary"
-    ACCENT = "accent"
-    MUTED = "muted"
-
-
-class OutputBackend(ABC):
-    """输出后端抽象基类"""
-    
-    @abstractmethod
-    def emit_progress(self, pct: float, msg: str, 
-                     step: Optional[int] = None,
-                     total_steps: Optional[int] = None) -> None:
-        """发射进度事件"""
-        pass
-    
-    @abstractmethod
-    def emit_partial(self, kind: str, data: Any) -> None:
-        """发射部分结果事件"""
-        pass
-    
-    @abstractmethod
-    def emit_done(self, data: Optional[Any] = None) -> None:
-        """发射完成事件"""
-        pass
-    
-    @abstractmethod
-    def emit_error(self, code: str, message: str, 
-                  details: Optional[Dict] = None) -> None:
-        """发射错误事件"""
-        pass
-    
-    @abstractmethod
-    def print_message(self, text: str, level: MessageLevel) -> None:
-        """打印消息"""
-        pass
-```
-
-### 3. NDJSONBackend (默认后端)
-
-```python
-"""
-NDJSON后端：输出结构化的JSON事件流（默认模式）
-"""
-
-import sys
-import json
-from datetime import datetime
-from typing import Optional, Any, Dict
-
-
-class EventType(Enum):
-    """事件类型"""
-    PROGRESS = "progress"
-    PARTIAL = "partial" 
-    DONE = "done"
-    ERROR = "error"
-    MESSAGE = "message"
-
-
-class NDJSONBackend(OutputBackend):
-    """
-    NDJSON输出后端（默认）
-    
-    输出结构化的JSON事件流，每行一个完整的JSON对象。
-    适合机器解析和自动化处理。
-    """
-    
-    def __init__(self):
-        pass
-    
-    def emit_progress(self, pct: float, msg: str,
-                     step: Optional[int] = None,
-                     total_steps: Optional[int] = None) -> None:
-        """发射进度事件"""
-        event = {
-            "event": EventType.PROGRESS.value,
-            "timestamp": self._timestamp(),
-            "percent": pct,
-            "message": msg
-        }
-        if step is not None:
-            event["step"] = step
-        if total_steps is not None:
-            event["total_steps"] = total_steps
-        self._emit_event(EventType.PROGRESS, event)
-    
-    def emit_partial(self, kind: str, data: Any) -> None:
-        """发射部分结果事件"""
-        self._emit_event(EventType.PARTIAL, {
-            "kind": kind,
-            "data": data
-        })
-    
-    def emit_done(self, data: Optional[Any] = None) -> None:
-        """发射完成事件"""
-        self._emit_event(EventType.DONE, {
-            "data": data
-        })
-        
-    def emit_error(self, code: str, message: str, 
-                  details: Optional[Dict] = None) -> None:
-        """发射错误事件"""
-        self._emit_event(EventType.ERROR, {
-            "code": code,
-            "message": message,
-            "details": details
-        })
-    
-    def print_message(self, text: str, level: MessageLevel) -> None:
-        """发射消息事件"""
-        self._emit_event(EventType.MESSAGE, {
-            "text": text,
-            "level": level.value if level else "info"
-        })
-    
-    def _emit_event(self, event_type: EventType, data: Dict[str, Any]) -> None:
-        """内部：发射事件到stdout"""
-        # Always use current sys.stdout (not stored reference)
-        event = {
-            "event": event_type.value,
-            "timestamp": self._timestamp(),
-            **data
-        }
-        sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
-    
-    @staticmethod
-    def _timestamp() -> str:
-        """生成ISO8601时间戳"""
-        return datetime.utcnow().isoformat() + "Z"
-```
-
-### 4. PrettifyBackend (美化后端)
-
-```python
-"""
-Prettify后端：输出美化的人类可读文本
-"""
-
-import sys
-from typing import Optional, Any, Dict
-
-
-class PrettifyBackend(OutputBackend):
-    """
-    Prettify输出后端（--prettify）
-    
-    输出简洁的人类可读文本，使用ANSI颜色，无需Rich等重度依赖。
-    设计理念：简洁、清晰、无干扰。
-    """
-    
-    # ANSI颜色代码
-    GREEN = "\033[32m"
-    RED = "\033[31m"
-    YELLOW = "\033[33m"
-    CYAN = "\033[36m"
-    MAGENTA = "\033[35m"
-    GRAY = "\033[90m"
-    BOLD = "\033[1m"
-    RESET = "\033[0m"
-    
-    def __init__(self):
-        self._last_progress_len = 0
-    
-    def emit_progress(self, pct: float, msg: str,
-                     step: Optional[int] = None,
-                     total_steps: Optional[int] = None) -> None:
-        """
-        显示进度（简化版）
-        
-        设计选择：
-        - 不使用复杂的进度条
-        - 只在关键节点输出（0%, 50%, 100%等）
-        - 避免刷屏
-        """
-        # 只在特定百分比输出（减少输出噪音）
-        if pct == 0 or pct == 100 or pct % 25 == 0:
-            status = f"[{pct:>3.0f}%] {msg}"
-            if step and total_steps:
-                status = f"[{step}/{total_steps}] {status}"
-            print(f"{self.CYAN}→{self.RESET} {status}")
-    
-    def emit_partial(self, kind: str, data: Any) -> None:
-        """
-        显示部分结果
-        
-        在prettify模式下，通常跳过partial事件，
-        避免输出过多中间信息。
-        """
-        pass  # Skip in prettify mode
-    
-    def emit_done(self, data: Optional[Any] = None) -> None:
-        """显示完成消息"""
-        print(f"{self.GREEN}✓{self.RESET} 操作完成")
-        
-        # 如果有数据，输出摘要
-        if data and isinstance(data, dict):
-            print()
-            for key, value in data.items():
-                label = key.replace("_", " ").title()
-                print(f"  {label}: {value}")
-    
-    def emit_error(self, code: str, message: str,
-                  details: Optional[Dict] = None) -> None:
-        """显示错误消息"""
-        print(f"{self.RED}✗{self.RESET} 错误 [{code}]: {message}", 
-              file=sys.stderr)
-        
-        # 详细信息（如果有）
-        if details and isinstance(details, dict):
-            for key, value in details.items():
-                if value:
-                    print(f"  {key}: {value}", file=sys.stderr)
-    
-    def print_message(self, text: str, level: MessageLevel) -> None:
-        """打印消息"""
-        icons = {
-            MessageLevel.SUCCESS: f"{self.GREEN}✓{self.RESET}",
-            MessageLevel.ERROR: f"{self.RED}✗{self.RESET}",
-            MessageLevel.WARNING: f"{self.YELLOW}⚠{self.RESET}",
-            MessageLevel.INFO: f"{self.CYAN}ℹ{self.RESET}",
-            MessageLevel.PRIMARY: f"{self.MAGENTA}●{self.RESET}",
-            MessageLevel.ACCENT: f"{self.CYAN}◆{self.RESET}",
-            MessageLevel.MUTED: f"{self.GRAY}·{self.RESET}",
-        }
-        
-        icon = icons.get(level, "")
-        output = sys.stderr if level == MessageLevel.ERROR else sys.stdout
-        print(f"{icon} {text}", file=output)
-```
-
-### 5. Message API (统一接口)
-
-```python
-"""
-Message API: 统一的消息输出接口
-
-用户代码统一使用Message类，自动适配当前的输出模式。
-"""
-
-from roseApp.core.output_engine import get_engine, MessageLevel
-
-
-class Message:
-    """
-    统一的消息输出接口
-    
-    设计理念：
-    - 用户代码只需要调用Message类
-    - 底层自动适配NDJSON或Prettify模式
-    - API保持简洁和一致
-    """
-    
-    @staticmethod
-    def success(text: str):
-        """成功消息（绿色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.SUCCESS)
-    
-    @staticmethod
-    def error(text: str):
-        """错误消息（红色，输出到stderr）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.ERROR)
-    
-    @staticmethod
-    def warning(text: str):
-        """警告消息（黄色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.WARNING)
-    
-    @staticmethod
-    def info(text: str):
-        """信息消息（青色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.INFO)
-    
-    @staticmethod
-    def primary(text: str):
-        """主要消息（品红色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.PRIMARY)
-    
-    @staticmethod
-    def accent(text: str):
-        """强调消息（青色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.ACCENT)
-    
-    @staticmethod
-    def muted(text: str):
-        """弱化消息（灰色）"""
-        engine = get_engine()
-        engine.print_message(text, MessageLevel.MUTED)
-```
-
----
-
-## 📁 文件结构变化
-
-### 要删除的文件（11个）
-
-```bash
-# 交互式UI组件（9个）
-roseApp/ui/interactive_common.py      # 交互式CLI核心 - 668行
-roseApp/ui/load_ui.py                 # load交互UI - 405行
-roseApp/ui/extract_ui.py              # extract交互UI - 457行
-roseApp/ui/compress_ui.py             # compress交互UI
-roseApp/ui/inspect_ui.py              # inspect交互UI
-roseApp/ui/cache_ui.py                # cache交互UI
-roseApp/ui/cli_ui.py                  # CLI UI工具 - 375行
-roseApp/ui/command_builder.py        # 命令构建器 - 316行
-roseApp/ui/theme.py                   # 主题系统 - 227行
-
-# 旧的中间产物（2个）
-roseApp/core/progress_tracker.py     # 旧的进度追踪器
-tests/test_output_engine.py          # 需要重写
-```
-
-**删除代码统计**: 约 2,500+ 行
-
-### 要重构的文件
-
-```bash
-# 核心输出系统（重构）
-roseApp/core/output_engine.py        # 重构为新架构
-roseApp/ui/common_ui.py               # 简化Message类
-
-# 主入口（简化）
-roseApp/rose.py                       # 删除交互模式，改--as-backend为--prettify
-
-# 8个CLI命令（适配）
-roseApp/cli/load.py                   # 适配新API
-roseApp/cli/extract.py                # 适配新API
-roseApp/cli/compress.py               # 适配新API
-roseApp/cli/inspect.py                # 适配新API
-roseApp/cli/data.py                   # 适配新API
-roseApp/cli/cache.py                  # 适配新API
-roseApp/cli/plugin.py                 # 适配新API
-roseApp/cli/config.py                 # 适配新API
-```
-
-### 文件组织（重构后）
-
-```
-roseApp/
-├── rose.py                           # 主入口（简化）
-├── core/
-│   ├── output_engine.py              # OutputEngine + Backends
-│   ├── BagManager.py                 # 保持不变
-│   ├── parser.py                     # 保持不变
-│   ├── model.py                      # 保持不变
-│   ├── cache.py                      # 保持不变
-│   ├── export_manager.py             # 保持不变
-│   ├── config.py                     # 保持不变
-│   ├── errors.py                     # 保持不变
-│   └── util.py                       # 保持不变
-├── cli/
-│   ├── load.py                       # 适配Message API
-│   ├── extract.py                    # 适配Message API
-│   ├── compress.py                   # 适配Message API
-│   ├── inspect.py                    # 适配Message API
-│   ├── data.py                       # 适配Message API
-│   ├── cache.py                      # 适配Message API
-│   ├── plugin.py                     # 适配Message API
-│   ├── config.py                     # 适配Message API
-│   └── util.py                       # 保持不变
-└── ui/
-    └── common_ui.py                  # Message类（简化）
-```
-
----
-
-## 🔧 主要变更说明
-
-### 1. 命令行参数变化
-
-#### 之前（v1.0）
-```bash
-# 默认：Rich文本输出
-$ rose load demo.bag
-
-# 后端模式：NDJSON输出
-$ rose --as-backend load demo.bag
-```
-
-#### 之后（v2.0）
-```bash
-# 默认：NDJSON输出（机器友好）
-$ rose load demo.bag
-
-# 美化模式：简洁文本输出（人类友好）
-$ rose --prettify load demo.bag
-```
-
-**设计理由**：
-- NDJSON作为默认，强化"headless engine"定位
-- Frontend可以直接消费NDJSON，无需特殊参数
-- `--prettify`更直观，表明"美化输出供人类阅读"
-- 符合"机器优先，人类按需"的设计哲学
-
-### 2. 主入口变化
-
-#### `roseApp/rose.py`
-
-```python
-# Before
-@app.callback(invoke_without_command=True)
-def callback(
-    ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True),
-    as_backend: bool = typer.Option(False, "--as-backend", 
-                                    help="Run as backend with NDJSON output"),
-):
-    # ...
-    mode = OutputMode.NDJSON if as_backend else OutputMode.TEXT
-    init_engine(mode)
-    
-    # Check for interactive mode
-    if not as_backend and not ctx.invoked_subcommand:
-        # Launch interactive CLI...
-        pass
-
-
-# After
-@app.callback(invoke_without_command=True)
-def callback(
-    ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True),
-    prettify: bool = typer.Option(False, "--prettify", "-p",
-                                  help="Prettify output for human reading"),
-):
-    # ...
-    # Default to NDJSON, prettify if requested
-    mode = OutputMode.PRETTIFY if prettify else OutputMode.NDJSON
-    init_engine(mode)
-    
-    # No interactive mode support
-    if ctx.invoked_subcommand is None:
-        console.print("Error: No command specified. Use --help for usage.")
-        raise typer.Exit(1)
-```
-
-**关键变化**：
-1. ❌ 删除 `--as-backend` 参数
-2. ✅ 添加 `--prettify` / `-p` 参数
-3. ❌ 删除交互模式检查和启动逻辑
-4. 🔄 反转默认模式（NDJSON为默认）
-
-### 3. Message使用示例
-
-#### 用户代码（保持不变）
-
-```python
-# 在命令实现中
-from roseApp.ui.common_ui import Message
-
-def load(...):
-    # 用户代码无需关心输出模式
-    Message.info(f"Found {count} bag files")
-    
-    # ... do work ...
-    
-    Message.success("All bags loaded successfully")
-    
-    if errors:
-        Message.error(f"Failed to load {len(errors)} bags")
-```
-
-#### 输出结果
-
-**NDJSON模式（默认）**:
 ```json
-{"event":"message","timestamp":"2025-10-08T10:00:00Z","text":"Found 3 bag files","level":"info"}
-{"event":"message","timestamp":"2025-10-08T10:00:05Z","text":"All bags loaded successfully","level":"success"}
+{
+  "event": "<事件类型>",
+  "timestamp": "<ISO8601_UTC_带Z后缀>",
+  "protocol": {
+    "name": "rose.ndjson",
+    "version": "1.0"
+  },
+  "context": {
+    "command": "load",
+    "trace_id": "...",
+    "run_id": "..."
+  },
+  "payload": {
+    // 事件特定载荷
+  }
+}
 ```
 
-**Prettify模式（--prettify）**:
-```
-ℹ Found 3 bag files
-✓ All bags loaded successfully
-```
+### 通用字段定义
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `event` | string | ✅ | 事件类型（4种之一） |
+| `timestamp` | string | ✅ | UTC 时间戳 |
+| `protocol` | object | 🚫 | 协议元信息 `{"name": "rose.ndjson", "version": "1.0"}` |
+| `context` | object | 🚫 | 命令上下文 `{"command": "load", "trace_id": "...", "run_id": "..."}` |
+| `payload` | object | 依事件 | 各事件载荷（见下） |
+
+### 四种事件类型
+
+| event | 用途 |
+|-------|------|
+| `progress` | 进度更新 |
+| `data` | 中间结果或输出数据 |
+| `done` | 成功结束 |
+| `error` | 失败结束 |
 
 ---
 
-## 📊 事件协议规范
+#### 1. progress（进度事件）
 
-### 事件类型
+**用途**: 报告长时间操作的进度
 
-#### 1. Progress Event（进度事件）
-
+**结构**:
 ```json
 {
   "event": "progress",
-  "timestamp": "2025-10-08T10:00:00Z",
-  "percent": 50.0,
-  "message": "Loading demo.bag",
-  "step": 1,          // Optional
-  "total_steps": 2    // Optional
-}
-```
-
-#### 2. Partial Event（部分结果事件）
-
-```json
-{
-  "event": "partial", 
-  "timestamp": "2025-10-08T10:00:01Z",
-  "kind": "topic_info",
-  "data": {
-    "topic": "/camera/image",
-    "type": "sensor_msgs/Image",
-    "count": 1500
+  "timestamp": "2025-10-08T10:00:00.123Z",
+  "payload": {
+    "percent": 75.5,
+    "message": "Processing bag files",
+    "step": 3,
+    "total_steps": 4
   }
 }
 ```
 
-#### 3. Done Event（完成事件）
+**payload 字段**:
+- `percent` (float, 必需): 进度百分比 0-100，单调递增
+- `message` (string, 可选): 描述性消息
+- `step` (int, 可选): 当前步骤编号（从 1 开始）
+- `total_steps` (int, 可选): 总步骤数
 
+---
+
+#### 2. data（数据事件）
+
+**用途**: 传输中间结果、最终数据或简单列表。不细分语义类型，所有结构化数据均可放入。
+
+**结构**:
+```json
+{
+  "event": "data",
+  "timestamp": "2025-10-08T10:00:01.456Z",
+  "payload": {
+    "label": "found_bags",
+    "data": [
+      {"path": "a.bag", "size_mb": 12.3},
+      {"path": "b.bag", "size_mb": 45.6}
+    ],
+    "count": 2
+  }
+}
+```
+
+**payload 字段**:
+- `label` (string, 可选): 用于区分不同阶段输出（如 `"topics"`, `"summary"`, `"metadata"`）
+- `data` (any, 必需): 可为对象或数组，包含实际数据
+- `count` (int, 可选): 统计信息（如列表长度）
+
+**常见 label 值**:
+- `found_bags`: 发现的 bag 文件列表
+- `topics`: bag 中的 topic 信息
+- `metadata`: bag 元数据
+- `analysis`: 分析结果
+- `cache_info`: 缓存信息
+- `results`: 操作结果详情
+
+---
+
+#### 3. done（完成事件）
+
+**用途**: 标志操作成功完成，包含最终聚合结果
+
+**结构**:
 ```json
 {
   "event": "done",
-  "timestamp": "2025-10-08T10:00:05Z",
-  "data": {
-    "loaded_files": 2,
-    "cached_files": 1,
-    "failed_files": 0,
-    "total_ready": 3
+  "timestamp": "2025-10-08T10:00:05.789Z",
+  "payload": {
+    "summary": {
+      "processed": 10,
+      "succeeded": 8,
+      "failed": 2,
+      "elapsed_time": 4.12
+    }
   }
 }
 ```
 
-#### 4. Error Event（错误事件）
+**payload 字段**:
+- `summary` (object, 必需): 最终聚合结果
+- summary 中的具体字段由操作类型决定
+- 退出码应为 0
 
+---
+
+#### 4. error（错误事件）
+
+**用途**: 报告操作失败及诊断信息
+
+**结构**:
 ```json
 {
   "event": "error",
-  "timestamp": "2025-10-08T10:00:02Z",
-  "code": "BAG_NOT_FOUND",
-  "message": "Bag file not found: demo.bag",
-  "details": {
-    "path": "/path/to/demo.bag",
-    "verbose": false
+  "timestamp": "2025-10-08T10:00:02.345Z",
+  "payload": {
+    "code": "BAG_NOT_FOUND",
+    "message": "Bag file not found: demo.bag",
+    "details": {
+      "path": "/path/to/demo.bag",
+      "suggestions": ["Check file path", "Ensure file exists"]
+    }
   }
 }
 ```
 
-#### 5. Message Event（消息事件）
+**payload 字段**:
+- `code` (string, 必需): 机器可读错误码（大写蛇形命名）
+- `message` (string, 必需): 人类可读错误消息
+- `details` (object, 可选): 额外诊断信息
+- 退出码应为非 0
+
+**常见错误码**:
+- `BAG_NOT_FOUND`: Bag 文件不存在
+- `INVALID_ARGUMENT`: 无效命令参数
+- `CACHE_ERROR`: 缓存操作失败
+- `PARSE_ERROR`: Bag 解析失败
+- `PERMISSION_DENIED`: 文件权限错误
+- `NO_COMMAND`: 未指定命令
+
+### 事件生命周期
+
+```
+操作开始
+   │
+   ├─► progress (0%)
+   │
+   ├─► data (中间结果)
+   ├─► progress (25%)
+   │
+   ├─► data (更多中间结果)
+   ├─► progress (50%)
+   │
+   ├─► progress (100%)
+   │
+   └─► done (最终结果)
+         或
+       error (失败)
+```
+
+### 协议规则
+
+1. **终止规则**: 每个操作必须以 `done` 或 `error` 结束（二选一）
+2. **进度规则**: Progress 事件的 percent 应单调递增
+3. **数据规则**: Data 事件可在任何时刻发射多次
+4. **时间规则**: 时间戳必须是 ISO8601 UTC 格式，带 'Z' 后缀
+5. **退出规则**: 成功退出码为 0（done），失败为非 0（error）
+6. **序列化规则**: 所有字段必须可 JSON 序列化，不得出现 `NaN` / `Infinity`
+7. **输出规则**: `stdout` 只包含 JSON 行，禁止混入文本输出
+
+### 完整示例
+
+一次典型的命令执行：
 
 ```json
+{"event":"progress","timestamp":"2025-10-08T10:00:00.000Z","payload":{"percent":0,"message":"Starting"}}
+{"event":"data","timestamp":"2025-10-08T10:00:01.000Z","payload":{"label":"found_files","data":["a.bag","b.bag"],"count":2}}
+{"event":"progress","timestamp":"2025-10-08T10:00:02.000Z","payload":{"percent":50,"message":"Processing"}}
+{"event":"data","timestamp":"2025-10-08T10:00:03.000Z","payload":{"label":"results","data":{"files_ok":2,"duration":2.5}}}
+{"event":"done","timestamp":"2025-10-08T10:00:04.000Z","payload":{"summary":{"processed":2,"elapsed_time":2.5}}}
+```
+
+---
+
+## EventEmitter API 参考
+
+### 模块位置
+
+```python
+# 位置：roseApp/core/event_emitter.py
+from roseApp.core.event_emitter import EventEmitter, init_emitter, get_emitter
+```
+
+### 初始化
+
+```python
+# 在应用启动时初始化（rose.py 中）
+from roseApp.core.event_emitter import init_emitter
+
+init_emitter()  # 创建全局 emitter 实例
+
+# 在命令中获取
+from roseApp.core.event_emitter import get_emitter
+
+emitter = get_emitter()
+```
+
+### 核心方法
+
+#### emit_progress()
+
+发射进度更新事件。
+
+```python
+def emit_progress(
+    percent: float,              # 0-100
+    message: str = "",           # 描述消息
+    step: Optional[int] = None,
+    total_steps: Optional[int] = None
+) -> None
+```
+
+**输出格式**:
+```json
 {
-  "event": "message",
-  "timestamp": "2025-10-08T10:00:00Z",
-  "text": "Found 3 bag files",
-  "level": "info"
+  "event": "progress",
+  "timestamp": "2025-10-08T10:00:00.123Z",
+  "payload": {
+    "percent": 75.5,
+    "message": "Processing files",
+    "step": 2,
+    "total_steps": 3
+  }
 }
 ```
 
-### Level 枚举值
+**示例**:
+```python
+emitter.emit_progress(0, "Starting operation", step=1, total_steps=3)
+emitter.emit_progress(50, "Processing files", step=2, total_steps=3)
+emitter.emit_progress(100, "Complete", step=3, total_steps=3)
+```
+
+#### emit_data()
+
+发射数据事件（中间结果或最终数据）。
 
 ```python
-success  # 成功操作
-error    # 错误信息
-warning  # 警告信息
-info     # 一般信息
-primary  # 主要信息
-accent   # 强调信息
-muted    # 弱化信息
+def emit_data(
+    data: Any,                    # 数据载荷（必须可 JSON 序列化）
+    label: Optional[str] = None,  # 数据标签
+    count: Optional[int] = None   # 可选统计信息
+) -> None
 ```
 
----
-
-## 🎨 输出示例对比
-
-### Load命令示例
-
-#### NDJSON模式（默认）
-
-```bash
-$ rose load tests/demo.bag
-```
-
-输出：
+**输出格式**:
 ```json
-{"event":"message","timestamp":"2025-10-08T10:00:00Z","text":"Found 1 bag file(s)","level":"info"}
-{"event":"progress","timestamp":"2025-10-08T10:00:01Z","percent":0,"message":"Loading demo.bag","step":1,"total_steps":1}
-{"event":"progress","timestamp":"2025-10-08T10:00:02Z","percent":50,"message":"Parsing metadata","step":1,"total_steps":1}
-{"event":"progress","timestamp":"2025-10-08T10:00:03Z","percent":100,"message":"Complete","step":1,"total_steps":1}
-{"event":"done","timestamp":"2025-10-08T10:00:03Z","data":{"loaded_files":1,"cached_files":0,"failed_files":0,"total_ready":1}}
+{
+  "event": "data",
+  "timestamp": "2025-10-08T10:00:01.456Z",
+  "payload": {
+    "label": "found_bags",
+    "data": [...],
+    "count": 3
+  }
+}
 ```
 
-#### Prettify模式（--prettify）
+**示例**:
+```python
+# 发射文件列表
+emitter.emit_data(
+    data=[
+        {"path": "a.bag", "size_mb": 12.3},
+        {"path": "b.bag", "size_mb": 45.6}
+    ],
+    label="found_bags",
+    count=2
+)
 
-```bash
-$ rose --prettify load tests/demo.bag
+# 发射单个对象
+emitter.emit_data(
+    data={
+        "path": "/path/to/demo.bag",
+        "duration": 120.5,
+        "topics_count": 15
+    },
+    label="metadata"
+)
 ```
 
-输出：
-```
-ℹ Found 1 bag file(s)
-→ [  0%] Loading demo.bag
-→ [100%] Complete
-✓ 操作完成
+#### emit_done()
 
-  Loaded Files: 1
-  Cached Files: 0
-  Failed Files: 0
-  Total Ready: 1
+发射操作完成事件。
+
+```python
+def emit_done(
+    summary: Dict[str, Any]  # 最终聚合结果
+) -> None
+```
+
+**输出格式**:
+```json
+{
+  "event": "done",
+  "timestamp": "2025-10-08T10:00:05.789Z",
+  "payload": {
+    "summary": {
+      "processed": 10,
+      "succeeded": 8,
+      "failed": 2,
+      "elapsed_time": 4.12
+    }
+  }
+}
+```
+
+**示例**:
+```python
+emitter.emit_done({
+    "processed": 10,
+    "succeeded": 8,
+    "failed": 2,
+    "elapsed_time": 12.5
+})
+```
+
+#### emit_error()
+
+发射错误事件。
+
+```python
+def emit_error(
+    code: str,                      # 错误码（大写蛇形）
+    message: str,                   # 错误消息
+    details: Optional[Dict] = None  # 额外上下文
+) -> None
+```
+
+**输出格式**:
+```json
+{
+  "event": "error",
+  "timestamp": "2025-10-08T10:00:02.345Z",
+  "payload": {
+    "code": "BAG_NOT_FOUND",
+    "message": "Bag file not found: demo.bag",
+    "details": {
+      "path": "/path/to/demo.bag",
+      "suggestions": ["Check file path"]
+    }
+  }
+}
+```
+
+**示例**:
+```python
+emitter.emit_error(
+    "BAG_NOT_FOUND",
+    "Cannot find bag file: demo.bag",
+    details={
+        "path": str(bag_path),
+        "cwd": os.getcwd(),
+        "suggestions": ["Check the file path", "Ensure file exists"]
+    }
+)
+```
+
+### 可选特性
+
+#### 设置命令上下文
+
+```python
+def set_context(
+    command: str,
+    trace_id: Optional[str] = None,
+    run_id: Optional[str] = None
+) -> None
+```
+
+设置后，所有事件将包含 context 字段。
+
+**示例**:
+```python
+emitter.set_context("load", trace_id="abc123", run_id="run-456")
 ```
 
 ---
 
-## 🔄 实施计划
+## 各命令无头化设计
 
-### Phase 1: 重构OutputEngine (2-3小时)
+### 设计指导原则
 
-**目标**: 完成核心输出系统重构
+对每个命令：
+1. **禁止迭代输出** - 不循环打印，用数组聚合
+2. **发射结构化数据** - 使用 partial/done 事件
+3. **前端负责渲染** - CLI 不关心显示格式
+4. **适度进度报告** - 长操作使用 emit_progress()
+5. **思考事件流** - 前端需要什么数据？何时需要？
 
-**任务**:
-1. ✅ 重构 `output_engine.py`
-   - 保持OutputEngine Facade
-   - 重写NDJSONBackend（默认）
-   - 创建PrettifyBackend（简化）
-   - 反转默认模式逻辑
+---
 
-2. ✅ 简化 `common_ui.py`
-   - Message类适配OutputEngine
-   - 移除所有Rich依赖
+### 1. load 命令
 
-3. ✅ 更新单元测试
-   - 测试两种后端
-   - 测试Message API适配
-   - 测试全局引擎管理
+**当前问题**:
+- 逐行打印发现的文件
+- 逐个打印加载状态
+- 混合使用 Message API 和 emit_done
 
-**验证标准**:
-- [ ] 所有单元测试通过
-- [ ] NDJSON输出格式正确
-- [ ] Prettify输出可读性好
-
-### Phase 2: 更新主入口 (1小时)
-
-**目标**: 修改rose.py，删除交互模式
-
-**任务**:
-1. ✅ 修改 `rose.py`
-   - 删除 `--as-backend` 参数
-   - 添加 `--prettify` 参数
-   - 删除交互模式启动逻辑
-   - 更新帮助文档
-
-2. ✅ 更新配置
-   - `config.py` 中的 `output_mode` 改为 `prettify`
-   - 删除 `as_backend` 配置项
-
-**验证标准**:
-- [ ] `rose --help` 显示正确
-- [ ] `rose --prettify load --help` 正常
-- [ ] 无交互模式残留
-
-### Phase 3: 删除交互式UI (1-2小时)
-
-**目标**: 删除所有交互式组件
-
-**任务**:
-1. ❌ 删除UI文件（9个）
-   ```bash
-   rm roseApp/ui/interactive_common.py
-   rm roseApp/ui/load_ui.py
-   rm roseApp/ui/extract_ui.py
-   rm roseApp/ui/compress_ui.py
-   rm roseApp/ui/inspect_ui.py
-   rm roseApp/ui/cache_ui.py
-   rm roseApp/ui/cli_ui.py
-   rm roseApp/ui/command_builder.py
-   rm roseApp/ui/theme.py
-   ```
-
-2. ❌ 删除旧文件
-   ```bash
-   rm roseApp/core/progress_tracker.py
-   ```
-
-3. 🔄 更新导入
-   - 在所有CLI命令中删除交互式UI导入
-   - 检查无遗留引用
-
-**验证标准**:
-- [ ] 无导入错误
-- [ ] 所有命令可正常运行
-
-### Phase 4: 适配CLI命令 (3-4小时)
-
-**目标**: 所有CLI命令适配新的输出系统
-
-**任务**: 适配8个命令
-
-#### 4.1 load.py
+**无头化方案**:
 
 ```python
-# Before
-from roseApp.core.output_engine import get_engine
-from roseApp.ui.load_ui import interactive_load
-
-def load(..., interactive: bool = False):
-    if interactive:
-        return interactive_load()
+def load(...):
+    emitter = get_emitter()
+    emitter.set_context("load")
     
-    engine = get_engine()
-    console = engine.console
-    with engine.create_progress() as progress:
-        # ...
-
-
-# After
-from roseApp.core.output_engine import get_engine
-from roseApp.ui.common_ui import Message
-
-def load(...):  # No interactive parameter
-    engine = get_engine()
+    # 阶段1: 发现文件（data 事件）
+    emitter.emit_data(
+        data=[
+            {
+                "path": str(bag),
+                "size_mb": bag.stat().st_size / 1024 / 1024,
+                "exists": bag.exists()
+            }
+            for bag in valid_bags
+        ],
+        label="found_bags",
+        count=len(valid_bags)
+    )
     
-    Message.info(f"Found {count} bag files")
+    # 阶段2: 加载进度
+    for i, bag in enumerate(valid_bags):
+        percent = (i / len(valid_bags)) * 100
+        emitter.emit_progress(
+            percent, 
+            f"Loading {bag.name}", 
+            step=i+1, 
+            total_steps=len(valid_bags)
+        )
+        # ... 执行加载工作 ...
     
-    for i, bag_file in enumerate(bag_files):
-        pct = (i / len(bag_files)) * 100
-        engine.emit_progress(pct, f"Loading {bag_file}", i+1, len(bag_files))
-        # ... do work ...
+    # 阶段3: 详细结果（data 事件）
+    emitter.emit_data(
+        data=[
+            {
+                "path": str(bag),
+                "status": "loaded",  # loaded | cached | error
+                "elapsed": 1.2,
+                "topics_count": 15,
+                "error": None
+            }
+            for bag, status, elapsed in all_results
+        ],
+        label="results",
+        count=len(all_results)
+    )
     
-    engine.emit_done({
-        "loaded_files": loaded,
-        "cached_files": cached,
-        "failed_files": failed,
-        "total_ready": total
+    # 阶段4: 完成（done 事件，包含汇总）
+    emitter.emit_done({
+        "loaded_files": loaded_count,
+        "cached_files": cached_count,
+        "failed_files": error_count,
+        "total_ready": total_ready,
+        "elapsed_time": total_time
     })
 ```
 
-**模式**:
-1. ❌ 删除 `interactive` 参数
-2. ❌ 删除 `interactive_load()` 调用
-3. ✅ 使用 `Message` 类输出消息
-4. ✅ 使用 `engine.emit_*()` 发送事件
-5. ❌ 删除 `engine.console` 和 `create_progress()` 调用
-
-#### 4.2 extract.py, compress.py, inspect.py, ...
-
-按相同模式适配其他命令。
-
-**验证标准**:
-- [ ] 每个命令在NDJSON模式正常
-- [ ] 每个命令在Prettify模式正常
-- [ ] 错误处理正确发送error事件
-
-### Phase 5: 更新依赖 (30分钟)
-
-**目标**: 删除不需要的依赖
-
-**任务**:
-
-#### requirements.txt
-
-```txt
-# Before
-textual>=0.40.0          # ❌ DELETE
-rosbags>=0.9.20          # ✅ KEEP
-rich>=13.0.0             # ❌ DELETE
-typer>=0.9.0             # ✅ KEEP
-pydantic>=2.0.0          # ✅ KEEP
-pydantic-settings>=2.0.0 # ✅ KEEP
-click>=8.0.0             # ✅ KEEP
-InquirerPy>=0.3.4        # ❌ DELETE
-prompt_toolkit>=3.0.0    # ❌ DELETE
-lz4>=4.3.2               # ✅ KEEP
-bz2file>=0.98            # ✅ KEEP
-
-# After
-rosbags>=0.9.20
-typer>=0.9.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-click>=8.0.0
-lz4>=4.3.2
-bz2file>=0.98
+**输出示例**:
+```json
+{"event":"data","timestamp":"...","payload":{"label":"found_bags","data":[{"path":"a.bag","size_mb":12.3}],"count":1}}
+{"event":"progress","timestamp":"...","payload":{"percent":0,"message":"Loading a.bag","step":1,"total_steps":1}}
+{"event":"progress","timestamp":"...","payload":{"percent":100,"message":"Loading a.bag","step":1,"total_steps":1}}
+{"event":"data","timestamp":"...","payload":{"label":"results","data":[{"path":"a.bag","status":"loaded","elapsed":1.2}],"count":1}}
+{"event":"done","timestamp":"...","payload":{"summary":{"loaded_files":1,"cached_files":0,"failed_files":0,"total_ready":1,"elapsed_time":1.5}}}
 ```
 
-**依赖减少**: 12 → 7（-42%）
-
-**验证标准**:
-- [ ] `pip install -r requirements.txt` 成功
-- [ ] 所有导入无错误
-- [ ] 功能测试通过
-
-### Phase 6: 更新文档 (2-3小时)
-
-**目标**: 更新所有文档
-
-**任务**:
-1. 📝 更新 `README.md`
-   - 删除交互模式说明
-   - 更新命令示例（--prettify）
-   - 更新安装说明（精简依赖）
-
-2. 📝 创建 `EVENTS.md`
-   - 详细的事件协议文档
-   - 所有事件类型和字段
-   - 示例和用例
-
-3. 📝 创建 `MIGRATION.md`
-   - v1.0 → v2.0 迁移指南
-   - 破坏性变化说明
-   - 代码迁移示例
-
-4. 📝 更新 `CHANGELOG.md`
-   - v2.0.0 发布说明
-   - 破坏性变化列表
-   - 新特性说明
-
-5. 📝 更新命令帮助
-   - 所有命令的 `--help` 文本
-   - 删除 `--interactive` 说明
-
-**验证标准**:
-- [ ] 文档完整且准确
-- [ ] 示例可运行
-- [ ] 迁移指南清晰
+**关键变化**:
+- 移除所有 `Message.info()` 和循环打印
+- 使用 `emit_data(label="found_bags")` 发射文件列表
+- 使用 `emit_data(label="results")` 发射详细结果
+- `emit_done()` 只包含汇总信息
 
 ---
 
-## 🧪 测试策略
+### 2. extract 命令
 
-### 单元测试
+**当前问题**:
+- 逐行打印发现的 bag
+- 逐行打印选中的 topic
+- 分散的状态消息
 
-#### test_output_engine.py
+**无头化方案**:
 
 ```python
-import json
-import sys
-from io import StringIO
-from roseApp.core.output_engine import (
-    OutputEngine, OutputMode, NDJSONBackend, PrettifyBackend,
-    init_engine, get_engine, reset_engine
-)
-
-
-class TestNDJSONBackend:
-    """测试NDJSON后端（默认）"""
+def extract(...):
+    emitter = get_emitter()
+    emitter.set_context("extract")
     
-    def test_emit_progress_ndjson(self, capture_stdout):
-        """测试NDJSON模式进度事件"""
-        backend = NDJSONBackend()
-        backend.emit_progress(50, "Loading...", 1, 2)
-        
-        output = capture_stdout.getvalue()
-        event = json.loads(output)
-        
-        assert event["event"] == "progress"
-        assert event["percent"] == 50
-        assert event["message"] == "Loading..."
-        assert event["step"] == 1
-        assert event["total_steps"] == 2
+    # 阶段1: 发现输入 bag（data 事件）
+    emitter.emit_data(
+        data=[
+            {
+                "path": str(bag),
+                "size_mb": bag.stat().st_size / 1024 / 1024,
+                "topics_count": len(bag_info.topics)
+            }
+            for bag in valid_bags
+        ],
+        label="found_bags",
+        count=len(valid_bags)
+    )
     
-    def test_emit_done_ndjson(self, capture_stdout):
-        """测试NDJSON模式完成事件"""
-        backend = NDJSONBackend()
-        backend.emit_done({"files": 3})
-        
-        output = capture_stdout.getvalue()
-        event = json.loads(output)
-        
-        assert event["event"] == "done"
-        assert event["data"]["files"] == 3
-
-
-class TestPrettifyBackend:
-    """测试Prettify后端"""
+    # 阶段2: Topic 选择（data 事件）
+    emitter.emit_data(
+        data={
+            "total_topics": len(all_topics),
+            "selected_count": len(selected_topics),
+            "selected": selected_topics,
+            "method": "pattern" if pattern else "explicit",
+            "pattern": pattern if pattern else None
+        },
+        label="topics"
+    )
     
-    def test_emit_progress_prettify(self, capture_stdout):
-        """测试Prettify模式进度事件"""
-        backend = PrettifyBackend()
-        
-        # 0% - should output
-        backend.emit_progress(0, "Starting...")
-        assert "0%" in capture_stdout.getvalue()
-        
-        # 50% - should output
-        backend.emit_progress(50, "Halfway...")
-        assert "50%" in capture_stdout.getvalue()
+    # 阶段3: 提取进度
+    for i, bag in enumerate(valid_bags):
+        percent = (i / len(valid_bags)) * 100
+        emitter.emit_progress(
+            percent,
+            f"Extracting from {bag.name}",
+            step=i+1,
+            total_steps=len(valid_bags)
+        )
+        # ... 执行提取工作 ...
     
-    def test_emit_done_prettify(self, capture_stdout):
-        """测试Prettify模式完成事件"""
-        backend = PrettifyBackend()
-        backend.emit_done({"files": 3})
-        
-        output = capture_stdout.getvalue()
-        assert "✓" in output
-        assert "操作完成" in output
-
-
-class TestOutputEngine:
-    """测试OutputEngine"""
+    # 阶段4: 详细结果（data 事件）
+    emitter.emit_data(
+        data=[
+            {
+                "input": str(bag),
+                "output": str(output_bag),
+                "topics_extracted": topic_count,
+                "messages": msg_count,
+                "size_mb": output_size,
+                "status": "success"
+            }
+            for bag, output_bag, topic_count, msg_count, output_size in extraction_results
+        ],
+        label="results",
+        count=len(extraction_results)
+    )
     
-    def test_default_mode_is_ndjson(self):
-        """测试默认模式为NDJSON"""
-        engine = OutputEngine()
-        assert engine.mode == OutputMode.NDJSON
-        assert engine.is_ndjson_mode()
-        assert not engine.is_prettify_mode()
-    
-    def test_prettify_mode(self):
-        """测试Prettify模式"""
-        engine = OutputEngine(OutputMode.PRETTIFY)
-        assert engine.mode == OutputMode.PRETTIFY
-        assert engine.is_prettify_mode()
-        assert not engine.is_ndjson_mode()
-
-
-class TestMessageIntegration:
-    """测试Message类集成"""
-    
-    def test_message_ndjson_mode(self, capture_stdout):
-        """测试NDJSON模式下的Message"""
-        reset_engine()
-        init_engine(OutputMode.NDJSON)
-        
-        from roseApp.ui.common_ui import Message
-        Message.success("Test success")
-        
-        output = capture_stdout.getvalue()
-        event = json.loads(output)
-        
-        assert event["event"] == "message"
-        assert event["text"] == "Test success"
-        assert event["level"] == "success"
-    
-    def test_message_prettify_mode(self, capture_stdout):
-        """测试Prettify模式下的Message"""
-        reset_engine()
-        init_engine(OutputMode.PRETTIFY)
-        
-        from roseApp.ui.common_ui import Message
-        Message.success("Test success")
-        
-        output = capture_stdout.getvalue()
-        assert "✓" in output
-        assert "Test success" in output
+    # 阶段5: 完成（done 事件，汇总）
+    emitter.emit_done({
+        "extracted_bags": success_count,
+        "failed_bags": fail_count,
+        "total_messages_extracted": total_msg_count,
+        "total_output_size_mb": total_output_size,
+        "compression": compression_type,
+        "elapsed_time": total_time
+    })
 ```
 
-### 集成测试
+---
 
-#### test_load_command.sh
+### 3. compress 命令
 
+**当前问题**:
+- 列出输入文件（迭代）
+- 显示压缩设置（分散）
+- 逐个显示压缩比
+
+**无头化方案**:
+
+```python
+def compress(...):
+    emitter = get_emitter()
+    emitter.set_context("compress")
+    
+    # 阶段1: 压缩计划（data 事件）
+    emitter.emit_data(
+        data={
+            "compression": compression_type,
+            "total_input_size_mb": total_input_size,
+            "bags": [
+                {
+                    "path": str(bag),
+                    "size_mb": bag.stat().st_size / 1024 / 1024
+                }
+                for bag in bags
+            ]
+        },
+        label="plan",
+        count=len(bags)
+    )
+    
+    # 阶段2: 压缩进度
+    for i, bag in enumerate(bags):
+        percent = (i / len(bags)) * 100
+        emitter.emit_progress(
+            percent,
+            f"Compressing {bag.name}",
+            step=i+1,
+            total_steps=len(bags)
+        )
+        # ... 执行压缩 ...
+    
+    # 阶段3: 详细结果（data 事件）
+    emitter.emit_data(
+        data=[
+            {
+                "input": str(bag),
+                "output": str(output),
+                "original_mb": orig_size,
+                "compressed_mb": comp_size,
+                "ratio": (1 - comp_size/orig_size) * 100,
+                "elapsed": elapsed,
+                "status": "success"
+            }
+            for bag, output, orig_size, comp_size, elapsed in compression_results
+        ],
+        label="results",
+        count=len(compression_results)
+    )
+    
+    # 阶段4: 完成（done 事件，汇总）
+    emitter.emit_done({
+        "compressed_count": success_count,
+        "failed_count": fail_count,
+        "total_original_mb": total_original,
+        "total_compressed_mb": total_compressed,
+        "compression_ratio": (1 - total_compressed/total_original) * 100,
+        "elapsed_time": total_time
+    })
+```
+
+---
+
+### 4. inspect 命令
+
+**当前问题**:
+- 逐行打印 topic 列表
+- 复杂的表格格式化
+- 字段分析分散输出
+
+**无头化方案**:
+
+```python
+def inspect(...):
+    emitter = get_emitter()
+    emitter.set_context("inspect")
+    
+    # 阶段1: Bag 元数据（data 事件）
+    emitter.emit_data(
+        data={
+            "path": str(bag_path),
+            "size_mb": size_mb,
+            "duration_sec": duration,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "topics_count": len(topics),
+            "messages_count": total_messages,
+            "compression": compression_type,
+            "version": bag_version
+        },
+        label="metadata"
+    )
+    
+    # 阶段2: Topics 分析（data 事件）
+    emitter.emit_data(
+        data={
+            "topics": [
+                {
+                    "name": topic.name,
+                    "type": topic.msg_type,
+                    "message_count": topic.msg_count,
+                    "frequency_hz": topic.frequency,
+                    "size_bytes": topic.size,
+                    "size_mb": topic.size / 1024 / 1024,
+                    "percentage": (topic.msg_count / total_messages) * 100,
+                    "start_time": topic.start_time.isoformat(),
+                    "end_time": topic.end_time.isoformat()
+                }
+                for topic in sorted_topics
+            ],
+            "sort_by": sort_by,
+            "reverse": reverse_sort
+        },
+        label="topics",
+        count=len(topics)
+    )
+    
+    # 阶段3: 字段分析（data 事件，如果请求）
+    if show_fields:
+        emitter.emit_data(
+            data={
+                "topics": [
+                    {
+                        "topic": topic.name,
+                        "message_type": topic.msg_type,
+                        "fields": [
+                            {
+                                "name": field.name,
+                                "type": field.type,
+                                "count": field.count,
+                                "nested": field.is_nested
+                            }
+                            for field in topic.fields
+                        ]
+                    }
+                    for topic in topics_with_fields
+                ]
+            },
+            label="fields",
+            count=len(topics_with_fields)
+        )
+    
+    # 阶段4: 完成（done 事件）
+    emitter.emit_done({
+        "bag": str(bag_path),
+        "analyzed_topics": len(topics),
+        "analyzed_messages": total_messages,
+        "elapsed_time": elapsed
+    })
+```
+
+---
+
+### 5. cache 命令
+
+**当前问题**:
+- 逐行列出缓存条目
+- 分散的统计信息
+
+**无头化方案**:
+
+```python
+# cache info (默认子命令)
+def cache_info(...):
+    emitter = get_emitter()
+    emitter.set_context("cache")
+    
+    # 发射缓存信息（data 事件，包含统计和条目）
+    emitter.emit_data(
+        data={
+            "stats": {
+                "total_entries": total,
+                "memory_entries": memory_count,
+                "disk_entries": disk_count,
+                "total_size_mb": size_mb,
+                "cache_dir": str(cache_dir)
+            },
+            "entries": [
+                {
+                    "key": key,
+                    "bag_path": str(path),
+                    "size_mb": size,
+                    "created": created.isoformat(),
+                    "last_accessed": accessed.isoformat(),
+                    "location": "memory" or "disk",
+                    "topics_count": topics_count,
+                    "messages_count": msg_count
+                }
+                for key, entry in all_entries
+            ]
+        },
+        label="cache_info",
+        count=len(all_entries)
+    )
+    
+    emitter.emit_done({"entries_count": len(all_entries)})
+
+# cache clear
+def cache_clear(...):
+    emitter = get_emitter()
+    emitter.set_context("cache")
+    
+    # 清除计划（data 事件）
+    emitter.emit_data(
+        data={
+            "entries_to_clear": entries_count,
+            "size_to_free_mb": size_mb,
+            "bag_path": str(bag_path) if bag_path else "all"
+        },
+        label="clear_plan"
+    )
+    
+    # 执行清除...
+    
+    # 完成
+    emitter.emit_done({
+        "cleared_entries": cleared_count,
+        "freed_mb": freed_size
+    })
+
+# cache export
+def cache_export(...):
+    emitter = get_emitter()
+    emitter.set_context("cache")
+    
+    # 导出计划（data 事件）
+    emitter.emit_data(
+        data={
+            "output_file": output_file,
+            "format": format,
+            "entries_count": entries_count
+        },
+        label="export_plan"
+    )
+    
+    # 执行导出...
+    
+    # 完成
+    emitter.emit_done({
+        "exported_file": output_file,
+        "format": format,
+        "entries_exported": count
+    })
+```
+
+---
+
+### 6. config 命令
+
+**当前问题**:
+- 逐行显示配置项
+- 设置操作的反馈分散
+
+**无头化方案**:
+
+```python
+# config show (默认)
+def config_show(...):
+    emitter = get_emitter()
+    emitter.set_context("config")
+    
+    # 发射配置数据（data 事件）
+    emitter.emit_data(
+        data={
+            "config": {
+                "verbose_default": config.verbose_default,
+                "parallel_workers": config.parallel_workers,
+                "build_index_default": config.build_index_default,
+                "cache_dir": str(config.cache_dir),
+                "cache_max_size_mb": config.cache_max_size_mb,
+                "compression_default": config.compression_default
+            },
+            "source": "user" if is_user_config else "default",
+            "config_file": str(config_file)
+        },
+        label="config_data",
+        count=len(config.dict())
+    )
+    
+    emitter.emit_done({"config_keys": len(config.dict())})
+
+# config set
+def config_set(key: str, value: Any, ...):
+    emitter = get_emitter()
+    emitter.set_context("config")
+    
+    # 配置变更（data 事件）
+    emitter.emit_data(
+        data={
+            "key": key,
+            "old_value": old_val,
+            "new_value": value,
+            "config_file": str(config_file)
+        },
+        label="change"
+    )
+    
+    # 应用更改...
+    
+    # 完成
+    emitter.emit_done({
+        "key": key,
+        "value": value,
+        "applied": True
+    })
+
+# config reset
+def config_reset(key: Optional[str] = None, ...):
+    emitter = get_emitter()
+    emitter.set_context("config")
+    
+    # 重置计划（data 事件）
+    emitter.emit_data(
+        data={
+            "keys_to_reset": [key] if key else "all",
+            "affected_count": affected_count
+        },
+        label="reset_plan"
+    )
+    
+    # 执行重置...
+    
+    # 完成
+    emitter.emit_done({
+        "reset_keys": reset_keys,
+        "count": len(reset_keys)
+    })
+```
+
+---
+
+## 实施策略
+
+### 第一阶段：重构 EventEmitter
+
+**目标**: 创建新的 EventEmitter 类，替换 OutputEngine
+
+**任务**:
+1. 创建 `roseApp/core/event_emitter.py`
+2. 实现 `EventEmitter` 类（只支持 NDJSON）
+3. 实现全局单例管理：`init_emitter()`, `get_emitter()`, `reset_emitter()`
+4. 编写单元测试
+
+**EventEmitter 实现要点**:
+```python
+class EventEmitter:
+    """Pure NDJSON event emitter for headless CLI"""
+    
+    def __init__(self):
+        self._context = None  # Optional context (command, trace_id, run_id)
+    
+    def set_context(self, command: str, trace_id: Optional[str] = None, 
+                   run_id: Optional[str] = None) -> None:
+        """Set context for all subsequent events"""
+        self._context = {
+            "command": command,
+            "trace_id": trace_id,
+            "run_id": run_id
+        }
+    
+    def _emit_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        """Emit event to stdout as NDJSON"""
+        event = {
+            "event": event_type,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": payload
+        }
+        
+        # Add optional fields
+        if self._context:
+            event["context"] = self._context
+        
+        # Optional: add protocol info
+        event["protocol"] = {
+            "name": "rose.ndjson",
+            "version": "1.0"
+        }
+        
+        sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    
+    def emit_progress(self, percent: float, message: str = "", 
+                     step: Optional[int] = None, 
+                     total_steps: Optional[int] = None) -> None:
+        """Emit progress event"""
+        payload = {"percent": percent}
+        if message:
+            payload["message"] = message
+        if step is not None:
+            payload["step"] = step
+        if total_steps is not None:
+            payload["total_steps"] = total_steps
+        self._emit_event("progress", payload)
+    
+    def emit_data(self, data: Any, label: Optional[str] = None, 
+                 count: Optional[int] = None) -> None:
+        """Emit data event"""
+        payload = {"data": data}
+        if label:
+            payload["label"] = label
+        if count is not None:
+            payload["count"] = count
+        self._emit_event("data", payload)
+    
+    def emit_done(self, summary: Dict[str, Any]) -> None:
+        """Emit done event"""
+        self._emit_event("done", {"summary": summary})
+    
+    def emit_error(self, code: str, message: str, 
+                  details: Optional[Dict] = None) -> None:
+        """Emit error event"""
+        payload = {
+            "code": code,
+            "message": message
+        }
+        if details:
+            payload["details"] = details
+        self._emit_event("error", payload)
+```
+
+### 第二阶段：更新 rose.py 入口
+
+**目标**: 移除 OutputEngine，使用 EventEmitter
+
+**任务**:
+1. 移除 `--prettify` 参数
+2. 移除 `OutputMode` 枚举
+3. 使用 `init_emitter()` 初始化
+4. 更新无命令错误处理
+
+**示例**:
+```python
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: typer.Context,
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True)
+):
+    """Rose CLI - ROS bag processing tool"""
+    # Initialize event emitter
+    from roseApp.core.event_emitter import init_emitter
+    init_emitter()
+    
+    # Configure logging
+    configure_logging(verbose)
+    
+    # Handle no command
+    if ctx.invoked_subcommand is None:
+        from roseApp.core.event_emitter import get_emitter
+        emitter = get_emitter()
+        emitter.emit_error(
+            "NO_COMMAND",
+            "No command specified. Use --help for usage."
+        )
+        raise typer.Exit(1)
+```
+
+### 第三阶段：重构各命令
+
+**目标**: 移除 Message API，使用 EventEmitter
+
+**优先级顺序**:
+1. **cache** - 最简单，作为参考示例
+2. **config** - 简单，数据结构清晰
+3. **load** - 高频使用，重要参考
+4. **inspect** - 数据密集，展示 partial 用法
+5. **extract** - 复杂，多阶段操作
+6. **compress** - 类似 extract
+
+**重构模式**:
+
+```python
+# 之前：迭代输出
+from ..ui.common_ui import Message
+
+Message.info(f"Found {len(items)} items:")
+for item in items:
+    Message.muted(f"  {item}")
+
+# 之后：事件发射
+from ..core.event_emitter import get_emitter
+
+emitter = get_emitter()
+emitter.emit_data(
+    data=[str(i) for i in items],
+    label="found_items",
+    count=len(items)
+)
+```
+
+**需要移除的模式**:
+- ❌ `Message.info()`, `Message.error()`, etc.
+- ❌ `console.print()` 调用
+- ❌ 循环中的输出语句
+- ❌ Rich 表格、面板等格式化输出
+- ❌ 进度条（使用 emit_progress 替代）
+
+**保留的输出**:
+- ✅ `emit_progress()` - 进度更新
+- ✅ `emit_partial()` - 中间结果
+- ✅ `emit_done()` - 最终结果
+- ✅ `emit_error()` - 错误信息
+
+### 第四阶段：清理旧代码
+
+**目标**: 删除不再需要的文件和代码
+
+**要删除的文件**:
+```bash
+# OutputEngine 相关
+roseApp/core/output_engine.py  # 替换为 event_emitter.py
+
+# Message API 相关
+roseApp/ui/common_ui.py  # 移除或大幅简化（只保留工具函数）
+```
+
+**要更新的导入**:
+```python
+# 在所有命令文件中
+# 之前
+from ..core.output_engine import get_engine, OutputMode
+from ..ui.common_ui import Message
+
+# 之后
+from ..core.event_emitter import get_emitter
+```
+
+### 第五阶段：测试
+
+**目标**: 验证 NDJSON 输出正确性
+
+**单元测试**:
+```python
+def test_event_emitter_progress(capsys):
+    """Test progress event emission"""
+    from roseApp.core.event_emitter import EventEmitter
+    
+    emitter = EventEmitter()
+    emitter.emit_progress(50, "Testing", step=1, total_steps=2)
+    
+    captured = capsys.readouterr()
+    event = json.loads(captured.out.strip())
+    
+    assert event["event"] == "progress"
+    assert event["percent"] == 50
+    assert event["message"] == "Testing"
+    assert event["step"] == 1
+    assert event["total_steps"] == 2
+    assert "timestamp" in event
+
+def test_load_command_ndjson(capsys):
+    """Test load command produces valid NDJSON"""
+    from roseApp.core.event_emitter import init_emitter, reset_emitter
+    
+    reset_emitter()
+    init_emitter()
+    
+    # Run load command
+    # ...
+    
+    captured = capsys.readouterr()
+    lines = captured.out.strip().split('\n')
+    
+    # Validate all lines are JSON
+    events = [json.loads(line) for line in lines]
+    
+    # Check event sequence
+    assert any(e['event'] == 'partial' for e in events)
+    assert events[-1]['event'] == 'done'
+    
+    # Check data structure
+    done_event = events[-1]
+    assert 'data' in done_event
+    assert 'loaded_files' in done_event['data']
+```
+
+**集成测试**:
 ```bash
 #!/bin/bash
-# 测试load命令在两种模式下
+# test_ndjson_output.sh
 
-echo "Test 1: NDJSON mode (default)"
+echo "Testing load command NDJSON output..."
+
 output=$(rose load tests/demo.bag 2>&1)
-echo "$output" | head -1 | python3 -m json.tool > /dev/null
-if [ $? -eq 0 ]; then
-    echo "✓ NDJSON output valid"
-else
-    echo "✗ NDJSON output invalid"
+
+# Verify all lines are valid JSON
+echo "$output" | while read -r line; do
+    if ! echo "$line" | jq . > /dev/null 2>&1; then
+        echo "Invalid JSON: $line"
+        exit 1
+    fi
+done
+
+# Verify event types
+if ! echo "$output" | jq -r '.event' | grep -q 'partial'; then
+    echo "Missing partial events"
     exit 1
 fi
 
-echo "Test 2: Prettify mode"
-output=$(rose --prettify load tests/demo.bag 2>&1)
-if echo "$output" | grep -q "✓"; then
-    echo "✓ Prettify output contains checkmark"
-else
-    echo "✗ Prettify output missing checkmark"
+if ! echo "$output" | jq -r '.event' | tail -1 | grep -qE '(done|error)'; then
+    echo "Missing final done/error event"
     exit 1
 fi
 
 echo "All tests passed!"
 ```
 
----
+### 第六阶段：文档更新
 
-## 📋 破坏性变化清单
+**目标**: 更新所有文档
 
-### 1. 命令行接口变化
-
-| 变化 | Before | After | 影响 |
-|------|--------|-------|------|
-| 默认输出 | Rich文本 | NDJSON | 🔴 高 |
-| 美化参数 | `--as-backend` | `--prettify` | 🟡 中 |
-| 交互模式 | 支持 | 删除 | 🔴 高 |
-
-**迁移方案**:
-
-```bash
-# v1.0 用户习惯
-rose load demo.bag                    # Rich文本输出
-rose load --interactive               # 交互式选择
-rose --as-backend load demo.bag       # NDJSON输出
-
-# v2.0 迁移方案
-rose --prettify load demo.bag         # 简洁文本输出（替代Rich）
-rose load demo.bag                    # NDJSON输出（前端消费）
-# 交互模式：使用shell脚本或参数
-```
-
-### 2. Python API变化
-
-#### 删除的API
-
-```python
-# ❌ 不再支持
-from roseApp.ui.load_ui import interactive_load
-from roseApp.ui.interactive_common import InteractivePrompt
-
-# ❌ 不再支持
-engine.console  # 不再提供Console对象
-engine.create_progress()  # 不再提供Progress对象
-```
-
-#### 新的API
-
-```python
-# ✅ 推荐使用
-from roseApp.ui.common_ui import Message
-from roseApp.core.output_engine import get_engine
-
-# 统一的消息输出
-Message.info("Processing...")
-Message.success("Done!")
-
-# 事件发射
-engine = get_engine()
-engine.emit_progress(50, "Loading...")
-engine.emit_done({"files": 3})
-```
-
-### 3. 依赖变化
-
-**删除的依赖**（5个）:
-- `textual>=0.40.0`
-- `rich>=13.0.0`
-- `InquirerPy>=0.3.4`
-- `prompt_toolkit>=3.0.0`
-
-**影响**:
-- 安装体积减少约 3MB
-- 安装时间减少约 60%
-- 但失去Rich的高级格式化能力
+**需要更新的文档**:
+1. **README.md** - 移除 prettify 模式说明
+2. **EVENTS_REFERENCE.md** - 创建完整事件参考
+3. **命令帮助文本** - 更新 help 描述
+4. **API 文档** - EventEmitter API 文档
 
 ---
 
-## 🎯 优势分析
+## 前端集成指南
 
-### 1. 代码简化
+### 消费 NDJSON 流
 
-| 指标 | Before | After | 改善 |
-|------|--------|-------|------|
-| 核心文件数 | 14 | 12 | -14% |
-| UI文件数 | 11 | 1 | -91% |
-| 总代码行数 | ~8,000 | ~5,500 | -31% |
-| 依赖数量 | 12 | 7 | -42% |
+**基础模式**:
+```javascript
+const { spawn } = require('child_process');
 
-### 2. 性能提升
-
-- **启动时间**: 减少 30-40%（无需加载Rich/Textual）
-- **内存占用**: 减少 20-30%（更少的依赖）
-- **输出效率**: NDJSON直写，无渲染开销
-
-### 3. 架构清晰
-
-```
-Before (v1.0):
-命令 → [Rich Console | NDJSON Backend] → 输出
-     ↑ 复杂的条件分支
-
-After (v2.0):
-命令 → Message API → OutputEngine → [NDJSON | Prettify] → 输出
-     ↑ 统一的抽象层
-```
-
-### 4. 易于扩展
-
-```python
-# 轻松添加新的输出格式
-class HTMLBackend(OutputBackend):
-    def print_message(self, text, level):
-        return f"<div class='{level}'>{text}</div>"
-
-class MarkdownBackend(OutputBackend):
-    def emit_done(self, data):
-        return f"## ✓ Complete\n```json\n{json.dumps(data)}\n```"
-
-# 注册新后端
-engine = OutputEngine(OutputMode.HTML)
-```
-
----
-
-## 📝 使用示例
-
-### Frontend集成示例
-
-```python
-#!/usr/bin/env python3
-"""
-Frontend: 消费Rose的NDJSON输出，提供富UI
-"""
-
-import subprocess
-import json
-import sys
-
-def run_rose_command(cmd: list):
-    """运行Rose命令并解析NDJSON输出"""
-    # Rose默认输出NDJSON，无需特殊参数
-    process = subprocess.Popen(
-        ["rose"] + cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
+function executeRoseCommand(args) {
+    const rose = spawn('rose', args);
     
-    for line in process.stdout:
-        try:
-            event = json.loads(line)
-            handle_event(event)
-        except json.JSONDecodeError:
-            print(f"Invalid JSON: {line}", file=sys.stderr)
+    let buffer = '';
     
-    return process.wait()
-
-def handle_event(event: dict):
-    """处理事件并更新UI"""
-    event_type = event.get("event")
-    
-    if event_type == "progress":
-        # 更新进度条UI
-        update_progress_bar(event["percent"], event["message"])
-    
-    elif event_type == "message":
-        # 显示消息
-        show_message(event["text"], event["level"])
-    
-    elif event_type == "done":
-        # 显示完成，展示结果
-        show_completion(event["data"])
-    
-    elif event_type == "error":
-        # 显示错误
-        show_error(event["code"], event["message"])
-
-# 使用
-run_rose_command(["load", "demo.bag"])
-```
-
-### Shell脚本示例
-
-```bash
-#!/bin/bash
-# 批量处理bag文件
-
-for bag in *.bag; do
-    echo "Processing: $bag"
-    
-    # Rose默认输出NDJSON
-    rose load "$bag" | while read -r line; do
-        event=$(echo "$line" | jq -r '.event')
+    rose.stdout.on('data', (data) => {
+        buffer += data.toString();
+        const lines = buffer.split('\n');
         
-        if [ "$event" = "done" ]; then
-            files=$(echo "$line" | jq -r '.data.loaded_files')
-            echo "✓ Loaded $files files from $bag"
-        elif [ "$event" = "error" ]; then
-            code=$(echo "$line" | jq -r '.code')
-            msg=$(echo "$line" | jq -r '.message')
-            echo "✗ Error [$code]: $msg" >&2
-        fi
-    done
-done
+        // Keep last incomplete line in buffer
+        buffer = lines.pop();
+        
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            
+            try {
+                const event = JSON.parse(line);
+                handleEvent(event);
+            } catch (e) {
+                console.error('Invalid JSON:', line, e);
+            }
+        }
+    });
+    
+    rose.stderr.on('data', (data) => {
+        console.error('stderr:', data.toString());
+    });
+    
+    rose.on('close', (code) => {
+        console.log(`Command exited with code ${code}`);
+        if (code !== 0) {
+            handleCommandFailure(code);
+        }
+    });
+}
+
+function handleEvent(event) {
+    const { event: type, payload, timestamp, context } = event;
+    
+    switch (type) {
+        case 'progress':
+            updateProgress(payload.percent, payload.message, payload.step, payload.total_steps);
+            break;
+        
+        case 'data':
+            handleData(payload.label, payload.data, payload.count);
+            break;
+        
+        case 'done':
+            handleSuccess(payload.summary);
+            break;
+        
+        case 'error':
+            handleError(payload.code, payload.message, payload.details);
+            break;
+        
+        default:
+            console.warn(`Unknown event type: ${type}`);
+    }
+}
 ```
 
-### CLI用户示例
+### 事件路由（按 label）
 
-```bash
-# 快速查看（prettify模式）
-rose --prettify load demo.bag
+```javascript
+function handleData(label, data, count) {
+    const handlers = {
+        // Load command
+        'found_bags': (d) => {
+            renderFileList(d);
+            updateStatus(`Found ${count} bag files`);
+        },
+        'results': (d) => {
+            renderProcessingResults(d);
+        },
+        
+        // Extract command
+        'found_bags': (d) => {
+            renderBagList(d);
+        },
+        'topics': (d) => {
+            renderSelectedTopics(d.selected);
+            updateStatus(`Selected ${d.selected_count} topics`);
+        },
+        
+        // Inspect command
+        'metadata': (d) => {
+            renderBagMetadata(d);
+        },
+        'topics': (d) => {
+            renderTopicsTable(d.topics, d.sort_by);
+        },
+        'fields': (d) => {
+            renderFieldAnalysis(d.topics);
+        },
+        
+        // Compress command
+        'plan': (d) => {
+            renderCompressionPlan(d.bags, d.compression);
+        },
+        
+        // Cache command
+        'cache_info': (d) => {
+            renderCacheStats(d.stats);
+            renderCacheEntries(d.entries);
+        },
+        
+        // Config command
+        'config_data': (d) => {
+            renderConfigTable(d.config);
+        },
+        'change': (d) => {
+            showNotification(`Config updated: ${d.key} = ${d.new_value}`);
+        }
+    };
+    
+    const handler = handlers[label];
+    if (handler) {
+        handler(data);
+    } else {
+        console.warn(`Unknown data label: ${label}`, data);
+    }
+}
+```
 
-# 自动化处理（默认NDJSON）
-rose load *.bag | process.py
+### 进度显示
 
-# 过滤事件
-rose load demo.bag | jq 'select(.event == "error")'
+```javascript
+class ProgressManager {
+    constructor() {
+        this.progressBar = document.getElementById('progress-bar');
+        this.progressText = document.getElementById('progress-text');
+        this.currentOperation = null;
+    }
+    
+    updateProgress(percent, message, step, totalSteps) {
+        this.progressBar.style.width = `${percent}%`;
+        
+        let text = message;
+        if (step && totalSteps) {
+            text = `[${step}/${totalSteps}] ${message}`;
+        }
+        
+        this.progressText.textContent = text;
+        
+        if (percent >= 100) {
+            setTimeout(() => this.hide(), 1000);
+        }
+    }
+    
+    show() {
+        this.progressBar.parentElement.style.display = 'block';
+    }
+    
+    hide() {
+        this.progressBar.parentElement.style.display = 'none';
+        this.reset();
+    }
+    
+    reset() {
+        this.progressBar.style.width = '0%';
+        this.progressText.textContent = '';
+    }
+}
+```
 
-# 提取数据
-rose load demo.bag | jq -r 'select(.event == "done") | .data'
+### 错误处理
+
+```javascript
+class ErrorHandler {
+    constructor() {
+        this.errorDialog = document.getElementById('error-dialog');
+        this.errorMessages = {
+            'BAG_NOT_FOUND': {
+                title: '文件未找到',
+                message: '指定的 bag 文件不存在'
+            },
+            'INVALID_ARGUMENT': {
+                title: '参数错误',
+                message: '提供的命令参数无效'
+            },
+            'CACHE_ERROR': {
+                title: '缓存错误',
+                message: '缓存操作失败'
+            },
+            'PARSE_ERROR': {
+                title: '解析错误',
+                message: 'Bag 文件解析失败'
+            },
+            'PERMISSION_DENIED': {
+                title: '权限不足',
+                message: '没有访问文件的权限'
+            }
+        };
+    }
+    
+    handleError(code, message, details) {
+        const errorInfo = this.errorMessages[code] || {
+            title: '错误',
+            message: '操作失败'
+        };
+        
+        // Show error dialog
+        this.showErrorDialog(
+            errorInfo.title,
+            message,
+            details
+        );
+        
+        // Log for debugging
+        console.error('Rose Error:', {
+            code,
+            message,
+            details,
+            timestamp: new Date().toISOString()
+        });
+    }
+    
+    showErrorDialog(title, message, details) {
+        this.errorDialog.querySelector('.title').textContent = title;
+        this.errorDialog.querySelector('.message').textContent = message;
+        
+        // Show suggestions if available
+        if (details?.suggestions) {
+            const suggestionsList = this.errorDialog.querySelector('.suggestions');
+            suggestionsList.innerHTML = '';
+            details.suggestions.forEach(s => {
+                const li = document.createElement('li');
+                li.textContent = s;
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+        }
+        
+        this.errorDialog.style.display = 'block';
+    }
+}
 ```
 
 ---
 
-## ⚖️ 设计决策记录
+## 最佳实践
 
-### 决策1: 反转默认输出模式
+### CLI 命令开发者
 
-**选项**:
-- A. 保持TEXT为默认（v1.0行为）
-- B. NDJSON为默认（v2.0选择）
+1. **思考事件而非输出**
+   - 设计命令时先规划事件流
+   - 确定需要哪些 partial 事件
+   - 明确 done 事件应包含什么数据
 
-**选择**: B - NDJSON为默认
+2. **禁止迭代输出**
+   - 永远不在循环中发射事件（除了 progress）
+   - 收集数据到数组，一次性在 partial/done 中发射
+   - 让前端决定如何显示列表/表格
 
-**理由**:
-1. ✅ 强化"headless engine"定位
-2. ✅ Frontend集成无需特殊参数
-3. ✅ 更适合自动化和脚本使用
-4. ✅ 机器友好是核心需求
-5. ⚠️ CLI用户需要添加 `--prettify`（可接受）
+3. **提供完整数据**
+   - done 事件应包含操作的完整结果
+   - 包含详细的 results 数组供前端使用
+   - 不要假设前端只需要摘要
 
-### 决策2: 保留OutputEngine架构
+4. **错误处理要详细**
+   - 提供清晰的错误码
+   - 包含诊断信息在 details 中
+   - 提供可行的 suggestions
 
-**选项**:
-- A. 创建全新的EventEmitter（v3提议）
-- B. 重构OutputEngine保持接口（v2.0选择）
+5. **一致性**
+   - 使用标准化的 kind 命名
+   - 保持相似命令的数据结构一致
+   - 遵循事件生命周期规则
 
-**选择**: B - 重构OutputEngine
+### 前端开发者
 
-**理由**:
-1. ✅ 用户代码改动更小
-2. ✅ 保持Facade模式的清晰性
-3. ✅ Backend适配器模式灵活
-4. ✅ 测试代码可以复用
-5. ✅ 渐进式重构风险更低
+1. **验证事件结构**
+   - 总是验证必需字段是否存在
+   - 优雅处理缺失的可选字段
+   - 对无效 JSON 要有容错机制
 
-### 决策3: 删除Rich库
+2. **处理缓冲**
+   - NDJSON 可能跨越多个 data 事件
+   - 缓冲不完整的行
+   - 处理空行
 
-**选项**:
-- A. 保留Rich做最小使用
-- B. 完全移除Rich（v2.0选择）
+3. **状态管理**
+   - 跟踪操作状态（进行中/完成/失败）
+   - 确保 done/error 事件重置状态
+   - 处理并发命令（如果支持）
 
-**选择**: B - 完全移除
+4. **用户体验**
+   - 进度条要流畅
+   - 错误消息要友好
+   - 提供详细信息的折叠面板
+   - 结果要可导出/复制
 
-**理由**:
-1. ✅ 减少500KB+依赖
-2. ✅ 启动速度提升30-40%
-3. ✅ ANSI codes足够prettify使用
-4. ✅ 如需要表格，可简单实现
-5. ⚠️ 失去漂亮格式化（可接受）
-
-### 决策4: 简化Prettify输出
-
-**选项**:
-- A. Prettify保持复杂进度条
-- B. Prettify简化输出（v2.0选择）
-
-**选择**: B - 简化输出
-
-**理由**:
-1. ✅ 无需Rich Progress依赖
-2. ✅ 输出更清晰，无干扰
-3. ✅ 关键信息一目了然
-4. ✅ 符合"按需美化"理念
-5. ℹ️ 复杂UI由Frontend实现
+5. **调试支持**
+   - 记录所有原始事件
+   - 提供事件查看器
+   - 支持重放事件流（测试用）
 
 ---
 
-## 🚀 实施检查清单
+## 总结
 
-### Phase 1: 核心重构
-- [ ] 重构 `output_engine.py`
-  - [ ] OutputEngine Facade
-  - [ ] NDJSONBackend（默认）
-  - [ ] PrettifyBackend（简化）
-  - [ ] 全局单例管理
-- [ ] 简化 `common_ui.py`
-  - [ ] Message类适配
-  - [ ] 删除Rich依赖
-- [ ] 单元测试
-  - [ ] NDJSONBackend测试
-  - [ ] PrettifyBackend测试
-  - [ ] Message集成测试
+### 架构变更
 
-### Phase 2: 主入口更新
-- [ ] 修改 `rose.py`
-  - [ ] 删除 `--as-backend`
-  - [ ] 添加 `--prettify`
-  - [ ] 删除交互模式
-  - [ ] 更新帮助文档
-- [ ] 更新 `config.py`
-  - [ ] 配置项重命名
+| 方面 | v2.0 (旧) | v5.0 (新) |
+|------|-----------|-----------|
+| 输出引擎 | OutputEngine | EventEmitter |
+| 输出模式 | NDJSON + Prettify | 纯 NDJSON |
+| Message API | 广泛使用 | 完全移除 |
+| 迭代输出 | 常见 | 禁止 |
+| 前端渲染 | 部分 | 全部 |
 
-### Phase 3: 删除交互UI
-- [ ] 删除9个UI文件
-- [ ] 删除旧的progress_tracker
-- [ ] 检查无遗留导入
+### 迁移路径
 
-### Phase 4: 适配CLI命令
-- [ ] load.py
-- [ ] extract.py
-- [ ] compress.py
-- [ ] inspect.py
-- [ ] data.py
-- [ ] cache.py
-- [ ] plugin.py
-- [ ] config.py
+1. **创建 EventEmitter** - 替换 OutputEngine
+2. **更新 rose.py** - 移除 prettify 支持
+3. **重构命令** - 移除 Message API，使用事件
+4. **清理代码** - 删除旧文件
+5. **测试验证** - 确保 NDJSON 正确
+6. **更新文档** - 反映新架构
 
-### Phase 5: 更新依赖
-- [ ] 更新 `requirements.txt`
-- [ ] 删除5个UI依赖
-- [ ] 验证安装
+### 工作量估算
 
-### Phase 6: 文档更新
-- [ ] README.md
-- [ ] EVENTS.md（新建）
-- [ ] MIGRATION.md（新建）
-- [ ] CHANGELOG.md
-- [ ] 命令帮助文档
+- **EventEmitter 实现**: 2-3 小时
+- **命令重构**: 
+  - cache: 1 小时
+  - config: 1 小时
+  - load: 2 小时
+  - inspect: 2 小时
+  - extract: 3 小时
+  - compress: 3 小时
+- **测试**: 4-5 小时
+- **文档**: 2-3 小时
+- **总计**: 约 20-25 小时
 
-### 最终验证
-- [ ] 所有单元测试通过
-- [ ] 所有集成测试通过
-- [ ] NDJSON输出格式验证
-- [ ] Prettify输出可读性验证
-- [ ] 文档完整性检查
-- [ ] 破坏性变化说明清晰
+### 预期收益
+
+1. **架构清晰** - 单一职责，无模式切换
+2. **前端自由** - 完全控制 UI 渲染
+3. **易于集成** - 标准 NDJSON 协议
+4. **易于测试** - JSON 输出易于验证
+5. **可扩展性** - 添加新命令模式一致
 
 ---
 
-## 📈 预期收益
+## 附录：事件类型速查表
 
-### 量化指标
+### Load 命令
 
-| 指标 | v1.0 | v2.0 | 改善 |
-|------|------|------|------|
-| **代码量** | 8,000行 | 5,500行 | -31% |
-| **文件数** | 32个 | 21个 | -34% |
-| **依赖数** | 12个 | 7个 | -42% |
-| **安装体积** | ~5MB | ~2MB | -60% |
-| **启动时间** | 100ms | 60ms | -40% |
-| **内存占用** | 50MB | 35MB | -30% |
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `found_bags` | [{"path", "size_mb", "exists"}], count |
+| progress | - | percent, message, step, total_steps |
+| data | `results` | [{"path", "status", "elapsed", "topics_count"}], count |
+| done | - | summary: {loaded_files, cached_files, failed_files, elapsed_time} |
 
-### 质量指标
+### Extract 命令
 
-- ✅ **可维护性**: 代码量减少，复杂度降低
-- ✅ **可测试性**: 事件流易于测试和验证
-- ✅ **可扩展性**: 新后端易于添加
-- ✅ **清晰度**: 单一数据流，职责分离
-- ✅ **性能**: 更快启动，更少内存
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `found_bags` | [{"path", "size_mb", "topics_count"}], count |
+| data | `topics` | {total_topics, selected_count, selected[], method} |
+| progress | - | percent, message, step, total_steps |
+| data | `results` | [{"input", "output", "topics_extracted", "messages"}], count |
+| done | - | summary: {extracted_bags, failed_bags, total_messages_extracted} |
 
----
+### Compress 命令
 
-## 🎓 总结
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `plan` | {compression, total_input_size_mb, bags[]} |
+| progress | - | percent, message, step, total_steps |
+| data | `results` | [{"input", "output", "original_mb", "compressed_mb", "ratio"}] |
+| done | - | summary: {compressed_count, compression_ratio, elapsed_time} |
 
-### 核心变化
+### Inspect 命令
 
-1. **默认NDJSON**: 机器友好优先，headless by default
-2. **Prettify按需**: `--prettify`提供简洁的人类可读输出
-3. **删除交互**: 移除所有交互式UI，专注核心功能
-4. **极简依赖**: 从12个减到7个，减少42%
-5. **统一API**: Message类作为唯一输出接口
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `metadata` | {path, size_mb, duration_sec, topics_count, messages_count} |
+| data | `topics` | {topics[], sort_by}, count |
+| data | `fields` | {topics[].fields[]}, count |
+| done | - | summary: {analyzed_topics, analyzed_messages, elapsed_time} |
 
-### 设计哲学
+### Cache 命令
 
-```
-机器可读为默认
-人类美化为选项
-简洁代码为目标
-清晰架构为基石
-```
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `cache_info` | {stats{}, entries[]}, count |
+| data | `clear_plan` | {entries_to_clear, size_to_free_mb, bag_path} |
+| done | - | summary: {cleared_entries, freed_mb} |
 
-### 适用场景
+### Config 命令
 
-**NDJSON模式（默认）**:
-- ✅ Frontend集成
-- ✅ 自动化脚本
-- ✅ 监控和日志分析
-- ✅ CI/CD管道
-
-**Prettify模式（--prettify）**:
-- ✅ 快速查看结果
-- ✅ Debug和测试
-- ✅ 简单的手动操作
-- ✅ 教学和演示
-
----
-
-## 📞 反馈和讨论
-
-### 需要确认的问题
-
-1. **默认NDJSON是否可接受？**
-   - CLI用户需要添加 `--prettify`
-   - 但更符合headless定位
-
-2. **删除交互模式是否OK？**
-   - 预计<10%用户使用
-   - 可用shell脚本替代
-
-3. **完全移除Rich是否合适？**
-   - 失去漂亮表格
-   - 但大幅减少依赖
-
-4. **Prettify输出是否够用？**
-   - 简化的进度显示
-   - 基本的ANSI颜色
-
-### 审阅重点
-
-- [ ] 架构设计是否合理
-- [ ] 破坏性变化是否可接受
-- [ ] 实施计划是否可行
-- [ ] 文档是否清晰完整
-
----
-
-**状态**: 📝 **待审阅和确认**  
-**下一步**: 用户确认后开始实施 Phase 1
-
----
-
-**版本历史**:
-- v1.0: 原始设计（Rich UI + 双后端）
-- v2.0: 极简重构（NDJSON First + Prettify）
+| 事件 | label | 数据 |
+|------|------|------|
+| data | `config_data` | {config{}, source, config_file} |
+| data | `change` | {key, old_value, new_value, config_file} |
+| done | - | summary: {key, value, applied} |
