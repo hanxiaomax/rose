@@ -2,6 +2,7 @@
 Configuration management CLI commands for Rose.
 
 Provides commands to initialize and edit Rose configuration.
+Headless NDJSON mode - pure event emission.
 """
 
 import os
@@ -13,7 +14,8 @@ from typing import Optional
 import typer
 
 from ..core.util import get_logger, set_app_mode, AppMode
-from ..ui.common_ui import Message
+from ..core.event_emitter import get_emitter
+
 # Initialize
 set_app_mode(AppMode.CLI)
 logger = get_logger(__name__)
@@ -31,23 +33,40 @@ def init(
     This command creates the Rose configuration directory and copies the default
     configuration template.
     """
+    emitter = get_emitter()
+    emitter.set_context("config")
+    
     # Fixed output location
     rose_dir = Path.home() / ".rose"
     config_file = rose_dir / "rose.config.yaml"
     
-    # Create .rose directory if it doesn't exist
-    if not rose_dir.exists():
-        rose_dir.mkdir(parents=True, exist_ok=True)
-        Message.success(f"Created directory: {rose_dir}")
-
-    
     # Check if file already exists
     if config_file.exists() and not force:
-        Message.warning(f"Configuration file already exists: {config_file}")
-        Message.warning(f"Use [cyan]rose config init --force[/cyan] to overwrite")
+        emitter.emit_data(
+            data={
+                "config_file": str(config_file),
+                "exists": True,
+                "force": False
+            },
+            label="init_check"
+        )
+        emitter.emit_error(
+            "CONFIG_EXISTS",
+            f"Configuration file already exists: {config_file}",
+            details={
+                "config_file": str(config_file),
+                "suggestion": "Use --force flag to overwrite"
+            }
+        )
         raise typer.Exit(1)
     
     try:
+        # Create .rose directory if it doesn't exist
+        created_dir = False
+        if not rose_dir.exists():
+            rose_dir.mkdir(parents=True, exist_ok=True)
+            created_dir = True
+        
         # Find the default configuration template
         template_locations = [
             Path(__file__).parent.parent.parent / "rose.config.default.yaml",  # Installed location
@@ -62,22 +81,46 @@ def init(
                 break
         
         if not template_file:
-            Message.error(f"Could not find rose.config.default.yaml template")
-            Message.error(f"Searched in:")
-            for loc in template_locations:
-                Message.error(f"  • {loc}")
+            emitter.emit_error(
+                "TEMPLATE_NOT_FOUND",
+                "Could not find rose.config.default.yaml template",
+                details={
+                    "searched_locations": [str(loc) for loc in template_locations]
+                }
+            )
             raise typer.Exit(1)
+        
+        # Emit initialization plan
+        emitter.emit_data(
+            data={
+                "rose_dir": str(rose_dir),
+                "config_file": str(config_file),
+                "template_file": str(template_file),
+                "created_dir": created_dir,
+                "force": force
+            },
+            label="init_plan"
+        )
         
         # Copy the template file
         shutil.copy2(template_file, config_file)
         
-        Message.success(f"Configuration initialized: {config_file}")
-        Message.info(f"Copied from: {template_file}")
-        Message.info(f"Edit your configuration:")
-        Message.info(f"  [cyan]rose config edit[/cyan]")
+        # Emit success
+        emitter.emit_done({
+            "config_file": str(config_file),
+            "template_file": str(template_file),
+            "created_dir": created_dir,
+            "action": "initialized"
+        })
         
+    except typer.Exit:
+        raise
     except Exception as e:
-        Message.error(f"Error initializing configuration: {e}")
+        emitter.emit_error(
+            "CONFIG_INIT_ERROR",
+            f"Error initializing configuration: {str(e)}",
+            details={"config_file": str(config_file)}
+        )
         logger.error(f"Config init error: {e}", exc_info=True)
         raise typer.Exit(1)
 
@@ -88,37 +131,82 @@ def edit():
     
     Opens ~/.rose/rose.config.yaml in vim (or $EDITOR if set).
     If the config file doesn't exist, run 'rose config init' first.
+    
+    Note: This command is interactive and may not work in pure headless environments.
     """
+    emitter = get_emitter()
+    emitter.set_context("config")
+    
     config_file = Path.home() / ".rose" / "rose.config.yaml"
     
     # Check if config file exists
     if not config_file.exists():
-        Message.error(f"Configuration file not found: {config_file}")
-        Message.error(f"Run [cyan]rose config init[/cyan] to create it first")
+        emitter.emit_error(
+            "CONFIG_NOT_FOUND",
+            f"Configuration file not found: {config_file}",
+            details={
+                "config_file": str(config_file),
+                "suggestion": "Run 'rose config init' to create it first"
+            }
+        )
         raise typer.Exit(1)
     
     # Find suitable editor
     editor = _find_editor()
     
     if not editor:
-        Message.error(f"No suitable editor found")
-        Message.error(f"Please set EDITOR environment variable or install vim, nano, or code")
-        Message.error(f"You can edit the file manually:")
-        Message.error(f"  {config_file}")
+        emitter.emit_error(
+            "NO_EDITOR",
+            "No suitable editor found",
+            details={
+                "config_file": str(config_file),
+                "suggestions": [
+                    "Set EDITOR environment variable",
+                    "Install vim, nano, or code",
+                    f"Edit the file manually: {config_file}"
+                ]
+            }
+        )
         raise typer.Exit(1)
 
     
     try:
-        Message.info(f"Opening configuration in {editor}...")
+        # Emit edit plan
+        emitter.emit_data(
+            data={
+                "config_file": str(config_file),
+                "editor": editor,
+                "action": "opening_editor"
+            },
+            label="edit_plan"
+        )
+        
         result = subprocess.run([editor, str(config_file)])
         
-        if result.returncode == 0:
-            Message.success(f"Configuration file saved")
+        # Emit done
+        emitter.emit_done({
+            "config_file": str(config_file),
+            "editor": editor,
+            "exit_code": result.returncode,
+            "action": "edited"
+        })
         
     except KeyboardInterrupt:
-        Message.error(f"Editor cancelled")
+        emitter.emit_error(
+            "EDIT_CANCELLED",
+            "Editor cancelled by user",
+            details={"config_file": str(config_file)}
+        )
+        raise typer.Exit(1)
     except Exception as e:
-        Message.error(f"Error opening editor: {e}")
+        emitter.emit_error(
+            "EDIT_ERROR",
+            f"Error opening editor: {str(e)}",
+            details={
+                "config_file": str(config_file),
+                "editor": editor
+            }
+        )
         logger.error(f"Config edit error: {e}", exc_info=True)
         raise typer.Exit(1)
 

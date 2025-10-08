@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Load command for ROS bag files - Load bags into cache for faster operations
+Load command for ROS bag files - Load bags into cache for faster operations.
+Headless NDJSON mode - pure event emission.
 """
 
 import asyncio
 import concurrent.futures
 import glob
 import re
+import time
 from pathlib import Path
 from typing import List, Optional
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
@@ -26,7 +26,7 @@ from ..core.errors import (
     ErrorContext
 )
 from ..core.config import get_config
-from ..ui.common_ui import CommonUI, Message
+from ..core.event_emitter import get_emitter
 
 # Set to CLI mode
 set_app_mode(AppMode.CLI)
@@ -70,10 +70,12 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
             return {
                 'path': str(bag_path),
                 'status': 'already_cached',
-                'message': 'Already in cache'
+                'message': 'Already in cache',
+                'elapsed': 0.0
             }
         
         # Load bag using parser's async load function
+        start_time = time.time()
         bag_info, elapsed_time = await parser.load_bag_async(
             str(bag_path), 
             build_index=build_index,
@@ -99,7 +101,7 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
             'message': 'Successfully loaded into cache',
             'topics_count': len(bag_info.topics) if bag_info.topics else 0,
             'duration': bag_info.duration_seconds if bag_info.duration_seconds else 0,
-            'elapsed_time': elapsed_time
+            'elapsed': elapsed_time
         }
         
     except Exception as e:
@@ -107,7 +109,8 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
         return {
             'path': str(bag_path),
             'status': 'error',
-            'message': str(e)
+            'message': str(e),
+            'elapsed': 0.0
         }
 
 
@@ -180,8 +183,6 @@ def load(
     This command processes bag files and stores their analysis in cache,
     making subsequent inspect and extract operations much faster.
     
-    If bag files are not provided, you will be prompted to select them interactively.
-    
     Examples:
         rose load "*.bag"                       # Load all bag files in current directory
         rose load bag1.bag bag2.bag             # Load specific bag files
@@ -191,31 +192,29 @@ def load(
         rose load "*.bag" --dry-run             # Preview what would be loaded
         rose load "*.bag" --build-index         # Build message index for data analysis
     """
+    start_total_time = time.time()
+    
     try:
-        # Get output engine for dual-mode support
-        from ..core.output_engine import get_engine
-        engine = get_engine()
-        console = Console()
+        # Get event emitter
+        emitter = get_emitter()
+        emitter.set_context("load")
         
         # Get configuration with defaults
         config = get_config()
         
-        # Auto-prompt for input bags if not provided
+        # Check for input
         if not input:
-            # Check if we're in a TTY (interactive terminal)
-            import sys
-        # v2.0: No interactive mode
-        if not input:
-            error = RoseError(
-                code=ErrorCode.INVALID_ARGUMENT,
-                message="No bag files specified",
-                details="At least one bag file pattern must be provided",
-                suggestions=[
-                    "Provide bag file patterns as arguments: rose load '*.bag'",
-                    "Use specific file paths: rose load input.bag",
-                ]
+            emitter.emit_error(
+                "INVALID_ARGUMENT",
+                "No bag files specified",
+                details={
+                    "suggestions": [
+                        "Provide bag file patterns as arguments: rose load '*.bag'",
+                        "Use specific file paths: rose load input.bag"
+                    ]
+                }
             )
-            raise error
+            raise typer.Exit(1)
         
         # Apply config defaults if not provided
         if verbose is None:
@@ -225,33 +224,56 @@ def load(
         if workers is None:
             workers = config.parallel_workers
         
-        # Initialize UI
-        ui = CommonUI()
-        ui.console = console
-        
         # Find bag files using patterns
         valid_bags = find_bag_files(input)
         
         if not valid_bags:
-            raise BagFileError(
-                ErrorCode.BAG_NOT_FOUND,
-                ', '.join(input),
-                details=f"No valid bag files found matching the provided patterns: {', '.join(input)}"
+            emitter.emit_error(
+                "BAG_NOT_FOUND",
+                "No valid bag files found",
+                details={
+                    "patterns": input,
+                    "suggestions": [
+                        "Check the file path",
+                        "Ensure files have .bag extension",
+                        "Try using absolute paths"
+                    ]
+                }
             )
-    
-        # Show found files
-        Message.info(f"Found {len(valid_bags)} bag file(s):")
-        for bag in valid_bags:
-            Message.muted(f"  {bag}")
+            raise typer.Exit(1)
+        
+        # Emit discovered bags
+        emitter.emit_data(
+            data=[
+                {
+                    "path": str(bag),
+                    "size_mb": bag.stat().st_size / 1024 / 1024 if bag.exists() else 0,
+                    "exists": bag.exists()
+                }
+                for bag in valid_bags
+            ],
+            label="found_bags",
+            count=len(valid_bags)
+        )
         
         # Handle dry run
         if dry_run:
-            Message.warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)")
-            Message.info(f"Build index: {build_index}", console)
-            Message.info(f"Workers: {workers}", console)
+            emitter.emit_data(
+                data={
+                    "build_index": build_index,
+                    "workers": workers,
+                    "force": force,
+                    "mode": "dry_run"
+                },
+                label="load_plan"
+            )
+            emitter.emit_done({
+                "dry_run": True,
+                "would_load": len(valid_bags)
+            })
             return
         
-        # Use config workers if not overridden
+        # Adjust workers
         import os
         if workers is None or workers <= 0:
             workers = max(1, (os.cpu_count() or 2) - 2)
@@ -259,8 +281,17 @@ def load(
         # Limit workers to number of bags
         workers = min(workers, len(valid_bags))
         
-        analysis_type = "with index building" if build_index else "quick"
-        Message.info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...")
+        # Emit loading plan
+        emitter.emit_data(
+            data={
+                "total_bags": len(valid_bags),
+                "workers": workers,
+                "build_index": build_index,
+                "force": force,
+                "analysis_type": "with index building" if build_index else "quick"
+            },
+            label="load_plan"
+        )
         
         # Initialize parser
         parser = BagParser()
@@ -268,29 +299,32 @@ def load(
         # If force reload, clear cache for these bags
         if force:
             cache_manager = create_bag_cache_manager()
-            Message.warning("Force reload enabled - clearing cache for these bags")
             for bag_path in valid_bags:
                 cache_manager.clear(bag_path)
         
-        # Load bags with plain text output
+        # Load bags
         results = []
-        
-        # Simple progress tracking without progress bars
         total_bags = len(valid_bags)
-        completed_count = 0
         
         # Use ThreadPoolExecutor for parallel loading
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit all tasks with simple progress callbacks
+            # Submit all tasks
             future_to_bag = {}
-            for i, bag_path in enumerate(valid_bags, 1):
-                Message.info(f"[{i}/{total_bags}] Loading {bag_path.name}...")
+            for i, bag_path in enumerate(valid_bags):
+                # Emit progress for submission
+                percent = (i / total_bags) * 100
+                emitter.emit_progress(
+                    percent,
+                    f"Submitting {bag_path.name}",
+                    step=i+1,
+                    total_steps=total_bags
+                )
                 
-                # Simple progress callback that just prints updates
+                # Progress callback (silent in headless mode)
                 def create_progress_callback(bag_name):
                     def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                        if phase:
-                            Message.muted(f"  {bag_name}: {phase}")
+                        if phase and verbose:
+                            logger.debug(f"{bag_name}: {phase}")
                     return progress_callback
                 
                 progress_callback = create_progress_callback(bag_path.name)
@@ -301,77 +335,81 @@ def load(
                 future_to_bag[future] = bag_path
             
             # Collect results as they complete
+            completed = 0
             for future in concurrent.futures.as_completed(future_to_bag):
                 bag_path = future_to_bag[future]
                 try:
                     result = future.result()
                     results.append(result)
-                    completed_count += 1
+                    completed += 1
                     
-                    # Show completion status
-                    status_msg = {
-                        'loaded': f"✓ Loaded {bag_path.name}",
-                        'already_cached': f"✓ {bag_path.name} (cached)",
-                        'error': f"✗ Failed {bag_path.name}"
-                    }.get(result['status'], f"? {bag_path.name}")
-                    Message.muted(status_msg)
+                    # Emit progress
+                    percent = (completed / total_bags) * 100
+                    emitter.emit_progress(
+                        percent,
+                        f"Loaded {bag_path.name}",
+                        step=completed,
+                        total_steps=total_bags
+                    )
                     
-                    if verbose:
-                        Message.info(f"{result['path']}: {result['message']}")
-                        
                 except Exception as e:
                     logger.error(f"Unexpected error loading {bag_path}: {e}")
                     results.append({
                         'path': str(bag_path),
                         'status': 'error',
-                        'message': f"Unexpected error: {e}"
+                        'message': f"Unexpected error: {e}",
+                        'elapsed': 0.0
                     })
-                    Message.error(f"Failed to load {bag_path.name}: {e}")
+                    completed += 1
         
-        # Calculate summary (headless: emit structured data, not console print)
+        # Calculate summary
         loaded_count = sum(1 for r in results if r['status'] == 'loaded')
         cached_count = sum(1 for r in results if r['status'] == 'already_cached')
         error_count = sum(1 for r in results if r['status'] == 'error')
         total_ready = loaded_count + cached_count
+        total_time = time.time() - start_total_time
         
-        # Emit summary as status messages (simple info, not complex formatting)
-        if loaded_count > 0:
-            Message.info(f"{loaded_count} bag(s) newly loaded into cache")
-        if cached_count > 0:
-            Message.info(f"{cached_count} bag(s) already in cache")
-        if error_count > 0:
-            Message.warning(f"{error_count} bag(s) failed to load")
+        # Emit detailed results
+        emitter.emit_data(
+            data=[
+                {
+                    "path": r['path'],
+                    "status": r['status'],
+                    "message": r.get('message', ''),
+                    "elapsed": r.get('elapsed', 0.0),
+                    "topics_count": r.get('topics_count', 0)
+                }
+                for r in results
+            ],
+            label="results",
+            count=len(results)
+        )
         
-        # Emit errors as individual messages
-        if error_count > 0:
-            for result in results:
-                if result['status'] == 'error':
-                    Message.error(f"{result['path']}: {result['message']}")
-        
-        # Success message
-        if total_ready > 0:
-            Message.success(f"Ready: {total_ready} bag(s) available for inspect and extract commands")
-        
-        # Emit completion event for headless mode
-        engine.emit_done({
+        # Emit done event
+        emitter.emit_done({
             "loaded_files": loaded_count,
             "cached_files": cached_count,
             "failed_files": error_count,
-            "total_ready": total_ready
+            "total_ready": total_ready,
+            "elapsed_time": total_time,
+            "build_index": build_index,
+            "workers": workers
         })
         
+        # Exit with error if any bags failed
         if error_count > 0:
             raise typer.Exit(1)
     
+    except typer.Exit:
+        raise
     except RoseError as e:
         # Emit error event for headless mode
-        from ..core.output_engine import get_engine
-        engine = get_engine()
+        emitter = get_emitter()
         
-        # Get error code name - error_code is the enum, code is the int
+        # Get error code name
         error_code_name = e.error_code.name if hasattr(e, 'error_code') else 'ROSE_ERROR'
         
-        engine.emit_error(
+        emitter.emit_error(
             code=error_code_name,
             message=str(e),
             details={'verbose': verbose or False}
@@ -382,16 +420,15 @@ def load(
         raise typer.Exit(exit_code)
     
     except Exception as e:
-        # Emit error event for headless mode
-        from ..core.output_engine import get_engine
-        engine = get_engine()
-        engine.emit_error(
+        # Emit error event for unexpected errors
+        emitter = get_emitter()
+        emitter.emit_error(
             code=type(e).__name__.upper(),
             message=str(e),
             details={'verbose': verbose or False}
         )
         
-        # Use unified error handler for unexpected errors
+        # Use unified error handler
         exit_code = handle_cli_error(e, verbose=verbose or False)
         raise typer.Exit(exit_code)
 

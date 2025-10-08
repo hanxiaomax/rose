@@ -9,7 +9,6 @@ import sys
 from enum import Enum
 from typing import Optional, Dict, Any
 from pathlib import Path
-from ..ui.common_ui import Message
 
 
 class ErrorCode(Enum):
@@ -235,49 +234,27 @@ def handle_cli_error(error: Exception, verbose: bool = False) -> int:
         Exit code (0-255)
     """
     import traceback as tb
-
+    import logging
     
+    logger = logging.getLogger(__name__)
+    
+    # In headless mode, all error output should be via EventEmitter
+    # This function only logs to file and returns exit code
     if isinstance(error, RoseError):
-        # Rose-specific error - format nicely for user
-        Message.error(f"Error ({error.code}): {error.message}")
+        # Log Rose-specific error
+        logger.error(f"Error ({error.code}): {error.message}", exc_info=verbose)
         
-        if error.details and not verbose:
-            # Show details in normal mode
-            Message.info(f"Details: {error.details}")
-        elif error.details and verbose:
-            # Show details with formatting in verbose mode
-            Message.warning(f"Details: {error.details}")
+        if error.details:
+            logger.debug(f"Details: {error.details}")
         
-        # Show stack trace only in verbose mode
-        if verbose:
-            if error.context:
-                Message.info(f"Context: {error.context}")
-            
-            # Show traceback in verbose mode
-            import traceback
-            Message.info(f"--- Traceback ---")
-            Message.info(f"".join(traceback.format_exception(type(error), error, error.__traceback__)))
-        
-        # Log to logger only (to file, not console) to avoid duplication
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"Error ({error.code}): {error.message}", exc_info=verbose)
+        if verbose and error.context:
+            logger.debug(f"Context: {error.context}")
         
         # Return error code (modulo 256 for valid exit code)
         return error.code % 256
     
     else:
-        # Generic error
-        Message.error(f"Unexpected error: {str(error)}")
-        
-        if verbose:
-            import traceback
-            Message.info(f"--- Traceback ---")
-            Message.info(f"".join(traceback.format_exception(type(error), error, error.__traceback__)))
-        
-        # Log to logger only
-        import logging
-        logger = logging.getLogger(__name__)
+        # Log generic error
         logger.error(f"Unexpected error: {str(error)}", exc_info=verbose)
         
         return 1

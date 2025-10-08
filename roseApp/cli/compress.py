@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Compress command for ROS bag file compression
-Compress ROS bag files with different compression algorithms
+Compress command for ROS bag file compression.
+Headless NDJSON mode - pure event emission.
 """
 
 import os
@@ -11,13 +11,13 @@ import glob
 import re
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import typer
+
 from ..core.parser import BagParser, ExtractOption
-from ..ui.common_ui import CommonUI, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
-
+from ..core.event_emitter import get_emitter
 
 # Set to CLI mode
 set_app_mode(AppMode.CLI)
@@ -63,7 +63,6 @@ def find_bag_files(input_patterns: List[str]) -> List[Path]:
                             if file.endswith('.bag') and regex.search(file):
                                 bag_files.append(Path(root) / file)
                 except re.error:
-                    # Not a valid regex, skip
                     pass
     
     # Remove duplicates and sort
@@ -71,100 +70,6 @@ def find_bag_files(input_patterns: List[str]) -> List[Path]:
     unique_bags.sort()
     
     return unique_bags
-
-
-async def validate_bag_file(bag_path: Path) -> dict:
-    """Validate that a bag file can be read correctly"""
-    try:
-        parser = BagParser()
-        
-        # Try to load the bag file
-        bag_info, _ = await parser.load_bag_async(str(bag_path), build_index=False)
-        
-        # Check if we got valid bag info
-        if not bag_info or not bag_info.topics:
-            return {
-                'valid': False,
-                'error': 'No topics found in bag file',
-                'topics_count': 0,
-                'messages_count': 0
-            }
-        
-        # Get basic statistics
-        topics_count = len(bag_info.get_topic_names())
-        
-        # Count messages by actually reading the bag file
-        messages_count = 0
-        try:
-            from rosbags.rosbag1 import Reader as ROS1Reader
-            from rosbags.rosbag2 import Reader as ROS2Reader
-            
-            # Try ROS1 format first (most common for compressed bags)
-            try:
-                with ROS1Reader(str(bag_path)) as reader:
-                    # Count all messages and validate first few
-                    validation_count = 0
-                    for connection, timestamp, rawdata in reader.messages():
-                        # Validate first 10 messages
-                        if validation_count < 10:
-                            # Just check that we can read the raw data
-                            if rawdata is None or len(rawdata) == 0:
-                                return {
-                                    'valid': False,
-                                    'error': 'Empty message data found',
-                                    'topics_count': topics_count,
-                                    'messages_count': messages_count
-                                }
-                            validation_count += 1
-                        messages_count += 1
-            except Exception:
-                # If ROS1 fails, try ROS2 format
-                try:
-                    with ROS2Reader(str(bag_path)) as reader:
-                        # Count all messages and validate first few
-                        validation_count = 0
-                        for connection, timestamp, rawdata in reader.messages():
-                            # Validate first 10 messages
-                            if validation_count < 10:
-                                # Just check that we can read the raw data
-                                if rawdata is None or len(rawdata) == 0:
-                                    return {
-                                        'valid': False,
-                                        'error': 'Empty message data found',
-                                        'topics_count': topics_count,
-                                        'messages_count': messages_count
-                                    }
-                                validation_count += 1
-                            messages_count += 1
-                except Exception as e2:
-                    return {
-                        'valid': False,
-                        'error': f'Failed to read bag file with both ROS1 and ROS2 readers: {str(e2)}',
-                        'topics_count': topics_count,
-                        'messages_count': messages_count
-                    }
-        except Exception as e:
-            return {
-                'valid': False,
-                'error': f'Failed to read bag file: {str(e)}',
-                'topics_count': topics_count,
-                'messages_count': messages_count
-            }
-        
-        return {
-            'valid': True,
-            'error': None,
-            'topics_count': topics_count,
-            'messages_count': messages_count
-        }
-        
-    except Exception as e:
-        return {
-            'valid': False,
-            'error': str(e),
-            'topics_count': 0,
-            'messages_count': 0
-        }
 
 
 async def compress_single_bag(
@@ -210,12 +115,11 @@ async def compress_single_bag(
             all_topics = bag_info.get_topic_names()
         
         # Create ExtractOption for compression (include all topics)
-        # Reduce memory limit for compression to avoid OOM
         extract_option = ExtractOption(
             topics=all_topics,
             compression=compression,
             overwrite=overwrite,
-            memory_limit_mb=256  # Reduce memory limit for compression
+            memory_limit_mb=256
         )
         
         # Progress callback wrapper
@@ -223,7 +127,7 @@ async def compress_single_bag(
             if progress_callback:
                 progress_callback(percent)
         
-        # Create a new parser instance for each compression to avoid memory issues
+        # Create a new parser instance for each compression
         parser = BagParser()
         
         # Perform the compression using extract functionality
@@ -234,20 +138,28 @@ async def compress_single_bag(
             progress_callback=progress_wrapper
         )
         
+        # Get file sizes for compression ratio
+        input_size = bag_path.stat().st_size
+        output_size = output_path.stat().st_size if output_path.exists() else 0
+        compression_ratio = (1 - output_size / input_size) * 100 if input_size > 0 else 0
+        
         return {
-            'success': True,
+            'status': 'compressed',
             'input_file': str(bag_path),
             'output_file': str(output_path),
             'compression': compression,
             'elapsed_time': elapsed_time,
             'message': result_message,
-            'topics_count': len(all_topics)
+            'topics_count': len(all_topics),
+            'input_size_mb': input_size / 1024 / 1024,
+            'output_size_mb': output_size / 1024 / 1024,
+            'compression_ratio': compression_ratio
         }
         
     except Exception as e:
         logger.error(f"Error compressing {bag_path}: {str(e)}")
         return {
-            'success': False,
+            'status': 'error',
             'input_file': str(bag_path),
             'output_file': None,
             'error': str(e),
@@ -259,18 +171,16 @@ async def compress_single_bag(
 def compress(
     input_bags: List[str] = typer.Argument(..., help="Bag file patterns (supports glob and regex)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output pattern (use {input} for input filename, {timestamp} for timestamp, {compression} for compression type)"),
-    workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count - 2)"),
+    workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count / 2, max 4)"),
     compression: str = typer.Option("lz4", "--compression", "-c", help="Compression type: bz2, lz4"),
-    validate: bool = typer.Option(False, "--validate", help="Validate compressed bag files after compression"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be compressed without doing it"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed compression information"),
-
 ):
     """
-    Compress ROS bag files with different compression algorithms (supports multiple files and patterns)
+    Compress ROS bag files with different compression algorithms (supports multiple files and patterns).
     
-    If bag files are not in cache, you will be prompted to load them automatically.
+    Bags must be loaded into cache first using 'rose load'.
     
     Examples:
         rose compress "*.bag" --compression lz4                                      # Compress all bag files with LZ4
@@ -278,136 +188,148 @@ def compress(
         rose compress bag1.bag bag2.bag --compression lz4 --workers 4               # Multiple files, parallel compression
         rose compress "*.bag" --compression bz2 --dry-run                           # Preview compression without doing it
     """
-    await_sync(_compress_bags_impl(input_bags, output, workers, compression, validate, dry_run, yes, verbose))
-
-
-async def _compress_bags_impl(
-    input_bags: List[str],
-    output: Optional[str],
-    workers: Optional[int],
-    compression: str,
-    validate: bool,
-    dry_run: bool,
-    yes: bool,
-    verbose: bool
-):
-    """Implementation of compress command"""
-    # console deprecated in v2.0
+    start_total_time = time.time()
     
-    # Find bag files using patterns
-    valid_bags = find_bag_files(input_bags)
-    
-    if not valid_bags:
-        Message.error("No bag files found matching the specified patterns")
-        for pattern in input_bags:
-            Message.info(f"  Pattern: {pattern}")
-        raise typer.Exit(1)
-    
-    # Show found files
-    Message.info(f"Found {len(valid_bags)} bag file(s):", console)
-    for bag in valid_bags:
-        Message.primary(f"  {bag}")
-    
-    # Check if bags are loaded in cache
-    cache_manager = create_bag_cache_manager()
-    uncached_bags = []
-    
-    for bag_path in valid_bags:
-        cached_entry = cache_manager.get_analysis(bag_path)
-        if not cached_entry or not cached_entry.is_valid(bag_path):
-            uncached_bags.append(bag_path)
-    
-    if uncached_bags:
-        Message.warning(f"{len(uncached_bags)} bag(s) not in cache. They need to be loaded first.", console)
-        if not yes and not typer.confirm("Load uncached bags automatically?"):
-            Message.warning("Operation cancelled")
-            raise typer.Exit(0)
+    try:
+        # Get event emitter
+        emitter = get_emitter()
+        emitter.set_context("compress")
         
-        # Load uncached bags directly without additional prompts
-        from ..core.parser import create_parser
+        # Validate compression option
+        valid_compression = ["bz2", "lz4"]
+        if compression not in valid_compression:
+            emitter.emit_error(
+                "INVALID_ARGUMENT",
+                f"Invalid compression: {compression}",
+                details={"valid_options": valid_compression}
+            )
+            raise typer.Exit(1)
         
-        for bag_path in uncached_bags:
-            Message.info(f"Loading bag file into cache: {bag_path}")
-            start_time = time.time()
-            parser = create_parser()
-            try:
-                # Use await since we're already in an async function
-                await parser.load_bag_async(bag_path, build_index=False)
-                elapsed = time.time() - start_time
-                Message.success(f"Successfully loaded bag into cache in {elapsed:.2f}s")
-            except Exception as e:
-                Message.error(f"Failed to load bag: {e}")
-                Message.error(f"Failed to load bag: {bag_path}")
-                raise typer.Exit(1)
-    
-    # Validate compression option
-    valid_compression = ["bz2", "lz4"]
-    if compression not in valid_compression:
-        Message.error(f"Invalid compression '{compression}'. Valid options: {', '.join(valid_compression)}", console)
-        raise typer.Exit(1)
-    
-    # Set default output pattern if not specified
-    if not output:
-        output_pattern = "{input}_{compression}_{timestamp}.bag"
-    else:
-        output_pattern = output
-    
-    # Dry run preview
-    if dry_run:
-        Message.warning(f"DRY RUN - Would compress {len(valid_bags)} bag file(s) with {compression}:", console)
+        # Find bag files using patterns
+        emitter.emit_progress(10, "Finding bag files")
+        valid_bags = find_bag_files(input_bags)
+        
+        if not valid_bags:
+            emitter.emit_error(
+                "BAG_NOT_FOUND",
+                "No bag files found",
+                details={"patterns": input_bags}
+            )
+            raise typer.Exit(1)
+        
+        # Emit found bags
+        emitter.emit_data(
+            data=[
+                {
+                    "path": str(bag),
+                    "size_mb": bag.stat().st_size / 1024 / 1024
+                }
+                for bag in valid_bags
+            ],
+            label="found_bags",
+            count=len(valid_bags)
+        )
+        
+        # Check if bags are loaded in cache
+        emitter.emit_progress(20, "Checking cache")
+        cache_manager = create_bag_cache_manager()
+        uncached_bags = []
+        
         for bag_path in valid_bags:
-            # Generate output path for preview
+            cached_entry = cache_manager.get_analysis(bag_path)
+            if not cached_entry or not cached_entry.is_valid(bag_path):
+                uncached_bags.append(str(bag_path))
+        
+        if uncached_bags:
+            emitter.emit_error(
+                "BAG_NOT_CACHED",
+                f"{len(uncached_bags)} bag(s) not in cache",
+                details={
+                    "uncached_bags": uncached_bags,
+                    "suggestions": [
+                        "Load bags first: rose load <pattern>",
+                        f"Run: rose load {' '.join(input_bags)}"
+                    ]
+                }
+            )
+            raise typer.Exit(1)
+        
+        # Set default output pattern if not specified
+        if not output:
+            output_pattern = "{input}_{compression}_{timestamp}.bag"
+        else:
+            output_pattern = output
+        
+        # Dry run preview
+        if dry_run:
+            preview_outputs = []
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            preview_output = output_pattern
-            if '{input}' in preview_output:
-                preview_output = preview_output.replace('{input}', bag_path.stem)
-            if '{timestamp}' in preview_output:
-                preview_output = preview_output.replace('{timestamp}', timestamp)
-            if '{compression}' in preview_output:
-                preview_output = preview_output.replace('{compression}', compression)
-            else:
-                if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
-                    preview_output = f"{bag_path.stem}_{compression}_{timestamp}.bag"
+            for bag_path in valid_bags:
+                preview_output = output_pattern
+                if '{input}' in preview_output:
+                    preview_output = preview_output.replace('{input}', bag_path.stem)
+                if '{timestamp}' in preview_output:
+                    preview_output = preview_output.replace('{timestamp}', timestamp)
+                if '{compression}' in preview_output:
+                    preview_output = preview_output.replace('{compression}', compression)
+                else:
+                    if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
+                        preview_output = f"{bag_path.stem}_{compression}_{timestamp}.bag"
+                
+                preview_outputs.append({
+                    "input": str(bag_path),
+                    "output": preview_output,
+                    "compression": compression
+                })
             
-            Message.primary(f"  {bag_path} -> {preview_output}")
+            emitter.emit_data(
+                data=preview_outputs,
+                label="compression_plan"
+            )
+            
+            emitter.emit_done({
+                "dry_run": True,
+                "would_compress": len(valid_bags),
+                "compression": compression
+            })
+            return
         
-        Message.info(f"Compression: {compression}")
-        return
-    
-    # Determine number of workers - be more conservative for compression
-    if workers is None:
-        # For compression, use fewer workers to avoid memory issues
-        workers = max(1, min(4, (os.cpu_count() // 2) if os.cpu_count() else 1))
-    else:
-        workers = max(1, min(workers, len(valid_bags), 6))  # Cap at 6 workers max
-    
-    # Perform compression
-    Message.info(f"Compressing {len(valid_bags)} bag file(s) with {workers} worker(s) (using {compression} compression)...", console)
-    
-    # Track timing and results
-    compression_start_time = time.time()
-    results = []
-    
-    # Use ThreadPoolExecutor for parallel processing
-    with Progress() as progress:
+        # Determine number of workers - be conservative for compression
+        if workers is None:
+            # For compression, use fewer workers to avoid memory issues
+            workers = max(1, min(4, (os.cpu_count() // 2) if os.cpu_count() else 1))
+        else:
+            workers = max(1, min(workers, len(valid_bags), 6))  # Cap at 6 workers max
         
-        # Create tasks for each bag
-        tasks = {}
-        for bag_path in valid_bags:
-            task_id = progress.add_task(f"{bag_path.name} - Compressing", total=100)
-            tasks[bag_path] = task_id
+        # Emit compression plan
+        emitter.emit_data(
+            data={
+                "total_bags": len(valid_bags),
+                "workers": workers,
+                "compression": compression,
+                "output_pattern": output_pattern
+            },
+            label="compression_plan"
+        )
         
-        def create_progress_callback(task_id):
-            def callback(percent):
-                progress.update(task_id, completed=percent)
-            return callback
+        # Perform compression
+        emitter.emit_progress(30, "Starting compression")
+        results = []
+        total_bags = len(valid_bags)
         
-        # Execute compression in parallel
+        # Use ThreadPoolExecutor for parallel processing
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             # Submit all compression tasks
             futures = {}
             for bag_path in valid_bags:
-                progress_callback = create_progress_callback(tasks[bag_path])
+                # Silent progress callback in headless mode
+                def create_progress_callback(bag_name):
+                    def callback(percent):
+                        if verbose:
+                            logger.debug(f"{bag_name}: {percent:.1f}%")
+                    return callback
+                
+                progress_callback = create_progress_callback(bag_path.name)
                 future = executor.submit(
                     await_sync,
                     compress_single_bag(
@@ -423,110 +345,96 @@ async def _compress_bags_impl(
                 futures[future] = bag_path
             
             # Collect results as they complete
+            completed = 0
             for future in concurrent.futures.as_completed(futures):
                 bag_path = futures[future]
-                task_id = tasks[bag_path]
                 
                 try:
                     result = future.result()
                     results.append(result)
+                    completed += 1
                     
-                    if result['success']:
-                        progress.update(task_id, description=f"[green]✓ {bag_path.name} - Compressed[/green]", completed=100)
-                    else:
-                        progress.update(task_id, description=f"[red]✗ {bag_path.name} - Failed[/red]", completed=100)
-                        
+                    # Emit progress
+                    percent = 30 + (completed / total_bags) * 60  # 30% to 90%
+                    emitter.emit_progress(
+                        percent,
+                        f"Compressed {bag_path.name}",
+                        step=completed,
+                        total_steps=total_bags
+                    )
+                    
                 except Exception as e:
                     logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
                     results.append({
-                        'success': False,
+                        'status': 'error',
                         'input_file': str(bag_path),
                         'output_file': None,
                         'error': str(e),
                         'message': str(e)
                     })
-                    progress.update(task_id, description=f"[red]✗ {bag_path.name} - Error[/red]", completed=100)
-    
-    # Validate compressed files if requested
-    if validate and results:
-        successful_results = [r for r in results if r['success']]
-        if successful_results:
-            console.print()
-            Message.info("Validating compressed bag files...")
-            
-            validation_results = []
-            with Progress() as progress:
-                
-                # Create validation tasks
-                validation_tasks = {}
-                for result in successful_results:
-                    output_path = Path(result['output_file'])
-                    task_id = progress.add_task(f"Validating {output_path.name}", total=100)
-                    validation_tasks[result['output_file']] = task_id
-                
-                # Validate files in parallel
-                with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(successful_results))) as executor:
-                    validation_futures = {}
-                    for result in successful_results:
-                        output_path = Path(result['output_file'])
-                        future = executor.submit(await_sync, validate_bag_file(output_path))
-                        validation_futures[future] = result
-                    
-                    # Collect validation results
-                    for future in concurrent.futures.as_completed(validation_futures):
-                        result = validation_futures[future]
-                        task_id = validation_tasks[result['output_file']]
-                        
-                        try:
-                            validation_result = future.result()
-                            validation_results.append({
-                                'file': result['output_file'],
-                                'original_result': result,
-                                **validation_result
-                            })
-                            
-                            if validation_result['valid']:
-                                progress.update(task_id, description=f"[green]✓ {Path(result['output_file']).name} - Valid[/green]", completed=100)
-                            else:
-                                progress.update(task_id, description=f"[red]✗ {Path(result['output_file']).name} - Invalid[/red]", completed=100)
-                                
-                        except Exception as e:
-                            logger.error(f"Validation error for {result['output_file']}: {str(e)}")
-                            validation_results.append({
-                                'file': result['output_file'],
-                                'original_result': result,
-                                'valid': False,
-                                'error': str(e),
-                                'topics_count': 0,
-                                'messages_count': 0
-                            })
-                            progress.update(task_id, description=f"[red]✗ {Path(result['output_file']).name} - Error[/red]", completed=100)
-            
-            # Show validation summary
-            console.print()
-            valid_files = [v for v in validation_results if v['valid']]
-            invalid_files = [v for v in validation_results if not v['valid']]
-            
-            Message.primary("Validation Summary")
-            if valid_files:
-                Message.success(f"  {len(valid_files)} bag(s) passed validation", console)
-                if verbose:
-                    for v in valid_files:
-                        Message.info(f"    {Path(v['file']).name}: {v['topics_count']} topics, {v['messages_count']} messages", console)
-            
-            if invalid_files:
-                Message.error(f"  {len(invalid_files)} bag(s) failed validation", console)
-                for v in invalid_files:
-                    Message.error(f"    {Path(v['file']).name}: {v['error']}", console)
-    
-    # Calculate total time
-    total_time = time.time() - compression_start_time
-    
-    # Use new UI components for display
-    from ..ui.compress_ui import CompressUI
-    
-    compress_ui = CompressUI()
-    compress_ui.display_batch_results(results, total_time)
+                    completed += 1
+        
+        # Calculate summary
+        success_count = sum(1 for r in results if r['status'] == 'compressed')
+        error_count = sum(1 for r in results if r['status'] == 'error')
+        total_time = time.time() - start_total_time
+        
+        # Calculate average compression ratio
+        successful_results = [r for r in results if r['status'] == 'compressed']
+        avg_compression_ratio = (
+            sum(r['compression_ratio'] for r in successful_results) / len(successful_results)
+            if successful_results else 0
+        )
+        
+        # Emit detailed results
+        emitter.emit_progress(95, "Finalizing")
+        emitter.emit_data(
+            data=[
+                {
+                    "input_file": r['input_file'],
+                    "output_file": r.get('output_file'),
+                    "status": r['status'],
+                    "message": r.get('message', ''),
+                    "elapsed": r.get('elapsed_time', 0.0),
+                    "input_size_mb": r.get('input_size_mb', 0),
+                    "output_size_mb": r.get('output_size_mb', 0),
+                    "compression_ratio": r.get('compression_ratio', 0)
+                }
+                for r in results
+            ],
+            label="results",
+            count=len(results)
+        )
+        
+        # Emit done event
+        emitter.emit_progress(100, "Compression complete")
+        emitter.emit_done({
+            "compressed_files": success_count,
+            "failed_files": error_count,
+            "total_files": len(results),
+            "elapsed_time": total_time,
+            "compression": compression,
+            "workers": workers,
+            "avg_compression_ratio": avg_compression_ratio
+        })
+        
+        # Exit with error if any compressions failed
+        if error_count > 0:
+            raise typer.Exit(1)
+        
+    except typer.Exit:
+        raise
+    except Exception as e:
+        # Emit error event
+        emitter = get_emitter()
+        emitter.emit_error(
+            code=type(e).__name__.upper(),
+            message=str(e),
+            details={'verbose': verbose}
+        )
+        
+        logger.error(f"Compression error: {e}", exc_info=True)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
