@@ -13,14 +13,13 @@ import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
 from ..core.parser import BagParser, ExtractOption
 from ..ui.common_ui import CommonUI, Message
-from ..ui.theme import get_color
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import filter_topics, check_and_load_bag_cache
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 
 
 # Set to CLI mode
@@ -180,44 +179,12 @@ def extract(
         rose extract "*.bag" --topics gps --compression lz4 --workers 4         # Parallel extraction with compression
         rose extract "*.bag" --topics gps --dry-run                             # Preview without extraction
     """
-    console = Console()
+    # console deprecated in v2.0
     
-    # Auto-prompt for input bags if not provided
+    # v2.0: No interactive mode, require explicit arguments
     if not input_bags:
-        # Check if we're in a TTY (interactive terminal)
-        import sys
-        if sys.stdin.isatty():
-            from ..interactive.components import InputPrompter
-            prompter = InputPrompter(console)
-            
-            Message.info("No input bag files specified. Please select bag files:", console)
-            bag_paths = prompter.prompt_for_bag_files(
-                message="Enter bag file pattern or path:",
-                allow_multiple=True,
-                required=True
-            )
-            
-            if not bag_paths:
-                Message.warning("No bag files selected. Operation cancelled.", console)
-                raise typer.Exit(0)
-            
-            # Convert Path objects to strings for processing
-            input_bags = [str(p) for p in bag_paths]
-        else:
-            # Non-interactive mode without input - show error
-            from ..core.errors import RoseError, ErrorCategory
-            error = RoseError(
-                category=ErrorCategory.INVALID_ARGUMENT,
-                message="No bag files specified",
-                details="At least one bag file pattern must be provided",
-                suggestions=[
-                    "Provide bag file patterns as arguments: rose extract '*.bag'",
-                    "Use specific file paths: rose extract input.bag",
-                    "Run in an interactive terminal to use the file selection prompt"
-                ]
-            )
-            console.print(error.format_message())
-            raise typer.Exit(1)
+        Message.error("Input and output bag files must be specified")
+        raise typer.Exit(1)
     
     _extract_topics_impl(input_bags, topics, output, workers, reverse, compression, dry_run, yes, verbose)
 
@@ -236,6 +203,9 @@ def _extract_topics_impl(
     """
     Multi-file topic extraction with parallel processing
     """
+    # Get output engine for dual-mode support
+    from ..core.output_engine import get_engine
+    engine = get_engine()
     console = Console()
     
     try:
@@ -366,14 +336,8 @@ def _extract_topics_impl(
         # Extract bags with individual progress bars
         results = []
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-            BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            console=console
-        ) as progress:
+        # Use engine.create_progress() for dual-mode support
+        with Progress() as progress:
             
             # Create individual progress tasks for each bag
             bag_tasks = {}
@@ -447,10 +411,35 @@ def _extract_topics_impl(
         
         # Check for errors
         error_count = sum(1 for r in results if r['status'] == 'error')
+        success_count = sum(1 for r in results if r['status'] == 'extracted')
+        
+        # Emit completion event for headless mode
+        engine.emit_done({
+            "extracted_files": success_count,
+            "failed_files": error_count,
+            "total_files": len(results),
+            "results": results
+        })
+        
         if error_count > 0:
             raise typer.Exit(1)
         
     except Exception as e:
+        # Emit error event for headless mode
+        from ..core.errors import RoseError
+        
+        # Get appropriate error code
+        if isinstance(e, RoseError):
+            error_code_name = e.error_code.name if hasattr(e, 'error_code') else 'ROSE_ERROR'
+        else:
+            error_code_name = type(e).__name__.upper()
+        
+        engine.emit_error(
+            code=error_code_name,
+            message=str(e),
+            details={'verbose': verbose}
+        )
+        
         Message.error(f"Error during extraction: {e}", console)
         logger.error(f"Extraction error: {e}", exc_info=True)
         raise typer.Exit(1)

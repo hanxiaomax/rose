@@ -15,12 +15,11 @@ from ..ui.common_ui import CommonUI, Message
 
 
 # Import theme system for colors
-from ..ui.theme import get_color
 
-WARNING_COLOR = get_color('warning')
-PRIMARY_COLOR = get_color('primary')
-ACCENT_COLOR = get_color('accent')
-SUCCESS_COLOR = get_color('success')
+WARNING_COLOR = "cyan"
+PRIMARY_COLOR = "cyan"
+ACCENT_COLOR = "cyan"
+SUCCESS_COLOR = "cyan"
 
 ROSE_BANNER = """
 ██████╗  ██████╗ ███████╗███████╗
@@ -37,21 +36,21 @@ def build_banner():
     title = Text()
     title.append("ROS Bag Filter Tool") 
     subtitle = Text()
-    subtitle.append("Github", style=f"{get_color('primary')} link https://github.com/hanxiaomax/rose")
-    subtitle.append(" • ", style=get_color('muted'))
-    subtitle.append("Author", style=f"{get_color('primary')} link https://github.com/hanxiaomax")
+    subtitle.append("Github", style="cyan link https://github.com/hanxiaomax/rose")
+    subtitle.append(" • ", style="cyan")
+    subtitle.append("Author", style="cyan link https://github.com/hanxiaomax")
 
     # Create banner content
     content = Text()
-    content.append(ROSE_BANNER, style=f"{get_color('primary')}")
-    content.append("ROSE is a Ros Bag One-Stop Editor", style=f"{get_color('primary')}")
+    content.append(ROSE_BANNER, style="cyan")
+    content.append("ROSE is a Ros Bag One-Stop Editor", style="cyan")
     
     # Create panel with all elements
     panel = Panel(
         content,
         title=title,
         subtitle=subtitle,  
-        border_style=get_color('accent'),  # Use Claude's signature color
+        border_style="cyan",  # Use Claude's signature color
         highlight=True
     )
     
@@ -92,19 +91,19 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
     
     # Create basic bag info text
     bag_info = Text()
-    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
-    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim {get_color('primary')}")
-    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim {get_color('primary')}")
-    bag_info.append(f"Topics({len(topics)} in total):\n", style=get_color('accent'))
+    bag_info.append(f"File: {os.path.basename(bag_path)}\n", style="bold cyan")
+    bag_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n",style=f"dim cyan")
+    bag_info.append(f"Path: {os.path.abspath(bag_path)}\n",style=f"dim cyan")
+    bag_info.append(f"Topics({len(topics)} in total):\n", style="cyan")
     
     # First, display all topics
     for topic in sorted(topics):
-        bag_info.append(f"• {topic:<40}", style=f"{get_color('primary')}")
-        bag_info.append(f"{connections[topic]}\n", style=f"dim {get_color('primary')}")
+        bag_info.append(f"• {topic:<40}", style="cyan")
+        bag_info.append(f"{connections[topic]}\n", style=f"dim cyan")
     
     panel = Panel(bag_info,
                   title=f"Bag Information",
-                  border_style=get_color('accent'),
+                  border_style="cyan",
                   padding=(0, 1))
     
     console.print(panel)
@@ -126,23 +125,23 @@ def print_bag_info(console:Console, bag_path: str, topics: List[str], connection
             filtered_topics = ask_topics(console, topics, parser=parser, bag_path=bag_path)
             
             if not filtered_topics:
-                console.print("No topics selected. Showing all topics.", style=get_color('warning'))
+                console.print("No topics selected. Showing all topics.", style="cyan")
                 continue
             
             # Create filtered topics panel
             filtered_info = Text()
-            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style=f"bold {get_color('accent')}")
+            filtered_info.append(f"File: {os.path.basename(bag_path)}\n", style="bold cyan")
             filtered_info.append(f"Size: {file_size_mb:.2f} MB ({file_size:,} bytes)\n")
             filtered_info.append(f"Path: {os.path.abspath(bag_path)}\n")
             filtered_info.append(f"Filtered Topics({len(filtered_topics)} of {len(topics)}):\n", style="bold")
             
             for topic in sorted(filtered_topics):
-                filtered_info.append(f"• {topic:<40}", style=get_color('primary'))
-                filtered_info.append(f"{connections[topic]}\n", style=get_color('muted'))
+                filtered_info.append(f"• {topic:<40}", style="cyan")
+                filtered_info.append(f"{connections[topic]}\n", style="cyan")
             
             filtered_panel = Panel(filtered_info,
                                   title=f"Filtered Bag Information",
-                                  border_style=get_color('primary'),
+                                  border_style="cyan",
                                   padding=(0, 1))
             
             console.print(filtered_panel)
@@ -175,9 +174,9 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     )
     
     # Add three columns, first column narrower
-    table.add_column("", style=f"{get_color('primary')}", width=4)  # For input/output labels
-    table.add_column("file", style=f"{get_color('primary')}", justify="left")  # Filename column
-    table.add_column("size", style=f"{get_color('primary')}", justify="left", width=20)  # Increase size column width for additional info
+    table.add_column("", style="cyan", width=4)  # For input/output labels
+    table.add_column("file", style="cyan", justify="left")  # Filename column
+    table.add_column("size", style="cyan", justify="left", width=20)  # Increase size column width for additional info
     
     # Add input row
     table.add_row(
@@ -188,13 +187,13 @@ def print_filter_stats(console:Console, input_bag: str, output_bag: str):
     
     # Add output row with reduction percentage, using ACCENT color
     table.add_row(
-        f"[{get_color('accent')}]Out[/{get_color('accent')}]",
-        f"[{get_color('accent')}]{os.path.basename(output_bag)}[/{get_color('accent')}]", 
-        f"[{get_color('accent')}]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/{get_color('accent')}]"  
+        f"[cyan]Out[/cyan]",
+        f"[cyan]{os.path.basename(output_bag)}[/cyan]", 
+        f"[cyan]{output_size_mb:.0f}MB (↓{reduction_ratio:.0f}%)[/cyan]"  
     )
     
     # Display table in a panel
-    console.print(Panel(table, title="Filter Results", border_style=f"bold {get_color('accent')}"))
+    console.print(Panel(table, title="Filter Results", border_style="bold cyan"))
 
 def print_batch_filter_summary(console:Console, success_count: int, fail_count: int):
     """Show filtering results for batch processing
@@ -213,9 +212,9 @@ def print_batch_filter_summary(console:Console, success_count: int, fail_count: 
     )
     
     if fail_count == 0:
-        console.print(summary, style=get_color('success'))
+        console.print(summary, style="cyan")
     else:
-        console.print(summary, style=get_color('accent'))
+        console.print(summary, style="cyan")
 
 def ask_topics(console: Console, topics: List[str], parser=None, bag_path: Optional[str] = None) -> Optional[List[str]]:
     return ask_topics_with_fuzzy(
@@ -419,8 +418,8 @@ def LoadingAnimation(title: Optional[str] = None, dismiss: bool = False):
         PanelProgress: A progress bar wrapped in a panel with optional title
     """
     return PanelProgress(
-        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),  # Set to None for adaptive width
+        TextColumn(f"[cyan][progress.description]{{task.description}}[/cyan]"),
+        BarColumn(bar_width=None, complete_style="cyan", finished_style="cyan"),  # Set to None for adaptive width
         TaskProgressColumn(),
         TimeRemainingColumn(),
         title=title,
@@ -438,8 +437,8 @@ def LoadingAnimationWithTimer(title: Optional[str] = None, dismiss: bool = False
         TimedPanelProgress: A progress bar wrapped in a panel with timing functionality
     """
     return TimedPanelProgress(
-        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-        BarColumn(bar_width=None, complete_style=get_color('success'), finished_style=get_color('success')),
+        TextColumn(f"[cyan][progress.description]{{task.description}}[/cyan]"),
+        BarColumn(bar_width=None, complete_style="cyan", finished_style="cyan"),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         title=title,

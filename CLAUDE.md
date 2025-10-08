@@ -22,7 +22,7 @@ ROSE is a high-performance ROS bag filtering tool with distinctive cassette futu
 - **ExportManager** (`roseApp/core/export_manager.py`) - Handles filtered bag output and format exports
 - **CacheManager** (`roseApp/core/cache.py`) - Persistent caching for parsed bag metadata
 - **PluginManager** (`roseApp/core/plugins/manager.py`) - Plugin loading and execution
-- **TUIApp** (`roseApp/tui/tui.py`) - Main TUI application with theme management
+- **ThemeLoader** (`roseApp/ui/theme.py`) - Theme management for UI components
 
 ### Data Flow Architecture
 - **Parser** → **BagManager** → **ExportManager**: Bag files are parsed into metadata, filtered by topics/time, then exported with optional compression
@@ -74,20 +74,20 @@ cd tests/bash_tests && ./quick_test.sh
 # Install in development mode
 pip install -e .
 
-# Run TUI in dev mode (with hot reload)
-textual run --dev roseApp.tui.tui:app
+# Alternative: use install script for full setup
+./install.sh
 
 # CLI commands for testing
-rose tui                    # Launch TUI
-rose cli                    # Interactive CLI mode
-rose filter input.bag output.bag -w whitelist.txt
-
-# Inspect bag contents
-rose inspect topics input.bag
-rose inspect info input.bag
+rose --help                 # Show all commands
+rose load *.bag            # Load bag files
+rose extract input.bag --topics gps imu  # Extract specific topics
+rose compress *.bag --compression lz4    # Compress bag files
+rose inspect demo.bag      # Inspect bag contents
+rose data info demo.bag    # Show data information
+rose cache                 # Manage cache
+rose plugin list           # List available plugins
 
 # Plugin management
-rose plugin list            # List available plugins
 rose plugin create my_plugin --template basic
 
 # Build package
@@ -114,44 +114,43 @@ docker run -it --rm -v $(pwd):/data -v $(pwd)/roseApp/tests:/data/roseApp/tests 
 
 ## Interface Modes
 
-### 1. TUI Mode (`rose tui`)
-- Cassette futurism themes (`cassette-walkman`, `cassette-dark`)
-- Claude-inspired themes (`claude-dark`, `claude-light`, `claude-midnight`, `claude-high-contrast`)
-- Fuzzy topic search with real-time filtering
-- Multi-selection batch processing with parallel execution
-- Whitelist management (load/save)
-- Compression options (BZ2, LZ4, none)
+### 1. UI Components (`roseApp/ui/`)
+- **Common UI utilities**: `common_ui.py` - Shared UI components and helpers
+- **Command builders**: `command_builder.py` - CLI command construction
+- **Module-specific UIs**: `load_ui.py`, `extract_ui.py`, `compress_ui.py`, `inspect_ui.py`, `cache_ui.py`
+- **Theme system**: `theme.py` - YAML-based theme management
+- **Interactive components**: `interactive_common.py` - Shared interactive UI logic
 
-### 2. Interactive CLI (`rose cli`)
-- Menu-driven interface with InquirerPy
-- Guided workflows for filtering and whitelist management
-- Batch processing capabilities
-- Progress indicators and detailed results
-- **Command Router**: `roseApp/interactive/core/command_router.py` - Routes commands to handlers
-- **Command Handlers**: `roseApp/interactive/commands/` - Individual command implementations
-- **Components**: `roseApp/interactive/components/` - Reusable UI components
+### 2. CLI Commands (`roseApp/cli/`)
+- **Load**: `load.py` - Load bag files into cache
+- **Extract**: `extract.py` - Extract specific topics from bags
+- **Compress**: `compress.py` - Compress bag files with different algorithms
+- **Inspect**: `inspect.py` - Analyze bag contents and statistics
+- **Data**: `data.py` - Data manipulation and export commands
+- **Cache**: `cache.py` - Cache management operations
+- **Plugin**: `plugin.py` - Plugin system management
+- **Config**: `config.py` - Configuration management
+- **Utility**: `util.py` - Shared CLI utilities
 
-### 3. Direct CLI Commands
-- `rose filter` - Filter bags with topics/whitelists and compression options
-- `rose inspect` - Analyze bag contents and metadata
-- `rose extract` - Extract specific data to various formats
-- `rose cache` - Manage parser cache
-- `rose plugin` - Plugin management and execution
-- `rose data` - Data analysis and visualization commands
+### 3. Core Engine (`roseApp/core/`)
+- **BagManager**: `BagManager.py` - Central orchestrator for bag operations
+- **Parser**: `parser.py` - ROS bag file parsing using rosbags
+- **ExportManager**: `export_manager.py` - Handles filtered bag output and format exports
+- **Cache**: `cache.py` - Persistent caching for parsed bag metadata
+- **Configuration**: `config.py` - Configuration system with validation
+- **Directories**: `directories.py` - Directory management utilities
+- **Errors**: `errors.py` - Custom exception classes
+- **Models**: `model.py` - Data models and type definitions
+- **Utilities**: `util.py` - Shared utility functions
+- **Plugins**: `plugins/` - Plugin system implementation
 
 ## Configuration
 
-### TUI Configuration
-File: `roseApp/ui/config.json`
-```json
-{
-    "show_splash_screen": true,
-    "theme": "cassette-walkman",
-    "whitelists": {
-        "demo": "./whitelists/demo.txt"
-    }
-}
-```
+### Configuration Files
+- **Main Configuration**: `rose.config.yaml` - Application settings and defaults
+- **Default Configuration**: `rose.config.default.yaml` - Template configuration file
+- **Theme Configuration**: `rose.theme.default.yaml` - Default color theme
+- **Custom Theme**: `rose.theme.yaml` - User custom theme (optional)
 
 ### Environment Setup
 ```bash
@@ -190,6 +189,7 @@ export ROSE_LOG_LEVEL=DEBUG
 - **Bash integration tests**: `tests/bash_tests/` - Comprehensive command testing
 - **Test data**: Sample bag files in `roseApp/tests/`
 - **Example demos**: `example/` - Usage examples and performance testing
+- **Test scripts**: Individual test scripts for each command (`test_load.sh`, `test_extract.sh`, etc.)
 
 ### Test Commands
 ```bash
@@ -272,7 +272,14 @@ docker run -it --rm -v $(pwd):/app -w /app python:3.11 bash
 - **Integration**: Reference in `roseApp/tui/config.json` for TUI access
 - **CLI management**: Create, view, and manage via interactive CLI
 
-## Development Guidelines
+## Current State & Recent Changes
+
+### Recent Refactoring
+- **Interactive CLI removed**: The interactive CLI components (`roseApp/interactive/`) have been removed in favor of direct CLI commands
+- **UI components consolidated**: All UI logic moved to `roseApp/ui/` with module-specific UI files
+- **Theme system simplified**: YAML-based theme configuration with fallback defaults
+
+### Development Guidelines
 
 ### Code Style & Patterns
 - **CLI/Interactive Parity**: Same parameters and validation logic for both CLI and interactive modes
@@ -298,6 +305,9 @@ rose --help --verbose
 
 # Check cache directory
 ls ~/.cache/rose/
+
+# Run tests with debug output
+ROSE_LOG_LEVEL=DEBUG bash tests/bash_tests/test_load.sh
 ```
 
 ### Performance Testing
@@ -319,4 +329,11 @@ rose plugin run my_analyzer process --help
 
 # Install plugin from file
 rose plugin install plugins/my_custom_plugin.py
+
+# List available plugins
+rose plugin list
+
+# Enable/disable plugins
+rose plugin enable my_analyzer
+rose plugin disable my_analyzer
 ```

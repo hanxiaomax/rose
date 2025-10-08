@@ -14,10 +14,6 @@ import asyncio
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.table import Table
-from rich.panel import Panel
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
@@ -36,7 +32,7 @@ except ImportError:
     pd = None
 
 logger = get_logger("data")
-console = Console()
+# console deprecated in v2.0
 app = typer.Typer(help="Data manipulation commands for ROS bag files")
 
 
@@ -239,7 +235,7 @@ def _display_data_info(bag_info: ComprehensiveBagInfo, topics: List[TopicInfo], 
                     
                     # Create a simple table for sample data
                     sample_table = Table()
-                    sample_table.add_column("Index", style=get_color('muted'))
+                    sample_table.add_column("Index", style="cyan")
                     for col in sample_df.columns:
                         sample_table.add_column(col, style="white")
                     
@@ -337,7 +333,7 @@ class DataProcessor:
     """Main data processing class for bag file operations"""
     
     def __init__(self):
-        self.console = Console()
+        # console deprecated in v2.0
         self.parser = create_parser()
         self.cache_manager = create_bag_cache_manager()
         self.current_bag_info: Optional[ComprehensiveBagInfo] = None
@@ -681,7 +677,7 @@ def export(
                 from InquirerPy import inquirer
                 from InquirerPy.base.control import Choice
                 
-                console.print(f"\n[{get_color('info')}]No topics specified. Please select topics to export:[/{get_color('info')}]")
+                console.print(f"\n[cyan]No topics specified. Please select topics to export:[/cyan]")
                 selected_topics = inquirer.checkbox(
                     message="Select topics (Space to select, Enter to confirm):",
                     choices=[Choice(t, name=t) for t in available_topics],
@@ -690,7 +686,7 @@ def export(
                 ).execute()
                 
                 if not selected_topics:
-                    console.print(f"[{get_color('warning')}]No topics selected. Exiting.[/{get_color('warning')}]")
+                    console.print(f"[cyan]No topics selected. Exiting.[/cyan]")
                     return
                 
                 topics = selected_topics
@@ -904,7 +900,7 @@ def info(
                         
                         # Create a simple table for sample data
                         sample_table = Table()
-                        sample_table.add_column("Index", style=get_color('muted'))
+                        sample_table.add_column("Index", style="cyan")
                         for col in sample_df.columns:
                             sample_table.add_column(col, style="white")
                         

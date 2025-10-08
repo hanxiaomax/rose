@@ -49,19 +49,27 @@ def configure_logging(verbosity: int):
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)")
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (e.g., -v, -vv, -vvv)"),
+    prettify: bool = typer.Option(False, "--prettify", "-p", help="Prettify output for human reading (default is NDJSON)")
 ):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
-    # Set application mode to CLI (removing TUI support)
+    # Set application mode to CLI
     set_app_mode(AppMode.CLI)
+    
+    # Initialize output engine based on mode
+    # v2.0: Default is NDJSON (machine-readable), prettify is optional
+    from roseApp.core.output_engine import init_engine, OutputMode
+    mode = OutputMode.PRETTIFY if prettify else OutputMode.NDJSON
+    init_engine(mode)
         
     configure_logging(verbose)
     
-    # If no subcommand is provided, start interactive mode
+    # If no subcommand is provided, show error
+    # v2.0: Interactive mode has been removed
     if ctx.invoked_subcommand is None:
-        from roseApp.interactive.core import InteractiveRunner
-        runner = InteractiveRunner()
-        runner.run_interactive()
+        from roseApp.ui.common_ui import Message
+        Message.error("No command specified. Use --help for usage.")
+        raise typer.Exit(1)
     
 
 

@@ -8,18 +8,13 @@ import shutil
 from pathlib import Path
 from typing import Optional, List
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.text import Text
 
 from ..core.plugins import get_plugin_manager, BasePlugin, BaseScriptPlugin, PluginInfo, HookType, PluginType
 from ..core.directories import get_rose_directories
 from ..ui.common_ui import Message
-from ..ui.theme import get_color
 
 app = typer.Typer(help="Plugin management commands")
-console = Console()
+# console deprecated in v2.0
 
 
 @app.command(name="list")
@@ -68,7 +63,7 @@ def list_plugins(
     table.add_column("Description", style="white")
     
     if verbose:
-        table.add_column("Author", style=get_color('muted'))
+        table.add_column("Author", style="cyan")
         table.add_column("Hooks", style="yellow")
     
     for plugin in plugins:
@@ -152,20 +147,20 @@ def info(
     # Show different information based on plugin type
     if isinstance(plugin, BaseScriptPlugin):
         info_text.append("Plugin Type: Script Plugin\n", style="bold green")
-        info_text.append("Execution: Can be run as standalone script\n", style=get_color('muted'))
+        info_text.append("Execution: Can be run as standalone script\n", style="cyan")
     else:
         if info.supported_hooks:
             info_text.append("Supported Hooks:\n", style="bold")
             for hook in info.supported_hooks:
-                info_text.append(f"  • {hook.value}\n", style=get_color('muted'))
+                info_text.append(f"  • {hook.value}\n", style="cyan")
         else:
-            info_text.append("Supported Hooks: None\n", style=get_color('muted'))
+            info_text.append("Supported Hooks: None\n", style="cyan")
     
     # Show plugin file path
     if plugin_name in manager.plugin_paths:
-        info_text.append(f"\nFile: {manager.plugin_paths[plugin_name]}", style=get_color('muted'))
+        info_text.append(f"\nFile: {manager.plugin_paths[plugin_name]}", style="cyan")
     
-    panel = Panel(info_text, title=f"Plugin Information", border_style=get_color('primary'))
+    panel = Panel(info_text, title=f"Plugin Information", border_style="cyan")
     console.print(panel)
 
 

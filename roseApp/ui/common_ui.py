@@ -1,20 +1,14 @@
 """
-Common UI utilities and formatters for Rose CLI commands.
-Provides shared display formatting, progress indicators, and message templates.
+Common UI utilities and formatters for Rose CLI commands (v2.0).
+
+Simplified Message interface that works with both NDJSON and Prettify modes.
+No longer depends on Rich - uses OutputEngine for all output.
 """
 
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
-from rich.text import Text
-from rich.panel import Panel
-from rich.table import Table
-
-# Import theme system
-from .theme import get_color
 
 
 @dataclass
@@ -29,73 +23,81 @@ class DisplayConfig:
 
 
 class Message:
-    """Unified message interface with theme colors"""
+    """
+    Unified message interface - automatically adapts to output mode.
+    
+    This class works with the OutputEngine to provide consistent messaging
+    across both NDJSON (default) and Prettify modes.
+    
+    Usage:
+        Message.success("Operation complete")
+        Message.error("Something went wrong")
+        Message.info(f"Found {count} files")
+    
+    The console parameter is deprecated and ignored.
+    """
     
     @staticmethod
-    def _print_styled(text: str, color: str, console: Optional[Console] = None, bold: bool = False) -> None:
-        """Print styled text using theme colors"""
-        if console is None:
-            console = Console()
-        
-        style = f"bold {color}" if bold else color
-        console.print(f"[{style}]{text}[/{style}]")
-    
-    @staticmethod
-    def success(text: str, console: Optional[Console] = None) -> None:
+    def success(text: str, console: Optional[Any] = None) -> None:
         """Display success message"""
-        Message._print_styled(text, get_color('success'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.SUCCESS)
     
     @staticmethod
-    def error(text: str, console: Optional[Console] = None) -> None:
+    def error(text: str, console: Optional[Any] = None) -> None:
         """Display error message"""
-        Message._print_styled(text, get_color('error'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.ERROR)
     
     @staticmethod
-    def warning(text: str, console: Optional[Console] = None) -> None:
+    def warning(text: str, console: Optional[Any] = None) -> None:
         """Display warning message"""
-        Message._print_styled(text, get_color('warning'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.WARNING)
     
     @staticmethod
-    def info(text: str, console: Optional[Console] = None) -> None:
+    def info(text: str, console: Optional[Any] = None) -> None:
         """Display info message"""
-        Message._print_styled(text, get_color('info'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.INFO)
     
     @staticmethod
-    def primary(text: str, console: Optional[Console] = None) -> None:
+    def primary(text: str, console: Optional[Any] = None) -> None:
         """Display primary message"""
-        Message._print_styled(text, get_color('primary'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.PRIMARY)
     
     @staticmethod
-    def accent(text: str, console: Optional[Console] = None) -> None:
+    def accent(text: str, console: Optional[Any] = None) -> None:
         """Display accent message"""
-        Message._print_styled(text, get_color('accent'), console)
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.ACCENT)
     
-
     @staticmethod
-    def muted(text: str, console: Optional[Console] = None) -> None:
+    def muted(text: str, console: Optional[Any] = None) -> None:
         """Display muted message"""
-        Message._print_styled(text, get_color('muted'), console)
-
+        from roseApp.core.output_engine import get_engine, MessageLevel
+        engine = get_engine()
+        engine.print_message(text, MessageLevel.MUTED)
 
 
 class CommonUI:
-    """Shared UI utilities for consistent display across CLI commands."""
+    """
+    Shared UI utilities for consistent display across CLI commands.
+    
+    Note: Many methods are deprecated in v2.0 as they depend on Rich.
+    Use Message class for output instead.
+    """
     
     def __init__(self):
-        self.console = Console()
-    
-    @staticmethod
-    def get_theme_colors():
-        """Get theme colors (simplified).
-        
-        Returns dictionary of color mappings from theme.yaml.
-        This maintains compatibility with code expecting color access.
-        
-        Returns:
-            Dictionary of color name to Rich color value mappings
-        """
-        from .theme import list_colors
-        return list_colors()
+        # Console is deprecated, but kept for backward compatibility
+        pass
     
     @staticmethod
     def format_file_size(size_bytes: int) -> str:
@@ -131,125 +133,91 @@ class CommonUI:
         ratio = (1 - compressed_size / original_size) * 100
         return f"{ratio:.1f}%"
     
-
-    
-    def create_progress_bar(self, description: str = "Processing...", total: int = 100) -> Progress:
-        """Create a standard progress bar with theme colors."""
-        return Progress(
-            SpinnerColumn(),
-            TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-            BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=self.console
-        )
-    
     def display_file_list(self, files: List[Path], title: str = "Files") -> None:
-        """Display a list of files with sizes."""
+        """
+        Display a list of files with sizes.
+        
+        Simplified version using Message interface.
+        """
         if not files:
-            Message.info("No files found.", self.console)
+            Message.info("No files found.")
             return
         
-        Message.info(f"{title} ({len(files)}):", self.console)
+        Message.info(f"{title} ({len(files)}):")
         for file in files:
             if file.exists():
                 size = self.format_file_size(file.stat().st_size)
-                Message.accent(f"  • {file} ({size})", self.console)
+                Message.accent(f"  • {file} ({size})")
             else:
-                Message.warning(f"  • {file} (not found)", self.console)
+                Message.warning(f"  • {file} (not found)")
     
     def display_summary_table(self, data: Dict[str, Any], title: str = "Summary") -> None:
-        """Display key-value data in a formatted table."""
-        table = Table(title=title, show_header=False)
-        table.add_column("Key", style=get_color('accent'))
-        table.add_column("Value", style=get_color('info'))
+        """
+        Display key-value data in simple format.
         
+        v2.0: Simplified to text output, no Rich tables.
+        """
+        Message.primary(f"{title}:")
         for key, value in data.items():
-            table.add_row(str(key), str(value))
-        
-        self.console.print(table)
+            Message.info(f"  {key}: {value}")
     
     def display_topics_list(self, topics: List[str], message_types: Optional[Dict[str, str]] = None) -> None:
         """Display topics in a clean list format."""
         if not topics:
-            Message.info("No topics found.", self.console)
+            Message.info("No topics found.")
             return
         
-        Message.info(f"Topics ({len(topics)}):", self.console)
+        Message.info(f"Topics ({len(topics)}):")
         for topic in sorted(topics):
             if message_types and topic in message_types:
-                Message.accent(f"  • {topic} ({message_types[topic]})", self.console)
+                Message.accent(f"  • {topic} ({message_types[topic]})")
             else:
-                Message.accent(f"  • {topic}", self.console)
-    
-    def ask_confirmation(self, message: str, default: bool = False) -> bool:
-        """Standard confirmation prompt."""
-        from InquirerPy import inquirer
-        return inquirer.confirm(
-            message=message,
-            default=default
-        ).execute()
-    
-    def ask_file_path(self, message: str, must_exist: bool = True) -> Optional[str]:
-        """Standard file path prompt."""
-        from InquirerPy import inquirer
-        from InquirerPy.validator import PathValidator
-        
-        validator = PathValidator(is_file=True, message="File does not exist") if must_exist else None
-        
-        return inquirer.filepath(
-            message=message,
-            validate=validator
-        ).execute()
+                Message.accent(f"  • {topic}")
 
 
 class ProgressUI:
-    """Progress display utilities."""
+    """
+    Progress display utilities (v2.0 - simplified).
     
-    def __init__(self, console: Optional[Console] = None):
-        self.console = console or Console()
+    Note: Complex progress bars are deprecated.
+    Use engine.emit_progress() for progress updates.
+    """
     
-    def create_task_progress(self, description: str, total: int = 100) -> tuple[Progress, Any]:
-        """Create progress bar with task."""
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=self.console
-        )
-        task = progress.add_task(description, total=total)
-        return progress, task
+    def __init__(self, console: Optional[Any] = None):
+        pass
     
     def show_processing_summary(self, total_files: int, workers: int, operation: str) -> None:
         """Display processing summary."""
-        Message.info(f"Processing {total_files} file(s) with {workers} worker(s) ({operation})...", self.console)
+        Message.info(f"Processing {total_files} file(s) with {workers} worker(s) ({operation})...")
     
     def show_batch_results(self, success_count: int, fail_count: int, total_time: float) -> None:
         """Display batch processing results."""
-        Message.primary("Processing Summary:", self.console)
+        Message.primary("Processing Summary:")
         
         if success_count > 0:
-            Message.success(f"  Successful: {success_count}", self.console)
+            Message.success(f"  Successful: {success_count}")
         if fail_count > 0:
-            Message.error(f"  Failed: {fail_count}", self.console)
+            Message.error(f"  Failed: {fail_count}")
         
-        Message.info(f"  Total Time: {total_time:.2f}s", self.console)
+        Message.info(f"  Total Time: {total_time:.2f}s")
 
 
 class TableUI:
-    """Table display utilities."""
+    """
+    Table display utilities (v2.0 - simplified).
     
-    def __init__(self, console: Optional[Console] = None):
-        self.console = console or Console()
+    Note: Rich tables are deprecated. Use simple text lists instead.
+    """
+    
+    def __init__(self, console: Optional[Any] = None):
+        pass
     
     def create_topics_list(self, topics_data: List[Dict[str, Any]], verbose: bool = False) -> None:
         """Display topics as a list."""
         if not topics_data:
             return
             
-        Message.primary("Topics:", self.console)
+        Message.primary("Topics:")
         
         for i, topic in enumerate(topics_data, 1):
             name = topic.get('name', '')
@@ -260,18 +228,17 @@ class TableUI:
                 frequency = topic.get('frequency', 0)
                 size = CommonUI.format_file_size(topic.get('size_bytes', 0))
                 Message.info(
-                    f"  {i:2d}. {name} ({msg_type}) - {messages} messages @ {frequency:.1f} Hz ({size})",
-                    self.console
+                    f"  {i:2d}. {name} ({msg_type}) - {messages} messages @ {frequency:.1f} Hz ({size})"
                 )
             else:
-                Message.accent(f"  {i:2d}. {name} ({msg_type})", self.console)
+                Message.accent(f"  {i:2d}. {name} ({msg_type})")
     
     def display_compression_summary_list(self, results: List[Dict[str, Any]]) -> None:
         """Display compression results as a list."""
         if not results:
             return
             
-        Message.primary("Compression Results:", self.console)
+        Message.primary("Compression Results:")
         
         total_original = 0
         total_compressed = 0
@@ -287,8 +254,7 @@ class TableUI:
                 reduction = CommonUI.format_compression_ratio(original_size, compressed_size)
                 
                 Message.success(
-                    f"  {i:2d}. {filename}: {original_str} → {compressed_str} ({reduction})",
-                    self.console
+                    f"  {i:2d}. {filename}: {original_str} → {compressed_str} ({reduction})"
                 )
                 
                 total_original += original_size
@@ -300,6 +266,5 @@ class TableUI:
             total_reduction = CommonUI.format_compression_ratio(total_original, total_compressed)
             
             Message.success(
-                f"  TOTAL: {total_original_str} → {total_compressed_str} ({total_reduction})",
-                self.console
+                f"  TOTAL: {total_original_str} → {total_compressed_str} ({total_reduction})"
             )

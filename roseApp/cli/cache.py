@@ -12,13 +12,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.json import JSON
 
 from ..core.cache import get_cache, BagCacheEntry
-from ..ui.theme import get_color
 
 app = typer.Typer(name="cache", help="Cache management commands")
 
@@ -43,6 +38,8 @@ def cache_default(
         rose cache --verbose          # Show verbose information
     """
     if ctx.invoked_subcommand is None:
+        from ..core.output_engine import get_engine
+        engine = get_engine()
         console = Console()
         
         try:
@@ -69,6 +66,8 @@ def cache_export(
         rose cache export data.json --bag /path/to.bag       # Export bag cache
         rose cache export data.pkl --format pickle --messages # Export with messages
     """
+    from ..core.output_engine import get_engine
+    engine = get_engine()
     console = Console()
     
     try:
@@ -91,6 +90,8 @@ def cache_clear(
         rose cache clear --bag /path/to.bag   # Clear bag cache
         rose cache clear -y                   # Clear without confirmation
     """
+    from ..core.output_engine import get_engine
+    engine = get_engine()
     console = Console()
     
     try:
@@ -109,12 +110,13 @@ def _show_cache_info(cache, console, show_content, verbose):
     try:
         stats = cache.get_stats()
         
-        # Use new UI components
-        from ..ui.cache_ui import CacheUI
-        cache_ui = CacheUI()
-        
         # Display cache statistics
-        cache_ui.display_cache_stats(stats)
+        console.print("\n[bold cyan]Cache Statistics:[/bold cyan]")
+        console.print(f"  Total Entries: {stats.get('entry_count', 0) + stats.get('memory_entries', 0)}")
+        console.print(f"  Memory Cache: {stats.get('memory_entries', 0)}")
+        console.print(f"  Disk Cache: {stats.get('entry_count', 0)}")
+        console.print(f"  Cache Size: {_format_size(stats.get('cache_size_bytes', 0))}")
+        console.print()
         
         # Show cache entries
         _show_cache_entries(cache, console, show_content, verbose)
@@ -126,10 +128,6 @@ def _show_cache_info(cache, console, show_content, verbose):
 def _show_cache_entries(cache, console, show_content, verbose):
     """Show all cache entries"""
     try:
-        # Use new UI components
-        from ..ui.cache_ui import CacheUI
-        cache_ui = CacheUI()
-        
         # Get memory cache entries
         memory_entries = cache._memory_cache.items() if hasattr(cache, '_memory_cache') else []
         
@@ -152,11 +150,10 @@ def _show_cache_entries(cache, console, show_content, verbose):
         total_entries = len(memory_entries) + len(file_entries)
         
         if total_entries == 0:
-            cache_ui.display_cache_empty()
+            console.print("[yellow]Cache is empty[/yellow]")
             return
         
-        # Prepare cache entries for display
-        cache_entries = []
+        console.print(f"[bold cyan]Cache Entries ({total_entries}):[/bold cyan]\n")
         
         # Process memory cache entries
         for key, entry in memory_entries:
@@ -164,15 +161,11 @@ def _show_cache_entries(cache, console, show_content, verbose):
                 value = entry.value if hasattr(entry, 'value') else entry
                 if isinstance(value, BagCacheEntry):
                     bag_info = value.bag_info
-                    entry_data = {
-                        'file_path': getattr(bag_info, 'file_path', 'Unknown'),
-                        'size_bytes': value.file_size,
-                        'topics_count': len(getattr(bag_info, 'topics', [])),
-                        'messages_count': getattr(bag_info, 'total_messages', 0),
-                        'duration_seconds': getattr(bag_info, 'duration_seconds', 0),
-                        'modified_time': time.ctime(value.cache_timestamp)
-                    }
-                    cache_entries.append(entry_data)
+                    file_path = getattr(bag_info, 'file_path', 'Unknown')
+                    topics_count = len(getattr(bag_info, 'topics', []))
+                    duration = getattr(bag_info, 'duration_seconds', 0)
+                    console.print(f"  [cyan]•[/cyan] {file_path}")
+                    console.print(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
             except Exception:
                 continue
         
@@ -181,20 +174,13 @@ def _show_cache_entries(cache, console, show_content, verbose):
             try:
                 if isinstance(value, BagCacheEntry):
                     bag_info = value.bag_info
-                    entry_data = {
-                        'file_path': getattr(bag_info, 'file_path', 'Unknown'),
-                        'size_bytes': value.file_size,
-                        'topics_count': len(getattr(bag_info, 'topics', [])),
-                        'messages_count': getattr(bag_info, 'total_messages', 0),
-                        'duration_seconds': getattr(bag_info, 'duration_seconds', 0),
-                        'modified_time': time.ctime(value.cache_timestamp)
-                    }
-                    cache_entries.append(entry_data)
+                    file_path = getattr(bag_info, 'file_path', 'Unknown')
+                    topics_count = len(getattr(bag_info, 'topics', []))
+                    duration = getattr(bag_info, 'duration_seconds', 0)
+                    console.print(f"  [cyan]•[/cyan] {file_path}")
+                    console.print(f"    Topics: {topics_count}, Duration: {duration:.1f}s")
             except Exception:
                 continue
-        
-        # Display using new UI
-        cache_ui.display_cache_list(cache_entries)
         
     except Exception as e:
         console.print(f"[red]Error showing cache entries: {e}[/red]")
@@ -270,10 +256,6 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print("[yellow]No cache data to clear[/yellow]")
             return
         
-        # Use new UI components
-        from ..ui.cache_ui import CacheUI
-        cache_ui = CacheUI()
-        
         if bag_path:
             # Clear specific bag cache
             bag_path_obj = Path(bag_path)
@@ -288,14 +270,15 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print(f"[bold]Found cache for bag: {bag_path}[/bold]")
             
             if not skip_confirm:
-                if not cache_ui.display_cache_clear_confirmation([bag_path]):
+                confirm = typer.confirm("Clear this cache entry?")
+                if not confirm:
                     console.print("Operation cancelled")
                     return
             
             # Clear specific bag cache
             success = cache.delete(cache_key)
             if success:
-                cache_ui.display_cache_clear_success(1)
+                console.print(f"[green]✓ Successfully cleared cache for {bag_path}[/green]")
             else:
                 console.print(f"[red]✗ Failed to clear cache for {bag_path}[/red]")
         else:
@@ -303,13 +286,14 @@ def _clear_cache_entries(cache, console, bag_path, skip_confirm):
             console.print(f"[bold]Found {total_entries:,} cache entries[/bold]")
             
             if not skip_confirm:
-                if not cache_ui.display_cache_clear_all_confirmation():
+                confirm = typer.confirm(f"Clear all {total_entries} cache entries?")
+                if not confirm:
                     console.print("Operation cancelled")
                     return
             
             # Clear all cache
             cache.clear()
-            cache_ui.display_cache_clear_all_success(total_entries)
+            console.print(f"[green]✓ Successfully cleared {total_entries} cache entries[/green]")
             
     except Exception as e:
         console.print(f"[red]Error clearing cache: {e}[/red]")

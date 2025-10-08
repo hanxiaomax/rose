@@ -112,6 +112,18 @@ class RoseConfig(BaseSettings):
         description="Enable colored output"
     )
     
+    # ===== Output Settings =====
+    # v2.0: Default is NDJSON (machine-readable)
+    output_mode: str = Field(
+        default="ndjson",
+        description="Output mode: ndjson (structured events) or prettify (human-readable)"
+    )
+    
+    prettify: bool = Field(
+        default=False,
+        description="Prettify output for human reading (overrides output_mode)"
+    )
+    
     # ===== Directory Settings =====
     output_directory: str = Field(
         default="output",
@@ -153,6 +165,13 @@ class RoseConfig(BaseSettings):
         """Validate parallel workers count"""
         if v is not None and v < 1:
             raise ValueError("parallel_workers must be at least 1")
+        return v
+    
+    @validator('output_mode')
+    def validate_output_mode(cls, v):
+        """Validate output mode"""
+        if v not in ['ndjson', 'prettify']:
+            raise ValueError("output_mode must be 'ndjson' or 'prettify'")
         return v
     
     class Config:

@@ -14,12 +14,9 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 from ..core.parser import BagParser, ExtractOption
-from ..ui.common_ui import (
-    CommonUI, Message
-)
-from ..ui.theme import get_color
+from ..ui.common_ui import CommonUI, Message
 from ..core.util import set_app_mode, AppMode, get_logger
 from ..core.cache import create_bag_cache_manager
 from .util import check_and_load_bag_cache
@@ -298,7 +295,7 @@ async def _compress_bags_impl(
     verbose: bool
 ):
     """Implementation of compress command"""
-    console = Console()
+    # console deprecated in v2.0
     
     # Find bag files using patterns
     valid_bags = find_bag_files(input_bags)
@@ -395,15 +392,7 @@ async def _compress_bags_impl(
     results = []
     
     # Use ThreadPoolExecutor for parallel processing
-    with Progress(
-        SpinnerColumn(),
-        TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-        BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        console=console,
-        refresh_per_second=10
-    ) as progress:
+    with Progress() as progress:
         
         # Create tasks for each bag
         tasks = {}
@@ -469,15 +458,7 @@ async def _compress_bags_impl(
             Message.info("Validating compressed bag files...", console)
             
             validation_results = []
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}", style=get_color('primary')),
-                BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
-                TaskProgressColumn(style=get_color('info')),
-                TimeElapsedColumn(style=get_color('muted')),
-                console=console,
-                refresh_per_second=10
-            ) as progress:
+            with Progress() as progress:
                 
                 # Create validation tasks
                 validation_tasks = {}
