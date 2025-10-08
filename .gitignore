@@ -51,3 +51,7 @@ rose.config.yaml
 
 # Cleanup config
 .cleanrc.json
+.pypirc
+.verification_report
+.cursor/
+*.bag
