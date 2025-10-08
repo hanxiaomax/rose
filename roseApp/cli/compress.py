@@ -15,12 +15,9 @@ from typing import List, Optional
 import typer
 
 from ..core.parser import BagParser, ExtractOption
-from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
 from ..core.event_emitter import get_emitter
-
-# Set to CLI mode
-set_app_mode(AppMode.CLI)
 
 # Initialize logger
 logger = get_logger(__name__)

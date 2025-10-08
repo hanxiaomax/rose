@@ -6,7 +6,7 @@ Handles configuration and cache directories in user home directory
 import os
 from pathlib import Path
 from typing import Optional
-from .util import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

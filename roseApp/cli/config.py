@@ -13,11 +13,10 @@ from pathlib import Path
 from typing import Optional
 import typer
 
-from ..core.util import get_logger, set_app_mode, AppMode
+from ..core.logging import get_logger
 from ..core.event_emitter import get_emitter
 
-# Initialize
-set_app_mode(AppMode.CLI)
+# Initialize logger
 logger = get_logger(__name__)
 
 

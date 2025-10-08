@@ -15,8 +15,7 @@ import typer
 
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
-from ..core.util import set_app_mode, AppMode, get_logger
-from ..core.plugins import get_plugin_manager, HookType
+from ..core.logging import get_logger
 from ..core.errors import (
     RoseError,
     BagFileError,
@@ -27,9 +26,6 @@ from ..core.errors import (
 )
 from ..core.config import get_config
 from ..core.event_emitter import get_emitter
-
-# Set to CLI mode
-set_app_mode(AppMode.CLI)
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -51,15 +47,6 @@ def await_sync(coro):
 async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_index: bool = False, progress_callback=None) -> dict:
     """Load a single bag file into cache using parser directly"""
     try:
-        # Execute before_load hooks
-        plugin_manager = get_plugin_manager()
-        before_context = plugin_manager.create_plugin_context(
-            bag_path, 'load', 
-            verbose=verbose, 
-            build_index=build_index
-        )
-        plugin_manager.execute_hooks(HookType.BEFORE_LOAD, before_context)
-        
         # Check if already cached
         cache_manager = create_bag_cache_manager()
         cached_entry = cache_manager.get_analysis(bag_path)
@@ -84,16 +71,6 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
         
         if verbose:
             logger.info(f"Successfully loaded {bag_path} into cache in {elapsed_time:.3f}s")
-        
-        # Execute after_load hooks
-        after_context = plugin_manager.create_plugin_context(
-            bag_path, 'load',
-            bag_info=bag_info,
-            elapsed_time=elapsed_time,
-            verbose=verbose,
-            build_index=build_index
-        )
-        plugin_manager.execute_hooks(HookType.AFTER_LOAD, after_context)
         
         return {
             'path': str(bag_path),

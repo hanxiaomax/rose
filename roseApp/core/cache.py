@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import logging
 import tempfile
 
-from roseApp.core.util import get_logger
+from roseApp.core.logging import get_logger
 from .model import ComprehensiveBagInfo
 from .directories import get_cache_dir
 

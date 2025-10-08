@@ -8,7 +8,7 @@ import time
 
 # Local application imports
 from roseApp.core.parser import create_parser, FileExistsError
-from roseApp.core.util import TimeUtil, get_preferred_parser_type
+from roseApp.core.util import TimeUtil
 
 class BagStatus(Enum):
     IDLE = "IDLE"
@@ -276,7 +276,7 @@ class BagManager:
         Args:
             compression: Compression type ('none', 'bz2', 'lz4')
         """
-        from roseApp.core.util import validate_compression_type
+        from roseApp.core.errors import validate_compression_type
         
         is_valid, error_message = validate_compression_type(compression)
         if not is_valid:

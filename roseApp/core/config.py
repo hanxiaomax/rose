@@ -373,27 +373,27 @@ def get_config() -> RoseConfig:
         # Validate configuration
         validation = _config.validate_config()
         
-        # Output config loading status using EventEmitter
-        from .event_emitter import get_emitter
-        emitter = get_emitter()
+        # Log config loading status (before logging reconfiguration)
+        # Note: Use print for config loading messages since logging isn't configured yet
+        import sys
         
         if loaded_path:
-            emitter.emit_message(f"Config: {loaded_path}", level="info")
+            print(f"Config: {loaded_path}", file=sys.stderr)
         else:
-            emitter.emit_message(f"Config: Using defaults (no rose.config.yaml)", level="info")
+            print(f"Config: Using defaults (no rose.config.yaml)", file=sys.stderr)
         
         # Show validation warnings
         if validation['warnings']:
             for warning in validation['warnings']:
-                emitter.emit_message(f"Warning: {warning}", level="warning")
+                print(f"Warning: {warning}", file=sys.stderr)
         
         if not validation['valid']:
-            emitter.emit_message(f"Configuration validation failed:", level="error")
+            print(f"Configuration validation failed:", file=sys.stderr)
             for error in validation['errors']:
-                emitter.emit_message(f"  - {error}", level="error")
+                print(f"  - {error}", file=sys.stderr)
         
         # After config is loaded, reconfigure logging with the correct level
-        from .util import reconfigure_logging
+        from .logging import reconfigure_logging
         reconfigure_logging()
         
         # Now we can log with the correct level

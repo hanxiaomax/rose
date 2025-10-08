@@ -22,7 +22,7 @@ except ImportError:
 from rich.console import Console
 from rich.markdown import Markdown
 
-from .util import get_logger
+from .logging import get_logger
 
 _logger = get_logger("export_manager")
 
