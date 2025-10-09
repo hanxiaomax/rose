@@ -377,58 +377,52 @@ def extract(
             label="extraction_plan"
         )
         
-        # Extract bags
+        # Extract bags with real-time progress
         E.progress(40, "Starting extraction")
         results = []
         total_bags = len(valid_bags)
         
-        # Use ThreadPoolExecutor for parallel extraction
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit all tasks
-            future_to_bag = {}
-            for i, bag_path in enumerate(valid_bags):
-                # Silent progress callback in headless mode
-                def create_progress_callback(bag_name):
-                    def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                        if phase and verbose:
-                            logger.debug(f"{bag_name}: {phase}")
-                    return progress_callback
-                
-                progress_callback = create_progress_callback(bag_path.name)
-                future = executor.submit(
-                    await_sync, 
-                    extract_single_bag(bag_path, topics_to_extract, output_pattern, compression, yes, verbose, progress_callback)
-                )
-                future_to_bag[future] = bag_path
-            
-            # Collect results as they complete
-            completed = 0
-            for future in concurrent.futures.as_completed(future_to_bag):
-                bag_path = future_to_bag[future]
-                try:
-                    result = future.result()
-                    results.append(result)
-                    completed += 1
+        # Use ThreadPoolExecutor for parallel extraction with task context
+        # Using two-phase progress: submit (40-60%) + execute (60-100%)
+        with E.task("Extracting topics", steps=total_bags * 2) as task:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                # Submit all tasks with progress
+                future_to_bag = {}
+                for bag_path in valid_bags:
+                    # Silent progress callback in headless mode
+                    def create_progress_callback(bag_name):
+                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                            if phase and verbose:
+                                logger.debug(f"{bag_name}: {phase}")
+                        return progress_callback
                     
-                    # Emit progress
-                    percent = 40 + (completed / total_bags) * 50  # 40% to 90%
-                    E.progress(
-                        percent,
-                        f"Extracted {bag_path.name}",
-                        step=completed,
-                        total_steps=total_bags
+                    progress_callback = create_progress_callback(bag_path.name)
+                    future = executor.submit(
+                        await_sync, 
+                        extract_single_bag(bag_path, topics_to_extract, output_pattern, compression, yes, verbose, progress_callback)
                     )
-                    
-                except Exception as e:
-                    logger.error(f"Unexpected error extracting {bag_path}: {e}")
-                    results.append({
-                        'path': str(bag_path),
-                        'output_path': None,
-                        'status': 'error',
-                        'message': f"Unexpected error: {e}",
-                        'elapsed_time': 0.0
-                    })
-                    completed += 1
+                    future_to_bag[future] = bag_path
+                    # Report submission progress (first half of steps)
+                    task.step(f"Queued {bag_path.name}")
+                
+                # Collect results as they complete (second half of steps)
+                for future in concurrent.futures.as_completed(future_to_bag):
+                    bag_path = future_to_bag[future]
+                    try:
+                        result = future.result()
+                        results.append(result)
+                        task.step(f"Extracted {bag_path.name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Unexpected error extracting {bag_path}: {e}")
+                        results.append({
+                            'path': str(bag_path),
+                            'output_path': None,
+                            'status': 'error',
+                            'message': f"Unexpected error: {e}",
+                            'elapsed_time': 0.0
+                        })
+                        task.step(f"Failed {bag_path.name}")
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'extracted')

@@ -277,61 +277,46 @@ def load(
         results = []
         total_bags = len(valid_bags)
         
-        # Use ThreadPoolExecutor for parallel loading
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit all tasks
-            future_to_bag = {}
-            for i, bag_path in enumerate(valid_bags):
-                # Emit progress for submission
-                percent = (i / total_bags) * 100
-                E.progress(
-                    percent,
-                    f"Submitting {bag_path.name}",
-                    step=i+1,
-                    total=total_bags
-                )
-                
-                # Progress callback (silent in headless mode)
-                def create_progress_callback(bag_name):
-                    def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                        if phase and verbose:
-                            logger.debug(f"{bag_name}: {phase}")
-                    return progress_callback
-                
-                progress_callback = create_progress_callback(bag_path.name)
-                future = executor.submit(
-                    await_sync, 
-                    load_single_bag(bag_path, parser, verbose, build_index, progress_callback)
-                )
-                future_to_bag[future] = bag_path
-            
-            # Collect results as they complete
-            completed = 0
-            for future in concurrent.futures.as_completed(future_to_bag):
-                bag_path = future_to_bag[future]
-                try:
-                    result = future.result()
-                    results.append(result)
-                    completed += 1
+        # Use ThreadPoolExecutor for parallel loading with real-time progress
+        # Using task context for the entire process: submit + execute + collect
+        with E.task("Loading bags", steps=total_bags * 2) as task:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                # Submit all tasks with progress
+                future_to_bag = {}
+                for bag_path in valid_bags:
+                    # Progress callback (silent in headless mode)
+                    def create_progress_callback(bag_name):
+                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                            if phase and verbose:
+                                logger.debug(f"{bag_name}: {phase}")
+                        return progress_callback
                     
-                    # Emit progress
-                    percent = (completed / total_bags) * 100
-                    E.progress(
-                        percent,
-                        f"Loaded {bag_path.name}",
-                        step=completed,
-                        total=total_bags
+                    progress_callback = create_progress_callback(bag_path.name)
+                    future = executor.submit(
+                        await_sync, 
+                        load_single_bag(bag_path, parser, verbose, build_index, progress_callback)
                     )
-                    
-                except Exception as e:
-                    logger.error(f"Unexpected error loading {bag_path}: {e}")
-                    results.append({
-                        'path': str(bag_path),
-                        'status': 'error',
-                        'message': f"Unexpected error: {e}",
-                        'elapsed': 0.0
-                    })
-                    completed += 1
+                    future_to_bag[future] = bag_path
+                    # Report submission progress (first half of steps)
+                    task.step(f"Queued {bag_path.name}")
+                
+                # Collect results as they complete (second half of steps)
+                for future in concurrent.futures.as_completed(future_to_bag):
+                    bag_path = future_to_bag[future]
+                    try:
+                        result = future.result()
+                        results.append(result)
+                        task.step(f"Completed {bag_path.name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Unexpected error loading {bag_path}: {e}")
+                        results.append({
+                            'path': str(bag_path),
+                            'status': 'error',
+                            'message': f"Unexpected error: {e}",
+                            'elapsed': 0.0
+                        })
+                        task.step(f"Failed {bag_path.name}")
         
         # Calculate summary
         loaded_count = sum(1 for r in results if r['status'] == 'loaded')

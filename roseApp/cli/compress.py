@@ -309,67 +309,61 @@ def compress(
             label="compression_plan"
         )
         
-        # Perform compression
+        # Perform compression with real-time progress
         E.progress(30, "Starting compression")
         results = []
         total_bags = len(valid_bags)
         
-        # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit all compression tasks
-            futures = {}
-            for bag_path in valid_bags:
-                # Silent progress callback in headless mode
-                def create_progress_callback(bag_name):
-                    def callback(percent):
-                        if verbose:
-                            logger.debug(f"{bag_name}: {percent:.1f}%")
-                    return callback
-                
-                progress_callback = create_progress_callback(bag_path.name)
-                future = executor.submit(
-                    await_sync,
-                    compress_single_bag(
-                        bag_path, 
-                        output_pattern, 
-                        compression, 
-                        overwrite=yes, 
-                        verbose=verbose, 
-                        progress_callback=progress_callback,
-                        cache_manager=cache_manager
-                    )
-                )
-                futures[future] = bag_path
-            
-            # Collect results as they complete
-            completed = 0
-            for future in concurrent.futures.as_completed(futures):
-                bag_path = futures[future]
-                
-                try:
-                    result = future.result()
-                    results.append(result)
-                    completed += 1
+        # Use ThreadPoolExecutor with task context for real-time progress
+        # Two-phase progress: submit + execute
+        with E.task("Compressing bags", steps=total_bags * 2) as task:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                # Submit all compression tasks with progress
+                futures = {}
+                for bag_path in valid_bags:
+                    # Silent progress callback in headless mode
+                    def create_progress_callback(bag_name):
+                        def callback(percent):
+                            if verbose:
+                                logger.debug(f"{bag_name}: {percent:.1f}%")
+                        return callback
                     
-                    # Emit progress
-                    percent = 30 + (completed / total_bags) * 60  # 30% to 90%
-                    E.progress(
-                        percent,
-                        f"Compressed {bag_path.name}",
-                        step=completed,
-                        total_steps=total_bags
+                    progress_callback = create_progress_callback(bag_path.name)
+                    future = executor.submit(
+                        await_sync,
+                        compress_single_bag(
+                            bag_path, 
+                            output_pattern, 
+                            compression, 
+                            overwrite=yes, 
+                            verbose=verbose, 
+                            progress_callback=progress_callback,
+                            cache_manager=cache_manager
+                        )
                     )
+                    futures[future] = bag_path
+                    # Report submission progress (first half of steps)
+                    task.step(f"Queued {bag_path.name}")
+                
+                # Collect results as they complete (second half of steps)
+                for future in concurrent.futures.as_completed(futures):
+                    bag_path = futures[future]
                     
-                except Exception as e:
-                    logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
-                    results.append({
-                        'status': 'error',
-                        'input_file': str(bag_path),
-                        'output_file': None,
-                        'error': str(e),
-                        'message': str(e)
-                    })
-                    completed += 1
+                    try:
+                        result = future.result()
+                        results.append(result)
+                        task.step(f"Compressed {bag_path.name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
+                        results.append({
+                            'status': 'error',
+                            'input_file': str(bag_path),
+                            'output_file': None,
+                            'error': str(e),
+                            'message': str(e)
+                        })
+                        task.step(f"Failed {bag_path.name}")
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'compressed')
