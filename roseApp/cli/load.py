@@ -25,7 +25,7 @@ from ..core.errors import (
     ErrorContext
 )
 from ..core.config import get_config
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -146,6 +146,7 @@ def find_bag_files(input_patterns: List[str]) -> List[Path]:
 
 
 @app.command()
+@ndjson_command("load")
 def load(
     input: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: from config)"),
@@ -172,24 +173,19 @@ def load(
     start_total_time = time.time()
     
     try:
-        # Get event emitter
-        emitter = get_emitter()
-        emitter.set_context("load")
         
         # Get configuration with defaults
         config = get_config()
         
         # Check for input
         if not input:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 "No bag files specified",
-                details={
-                    "suggestions": [
-                        "Provide bag file patterns as arguments: rose load '*.bag'",
-                        "Use specific file paths: rose load input.bag"
-                    ]
-                }
+                suggestions=[
+                    "Provide bag file patterns as arguments: rose load '*.bag'",
+                    "Use specific file paths: rose load input.bag"
+                ]
             )
             raise typer.Exit(1)
         
@@ -205,23 +201,21 @@ def load(
         valid_bags = find_bag_files(input)
         
         if not valid_bags:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_FOUND",
                 "No valid bag files found",
-                details={
-                    "patterns": input,
-                    "suggestions": [
-                        "Check the file path",
-                        "Ensure files have .bag extension",
-                        "Try using absolute paths"
-                    ]
-                }
+                patterns=input,
+                suggestions=[
+                    "Check the file path",
+                    "Ensure files have .bag extension",
+                    "Try using absolute paths"
+                ]
             )
             raise typer.Exit(1)
         
         # Emit discovered bags
-        emitter.emit_data(
-            data=[
+        E.data(
+            [
                 {
                     "path": str(bag),
                     "size_mb": bag.stat().st_size / 1024 / 1024 if bag.exists() else 0,
@@ -235,8 +229,8 @@ def load(
         
         # Handle dry run
         if dry_run:
-            emitter.emit_data(
-                data={
+            E.data(
+                {
                     "build_index": build_index,
                     "workers": workers,
                     "force": force,
@@ -244,7 +238,7 @@ def load(
                 },
                 label="load_plan"
             )
-            emitter.emit_done({
+            E.done({
                 "dry_run": True,
                 "would_load": len(valid_bags)
             })
@@ -259,8 +253,8 @@ def load(
         workers = min(workers, len(valid_bags))
         
         # Emit loading plan
-        emitter.emit_data(
-            data={
+        E.data(
+            {
                 "total_bags": len(valid_bags),
                 "workers": workers,
                 "build_index": build_index,
@@ -290,11 +284,11 @@ def load(
             for i, bag_path in enumerate(valid_bags):
                 # Emit progress for submission
                 percent = (i / total_bags) * 100
-                emitter.emit_progress(
+                E.progress(
                     percent,
                     f"Submitting {bag_path.name}",
                     step=i+1,
-                    total_steps=total_bags
+                    total=total_bags
                 )
                 
                 # Progress callback (silent in headless mode)
@@ -322,11 +316,11 @@ def load(
                     
                     # Emit progress
                     percent = (completed / total_bags) * 100
-                    emitter.emit_progress(
+                    E.progress(
                         percent,
                         f"Loaded {bag_path.name}",
                         step=completed,
-                        total_steps=total_bags
+                        total=total_bags
                     )
                     
                 except Exception as e:
@@ -347,8 +341,8 @@ def load(
         total_time = time.time() - start_total_time
         
         # Emit detailed results
-        emitter.emit_data(
-            data=[
+        E.data(
+            [
                 {
                     "path": r['path'],
                     "status": r['status'],
@@ -363,7 +357,7 @@ def load(
         )
         
         # Emit done event
-        emitter.emit_done({
+        E.done({
             "loaded_files": loaded_count,
             "cached_files": cached_count,
             "failed_files": error_count,
@@ -380,16 +374,14 @@ def load(
     except typer.Exit:
         raise
     except RoseError as e:
-        # Emit error event for headless mode
-        emitter = get_emitter()
-        
         # Get error code name
         error_code_name = e.error_code.name if hasattr(e, 'error_code') else 'ROSE_ERROR'
         
-        emitter.emit_error(
+        # Emit error event
+        E.error(
             code=error_code_name,
             message=str(e),
-            details={'verbose': verbose or False}
+            verbose=verbose or False
         )
         
         # Use unified error handler for Rose errors
@@ -398,11 +390,10 @@ def load(
     
     except Exception as e:
         # Emit error event for unexpected errors
-        emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             code=type(e).__name__.upper(),
             message=str(e),
-            details={'verbose': verbose or False}
+            verbose=verbose or False
         )
         
         # Use unified error handler

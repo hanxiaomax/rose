@@ -11,7 +11,7 @@ import typer
 from ..core.model import AnalysisLevel
 from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -32,6 +32,7 @@ def filter_topics(topic_list, pattern, exclude_pattern=None):
 
 
 @app.command()
+@ndjson_command("inspect")
 def inspect(
     bag_path: Optional[Path] = typer.Argument(None, help="Path to the ROS bag file"),
     topics_filter: Optional[str] = typer.Option(None, "--topics", "-t", help="Filter topics by regex pattern"),
@@ -55,12 +56,11 @@ def inspect(
     """
     try:
         # Get event emitter
-        emitter = get_emitter()
-        emitter.set_context("inspect")
+    # Using global E emitter (context set by @ndjson_command)
         
         # Validate bag file exists
         if not bag_path:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 "Bag file path is required",
                 details={"suggestions": ["Provide a bag file path: rose inspect demo.bag"]}
@@ -68,7 +68,7 @@ def inspect(
             raise typer.Exit(1)
         
         if not bag_path.exists():
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_FOUND",
                 f"Bag file not found: {bag_path}",
                 details={
@@ -87,7 +87,7 @@ def inspect(
         
         # Check if bag is in cache
         if cached_entry is None:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_CACHED",
                 f"Bag file not in cache: {bag_path}",
                 details={
@@ -101,18 +101,18 @@ def inspect(
             raise typer.Exit(1)
         
         # Emit progress: starting inspection
-        emitter.emit_progress(0, "Starting inspection")
+        E.progress(0, "Starting inspection")
         
         # Convert cached bag info to result format
         bag_info = cached_entry.bag_info
         
         # Refresh statistics from DataFrames if available
         if bag_info.has_any_dataframes():
-            emitter.emit_progress(30, "Refreshing statistics")
+            E.progress(30, "Refreshing statistics")
             bag_info.refresh_all_statistics_from_dataframes()
         
         # Emit bag metadata
-        emitter.emit_progress(50, "Analyzing metadata")
+        E.progress(50, "Analyzing metadata")
         metadata = {
             'file_path': bag_info.file_path,
             'file_name': Path(bag_info.file_path).name,
@@ -126,7 +126,7 @@ def inspect(
             'has_dataframes': bag_info.has_any_dataframes()
         }
         
-        emitter.emit_data(
+        E.data(
             data=metadata,
             label="metadata"
         )
@@ -141,7 +141,7 @@ def inspect(
             filtered_topic_names = all_topic_names
         
         # Emit progress: analyzing topics
-        emitter.emit_progress(70, "Analyzing topics")
+        E.progress(70, "Analyzing topics")
         
         # Convert topics to output format
         topics_output = []
@@ -182,7 +182,7 @@ def inspect(
             topics_output.sort(key=lambda t: t.get('size_bytes', 0), reverse=reverse_sort)
         
         # Emit topics data
-        emitter.emit_data(
+        E.data(
             data=topics_output,
             label="topics",
             count=len(topics_output)
@@ -190,7 +190,7 @@ def inspect(
         
         # Add field analysis if requested
         if show_fields and len(bag_info.message_types) > 0:
-            emitter.emit_progress(90, "Analyzing fields")
+            E.progress(90, "Analyzing fields")
             
             field_analysis = {}
             for topic_info_obj in bag_info.topics:
@@ -207,15 +207,15 @@ def inspect(
                         }
             
             if field_analysis:
-                emitter.emit_data(
+                E.data(
                     data=field_analysis,
                     label="fields"
                 )
         
         # Emit done event
-        emitter.emit_progress(100, "Inspection complete")
+        E.progress(100, "Inspection complete")
         
-        emitter.emit_done({
+        E.done({
             "topics_count": len(topics_output),
             "total_topics": len(bag_info.topics),
             "filtered": topics_filter is not None,
@@ -229,7 +229,7 @@ def inspect(
     except Exception as e:
         # Emit error event
         emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             code=type(e).__name__.upper(),
             message=str(e),
             details={'verbose': verbose or False}

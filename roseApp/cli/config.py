@@ -14,7 +14,7 @@ from typing import Optional
 import typer
 
 from ..core.logging import get_logger
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 app = typer.Typer(help="Configuration management commands")
 
 @app.command()
+@ndjson_command("config-init")
 def init(
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing configuration file")
 ):
@@ -32,8 +33,7 @@ def init(
     This command creates the Rose configuration directory and copies the default
     configuration template.
     """
-    emitter = get_emitter()
-    emitter.set_context("config")
+    # Using global E emitter (context set by @ndjson_command)
     
     # Fixed output location
     rose_dir = Path.home() / ".rose"
@@ -41,7 +41,7 @@ def init(
     
     # Check if file already exists
     if config_file.exists() and not force:
-        emitter.emit_data(
+        E.data(
             data={
                 "config_file": str(config_file),
                 "exists": True,
@@ -49,7 +49,7 @@ def init(
             },
             label="init_check"
         )
-        emitter.emit_error(
+        E.error(
             "CONFIG_EXISTS",
             f"Configuration file already exists: {config_file}",
             details={
@@ -80,7 +80,7 @@ def init(
                 break
         
         if not template_file:
-            emitter.emit_error(
+            E.error(
                 "TEMPLATE_NOT_FOUND",
                 "Could not find rose.config.default.yaml template",
                 details={
@@ -90,7 +90,7 @@ def init(
             raise typer.Exit(1)
         
         # Emit initialization plan
-        emitter.emit_data(
+        E.data(
             data={
                 "rose_dir": str(rose_dir),
                 "config_file": str(config_file),
@@ -105,7 +105,7 @@ def init(
         shutil.copy2(template_file, config_file)
         
         # Emit success
-        emitter.emit_done({
+        E.done({
             "config_file": str(config_file),
             "template_file": str(template_file),
             "created_dir": created_dir,
@@ -115,7 +115,7 @@ def init(
     except typer.Exit:
         raise
     except Exception as e:
-        emitter.emit_error(
+        E.error(
             "CONFIG_INIT_ERROR",
             f"Error initializing configuration: {str(e)}",
             details={"config_file": str(config_file)}
@@ -124,6 +124,7 @@ def init(
         raise typer.Exit(1)
 
 @app.command()
+@ndjson_command("config-edit")
 def edit():
     """
     Edit Rose configuration file in your default editor.
@@ -133,14 +134,13 @@ def edit():
     
     Note: This command is interactive and may not work in pure headless environments.
     """
-    emitter = get_emitter()
-    emitter.set_context("config")
+    # Using global E emitter (context set by @ndjson_command)
     
     config_file = Path.home() / ".rose" / "rose.config.yaml"
     
     # Check if config file exists
     if not config_file.exists():
-        emitter.emit_error(
+        E.error(
             "CONFIG_NOT_FOUND",
             f"Configuration file not found: {config_file}",
             details={
@@ -154,7 +154,7 @@ def edit():
     editor = _find_editor()
     
     if not editor:
-        emitter.emit_error(
+        E.error(
             "NO_EDITOR",
             "No suitable editor found",
             details={
@@ -171,7 +171,7 @@ def edit():
     
     try:
         # Emit edit plan
-        emitter.emit_data(
+        E.data(
             data={
                 "config_file": str(config_file),
                 "editor": editor,
@@ -183,7 +183,7 @@ def edit():
         result = subprocess.run([editor, str(config_file)])
         
         # Emit done
-        emitter.emit_done({
+        E.done({
             "config_file": str(config_file),
             "editor": editor,
             "exit_code": result.returncode,
@@ -191,14 +191,14 @@ def edit():
         })
         
     except KeyboardInterrupt:
-        emitter.emit_error(
+        E.error(
             "EDIT_CANCELLED",
             "Editor cancelled by user",
             details={"config_file": str(config_file)}
         )
         raise typer.Exit(1)
     except Exception as e:
-        emitter.emit_error(
+        E.error(
             "EDIT_ERROR",
             f"Error opening editor: {str(e)}",
             details={

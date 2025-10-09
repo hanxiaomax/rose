@@ -14,12 +14,13 @@ from typing import Optional, List, Dict, Any
 import typer
 
 from ..core.cache import get_cache, BagCacheEntry
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 app = typer.Typer(name="cache", help="Cache management commands")
 
 
 @app.callback(invoke_without_command=True)
+@ndjson_command("cache")
 def cache_default(
     ctx: typer.Context,
     show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content"),
@@ -28,22 +29,19 @@ def cache_default(
     """Show cache information (default command when no subcommand is provided)"""
     if ctx.invoked_subcommand is None:
         try:
-            emitter = get_emitter()
-            emitter.set_context("cache")
-            
             cache = get_cache()
             _show_cache_info(cache, show_content, verbose)
         except Exception as e:
-            emitter = get_emitter()
-            emitter.emit_error(
+            E.error(
                 "CACHE_ERROR",
                 f"Error showing cache: {str(e)}",
-                details={"operation": "show"}
+                operation="show"
             )
             raise typer.Exit(1)
 
 
 @app.command("export")
+@ndjson_command("cache-export")
 def cache_export(
     output_file: str = typer.Argument(..., help="Output file path"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Cache key or bag file name to export"),
@@ -53,39 +51,33 @@ def cache_export(
 ):
     """Export cache entries to file"""
     try:
-        emitter = get_emitter()
-        emitter.set_context("cache")
-        
         cache = get_cache()
         _export_cache_entries(cache, output_file, name, bag_path, format, include_messages)
     except Exception as e:
-        emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             "CACHE_EXPORT_ERROR",
             f"Error exporting cache: {str(e)}",
-            details={"output_file": output_file, "format": format}
+            output_file=output_file,
+            format=format
         )
         raise typer.Exit(1)
 
 
 @app.command("clear")
+@ndjson_command("cache-clear")
 def cache_clear(
     bag_path: Optional[str] = typer.Option(None, "--bag", "-b", help="Clear cache for specific bag file"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation (headless mode)")
 ):
     """Clear cache data"""
     try:
-        emitter = get_emitter()
-        emitter.set_context("cache")
-        
         cache = get_cache()
         _clear_cache_entries(cache, bag_path, yes)
     except Exception as e:
-        emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             "CACHE_CLEAR_ERROR",
             f"Error clearing cache: {str(e)}",
-            details={"bag_path": bag_path}
+            bag_path=bag_path
         )
         raise typer.Exit(1)
 
@@ -97,7 +89,7 @@ def cache_clear(
 def _show_cache_info(cache, show_content, verbose):
     """Show cache information and entries"""
     try:
-        emitter = get_emitter()
+        # Using global E emitter
         stats = cache.get_stats()
         
         # Get all cache entries
@@ -129,7 +121,7 @@ def _show_cache_info(cache, show_content, verbose):
                 continue
         
         # Emit cache info as data event
-        emitter.emit_data(
+        E.data(
             data={
                 "stats": {
                     "total_entries": stats.get('entry_count', 0) + stats.get('memory_entries', 0),
@@ -145,13 +137,13 @@ def _show_cache_info(cache, show_content, verbose):
         )
         
         # Emit done event
-        emitter.emit_done({
+        E.done({
             "entries_count": len(entries_data)
         })
         
     except Exception as e:
-        emitter = get_emitter()
-        emitter.emit_error(
+        # Using global E emitter
+        E.error(
             "CACHE_INFO_ERROR",
             f"Error getting cache info: {str(e)}"
         )
@@ -161,19 +153,19 @@ def _show_cache_info(cache, show_content, verbose):
 def _clear_cache_entries(cache, bag_path, skip_confirm):
     """Clear cache entries with optional bag path filtering"""
     try:
-        emitter = get_emitter()
+        # Using global E emitter
         stats = cache.get_stats()
         total_entries = stats.get('entry_count', 0) + stats.get('memory_entries', 0)
         
         if total_entries == 0:
-            emitter.emit_data(
+            E.data(
                 data={
                     "entries_to_clear": 0,
                     "size_to_free_mb": 0
                 },
                 label="clear_plan"
             )
-            emitter.emit_done({
+            E.done({
                 "cleared_entries": 0,
                 "freed_mb": 0
             })
@@ -189,7 +181,7 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             
             cached_data = cache.get(cache_key)
             if not cached_data:
-                emitter.emit_data(
+                E.data(
                     data={
                         "entries_to_clear": 0,
                         "bag_path": str(bag_path),
@@ -197,14 +189,14 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
                     },
                     label="clear_plan"
                 )
-                emitter.emit_done({
+                E.done({
                     "cleared_entries": 0,
                     "freed_mb": 0
                 })
                 return
             
             # Emit clear plan
-            emitter.emit_data(
+            E.data(
                 data={
                     "entries_to_clear": 1,
                     "size_to_free_mb": size_to_free_mb,
@@ -216,7 +208,7 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             
             # In headless mode, skip_confirm should be True
             if not skip_confirm:
-                emitter.emit_error(
+                E.error(
                     "CONFIRMATION_REQUIRED",
                     "Interactive confirmation not supported in headless mode. Use --yes flag.",
                     details={"bag_path": str(bag_path)}
@@ -225,14 +217,14 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             
             success = cache.delete(cache_key)
             
-            emitter.emit_done({
+            E.done({
                 "cleared_entries": 1 if success else 0,
                 "freed_mb": size_to_free_mb if success else 0,
                 "bag_path": str(bag_path)
             })
         else:
             # Clear all cache
-            emitter.emit_data(
+            E.data(
                 data={
                     "entries_to_clear": total_entries,
                     "size_to_free_mb": size_to_free_mb,
@@ -243,7 +235,7 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             
             # In headless mode, skip_confirm should be True
             if not skip_confirm:
-                emitter.emit_error(
+                E.error(
                     "CONFIRMATION_REQUIRED",
                     "Interactive confirmation not supported in headless mode. Use --yes flag.",
                     details={"total_entries": total_entries}
@@ -252,7 +244,7 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             
             cache.clear()
             
-            emitter.emit_done({
+            E.done({
                 "cleared_entries": total_entries,
                 "freed_mb": size_to_free_mb
             })
@@ -260,8 +252,8 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
     except typer.Exit:
         raise
     except Exception as e:
-        emitter = get_emitter()
-        emitter.emit_error(
+        # Using global E emitter
+        E.error(
             "CACHE_CLEAR_ERROR",
             f"Error clearing cache: {str(e)}",
             details={"bag_path": bag_path}
@@ -272,13 +264,13 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
 def _export_cache_entries(cache, output_file, name, bag_path, format, include_messages):
     """Export cache entries to file"""
     try:
-        emitter = get_emitter()
+        # Using global E emitter
         
         # Get all cache entries
         all_entries = _get_all_cache_entries(cache)
         
         if not all_entries:
-            emitter.emit_data(
+            E.data(
                 data={
                     "output_file": output_file,
                     "format": format,
@@ -286,7 +278,7 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
                 },
                 label="export_plan"
             )
-            emitter.emit_done({
+            E.done({
                 "exported_file": output_file,
                 "format": format,
                 "entries_exported": 0
@@ -318,7 +310,7 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
             all_entries = filtered_entries
         
         # Emit export plan
-        emitter.emit_data(
+        E.data(
             data={
                 "output_file": output_file,
                 "format": format,
@@ -343,14 +335,14 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
             with open(output_path, 'wb') as f:
                 pickle.dump(export_data, f)
         else:
-            emitter.emit_error(
+            E.error(
                 "INVALID_FORMAT",
                 f"Unsupported export format: {format}",
                 details={"format": format, "supported": ["json", "yaml", "pickle"]}
             )
             raise typer.Exit(1)
         
-        emitter.emit_done({
+        E.done({
             "exported_file": str(output_path),
             "format": format,
             "entries_exported": len(all_entries),
@@ -360,8 +352,8 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
     except typer.Exit:
         raise
     except Exception as e:
-        emitter = get_emitter()
-        emitter.emit_error(
+        # Using global E emitter
+        E.error(
             "CACHE_EXPORT_ERROR",
             f"Error exporting cache: {str(e)}",
             details={"output_file": output_file, "format": format}

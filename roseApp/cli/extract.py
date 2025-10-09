@@ -17,7 +17,7 @@ import typer
 from ..core.parser import BagParser, ExtractOption
 from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -171,6 +171,7 @@ async def extract_single_bag(
 
 
 @app.command()
+@ndjson_command("extract")
 def extract(
     input_bags: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
     topics: Optional[List[str]] = typer.Option(None, "--topics", help="Topics to keep (supports fuzzy matching, can be used multiple times)"),
@@ -198,12 +199,11 @@ def extract(
     
     try:
         # Get event emitter
-        emitter = get_emitter()
-        emitter.set_context("extract")
+    # Using global E emitter (context set by @ndjson_command)
         
         # Validate input arguments
         if not input_bags:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 "No bag files specified",
                 details={"suggestions": ["Provide bag file patterns: rose extract '*.bag' --topics gps"]}
@@ -211,7 +211,7 @@ def extract(
             raise typer.Exit(1)
         
         if not topics:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 "No topics specified",
                 details={"suggestions": ["Use --topics to specify topics: rose extract demo.bag --topics gps imu"]}
@@ -221,7 +221,7 @@ def extract(
         # Validate compression option
         valid_compression = ["none", "bz2", "lz4"]
         if compression not in valid_compression:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 f"Invalid compression: {compression}",
                 details={"valid_options": valid_compression}
@@ -229,11 +229,11 @@ def extract(
             raise typer.Exit(1)
         
         # Find bag files using patterns
-        emitter.emit_progress(10, "Finding bag files")
+        E.progress(10, "Finding bag files")
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_FOUND",
                 "No bag files found",
                 details={"patterns": input_bags}
@@ -241,14 +241,14 @@ def extract(
             raise typer.Exit(1)
         
         # Emit found bags
-        emitter.emit_data(
+        E.data(
             data=[{"path": str(bag), "size_mb": bag.stat().st_size / 1024 / 1024} for bag in valid_bags],
             label="found_bags",
             count=len(valid_bags)
         )
         
         # Check if bags are loaded in cache
-        emitter.emit_progress(20, "Checking cache")
+        E.progress(20, "Checking cache")
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
         
@@ -258,7 +258,7 @@ def extract(
                 uncached_bags.append(str(bag_path))
         
         if uncached_bags:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_CACHED",
                 f"{len(uncached_bags)} bag(s) not in cache",
                 details={
@@ -278,7 +278,7 @@ def extract(
             output_pattern = output
         
         # Get all unique topics from all bags
-        emitter.emit_progress(30, "Analyzing topics")
+        E.progress(30, "Analyzing topics")
         all_topics_set = set()
         for bag_path in valid_bags:
             cached_entry = cache_manager.get_analysis(bag_path)
@@ -289,7 +289,7 @@ def extract(
         
         all_topics = list(all_topics_set)
         if not all_topics:
-            emitter.emit_error(
+            E.error(
                 "NO_TOPICS",
                 "No topics found in cached bag analysis",
                 details={"bags": [str(b) for b in valid_bags]}
@@ -308,7 +308,7 @@ def extract(
             operation = "including"
         
         if not topics_to_extract:
-            emitter.emit_error(
+            E.error(
                 "NO_MATCHING_TOPICS",
                 f"No topics match the patterns: {', '.join(topics)}",
                 details={
@@ -320,7 +320,7 @@ def extract(
             raise typer.Exit(1)
         
         # Emit topics data
-        emitter.emit_data(
+        E.data(
             data={
                 "all_topics": all_topics,
                 "topics_to_extract": topics_to_extract,
@@ -348,12 +348,12 @@ def extract(
                     "output": preview_output
                 })
             
-            emitter.emit_data(
+            E.data(
                 data=preview_outputs,
                 label="extraction_plan"
             )
             
-            emitter.emit_done({
+            E.done({
                 "dry_run": True,
                 "would_extract": len(valid_bags),
                 "topics_count": len(topics_to_extract)
@@ -366,7 +366,7 @@ def extract(
         workers = min(workers, len(valid_bags))
         
         # Emit extraction plan
-        emitter.emit_data(
+        E.data(
             data={
                 "total_bags": len(valid_bags),
                 "workers": workers,
@@ -378,7 +378,7 @@ def extract(
         )
         
         # Extract bags
-        emitter.emit_progress(40, "Starting extraction")
+        E.progress(40, "Starting extraction")
         results = []
         total_bags = len(valid_bags)
         
@@ -412,7 +412,7 @@ def extract(
                     
                     # Emit progress
                     percent = 40 + (completed / total_bags) * 50  # 40% to 90%
-                    emitter.emit_progress(
+                    E.progress(
                         percent,
                         f"Extracted {bag_path.name}",
                         step=completed,
@@ -436,8 +436,8 @@ def extract(
         total_time = time.time() - start_total_time
         
         # Emit detailed results
-        emitter.emit_progress(95, "Finalizing")
-        emitter.emit_data(
+        E.progress(95, "Finalizing")
+        E.data(
             data=[
                 {
                     "path": r['path'],
@@ -453,8 +453,8 @@ def extract(
         )
         
         # Emit done event
-        emitter.emit_progress(100, "Extraction complete")
-        emitter.emit_done({
+        E.progress(100, "Extraction complete")
+        E.done({
             "extracted_files": success_count,
             "failed_files": error_count,
             "total_files": len(results),
@@ -472,8 +472,7 @@ def extract(
         raise
     except Exception as e:
         # Emit error event
-        emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             code=type(e).__name__.upper(),
             message=str(e),
             details={'verbose': verbose}

@@ -17,7 +17,7 @@ import typer
 from ..core.parser import BagParser, ExtractOption
 from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
-from ..core.event_emitter import get_emitter
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -165,6 +165,7 @@ async def compress_single_bag(
 
 
 @app.command()
+@ndjson_command("compress")
 def compress(
     input_bags: List[str] = typer.Argument(..., help="Bag file patterns (supports glob and regex)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output pattern (use {input} for input filename, {timestamp} for timestamp, {compression} for compression type)"),
@@ -189,13 +190,12 @@ def compress(
     
     try:
         # Get event emitter
-        emitter = get_emitter()
-        emitter.set_context("compress")
+    # Using global E emitter (context set by @ndjson_command)
         
         # Validate compression option
         valid_compression = ["bz2", "lz4"]
         if compression not in valid_compression:
-            emitter.emit_error(
+            E.error(
                 "INVALID_ARGUMENT",
                 f"Invalid compression: {compression}",
                 details={"valid_options": valid_compression}
@@ -203,11 +203,11 @@ def compress(
             raise typer.Exit(1)
         
         # Find bag files using patterns
-        emitter.emit_progress(10, "Finding bag files")
+        E.progress(10, "Finding bag files")
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_FOUND",
                 "No bag files found",
                 details={"patterns": input_bags}
@@ -215,7 +215,7 @@ def compress(
             raise typer.Exit(1)
         
         # Emit found bags
-        emitter.emit_data(
+        E.data(
             data=[
                 {
                     "path": str(bag),
@@ -228,7 +228,7 @@ def compress(
         )
         
         # Check if bags are loaded in cache
-        emitter.emit_progress(20, "Checking cache")
+        E.progress(20, "Checking cache")
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
         
@@ -238,7 +238,7 @@ def compress(
                 uncached_bags.append(str(bag_path))
         
         if uncached_bags:
-            emitter.emit_error(
+            E.error(
                 "BAG_NOT_CACHED",
                 f"{len(uncached_bags)} bag(s) not in cache",
                 details={
@@ -279,12 +279,12 @@ def compress(
                     "compression": compression
                 })
             
-            emitter.emit_data(
+            E.data(
                 data=preview_outputs,
                 label="compression_plan"
             )
             
-            emitter.emit_done({
+            E.done({
                 "dry_run": True,
                 "would_compress": len(valid_bags),
                 "compression": compression
@@ -299,7 +299,7 @@ def compress(
             workers = max(1, min(workers, len(valid_bags), 6))  # Cap at 6 workers max
         
         # Emit compression plan
-        emitter.emit_data(
+        E.data(
             data={
                 "total_bags": len(valid_bags),
                 "workers": workers,
@@ -310,7 +310,7 @@ def compress(
         )
         
         # Perform compression
-        emitter.emit_progress(30, "Starting compression")
+        E.progress(30, "Starting compression")
         results = []
         total_bags = len(valid_bags)
         
@@ -353,7 +353,7 @@ def compress(
                     
                     # Emit progress
                     percent = 30 + (completed / total_bags) * 60  # 30% to 90%
-                    emitter.emit_progress(
+                    E.progress(
                         percent,
                         f"Compressed {bag_path.name}",
                         step=completed,
@@ -384,8 +384,8 @@ def compress(
         )
         
         # Emit detailed results
-        emitter.emit_progress(95, "Finalizing")
-        emitter.emit_data(
+        E.progress(95, "Finalizing")
+        E.data(
             data=[
                 {
                     "input_file": r['input_file'],
@@ -404,8 +404,8 @@ def compress(
         )
         
         # Emit done event
-        emitter.emit_progress(100, "Compression complete")
-        emitter.emit_done({
+        E.progress(100, "Compression complete")
+        E.done({
             "compressed_files": success_count,
             "failed_files": error_count,
             "total_files": len(results),
@@ -424,7 +424,7 @@ def compress(
     except Exception as e:
         # Emit error event
         emitter = get_emitter()
-        emitter.emit_error(
+        E.error(
             code=type(e).__name__.upper(),
             message=str(e),
             details={'verbose': verbose}
