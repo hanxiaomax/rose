@@ -1,183 +1,203 @@
 #!/usr/bin/env python3
 """
-Inspect command for ROS bag files - Using ResultHandler for rendering and export
+Inspect command for ROS bag files.
+Headless NDJSON mode - pure event emission.
 """
 import asyncio
 from pathlib import Path
 from typing import Optional, List
-
 import typer
+
 from ..core.model import AnalysisLevel
-from ..core.export_manager import OutputFormat, ExportOptions
-from ..ui.common_ui import CommonUI
-from ..ui.common_ui import Message
-from ..ui.theme import get_color
-from ..core.util import set_app_mode, AppMode, get_logger
+from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
-from .util import filter_topics, check_and_load_bag_cache
+from ..core.event_emitter import E, ndjson_command
+
+# Initialize logger
+logger = get_logger(__name__)
+
 app = typer.Typer(help="Inspect ROS bag files")
 
 
+def filter_topics(topic_list, pattern, exclude_pattern=None):
+    """Simple topic filtering by regex pattern"""
+    import re
+    if pattern:
+        regex = re.compile(pattern)
+        topic_list = [t for t in topic_list if regex.search(t)]
+    if exclude_pattern:
+        exclude_regex = re.compile(exclude_pattern)
+        topic_list = [t for t in topic_list if not exclude_regex.search(t)]
+    return topic_list
+
+
 @app.command()
+@ndjson_command("inspect")
 def inspect(
     bag_path: Optional[Path] = typer.Argument(None, help="Path to the ROS bag file"),
-    topics: Optional[List[str]] = typer.Option(None, "--topics", "-t", help="Filter specific topics"),
-
+    topics_filter: Optional[str] = typer.Option(None, "--topics", "-t", help="Filter topics by regex pattern"),
     show_fields: bool = typer.Option(False, "--show-fields", help="Show field analysis for messages"),
     sort_by: str = typer.Option("size", "--sort", help="Sort topics by (name, count, frequency, size)"),
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
-
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
-
 ):
     """
-    Inspect a ROS bag file and display comprehensive analysis
+    Inspect a ROS bag file and display comprehensive analysis.
     
-    If the bag file is not in cache, you will be prompted to load it automatically.
+    The bag file must be loaded into cache first using 'rose load'.
     This command uses cached bag analysis for fast inspection.
+    
+    Examples:
+        rose inspect demo.bag                      # Show basic bag info
+        rose inspect demo.bag -v                   # Show detailed statistics
+        rose inspect demo.bag --show-fields        # Include field analysis
+        rose inspect demo.bag -t "/camera.*"       # Filter topics by regex
     """
-    # Validate bag file exists for non-interactive mode
-    if not bag_path:
-        Message.error("Bag file path is required", ui.console)
-        raise typer.Exit(1)
-    
-    # Use CommonUI for unified output management
-    ui = CommonUI()
-    console = ui.console
-    
-    # Validate bag file exists
-    if not bag_path.exists():
-        Message.error(f"Bag file not found: {bag_path}", ui.console)
-        raise typer.Exit(1)
-    
-    # Get cache manager and check current status
-    cache_manager = create_bag_cache_manager()
-    cached_entry = cache_manager.get_analysis(bag_path)
-    
-    # Check if bag needs loading or re-loading for verbose mode
-    needs_loading = False
-    needs_index = False
-    
-    if cached_entry is None:
-        needs_loading = True
-        needs_index = verbose
-    elif verbose and not cached_entry.bag_info.has_any_dataframes():
-        # Verbose mode requires index, but current cache doesn't have DataFrames
-        needs_index = True
-        
-    if needs_loading:
-        # Bag not in cache at all
-        build_index = verbose
-        if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=build_index):
-            Message.error(f"Bag file '{bag_path}' is not available in cache and loading was cancelled.", console)
-            raise typer.Exit(1)
-        cached_entry = cache_manager.get_analysis(bag_path)
-    elif needs_index:
-        # Bag in cache but needs DataFrame index for verbose mode
-        console = ui.console
-        console.print(f"[{get_color('warning')}]⚠[/{get_color('warning')}] Verbose mode requires DataFrame index, but cached data doesn't have it.")
-        should_rebuild = typer.confirm("Would you like to rebuild the cache with DataFrame indexing?", default=True)
-        
-        if should_rebuild:
-            console.print(f"[{get_color('info')}]Rebuilding cache with DataFrame indexing...[/{get_color('info')}]")
-            # Clear current cache entry and reload with index
-            cache_manager.clear(bag_path)
-            if not check_and_load_bag_cache(bag_path, auto_load=True, verbose=verbose, build_index=True, force_load=True):
-                Message.error(f"Failed to rebuild cache with DataFrame indexing.", console)
-                raise typer.Exit(1)
-            cached_entry = cache_manager.get_analysis(bag_path)
-        else:
-            console.print(f"[{get_color('warning')}]Continuing with cached data (statistics may be incomplete).[/{get_color('warning')}]")
-    
-    # Set output format based on verbose mode
-    if verbose:
-        output_format = OutputFormat.TABLE
-    else:
-        output_format = OutputFormat.LIST
-    
-    # Configure logging based on debug flag
-    if not debug:
-        # Suppress logs in standard output unless debug mode
-        import logging
-        logging.getLogger().setLevel(logging.CRITICAL)
-        logging.getLogger('cache').setLevel(logging.CRITICAL)
-        logging.getLogger('root').setLevel(logging.CRITICAL)
-    
-    # Create options object (simplified since we're using cache directly)
-    class SimpleInspectOptions:
-        def __init__(self):
-            self.topics = topics
-
-            self.show_fields = show_fields
-            self.sort_by = sort_by
-            self.reverse_sort = reverse_sort
-    
-            self.output_format = output_format
-            self.output_file = output
-            self.verbose = verbose
-    
-    options = SimpleInspectOptions()
-    
-    # Run the async inspection
-    asyncio.run(_run_inspect(cached_entry, options, debug))
-
-
-async def _run_inspect(cached_entry, options, debug: bool = False):
-    """Run the bag inspection asynchronously using new UI components"""
-    
-    from ..ui.inspect_ui import InspectUI
-    
-    # Use new UI components
-    ui = InspectUI()
-    
     try:
-        ui.display_cache_status(True, cached_entry.bag_info.file_path)
+        # Get event emitter
+    # Using global E emitter (context set by @ndjson_command)
+        
+        # Validate bag file exists
+        if not bag_path:
+            E.error(
+                "INVALID_ARGUMENT",
+                "Bag file path is required",
+                details={"suggestions": ["Provide a bag file path: rose inspect demo.bag"]}
+            )
+            raise typer.Exit(1)
+        
+        if not bag_path.exists():
+            E.error(
+                "BAG_NOT_FOUND",
+                f"Bag file not found: {bag_path}",
+                details={
+                    "path": str(bag_path),
+                    "suggestions": [
+                        "Check the file path",
+                        "Ensure the file exists"
+                    ]
+                }
+            )
+            raise typer.Exit(1)
+        
+        # Get cache manager and check current status
+        cache_manager = create_bag_cache_manager()
+        cached_entry = cache_manager.get_analysis(bag_path)
+        
+        # Check if bag is in cache
+        if cached_entry is None:
+            E.error(
+                "BAG_NOT_CACHED",
+                f"Bag file not in cache: {bag_path}",
+                details={
+                    "path": str(bag_path),
+                    "suggestions": [
+                        f"Load the bag first: rose load {bag_path}",
+                        "Run 'rose load' to cache all bags in directory"
+                    ]
+                }
+            )
+            raise typer.Exit(1)
+        
+        # Define stages for inspect command
+        stages = [
+            ("start", "Starting inspection"),
+            ("refresh", "Refreshing statistics"),      # Optional
+            ("metadata", "Analyzing metadata"),
+            ("topics", "Analyzing topics"),
+            ("fields", "Analyzing fields")             # Optional
+        ]
+        
+        # Determine actual stages based on options
+        actual_stages = [stages[0]]  # Always include start
+        if bag_info.has_any_dataframes():
+            actual_stages.append(stages[1])  # refresh
+        actual_stages.extend([stages[2], stages[3]])  # metadata, topics
+        if show_fields and len(bag_info.message_types) > 0:
+            actual_stages.append(stages[4])  # fields
+        
+        current_stage = 1
+        total_stages = len(actual_stages)
+        
+        # Stage 1: Starting inspection
+        E.progress(
+            message="Starting inspection",
+            mode="stage",
+            stage="start",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
         
         # Convert cached bag info to result format
         bag_info = cached_entry.bag_info
         
         # Refresh statistics from DataFrames if available
         if bag_info.has_any_dataframes():
+            E.progress(
+                message="Refreshing statistics",
+                mode="stage",
+                stage="refresh",
+                stage_index=current_stage,
+                total_stages=total_stages
+            )
+            current_stage += 1
             bag_info.refresh_all_statistics_from_dataframes()
         
-        # Create the result structure
-        result = {
-            'topics': [],
+        # Emit bag metadata
+        E.progress(
+            message="Analyzing metadata",
+            mode="stage",
+            stage="metadata",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
+        metadata = {
             'file_path': bag_info.file_path,
-            'total_messages': bag_info.total_messages,
-            'total_size': bag_info.total_size,
-            'duration_seconds': bag_info.duration_seconds,
+            'file_name': Path(bag_info.file_path).name,
+            'file_size': bag_info.file_size or 0,
+            'file_size_mb': bag_info.file_size_mb,
+            'topics_count': len(bag_info.topics),
+            'total_messages': bag_info.total_messages or 0,
+            'duration_seconds': bag_info.duration_seconds or 0.0,
             'time_range': bag_info.time_range.to_dict() if bag_info.time_range else None,
-            'bag_info': {
-                'file_path': bag_info.file_path,
-                'file_name': Path(bag_info.file_path).name,
-                'file_size': bag_info.file_size or 0,
-                'file_size_mb': bag_info.file_size_mb,
-                'topics_count': len(bag_info.topics),
-                'total_messages': bag_info.total_messages or 0,
-                'duration_seconds': bag_info.duration_seconds or 0.0,
-                'analysis_time': 0.0,
-                'cached': True
-            }
+            'cached': True,
+            'has_dataframes': bag_info.has_any_dataframes()
         }
+        
+        E.data(
+            data=metadata,
+            label="metadata"
+        )
         
         # Get all topic names for filtering
         all_topic_names = [topic if isinstance(topic, str) else topic.name for topic in bag_info.topics]
         
         # Apply topic filtering if specified
-        if options.topics:
-            filtered_topic_names = filter_topics(all_topic_names, options.topics, None)
+        if topics_filter:
+            filtered_topic_names = filter_topics(all_topic_names, topics_filter, None)
         else:
             filtered_topic_names = all_topic_names
         
-        # Convert topics to expected format
+        # Emit progress: analyzing topics
+        E.progress(
+            message="Analyzing topics",
+            mode="stage",
+            stage="topics",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
+        
+        # Convert topics to output format
+        topics_output = []
         for topic_info_obj in bag_info.topics:
             if topic_info_obj.name not in filtered_topic_names:
                 continue
             
-            if options.verbose:
+            if verbose:
                 topic_info = {
                     'name': topic_info_obj.name,
                     'message_type': topic_info_obj.message_type,
@@ -191,16 +211,42 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                     'message_type': topic_info_obj.message_type
                 }
             
-            # Add field analysis if requested
-            if options.show_fields:
+            # Add field paths if requested
+            if show_fields:
                 msg_type_info = bag_info.find_message_type(topic_info_obj.message_type)
                 if msg_type_info and msg_type_info.fields:
                     topic_info['field_paths'] = msg_type_info.get_all_field_paths()
             
-            result['topics'].append(topic_info)
+            topics_output.append(topic_info)
+        
+        # Sort topics
+        if sort_by == "name":
+            topics_output.sort(key=lambda t: t['name'], reverse=reverse_sort)
+        elif sort_by == "count" and verbose:
+            topics_output.sort(key=lambda t: t.get('message_count', 0), reverse=reverse_sort)
+        elif sort_by == "frequency" and verbose:
+            topics_output.sort(key=lambda t: t.get('frequency', 0.0), reverse=reverse_sort)
+        elif sort_by == "size" and verbose:
+            topics_output.sort(key=lambda t: t.get('size_bytes', 0), reverse=reverse_sort)
+        
+        # Emit topics data
+        E.data(
+            data=topics_output,
+            label="topics",
+            count=len(topics_output)
+        )
         
         # Add field analysis if requested
-        if options.show_fields and len(bag_info.message_types) > 0:
+        if show_fields and len(bag_info.message_types) > 0:
+            E.progress(
+                message="Analyzing fields",
+                mode="stage",
+                stage="fields",
+                stage_index=current_stage,
+                total_stages=total_stages
+            )
+            current_stage += 1
+            
             field_analysis = {}
             for topic_info_obj in bag_info.topics:
                 if topic_info_obj.name not in filtered_topic_names:
@@ -216,30 +262,35 @@ async def _run_inspect(cached_entry, options, debug: bool = False):
                         }
             
             if field_analysis:
-                result['field_analysis'] = field_analysis
+                E.data(
+                    data=field_analysis,
+                    label="fields"
+                )
         
-        # Display results
-        display_config = {
-            'verbose': options.verbose,
-            'show_fields': options.show_fields
-        }
-        
-        if not options.verbose:
-            ui.display_simple_list(result, options.verbose)
-        else:
-            ui.display_inspection_result(result, display_config)
-        
-        # Handle fields display
-        if options.show_fields:
-            field_analysis = result.get('field_analysis', {})
-            topics = result.get('topics', [])
-            if field_analysis or any('field_paths' in topic for topic in topics):
-                ui.display_field_analysis(field_analysis, topics)
-        
+        # Emit done event
+        E.done({
+            "topics_count": len(topics_output),
+            "total_topics": len(bag_info.topics),
+            "filtered": topics_filter is not None,
+            "show_fields": show_fields,
+            "sort_by": sort_by,
+            "verbose": verbose
+        })
+    
+    except typer.Exit:
+        raise
     except Exception as e:
-        ui.display_loading_failed("inspection", str(e))
+        # Emit error event
+        emitter = get_emitter()
+        E.error(
+            code=type(e).__name__.upper(),
+            message=str(e),
+            details={'verbose': verbose or False}
+        )
+        
+        logger.error(f"Unexpected error during inspection: {e}")
         raise typer.Exit(1)
 
 
 if __name__ == "__main__":
-    app() 
+    app()

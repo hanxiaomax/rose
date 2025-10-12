@@ -233,52 +233,28 @@ def handle_cli_error(error: Exception, verbose: bool = False) -> int:
     Returns:
         Exit code (0-255)
     """
-    from rich.console import Console
     import traceback as tb
+    import logging
     
-    console = Console()
+    logger = logging.getLogger(__name__)
     
+    # In headless mode, all error output should be via EventEmitter
+    # This function only logs to file and returns exit code
     if isinstance(error, RoseError):
-        # Rose-specific error - format nicely for user
-        console.print(f"[red]Error ({error.code}): {error.message}[/red]")
+        # Log Rose-specific error
+        logger.error(f"Error ({error.code}): {error.message}", exc_info=verbose)
         
-        if error.details and not verbose:
-            # Show details in normal mode
-            console.print(f"Details: {error.details}")
-        elif error.details and verbose:
-            # Show details with formatting in verbose mode
-            console.print(f"[yellow]Details: {error.details}[/yellow]")
+        if error.details:
+            logger.debug(f"Details: {error.details}")
         
-        # Show stack trace only in verbose mode
-        if verbose:
-            if error.context:
-                console.print(f"[dim]Context: {error.context}[/dim]")
-            
-            # Show traceback in verbose mode
-            import traceback
-            console.print("[dim]--- Traceback ---[/dim]")
-            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
-        
-        # Log to logger only (to file, not console) to avoid duplication
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"Error ({error.code}): {error.message}", exc_info=verbose)
+        if verbose and error.context:
+            logger.debug(f"Context: {error.context}")
         
         # Return error code (modulo 256 for valid exit code)
         return error.code % 256
     
     else:
-        # Generic error
-        console.print(f"[red]Unexpected error: {str(error)}[/red]")
-        
-        if verbose:
-            import traceback
-            console.print("[dim]--- Traceback ---[/dim]")
-            console.print("[dim]" + "".join(traceback.format_exception(type(error), error, error.__traceback__)) + "[/dim]")
-        
-        # Log to logger only
-        import logging
-        logger = logging.getLogger(__name__)
+        # Log generic error
         logger.error(f"Unexpected error: {str(error)}", exc_info=verbose)
         
         return 1

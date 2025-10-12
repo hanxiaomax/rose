@@ -22,7 +22,6 @@ except ImportError:
     from pydantic import BaseSettings, Field, validator
 from enum import Enum
 
-
 class CompressionType(str, Enum):
     """Available compression types"""
     NONE = "none"
@@ -112,6 +111,18 @@ class RoseConfig(BaseSettings):
         description="Enable colored output"
     )
     
+    # ===== Output Settings =====
+    # v2.0: Default is NDJSON (machine-readable)
+    output_mode: str = Field(
+        default="ndjson",
+        description="Output mode: ndjson (structured events) or prettify (human-readable)"
+    )
+    
+    prettify: bool = Field(
+        default=False,
+        description="Prettify output for human reading (overrides output_mode)"
+    )
+    
     # ===== Directory Settings =====
     output_directory: str = Field(
         default="output",
@@ -153,6 +164,13 @@ class RoseConfig(BaseSettings):
         """Validate parallel workers count"""
         if v is not None and v < 1:
             raise ValueError("parallel_workers must be at least 1")
+        return v
+    
+    @validator('output_mode')
+    def validate_output_mode(cls, v):
+        """Validate output mode"""
+        if v not in ['ndjson', 'prettify']:
+            raise ValueError("output_mode must be 'ndjson' or 'prettify'")
         return v
     
     class Config:
@@ -355,26 +373,27 @@ def get_config() -> RoseConfig:
         # Validate configuration
         validation = _config.validate_config()
         
-        # Only log to console for CLI visibility (not to logger yet)
-        from rich.console import Console
-        console = Console(stderr=True)
-        if loaded_path:
-            console.print(f"[dim]Config: {loaded_path}[/dim]")
-        else:
-            console.print(f"[dim]Config: Using defaults (no rose.config.yaml)[/dim]")
+        # Log config loading status (before logging reconfiguration)
+        # Note: Use print for config loading messages since logging isn't configured yet
+        import sys
         
-        # Show validation warnings on console
+        if loaded_path:
+            print(f"Config: {loaded_path}", file=sys.stderr)
+        else:
+            print(f"Config: Using defaults (no rose.config.yaml)", file=sys.stderr)
+        
+        # Show validation warnings
         if validation['warnings']:
             for warning in validation['warnings']:
-                console.print(f"[yellow]Warning: {warning}[/yellow]")
+                print(f"Warning: {warning}", file=sys.stderr)
         
         if not validation['valid']:
-            console.print("[red]Configuration validation failed:[/red]")
+            print(f"Configuration validation failed:", file=sys.stderr)
             for error in validation['errors']:
-                console.print(f"[red]  - {error}[/red]")
+                print(f"  - {error}", file=sys.stderr)
         
         # After config is loaded, reconfigure logging with the correct level
-        from .util import reconfigure_logging
+        from .logging import reconfigure_logging
         reconfigure_logging()
         
         # Now we can log with the correct level

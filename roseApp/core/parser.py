@@ -15,7 +15,7 @@ from enum import Enum
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag1 import Writer as Rosbag1Writer
 from rosbags.serde import deserialize_cdr
-from roseApp.core.util import get_logger
+from roseApp.core.logging import get_logger
 from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
 try:
@@ -713,7 +713,7 @@ class BagParser:
     
     def _validate_compression(self, compression: str) -> None:
         """Validate compression type"""
-        from roseApp.core.util import validate_compression_type
+        from roseApp.core.errors import validate_compression_type
         is_valid, error_message = validate_compression_type(compression)
         if not is_valid:
             raise ValueError(error_message)

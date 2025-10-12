@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """
-Load command for ROS bag files - Load bags into cache for faster operations
+Load command for ROS bag files - Load bags into cache for faster operations.
+Headless NDJSON mode - pure event emission.
 """
 
 import asyncio
 import concurrent.futures
 import glob
 import re
+import time
 from pathlib import Path
 from typing import List, Optional
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn, TimeElapsedColumn
-from rich.table import Table
 
 from ..core.parser import BagParser
 from ..core.cache import get_cache, create_bag_cache_manager
-from ..core.util import set_app_mode, AppMode, get_logger
-from ..core.plugins import get_plugin_manager, HookType
+from ..core.logging import get_logger
 from ..core.errors import (
     RoseError,
     BagFileError,
@@ -27,11 +25,7 @@ from ..core.errors import (
     ErrorContext
 )
 from ..core.config import get_config
-from ..ui.theme import get_color
-from ..ui.common_ui import CommonUI, Message
-
-# Set to CLI mode
-set_app_mode(AppMode.CLI)
+from ..core.event_emitter import E, ndjson_command
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -51,17 +45,24 @@ def await_sync(coro):
 
 
 async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_index: bool = False, progress_callback=None) -> dict:
-    """Load a single bag file into cache using parser directly"""
+    """
+    Load a single bag file into cache using parser directly.
+    
+    Note: This function does NOT emit task-level events directly to avoid
+    thread-safety issues in parallel execution. Instead, it returns results
+    that the caller can emit with proper task-level IDs.
+    
+    Args:
+        bag_path: Path to the bag file
+        parser: BagParser instance
+        verbose: Enable verbose logging
+        build_index: Build message index
+        progress_callback: Callback for progress updates
+    
+    Returns:
+        Dict with loading results
+    """
     try:
-        # Execute before_load hooks
-        plugin_manager = get_plugin_manager()
-        before_context = plugin_manager.create_plugin_context(
-            bag_path, 'load', 
-            verbose=verbose, 
-            build_index=build_index
-        )
-        plugin_manager.execute_hooks(HookType.BEFORE_LOAD, before_context)
-        
         # Check if already cached
         cache_manager = create_bag_cache_manager()
         cached_entry = cache_manager.get_analysis(bag_path)
@@ -69,13 +70,16 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
         if cached_entry and cached_entry.is_valid(bag_path):
             if verbose:
                 logger.info(f"Bag {bag_path} already cached, skipping")
+            
             return {
                 'path': str(bag_path),
                 'status': 'already_cached',
-                'message': 'Already in cache'
+                'message': 'Already in cache',
+                'elapsed': 0.0
             }
         
         # Load bag using parser's async load function
+        start_time = time.time()
         bag_info, elapsed_time = await parser.load_bag_async(
             str(bag_path), 
             build_index=build_index,
@@ -85,23 +89,13 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
         if verbose:
             logger.info(f"Successfully loaded {bag_path} into cache in {elapsed_time:.3f}s")
         
-        # Execute after_load hooks
-        after_context = plugin_manager.create_plugin_context(
-            bag_path, 'load',
-            bag_info=bag_info,
-            elapsed_time=elapsed_time,
-            verbose=verbose,
-            build_index=build_index
-        )
-        plugin_manager.execute_hooks(HookType.AFTER_LOAD, after_context)
-        
         return {
             'path': str(bag_path),
             'status': 'loaded',
             'message': 'Successfully loaded into cache',
             'topics_count': len(bag_info.topics) if bag_info.topics else 0,
             'duration': bag_info.duration_seconds if bag_info.duration_seconds else 0,
-            'elapsed_time': elapsed_time
+            'elapsed': elapsed_time
         }
         
     except Exception as e:
@@ -109,7 +103,8 @@ async def load_single_bag(bag_path: Path, parser, verbose: bool = False, build_i
         return {
             'path': str(bag_path),
             'status': 'error',
-            'message': str(e)
+            'message': str(e),
+            'elapsed': 0.0
         }
 
 
@@ -168,6 +163,7 @@ def find_bag_files(input_patterns: List[str]) -> List[Path]:
 
 
 @app.command()
+@ndjson_command("load")
 def load(
     input: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: from config)"),
@@ -182,8 +178,6 @@ def load(
     This command processes bag files and stores their analysis in cache,
     making subsequent inspect and extract operations much faster.
     
-    If bag files are not provided, you will be prompted to select them interactively.
-    
     Examples:
         rose load "*.bag"                       # Load all bag files in current directory
         rose load bag1.bag bag2.bag             # Load specific bag files
@@ -193,47 +187,23 @@ def load(
         rose load "*.bag" --dry-run             # Preview what would be loaded
         rose load "*.bag" --build-index         # Build message index for data analysis
     """
+    start_total_time = time.time()
+    
     try:
-        console = Console()
-        
         # Get configuration with defaults
         config = get_config()
         
-        # Auto-prompt for input bags if not provided
+        # Check for input
         if not input:
-            # Check if we're in a TTY (interactive terminal)
-            import sys
-            if sys.stdin.isatty():
-                from ..interactive.components import InputPrompter
-                prompter = InputPrompter(console)
-                
-                Message.info("No input bag files specified. Please select bag files:", console)
-                bag_paths = prompter.prompt_for_bag_files(
-                    message="Enter bag file pattern or path:",
-                    allow_multiple=True,
-                    required=True
-                )
-                
-                if not bag_paths:
-                    Message.warning("No bag files selected. Operation cancelled.", console)
-                    raise typer.Exit(0)
-                
-                # Convert Path objects to strings for processing
-                input = [str(p) for p in bag_paths]
-            else:
-                # Non-interactive mode without input - show error
-                error = RoseError(
-                    code=ErrorCode.INVALID_ARGUMENT,
-                    message="No bag files specified",
-                    details="At least one bag file pattern must be provided",
-                    suggestions=[
-                        "Provide bag file patterns as arguments: rose load '*.bag'",
-                        "Use specific file paths: rose load input.bag",
-                        "Run in an interactive terminal to use the file selection prompt"
-                    ]
-                )
-                console.print(error.format_message())
-                raise typer.Exit(1)
+            E.error(
+                "INVALID_ARGUMENT",
+                "No bag files specified",
+                suggestions=[
+                    "Provide bag file patterns as arguments: rose load '*.bag'",
+                    "Use specific file paths: rose load input.bag"
+                ]
+            )
+            raise typer.Exit(1)
         
         # Apply config defaults if not provided
         if verbose is None:
@@ -243,171 +213,265 @@ def load(
         if workers is None:
             workers = config.parallel_workers
         
-        # Initialize UI
-        ui = CommonUI()
-        ui.console = console
-        
-        # Find bag files using patterns
-        valid_bags = find_bag_files(input)
-        
-        if not valid_bags:
-            raise BagFileError(
-                ErrorCode.BAG_NOT_FOUND,
-                ', '.join(input),
-                details=f"No valid bag files found matching the provided patterns: {', '.join(input)}"
+        # Use heartbeat for smooth progress updates (1 second interval)
+        with E.heartbeat(interval=1.0) as hb:
+            # Stage 1: Discovery (fast)
+            hb.update(
+                message="Finding bag files",
+                mode="stage",
+                stage="discovery",
+                stage_index=1,
+                total_stages=2
             )
-    
-        # Show found files
-        Message.info(f"Found {len(valid_bags)} bag file(s):", console)
-        for bag in valid_bags:
-            Message.info(f"  {bag}", console)
-        
-        # Handle dry run
-        if dry_run:
-            Message.warning(f"DRY RUN - Would load {len(valid_bags)} bag file(s)", console)
-            Message.info(f"Build index: {build_index}", console)
-            Message.info(f"Workers: {workers}", console)
-            return
-        
-        # Use config workers if not overridden
-        import os
-        if workers is None or workers <= 0:
-            workers = max(1, (os.cpu_count() or 2) - 2)
-        
-        # Limit workers to number of bags
-        workers = min(workers, len(valid_bags))
-        
-        analysis_type = "with index building" if build_index else "quick"
-        Message.info(f"Loading {len(valid_bags)} bag file(s) with {workers} worker(s) ({analysis_type})...", console)
-        
-        # Initialize parser
-        parser = BagParser()
-        
-        # If force reload, clear cache for these bags
-        if force:
-            cache_manager = create_bag_cache_manager()
-            Message.warning("Force reload enabled - clearing cache for these bags", console)
-            for bag_path in valid_bags:
-                cache_manager.clear(bag_path)
-        
-        # Load bags with individual progress bars
-        results = []
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn(f"[{get_color('primary')}][progress.description]{{task.description}}[/{get_color('primary')}]"),
-            BarColumn(complete_style=get_color('success'), finished_style=get_color('success')),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            console=console
-        ) as progress:
             
-            # Create individual progress tasks for each bag
-            bag_tasks = {}
-            for bag in valid_bags:
-                task_id = progress.add_task(f"Loading {bag.name}...", total=100)
-                bag_tasks[bag] = task_id
+            # Find bag files using patterns
+            valid_bags = find_bag_files(input)
             
-            # Function to create progress callback for individual bags
-            def create_progress_callback(bag_path: Path, task_id):
-                def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                    if progress_pct > 0:
-                        progress.update(task_id, completed=min(progress_pct, 100))
-                    if phase:
-                        progress.update(task_id, description=f"Loading {bag_path.name}: {phase}")
-                return progress_callback
+            if not valid_bags:
+                E.error(
+                    "BAG_NOT_FOUND",
+                    "No valid bag files found",
+                    patterns=input,
+                    suggestions=[
+                        "Check the file path",
+                        "Ensure files have .bag extension",
+                        "Try using absolute paths"
+                    ]
+                )
+                raise typer.Exit(1)
             
-            # Use ThreadPoolExecutor for parallel loading
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks with individual progress callbacks
-                future_to_bag = {}
+            # Emit discovered bags
+            E.data(
+                [
+                    {
+                        "path": str(bag),
+                        "size_mb": bag.stat().st_size / 1024 / 1024 if bag.exists() else 0,
+                        "exists": bag.exists()
+                    }
+                    for bag in valid_bags
+                ],
+                label="found_bags",
+                count=len(valid_bags)
+            )
+            
+            # Handle dry run
+            if dry_run:
+                E.data(
+                    {
+                        "build_index": build_index,
+                        "workers": workers,
+                        "force": force,
+                        "mode": "dry_run"
+                    },
+                    label="load_plan"
+                )
+                E.done({
+                    "dry_run": True,
+                    "would_load": len(valid_bags)
+                })
+                return
+            
+            # Adjust workers
+            import os
+            if workers is None or workers <= 0:
+                workers = max(1, (os.cpu_count() or 2) - 2)
+            
+            # Limit workers to number of bags
+            workers = min(workers, len(valid_bags))
+            
+            # Emit loading plan
+            E.data(
+                {
+                    "total_bags": len(valid_bags),
+                    "workers": workers,
+                    "build_index": build_index,
+                    "force": force,
+                    "analysis_type": "with index building" if build_index else "quick"
+                },
+                label="load_plan"
+            )
+            
+            # Initialize parser
+            parser = BagParser()
+            
+            # If force reload, clear cache for these bags
+            if force:
+                cache_manager = create_bag_cache_manager()
                 for bag_path in valid_bags:
-                    task_id = bag_tasks[bag_path]
-                    progress_callback = create_progress_callback(bag_path, task_id)
+                    cache_manager.clear(bag_path)
+            
+            # Load bags
+            results = []
+            total_bags = len(valid_bags)
+            start_time = time.time()
+            
+            # Stage 2: Loading (parallel execution with task-level IDs)
+            # - Run-level events (trace_id:run_id): Overall batch progress
+            # - Task-level events (trace_id:run_id:bag_name): Individual bag progress
+            total_items = total_bags * 2  # Submit phase + Execute phase
+            
+            # Use ThreadPoolExecutor for parallel loading with real-time progress
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                # Phase 1: Submit all tasks (fast)
+                future_to_bag = {}
+                for i, bag_path in enumerate(valid_bags, 1):
+                    # Progress callback (silent in headless mode)
+                    def create_progress_callback(bag_name):
+                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                            if phase and verbose:
+                                logger.debug(f"{bag_name}: {phase}")
+                        return progress_callback
+                    
+                    progress_callback = create_progress_callback(bag_path.name)
+                    
                     future = executor.submit(
                         await_sync, 
                         load_single_bag(bag_path, parser, verbose, build_index, progress_callback)
                     )
                     future_to_bag[future] = bag_path
+                    
+                    # Emit task-level start event
+                    task_id = bag_path.name
+                    E.set_id(task_id)
+                    E.progress(
+                        message=f"Queued {bag_path.name}",
+                        mode="stage",
+                        stage="queued",
+                        stage_index=1,
+                        total_stages=2
+                    )
+                    E.clear_id()
+                    
+                    # Report submission progress (first half of items) - run-level
+                    hb.update(
+                        message=f"Queued {bag_path.name}",
+                        mode="count",
+                        current=i,
+                        total=total_items,
+                        elapsed=time.time() - start_time
+                    )
                 
-                # Collect results as they complete
+                # Phase 2: Collect results as they complete (second half of items)
+                completed_count = 0
                 for future in concurrent.futures.as_completed(future_to_bag):
                     bag_path = future_to_bag[future]
-                    task_id = bag_tasks[bag_path]
+                    completed_count += 1
+                    current_item = total_bags + completed_count  # Second half
+                    task_id = bag_path.name
+                    
                     try:
                         result = future.result()
                         results.append(result)
                         
-                        # Complete the progress bar
-                        progress.update(task_id, completed=100)
+                        # Emit task-level completion event
+                        E.set_id(task_id)
+                        E.progress(
+                            message=f"Completed {bag_path.name}",
+                            mode="stage",
+                            stage="completed",
+                            stage_index=2,
+                            total_stages=2
+                        )
+                        E.data(result, label="task_complete")
+                        E.clear_id()
                         
-                        # Update description based on result
-                        status_desc = {
-                            'loaded': f"{bag_path.name} - Loaded",
-                            'already_cached': f"{bag_path.name} - Already cached",
-                            'error': f"{bag_path.name} - Error"
-                        }.get(result['status'], f"{bag_path.name} - Unknown")
+                        # Run-level progress update (main batch progress)
+                        hb.update(
+                            message=f"Completed {bag_path.name}",
+                            mode="count",
+                            current=current_item,
+                            total=total_items,
+                            elapsed=time.time() - start_time
+                        )
                         
-                        progress.update(task_id, description=status_desc)
-                        
-                        if verbose:
-                            status_color = {
-                                'loaded': 'green',
-                                'already_cached': 'yellow', 
-                                'error': 'red'
-                            }.get(result['status'], 'white')
-                            console.print(f"[{status_color}]{result['path']}: {result['message']}[/{status_color}]")
-                            
                     except Exception as e:
                         logger.error(f"Unexpected error loading {bag_path}: {e}")
-                        results.append({
+                        error_result = {
                             'path': str(bag_path),
                             'status': 'error',
-                            'message': f"Unexpected error: {e}"
-                        })
-                        progress.update(task_id, completed=100, description=f"{bag_path.name} - Error")
+                            'message': f"Unexpected error: {e}",
+                            'elapsed': 0.0
+                        }
+                        results.append(error_result)
+                        
+                        # Emit task-level error event
+                        E.set_id(task_id)
+                        E.data(error_result, label="task_error")
+                        E.clear_id()
+                        
+                        # Run-level progress update
+                        hb.update(
+                            message=f"Failed {bag_path.name}",
+                            mode="count",
+                            current=current_item,
+                            total=total_items,
+                            elapsed=time.time() - start_time
+                        )
+            
+            # Calculate summary
+            loaded_count = sum(1 for r in results if r['status'] == 'loaded')
+            cached_count = sum(1 for r in results if r['status'] == 'already_cached')
+            error_count = sum(1 for r in results if r['status'] == 'error')
+            total_ready = loaded_count + cached_count
+            total_time = time.time() - start_total_time
+            
+            # Emit detailed results
+            E.data(
+                [
+                    {
+                        "path": r['path'],
+                        "status": r['status'],
+                        "message": r.get('message', ''),
+                        "elapsed": r.get('elapsed', 0.0),
+                        "topics_count": r.get('topics_count', 0)
+                    }
+                    for r in results
+                ],
+                label="results",
+                count=len(results)
+            )
         
-        # Show summary
-        loaded_count = sum(1 for r in results if r['status'] == 'loaded')
-        cached_count = sum(1 for r in results if r['status'] == 'already_cached')
-        error_count = sum(1 for r in results if r['status'] == 'error')
+        # Emit done event (outside heartbeat context)
+        E.done({
+            "loaded_files": loaded_count,
+            "cached_files": cached_count,
+            "failed_files": error_count,
+            "total_ready": total_ready,
+            "elapsed_time": total_time,
+            "build_index": build_index,
+            "workers": workers
+        })
         
-        Message.info("Loading Summary", console)
-        
-        # Simple text-based summary
-        summary_lines = []
-        if loaded_count > 0:
-            summary_lines.append(f"{loaded_count} bag(s) newly loaded into cache")
-        if cached_count > 0:
-            summary_lines.append(f"{cached_count} bag(s) already in cache")
-        if error_count > 0:
-            summary_lines.append(f"{error_count} bag(s) failed to load")
-        
-        for line in summary_lines:
-            console.print(f"  {line}")
-        
-        # Show errors if any
-        if error_count > 0:
-            Message.error("Errors:", console)
-            for result in results:
-                if result['status'] == 'error':
-                    Message.error(f"  {result['path']}: {result['message']}", console)
-        
-        # Show success message
-        total_ready = loaded_count + cached_count
-        if total_ready > 0:
-            Message.success(f"Ready: {total_ready} bag(s) available for inspect and extract commands", console)
-        
+        # Exit with error if any bags failed
         if error_count > 0:
             raise typer.Exit(1)
     
+    except typer.Exit:
+        raise
     except RoseError as e:
+        # Get error code name
+        error_code_name = e.error_code.name if hasattr(e, 'error_code') else 'ROSE_ERROR'
+        
+        # Emit error event
+        E.error(
+            code=error_code_name,
+            message=str(e),
+            verbose=verbose or False
+        )
+        
         # Use unified error handler for Rose errors
         exit_code = handle_cli_error(e, verbose=verbose or False)
         raise typer.Exit(exit_code)
     
     except Exception as e:
-        # Use unified error handler for unexpected errors
+        # Emit error event for unexpected errors
+        E.error(
+            code=type(e).__name__.upper(),
+            message=str(e),
+            verbose=verbose or False
+        )
+        
+        # Use unified error handler
         exit_code = handle_cli_error(e, verbose=verbose or False)
         raise typer.Exit(exit_code)
 
