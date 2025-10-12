@@ -203,7 +203,13 @@ def compress(
             raise typer.Exit(1)
         
         # Find bag files using patterns
-        E.progress(10, "Finding bag files")
+        E.progress(
+            message="Finding bag files",
+            mode="stage",
+            stage="discovery",
+            stage_index=1,
+            total_stages=3
+        )
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
@@ -228,7 +234,13 @@ def compress(
         )
         
         # Check if bags are loaded in cache
-        E.progress(20, "Checking cache")
+        E.progress(
+            message="Checking cache",
+            mode="stage",
+            stage="validation",
+            stage_index=2,
+            total_stages=3
+        )
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
         
@@ -310,17 +322,20 @@ def compress(
         )
         
         # Perform compression with real-time progress
-        E.progress(30, "Starting compression")
+        # Stage 3: Compression with heartbeat support
         results = []
         total_bags = len(valid_bags)
+        start_time = time.time()
         
-        # Use ThreadPoolExecutor with task context for real-time progress
-        # Two-phase progress: submit + execute
-        with E.task("Compressing bags", steps=total_bags * 2) as task:
+        # Use count mode for multiple files, stage mode with heartbeat for single large files
+        if total_bags > 1:
+            # Multiple files: use count mode with 2-phase concurrent processing
+            total_items = total_bags * 2  # Submit + Execute phases
+            
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all compression tasks with progress
+                # Phase 1: Submit all tasks (fast)
                 futures = {}
-                for bag_path in valid_bags:
+                for i, bag_path in enumerate(valid_bags, 1):
                     # Silent progress callback in headless mode
                     def create_progress_callback(bag_name):
                         def callback(percent):
@@ -342,17 +357,33 @@ def compress(
                         )
                     )
                     futures[future] = bag_path
-                    # Report submission progress (first half of steps)
-                    task.step(f"Queued {bag_path.name}")
+                    
+                    # Report submission progress (first half of items)
+                    E.progress(
+                        message=f"Queued {bag_path.name}",
+                        mode="count",
+                        current=i,
+                        total=total_items,
+                        elapsed=time.time() - start_time
+                    )
                 
-                # Collect results as they complete (second half of steps)
+                # Phase 2: Collect results as they complete (second half of items)
+                completed_count = 0
                 for future in concurrent.futures.as_completed(futures):
                     bag_path = futures[future]
+                    completed_count += 1
+                    current_item = total_bags + completed_count  # Second half
                     
                     try:
                         result = future.result()
                         results.append(result)
-                        task.step(f"Compressed {bag_path.name}")
+                        E.progress(
+                            message=f"Compressed {bag_path.name}",
+                            mode="count",
+                            current=current_item,
+                            total=total_items,
+                            elapsed=time.time() - start_time
+                        )
                         
                     except Exception as e:
                         logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
@@ -363,7 +394,72 @@ def compress(
                             'error': str(e),
                             'message': str(e)
                         })
-                        task.step(f"Failed {bag_path.name}")
+                        E.progress(
+                            message=f"Failed {bag_path.name}",
+                            mode="count",
+                            current=current_item,
+                            total=total_items,
+                            elapsed=time.time() - start_time
+                        )
+        else:
+            # Single file: use stage mode with heartbeat
+            bag_path = valid_bags[0]
+            heartbeat_counter = 0
+            last_heartbeat = time.time()
+            
+            # Create a heartbeat-enabled progress callback
+            def heartbeat_progress_callback(percent):
+                nonlocal heartbeat_counter, last_heartbeat
+                current_time = time.time()
+                
+                # Emit heartbeat every 3 seconds
+                if current_time - last_heartbeat >= 3.0:
+                    heartbeat_counter += 1
+                    E.progress(
+                        message=f"Compressing {bag_path.name}... ({percent:.1f}% complete)",
+                        mode="stage",
+                        stage="compression",
+                        stage_index=3,
+                        total_stages=3,
+                        current=heartbeat_counter,
+                        elapsed=current_time - start_time
+                    )
+                    last_heartbeat = current_time
+                
+                if verbose:
+                    logger.debug(f"{bag_path.name}: {percent:.1f}%")
+            
+            try:
+                result = await_sync(compress_single_bag(
+                    bag_path, 
+                    output_pattern, 
+                    compression, 
+                    overwrite=yes, 
+                    verbose=verbose, 
+                    progress_callback=heartbeat_progress_callback,
+                    cache_manager=cache_manager
+                ))
+                results.append(result)
+                
+                # Final completion message
+                E.progress(
+                    message=f"Compressed {bag_path.name}",
+                    mode="stage",
+                    stage="compression",
+                    stage_index=3,
+                    total_stages=3,
+                    elapsed=time.time() - start_time
+                )
+                
+            except Exception as e:
+                logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
+                results.append({
+                    'status': 'error',
+                    'input_file': str(bag_path),
+                    'output_file': None,
+                    'error': str(e),
+                    'message': str(e)
+                })
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'compressed')
@@ -378,7 +474,6 @@ def compress(
         )
         
         # Emit detailed results
-        E.progress(95, "Finalizing")
         E.data(
             data=[
                 {

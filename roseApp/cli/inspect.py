@@ -100,19 +100,60 @@ def inspect(
             )
             raise typer.Exit(1)
         
-        # Emit progress: starting inspection
-        E.progress(0, "Starting inspection")
+        # Define stages for inspect command
+        stages = [
+            ("start", "Starting inspection"),
+            ("refresh", "Refreshing statistics"),      # Optional
+            ("metadata", "Analyzing metadata"),
+            ("topics", "Analyzing topics"),
+            ("fields", "Analyzing fields")             # Optional
+        ]
+        
+        # Determine actual stages based on options
+        actual_stages = [stages[0]]  # Always include start
+        if bag_info.has_any_dataframes():
+            actual_stages.append(stages[1])  # refresh
+        actual_stages.extend([stages[2], stages[3]])  # metadata, topics
+        if show_fields and len(bag_info.message_types) > 0:
+            actual_stages.append(stages[4])  # fields
+        
+        current_stage = 1
+        total_stages = len(actual_stages)
+        
+        # Stage 1: Starting inspection
+        E.progress(
+            message="Starting inspection",
+            mode="stage",
+            stage="start",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
         
         # Convert cached bag info to result format
         bag_info = cached_entry.bag_info
         
         # Refresh statistics from DataFrames if available
         if bag_info.has_any_dataframes():
-            E.progress(30, "Refreshing statistics")
+            E.progress(
+                message="Refreshing statistics",
+                mode="stage",
+                stage="refresh",
+                stage_index=current_stage,
+                total_stages=total_stages
+            )
+            current_stage += 1
             bag_info.refresh_all_statistics_from_dataframes()
         
         # Emit bag metadata
-        E.progress(50, "Analyzing metadata")
+        E.progress(
+            message="Analyzing metadata",
+            mode="stage",
+            stage="metadata",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
         metadata = {
             'file_path': bag_info.file_path,
             'file_name': Path(bag_info.file_path).name,
@@ -141,7 +182,14 @@ def inspect(
             filtered_topic_names = all_topic_names
         
         # Emit progress: analyzing topics
-        E.progress(70, "Analyzing topics")
+        E.progress(
+            message="Analyzing topics",
+            mode="stage",
+            stage="topics",
+            stage_index=current_stage,
+            total_stages=total_stages
+        )
+        current_stage += 1
         
         # Convert topics to output format
         topics_output = []
@@ -190,7 +238,14 @@ def inspect(
         
         # Add field analysis if requested
         if show_fields and len(bag_info.message_types) > 0:
-            E.progress(90, "Analyzing fields")
+            E.progress(
+                message="Analyzing fields",
+                mode="stage",
+                stage="fields",
+                stage_index=current_stage,
+                total_stages=total_stages
+            )
+            current_stage += 1
             
             field_analysis = {}
             for topic_info_obj in bag_info.topics:
@@ -213,8 +268,6 @@ def inspect(
                 )
         
         # Emit done event
-        E.progress(100, "Inspection complete")
-        
         E.done({
             "topics_count": len(topics_output),
             "total_topics": len(bag_info.topics),

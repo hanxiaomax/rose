@@ -228,8 +228,15 @@ def extract(
             )
             raise typer.Exit(1)
         
-        # Find bag files using patterns
-        E.progress(10, "Finding bag files")
+        # Stages 1-3: Preparation (fast)
+        # Stage 1: Discovery
+        E.progress(
+            message="Finding bag files",
+            mode="stage", 
+            stage="discovery",
+            stage_index=1,
+            total_stages=4
+        )
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
@@ -247,8 +254,14 @@ def extract(
             count=len(valid_bags)
         )
         
-        # Check if bags are loaded in cache
-        E.progress(20, "Checking cache")
+        # Stage 2: Cache check
+        E.progress(
+            message="Checking cache",
+            mode="stage",
+            stage="cache_check", 
+            stage_index=2,
+            total_stages=4
+        )
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
         
@@ -277,8 +290,14 @@ def extract(
         else:
             output_pattern = output
         
-        # Get all unique topics from all bags
-        E.progress(30, "Analyzing topics")
+        # Stage 3: Topic analysis
+        E.progress(
+            message="Analyzing topics",
+            mode="stage",
+            stage="topic_analysis",
+            stage_index=3,
+            total_stages=4
+        )
         all_topics_set = set()
         for bag_path in valid_bags:
             cached_entry = cache_manager.get_analysis(bag_path)
@@ -377,52 +396,74 @@ def extract(
             label="extraction_plan"
         )
         
-        # Extract bags with real-time progress
-        E.progress(40, "Starting extraction")
+        # Stage 4: Extraction (count mode, 2-phase concurrent)
         results = []
         total_bags = len(valid_bags)
+        start_time = time.time()
+        total_items = total_bags * 2
         
-        # Use ThreadPoolExecutor for parallel extraction with task context
-        # Using two-phase progress: submit (40-60%) + execute (60-100%)
-        with E.task("Extracting topics", steps=total_bags * 2) as task:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks with progress
-                future_to_bag = {}
-                for bag_path in valid_bags:
-                    # Silent progress callback in headless mode
-                    def create_progress_callback(bag_name):
-                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                            if phase and verbose:
-                                logger.debug(f"{bag_name}: {phase}")
-                        return progress_callback
-                    
-                    progress_callback = create_progress_callback(bag_path.name)
-                    future = executor.submit(
-                        await_sync, 
-                        extract_single_bag(bag_path, topics_to_extract, output_pattern, compression, yes, verbose, progress_callback)
-                    )
-                    future_to_bag[future] = bag_path
-                    # Report submission progress (first half of steps)
-                    task.step(f"Queued {bag_path.name}")
+        # Use ThreadPoolExecutor for parallel extraction
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            # Phase 1: Submit all tasks (fast)
+            future_to_bag = {}
+            for i, bag_path in enumerate(valid_bags, 1):
+                # Silent progress callback in headless mode
+                def create_progress_callback(bag_name):
+                    def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                        if phase and verbose:
+                            logger.debug(f"{bag_name}: {phase}")
+                    return progress_callback
                 
-                # Collect results as they complete (second half of steps)
-                for future in concurrent.futures.as_completed(future_to_bag):
-                    bag_path = future_to_bag[future]
-                    try:
-                        result = future.result()
-                        results.append(result)
-                        task.step(f"Extracted {bag_path.name}")
-                        
-                    except Exception as e:
-                        logger.error(f"Unexpected error extracting {bag_path}: {e}")
-                        results.append({
-                            'path': str(bag_path),
-                            'output_path': None,
-                            'status': 'error',
-                            'message': f"Unexpected error: {e}",
-                            'elapsed_time': 0.0
-                        })
-                        task.step(f"Failed {bag_path.name}")
+                progress_callback = create_progress_callback(bag_path.name)
+                future = executor.submit(
+                    await_sync, 
+                    extract_single_bag(bag_path, topics_to_extract, output_pattern, compression, yes, verbose, progress_callback)
+                )
+                future_to_bag[future] = bag_path
+                
+                # Report submission progress (first half of items)
+                E.progress(
+                    message=f"Queued {bag_path.name}",
+                    mode="count",
+                    current=i,
+                    total=total_items,
+                    elapsed=time.time() - start_time
+                )
+            
+            # Phase 2: Collect results as they complete (second half of items)
+            completed_count = 0
+            for future in concurrent.futures.as_completed(future_to_bag):
+                bag_path = future_to_bag[future]
+                completed_count += 1
+                current_item = total_bags + completed_count  # Second half
+                
+                try:
+                    result = future.result()
+                    results.append(result)
+                    E.progress(
+                        message=f"Extracted {bag_path.name}",
+                        mode="count",
+                        current=current_item,
+                        total=total_items,
+                        elapsed=time.time() - start_time
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Unexpected error extracting {bag_path}: {e}")
+                    results.append({
+                        'path': str(bag_path),
+                        'output_path': None,
+                        'status': 'error',
+                        'message': f"Unexpected error: {e}",
+                        'elapsed_time': 0.0
+                    })
+                    E.progress(
+                        message=f"Failed {bag_path.name}",
+                        mode="count",
+                        current=current_item,
+                        total=total_items,
+                        elapsed=time.time() - start_time
+                    )
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'extracted')
@@ -430,7 +471,6 @@ def extract(
         total_time = time.time() - start_total_time
         
         # Emit detailed results
-        E.progress(95, "Finalizing")
         E.data(
             data=[
                 {
@@ -447,7 +487,6 @@ def extract(
         )
         
         # Emit done event
-        E.progress(100, "Extraction complete")
         E.done({
             "extracted_files": success_count,
             "failed_files": error_count,

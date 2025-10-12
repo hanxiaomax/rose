@@ -89,36 +89,93 @@ def cache_clear(
 def _show_cache_info(cache, show_content, verbose):
     """Show cache information and entries"""
     try:
-        # Using global E emitter
-        stats = cache.get_stats()
-        
-        # Get all cache entries
+        # Get all cache entries first
         all_entries = _get_all_cache_entries(cache)
+        entry_count = len(all_entries)
         
-        # Prepare entries data
-        entries_data = []
-        for key, value, cache_type in all_entries:
-            try:
-                entry_dict = {
-                    "key": key,
-                    "location": cache_type
-                }
-                
-                if isinstance(value, BagCacheEntry):
-                    bag_info = value.bag_info
-                    entry_dict.update({
-                        "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
-                        "topics_count": len(getattr(bag_info, 'topics', [])),
-                        "messages_count": sum(getattr(bag_info, 'message_counts', {}).values()),
-                        "duration_sec": getattr(bag_info, 'duration_seconds', 0),
-                        "size_mb": value.file_size / 1024 / 1024 if value.file_size else 0,
-                        "created": value.cache_timestamp,
-                        "last_accessed": value.file_mtime
-                    })
-                
-                entries_data.append(entry_dict)
-            except Exception:
-                continue
+        # Adaptive progress: stage mode for few entries, count mode for many
+        if entry_count <= 10:
+            # Stage mode for few entries (fast enough)
+            E.progress(
+                message="Processing cache entries",
+                mode="stage",
+                stage="processing",
+                stage_index=1,
+                total_stages=2
+            )
+            
+            # Get stats and process entries
+            stats = cache.get_stats()
+            entries_data = []
+            for key, value, cache_type in all_entries:
+                try:
+                    entry_dict = {
+                        "key": key,
+                        "location": cache_type
+                    }
+                    
+                    if isinstance(value, BagCacheEntry):
+                        bag_info = value.bag_info
+                        entry_dict.update({
+                            "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
+                            "topics_count": len(getattr(bag_info, 'topics', [])),
+                            "messages_count": sum(getattr(bag_info, 'message_counts', {}).values()),
+                            "duration_sec": getattr(bag_info, 'duration_seconds', 0),
+                            "size_mb": value.file_size / 1024 / 1024 if value.file_size else 0,
+                            "created": value.cache_timestamp,
+                            "last_accessed": value.file_mtime
+                        })
+                    
+                    entries_data.append(entry_dict)
+                except Exception:
+                    continue
+            
+            E.progress(
+                message="Preparing output",
+                mode="stage",
+                stage="output",
+                stage_index=2,
+                total_stages=2
+            )
+        else:
+            # Count mode for many entries (show progress)
+            stats = cache.get_stats()
+            entries_data = []
+            start_time = time.time()
+            
+            for i, (key, value, cache_type) in enumerate(all_entries, 1):
+                try:
+                    entry_dict = {
+                        "key": key,
+                        "location": cache_type
+                    }
+                    
+                    if isinstance(value, BagCacheEntry):
+                        bag_info = value.bag_info
+                        entry_dict.update({
+                            "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
+                            "topics_count": len(getattr(bag_info, 'topics', [])),
+                            "messages_count": sum(getattr(bag_info, 'message_counts', {}).values()),
+                            "duration_sec": getattr(bag_info, 'duration_seconds', 0),
+                            "size_mb": value.file_size / 1024 / 1024 if value.file_size else 0,
+                            "created": value.cache_timestamp,
+                            "last_accessed": value.file_mtime
+                        })
+                    
+                    entries_data.append(entry_dict)
+                    
+                    # Report progress every 10 entries or on last entry
+                    if i % 10 == 0 or i == entry_count:
+                        E.progress(
+                            message=f"Processed entry {i}",
+                            mode="count",
+                            current=i,
+                            total=entry_count,
+                            elapsed=time.time() - start_time
+                        )
+                        
+                except Exception:
+                    continue
         
         # Emit cache info as data event
         E.data(
@@ -224,9 +281,13 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
             })
         else:
             # Clear all cache
+            # Get all entries to clear with progress
+            all_entries = _get_all_cache_entries(cache)
+            entries_to_clear = len(all_entries)
+            
             E.data(
                 data={
-                    "entries_to_clear": total_entries,
+                    "entries_to_clear": entries_to_clear,
                     "size_to_free_mb": size_to_free_mb,
                     "skip_confirm": skip_confirm
                 },
@@ -238,14 +299,54 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
                 E.error(
                     "CONFIRMATION_REQUIRED",
                     "Interactive confirmation not supported in headless mode. Use --yes flag.",
-                    details={"total_entries": total_entries}
+                    details={"total_entries": entries_to_clear}
                 )
                 raise typer.Exit(1)
             
-            cache.clear()
+            # Adaptive progress for clearing
+            if entries_to_clear <= 20:
+                # Stage mode for few entries (fast clear)
+                E.progress(
+                    message="Clearing cache",
+                    mode="stage",
+                    stage="clearing",
+                    stage_index=1,
+                    total_stages=1
+                )
+                cache.clear()
+            else:
+                # Count mode for many entries - clear one by one with progress
+                start_time = time.time()
+                cleared_count = 0
+                
+                for i, (key, value, cache_type) in enumerate(all_entries, 1):
+                    try:
+                        if cache_type == "memory":
+                            # Clear from memory cache
+                            if hasattr(cache, '_memory_cache') and key in cache._memory_cache:
+                                del cache._memory_cache[key]
+                                cleared_count += 1
+                        else:
+                            # Clear from disk cache
+                            success = cache.delete(key)
+                            if success:
+                                cleared_count += 1
+                        
+                        # Report progress every 10 entries or on last entry
+                        if i % 10 == 0 or i == entries_to_clear:
+                            E.progress(
+                                message=f"Cleared {cleared_count} entries",
+                                mode="count",
+                                current=i,
+                                total=entries_to_clear,
+                                elapsed=time.time() - start_time
+                            )
+                    except Exception:
+                        # Continue clearing other entries even if one fails
+                        continue
             
             E.done({
-                "cleared_entries": total_entries,
+                "cleared_entries": entries_to_clear,
                 "freed_mb": size_to_free_mb
             })
             
@@ -264,8 +365,6 @@ def _clear_cache_entries(cache, bag_path, skip_confirm):
 def _export_cache_entries(cache, output_file, name, bag_path, format, include_messages):
     """Export cache entries to file"""
     try:
-        # Using global E emitter
-        
         # Get all cache entries
         all_entries = _get_all_cache_entries(cache)
         
@@ -309,19 +408,65 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
             
             all_entries = filtered_entries
         
+        entry_count = len(all_entries)
+        
         # Emit export plan
         E.data(
             data={
                 "output_file": output_file,
                 "format": format,
-                "entries_count": len(all_entries),
+                "entries_count": entry_count,
                 "include_messages": include_messages
             },
             label="export_plan"
         )
         
-        # Prepare export data
-        export_data = _prepare_export_data(all_entries, include_messages)
+        # Adaptive progress for export preparation
+        if entry_count <= 10:
+            # Stage mode for few entries
+            E.progress(
+                message="Processing entries",
+                mode="stage",
+                stage="processing",
+                stage_index=1,
+                total_stages=2
+            )
+            export_data = _prepare_export_data(all_entries, include_messages)
+            
+            E.progress(
+                message="Writing file",
+                mode="stage",
+                stage="writing",
+                stage_index=2,
+                total_stages=2
+            )
+        else:
+            # Count mode for many entries
+            start_time = time.time()
+            export_data = {
+                'metadata': {
+                    'export_timestamp': time.time(),
+                    'format': format,
+                    'include_messages': include_messages,
+                    'total_entries': entry_count
+                },
+                'entries': []
+            }
+            
+            for i, (key, value, cache_type) in enumerate(all_entries, 1):
+                # Process each entry with progress
+                entry_data = _process_single_entry(key, value, cache_type, include_messages)
+                export_data['entries'].append(entry_data)
+                
+                # Report progress every 5 entries or on last entry
+                if i % 5 == 0 or i == entry_count:
+                    E.progress(
+                        message=f"Processed entry {i}",
+                        mode="count",
+                        current=i,
+                        total=entry_count,
+                        elapsed=time.time() - start_time
+                    )
         
         # Export to file
         output_path = Path(output_file)
@@ -359,6 +504,52 @@ def _export_cache_entries(cache, output_file, name, bag_path, format, include_me
             details={"output_file": output_file, "format": format}
         )
         raise typer.Exit(1)
+
+
+def _process_single_entry(key, value, cache_type, include_messages):
+    """Process a single cache entry for export"""
+    try:
+        entry_data = {
+            'key': key,
+            'cache_type': cache_type,
+            'timestamp': time.time()
+        }
+        
+        if isinstance(value, BagCacheEntry):
+            bag_info = value.bag_info
+            entry_data.update({
+                'bag_path': str(getattr(bag_info, 'file_path', 'Unknown')),
+                'topics_count': len(getattr(bag_info, 'topics', [])),
+                'messages_count': sum(getattr(bag_info, 'message_counts', {}).values()),
+                'duration_sec': getattr(bag_info, 'duration_seconds', 0),
+                'size_mb': value.file_size / 1024 / 1024 if value.file_size else 0,
+                'created': value.cache_timestamp,
+                'last_accessed': value.file_mtime
+            })
+            
+            if include_messages and hasattr(bag_info, 'topics'):
+                entry_data['topics'] = [
+                    {
+                        'name': topic.name,
+                        'type': topic.type,
+                        'message_count': topic.message_count,
+                        'frequency': getattr(topic, 'frequency', 0)
+                    }
+                    for topic in bag_info.topics
+                ]
+        else:
+            # Handle other cache entry types
+            entry_data['value'] = str(value)
+        
+        return entry_data
+        
+    except Exception as e:
+        return {
+            'key': key,
+            'cache_type': cache_type,
+            'error': f"Failed to process entry: {str(e)}",
+            'timestamp': time.time()
+        }
 
 
 def _get_all_cache_entries(cache) -> List[tuple]:
