@@ -18,21 +18,15 @@ show_test_config
 cd /workspaces/rose
 
 print_test "Cache command help"
-run_cmd_silent "python -m roseApp.rose cache --help" "Help works" "Help failed"
+run_cmd "python -m roseApp.rose cache --help" "Help works" "Help failed"
 
 print_test "Cache status"
-run_cmd_silent "python -m roseApp.rose cache" "Cache status works" "Cache status failed"
+run_cmd "python -m roseApp.rose cache" "Cache status works" "Cache status failed"
 
 print_test "Cache clear"
-run_cmd_silent "python -m roseApp.rose cache --clear" "Cache clear works" "Cache clear failed"
+run_cmd_expect_error "python -m roseApp.rose cache clear" "Cache clear no confirmation works" "Cache clear no confirmation failed"
 
-print_test "Cache rebuild"
-run_cmd_silent "python -m roseApp.rose cache --rebuild \"$TEST_BAG\"" "Cache rebuild works" "Cache rebuild failed"
-
-print_test "Cache info"
-run_cmd_silent "python -m roseApp.rose cache --info \"$TEST_BAG\"" "Cache info works" "Cache info failed"
-
-print_test "Cache non-existent bag (error handling)"
-run_cmd_expect_error "python -m roseApp.rose cache --info \"non_existent.bag\"" "Error handling works" "Should fail with non-existent bag"
+print_test "Cache clear with confirmation"
+run_cmd "python -m roseApp.rose cache clear --yes " "Cache clear works" "Cache clear failed"
 
 echo -e "${GREEN}Cache command smoke tests passed!${NC}"
