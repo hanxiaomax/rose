@@ -37,120 +37,6 @@ class EventType(Enum):
     ERROR = "error"
 
 
-class HeartbeatManager:
-    """
-    Manages periodic heartbeat for progress updates.
-    
-    Ensures frontend receives regular updates even during long operations.
-    If no new progress is sent within the interval, the last progress is
-    resent with an updated timestamp.
-    
-    Usage:
-        with E.heartbeat(interval=1.0) as hb:
-            hb.update(message="Processing", mode="count", current=0, total=10)
-            for i in range(10):
-                do_long_operation()  # Heartbeat sends updates automatically
-                hb.update(message=f"Processed {i+1}", mode="count", 
-                         current=i+1, total=10)
-    """
-    
-    def __init__(self, emitter: 'EventEmitter', interval: float = 1.0):
-        """
-        Initialize heartbeat manager.
-        
-        Args:
-            emitter: Parent EventEmitter instance
-            interval: Heartbeat interval in seconds (default: 1.0)
-        """
-        self._emitter = emitter
-        self._interval = interval
-        self._last_progress: Optional[Dict[str, Any]] = None
-        self._last_update_time = 0.0
-        self._heartbeat_thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-        self._lock = threading.Lock()
-        self._enabled = True
-    
-    def start(self) -> None:
-        """Start heartbeat background thread"""
-        if self._heartbeat_thread is not None:
-            return  # Already started
-        
-        self._stop_event.clear()
-        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
-        self._heartbeat_thread.start()
-    
-    def stop(self) -> None:
-        """Stop heartbeat thread and wait for cleanup"""
-        if self._heartbeat_thread is None:
-            return
-        
-        self._stop_event.set()
-        self._heartbeat_thread.join(timeout=2.0)
-        self._heartbeat_thread = None
-    
-    def update(self, **progress_kwargs) -> None:
-        """
-        Update progress and record for heartbeat replay.
-        
-        This method:
-        1. Records the progress parameters for potential replay
-        2. Immediately emits the progress event
-        
-        Args:
-            **progress_kwargs: Arguments to pass to emit_progress()
-        """
-        with self._lock:
-            self._last_progress = progress_kwargs.copy()
-            self._last_update_time = time.time()
-        
-        # Immediately emit
-        self._emitter.emit_progress(**progress_kwargs)
-    
-    def disable(self) -> None:
-        """Temporarily disable heartbeat (e.g., during fast operations)"""
-        with self._lock:
-            self._enabled = False
-    
-    def enable(self) -> None:
-        """Re-enable heartbeat"""
-        with self._lock:
-            self._enabled = True
-    
-    def _heartbeat_loop(self) -> None:
-        """Background thread that sends periodic heartbeats"""
-        while not self._stop_event.is_set():
-            time.sleep(self._interval)
-            
-            if self._stop_event.is_set():
-                break
-            
-            progress_kwargs = None
-            with self._lock:
-                if not self._enabled or self._last_progress is None:
-                    continue
-                
-                # Check if we need to send a heartbeat
-                elapsed_since_last = time.time() - self._last_update_time
-                if elapsed_since_last >= self._interval:
-                    # Resend last progress (will get new timestamp automatically)
-                    progress_kwargs = self._last_progress.copy()
-            
-            # Emit outside the lock to avoid deadlock
-            if progress_kwargs:
-                self._emitter.emit_progress(**progress_kwargs)
-    
-    def __enter__(self):
-        """Enter context manager"""
-        self.start()
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager"""
-        self.stop()
-        return False
-
-
 class EventEmitter:
     """
     Pure NDJSON event emitter for headless CLI.
@@ -163,6 +49,7 @@ class EventEmitter:
     - Simplified ID format: trace_id:run_id[:task_id]
     - Version field instead of protocol object
     - Flat header structure (no nested context)
+    - Automatic 1-second heartbeat for all progress events
     
     Minimal API Usage (recommended):
         E = get_emitter()
@@ -170,13 +57,10 @@ class EventEmitter:
         E.data([...], label="found_bags")
         E.done({"processed": 10})
     
-    Heartbeat Usage:
-        with E.heartbeat(interval=1.0) as hb:
-            hb.update(message="Loading", mode="count", current=0, total=10)
-            for i in range(10):
-                do_work()  # Heartbeat sends updates automatically
-                hb.update(message=f"Loaded {i+1}", mode="count", 
-                         current=i+1, total=10)
+    Automatic Heartbeat:
+        All progress events automatically trigger 1-second periodic heartbeat.
+        If no new progress is sent within 1 second, the last progress is resent
+        with updated timestamp. No manual heartbeat management needed.
     
     Task-Level Events (Parallel Execution):
         # Run-level event (default)
@@ -194,6 +78,15 @@ class EventEmitter:
         """Initialize event emitter"""
         self._context: Optional[Dict[str, Any]] = None
         self._version = "2.0"
+        
+        # Automatic heartbeat state
+        self._last_progress: Optional[Dict[str, Any]] = None
+        self._last_progress_time = 0.0
+        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._heartbeat_stop_event = threading.Event()
+        self._heartbeat_lock = threading.Lock()
+        self._heartbeat_interval = 1.0  # 1 second
+        self._heartbeat_active = False
     
     def set_context(
         self, 
@@ -286,6 +179,62 @@ class EventEmitter:
             yield
         finally:
             self.clear_id()
+    
+    def _start_auto_heartbeat(self) -> None:
+        """Start automatic heartbeat thread if not already running"""
+        with self._heartbeat_lock:
+            if self._heartbeat_active:
+                return
+            
+            self._heartbeat_active = True
+            self._heartbeat_stop_event.clear()
+            self._heartbeat_thread = threading.Thread(
+                target=self._heartbeat_loop, 
+                daemon=True
+            )
+            self._heartbeat_thread.start()
+    
+    def _stop_auto_heartbeat(self) -> None:
+        """Stop automatic heartbeat thread"""
+        with self._heartbeat_lock:
+            if not self._heartbeat_active:
+                return
+            
+            self._heartbeat_active = False
+            self._heartbeat_stop_event.set()
+            
+            if self._heartbeat_thread:
+                self._heartbeat_thread.join(timeout=2.0)
+                self._heartbeat_thread = None
+    
+    def _heartbeat_loop(self) -> None:
+        """Background thread that sends periodic heartbeats"""
+        while not self._heartbeat_stop_event.is_set():
+            time.sleep(self._heartbeat_interval)
+            
+            if self._heartbeat_stop_event.is_set():
+                break
+            
+            # Check if we need to send a heartbeat
+            progress_kwargs = None
+            with self._heartbeat_lock:
+                if self._last_progress is None:
+                    continue
+                
+                elapsed_since_last = time.time() - self._last_progress_time
+                if elapsed_since_last >= self._heartbeat_interval:
+                    # Resend last progress with new timestamp
+                    progress_kwargs = self._last_progress.copy()
+            
+            # Emit outside the lock to avoid deadlock
+            if progress_kwargs:
+                self.emit_progress(**progress_kwargs)
+    
+    def _record_progress_for_heartbeat(self, **progress_kwargs) -> None:
+        """Record progress parameters for heartbeat replay"""
+        with self._heartbeat_lock:
+            self._last_progress = progress_kwargs.copy()
+            self._last_progress_time = time.time()
     
     def _emit_event(self, event_type: EventType, payload: Dict[str, Any]) -> None:
         """
@@ -397,6 +346,10 @@ class EventEmitter:
         """
         Emit progress event with standardized payload.
         
+        Automatically starts 1-second heartbeat mechanism on first progress event.
+        Heartbeat will resend the last progress with updated timestamp if no new
+        progress is sent within 1 second.
+        
         Args:
             message: Human-readable status message
             mode: Progress mode (stage/count/heartbeat)
@@ -421,6 +374,23 @@ class EventEmitter:
                          stage="compression", stage_index=3, total_stages=5,
                          current=15, elapsed=45.0)
         """
+        # Start automatic heartbeat on first progress event
+        self._start_auto_heartbeat()
+        
+        # Record progress for heartbeat replay
+        progress_kwargs = {
+            'message': message,
+            'mode': mode,
+            'stage': stage,
+            'stage_index': stage_index,
+            'total_stages': total_stages,
+            'current': current,
+            'total': total,
+            'elapsed': elapsed
+        }
+        self._record_progress_for_heartbeat(**progress_kwargs)
+        
+        # Build payload
         payload = {
             "message": message,
             "mode": mode
@@ -475,6 +445,8 @@ class EventEmitter:
         """
         Emit done event (successful completion).
         
+        Automatically stops heartbeat mechanism when command completes.
+        
         Args:
             summary: Summary data with operation results
         
@@ -492,6 +464,73 @@ class EventEmitter:
         """
         payload = {"summary": summary}
         self._emit_event(EventType.DONE, payload)
+        
+        # Stop heartbeat on completion
+        self._stop_auto_heartbeat()
+    
+    def emit_error(
+        self, 
+        code: str, 
+        message: str, 
+        details: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Emit error event (operation failure).
+        
+        Automatically stops heartbeat mechanism when command fails.
+        In development mode, also prints the call stack to stderr for debugging.
+        
+        Args:
+            code: Machine-readable error code (UPPER_SNAKE_CASE)
+            message: Human-readable error message
+            details: Optional additional diagnostic information
+        
+        Example:
+            emitter.emit_error(
+                "BAG_NOT_FOUND",
+                "Bag file not found: demo.bag",
+                details={
+                    "path": "/path/to/demo.bag",
+                    "suggestions": ["Check file path", "Ensure file exists"]
+                }
+            )
+        
+        Note:
+            This should be the last event emitted on failure.
+            Exit code should be non-zero.
+        """
+        # Print call stack to stderr for development debugging
+        import traceback
+        import sys
+        import os
+        
+        # Check if we're in development mode (not in production)
+        is_dev = os.getenv('ROSE_ENV', 'development') == 'development' or os.getenv('DEBUG', '').lower() in ('1', 'true', 'yes')
+        
+        if is_dev:
+            print(f"[DEBUG] E.error called: {code} - {message}", file=sys.stderr)
+            print(f"[DEBUG] Call stack:", file=sys.stderr)
+            
+            # Get current stack, skip the current frame
+            stack = traceback.extract_stack()[:-1]
+            for frame in stack[-5:]:  # Show last 5 frames
+                print(f"  File \"{frame.filename}\", line {frame.lineno}, in {frame.name}", file=sys.stderr)
+                if frame.line:
+                    print(f"    {frame.line.strip()}", file=sys.stderr)
+            print("", file=sys.stderr)  # Empty line
+        
+        payload: Dict[str, Any] = {
+            "code": code,
+            "message": message
+        }
+        
+        if details:
+            payload["details"] = details
+        
+        self._emit_event(EventType.ERROR, payload)
+        
+        # Stop heartbeat on error
+        self._stop_auto_heartbeat()
     
     # Simplified API (recommended for new code)
     
@@ -603,8 +642,6 @@ class EventEmitter:
         """
         Emit error event (simplified API).
         
-        Automatically prints call stack to logger for debugging purposes.
-        
         Args:
             code: Machine-readable error code (UPPER_SNAKE_CASE)
             message: Human-readable error message
@@ -613,80 +650,8 @@ class EventEmitter:
         Example:
             E.error("BAG_NOT_FOUND", "File not found", path="/path/to/bag")
         """
-        # Print call stack to logger for debugging
-        import traceback
-        from roseApp.core.logging import get_logger
-        
-        logger = get_logger("EventEmitter")
-        logger.debug(f"E.error called: {code} - {message}")
-        logger.debug("Call stack:")
-        
-        # Get current stack, skip the current frame
-        stack = traceback.extract_stack()[:-1]
-        for frame in stack[-5:]:  # Show last 5 frames
-            logger.debug(f"  File \"{frame.filename}\", line {frame.lineno}, in {frame.name}")
-            if frame.line:
-                logger.debug(f"    {frame.line.strip()}")
-        
-        # Emit error event
         details_dict = details if details else None
-        payload: Dict[str, Any] = {
-            "code": code,
-            "message": message
-        }
-        
-        if details_dict:
-            payload["details"] = details_dict
-        
-        self._emit_event(EventType.ERROR, payload)
-    
-    # Heartbeat API
-    
-    def create_heartbeat(self, interval: float = 1.0) -> HeartbeatManager:
-        """
-        Create a heartbeat manager for periodic progress updates.
-        
-        Args:
-            interval: Heartbeat interval in seconds (default: 1.0)
-        
-        Returns:
-            HeartbeatManager instance
-        
-        Usage:
-            hb = E.create_heartbeat(interval=1.0)
-            hb.start()
-            try:
-                hb.update(message="Processing", mode="count", current=0, total=10)
-                # ... long operations ...
-            finally:
-                hb.stop()
-        """
-        return HeartbeatManager(self, interval)
-    
-    @contextmanager
-    def heartbeat(self, interval: float = 1.0):
-        """
-        Context manager for automatic heartbeat management.
-        
-        Args:
-            interval: Heartbeat interval in seconds (default: 1.0)
-        
-        Yields:
-            HeartbeatManager instance
-        
-        Usage:
-            with E.heartbeat(interval=1.0) as hb:
-                hb.update(message="Loading", mode="count", current=0, total=10)
-                for i in range(10):
-                    do_long_operation()  # Heartbeat sends updates automatically
-                    hb.update(message=f"Loaded {i+1}", mode="count", 
-                             current=i+1, total=10)
-        """
-        hb = HeartbeatManager(self, interval)
-        with hb:
-            yield hb
-    
-
+        self.emit_error(code, message, details_dict)
 # Global emitter instance
 _emitter: Optional[EventEmitter] = None
 

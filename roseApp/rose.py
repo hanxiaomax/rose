@@ -33,8 +33,9 @@ def callback(ctx: typer.Context):
     
     # If no subcommand is provided, emit error event
     if ctx.invoked_subcommand is None:
-        from roseApp.core.event_emitter import E
-        E.error(
+        from roseApp.core.event_emitter import get_emitter
+        emitter = get_emitter()
+        emitter.emit_error(
             "NO_COMMAND",
             "No command specified. Use --help for usage."
         )
