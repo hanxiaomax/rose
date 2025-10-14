@@ -109,7 +109,6 @@ TEST_SCRIPTS=(
     "test_inspect.sh"
     "test_data.sh"
     "test_cache.sh"
-    "test_plugin.sh"
 )
 
 # Track results

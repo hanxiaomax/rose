@@ -402,29 +402,20 @@ def compress(
                             elapsed=time.time() - start_time
                         )
         else:
-            # Single file: use stage mode with heartbeat
+            # Single file: use stage mode (automatic heartbeat)
             bag_path = valid_bags[0]
-            heartbeat_counter = 0
-            last_heartbeat = time.time()
             
-            # Create a heartbeat-enabled progress callback
-            def heartbeat_progress_callback(percent):
-                nonlocal heartbeat_counter, last_heartbeat
-                current_time = time.time()
-                
-                # Emit heartbeat every 3 seconds
-                if current_time - last_heartbeat >= 3.0:
-                    heartbeat_counter += 1
-                    E.progress(
-                        message=f"Compressing {bag_path.name}... ({percent:.1f}% complete)",
-                        mode="stage",
-                        stage="compression",
-                        stage_index=3,
-                        total_stages=3,
-                        current=heartbeat_counter,
-                        elapsed=current_time - start_time
-                    )
-                    last_heartbeat = current_time
+            # Create a simple progress callback (heartbeat is automatic)
+            def progress_callback(percent):
+                # Update progress as we go (heartbeat automatic)
+                E.progress(
+                    message=f"Compressing {bag_path.name}... ({percent:.1f}% complete)",
+                    mode="stage",
+                    stage="compression",
+                    stage_index=3,
+                    total_stages=3,
+                    elapsed=time.time() - start_time
+                )
                 
                 if verbose:
                     logger.debug(f"{bag_path.name}: {percent:.1f}%")
@@ -436,7 +427,7 @@ def compress(
                     compression, 
                     overwrite=yes, 
                     verbose=verbose, 
-                    progress_callback=heartbeat_progress_callback,
+                    progress_callback=progress_callback,
                     cache_manager=cache_manager
                 ))
                 results.append(result)
