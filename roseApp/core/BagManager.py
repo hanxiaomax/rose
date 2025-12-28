@@ -341,9 +341,10 @@ class BagManager:
         """
         from roseApp.core.errors import validate_compression_type
         
-        is_valid, error_message = validate_compression_type(compression)
-        if not is_valid:
-            raise ValueError(error_message)
+        try:
+            validate_compression_type(compression)
+        except Exception as e:
+            raise ValueError(str(e))
         
         self.compression = compression
     

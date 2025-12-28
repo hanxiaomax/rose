@@ -311,7 +311,7 @@ class Output:
             title: Section title
         """
         self._console.print()
-        self._console.print(f"[{self._theme.highlight}]=== {title} ===[/{self._theme.highlight}]")
+        self._console.print(f"[bold {self._theme.highlight}]{title}[/bold {self._theme.highlight}]")
     
     def divider(self) -> None:
         """Print horizontal divider."""

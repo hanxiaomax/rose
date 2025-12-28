@@ -6,6 +6,7 @@ List and manage cached ROS bag files.
 import json
 import yaml
 import pickle
+import sys
 import time
 from pathlib import Path
 from typing import Optional, List
@@ -25,13 +26,13 @@ def list_default(
 ):
     """List all cached bag files (default command)"""
     if ctx.invoked_subcommand is None:
-    out = get_output()
-    try:
-        cache = get_cache()
-        _show_cache_info(cache, show_content, verbose, out)
-    except Exception as e:
-        out.error(f"Error showing cache: {str(e)}")
-        raise typer.Exit(1)
+        out = get_output()
+        try:
+            cache = get_cache()
+            _show_cache_info(cache, show_content, verbose, out)
+        except Exception as e:
+            out.error(f"Error showing cache: {str(e)}")
+            raise typer.Exit(1)
 
 
 @app.command("export")
@@ -99,7 +100,7 @@ def _show_cache_info(cache, show_content, verbose, out):
         out.section("Cache Information")
         
         total_entries = stats.get('entry_count', 0) + stats.get('memory_entries', 0)
-        total_size_mb = stats.get('cache_size_bytes', 0) / 1024 / 1024
+        total_size_mb = stats.get('total_size_bytes', 0) / 1024 / 1024
         cache_dir = str(cache.cache_dir) if hasattr(cache, 'cache_dir') else "N/A"
         
         out.key_value({
@@ -184,21 +185,24 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     # Try to parse as ID first
     target_entry = None
     target_key = None
+    target_id = None
     try:
         entry_id = int(identifier)
         if 1 <= entry_id <= len(all_entries):
             target_key, target_value, target_type = all_entries[entry_id - 1]
             target_entry = (target_key, target_value, target_type)
+            target_id = entry_id
     except ValueError:
-        # Not a number, treat as path
+        # Not a number, treat as path - need to find the ID
         identifier_path = Path(identifier)
-        for key, value, cache_type in all_entries:
+        for idx, (key, value, cache_type) in enumerate(all_entries, 1):
             if isinstance(value, BagCacheEntry):
                 bag_info = value.bag_info
                 bag_path = Path(getattr(bag_info, 'file_path', ''))
                 if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path):
                     target_entry = (key, value, cache_type)
                     target_key = key
+                    target_id = idx
                     break
     
     if not target_entry:
@@ -208,22 +212,66 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     
     key, value, cache_type = target_entry
     
-    # Get bag name for display
+    # Collect detailed information about the entry
     bag_name = key
+    bag_path_str = "Unknown"
+    entry_details = {}
+    cache_size_bytes = 0
+    
     if isinstance(value, BagCacheEntry):
         bag_info = value.bag_info
         bag_name = Path(getattr(bag_info, 'file_path', key)).name
+        bag_path_str = getattr(bag_info, 'file_path', 'Unknown')
+        
+        # Collect detailed information
+        entry_details = {
+            "File": bag_name,
+            "Path": bag_path_str,
+            "Topics": len(getattr(bag_info, 'topics', [])),
+            "Duration": f"{getattr(bag_info, 'duration_seconds', 0):.1f}s",
+            "Original size": f"{value.file_size / 1024 / 1024:.1f} MB" if value.file_size else "Unknown",
+            "Cache location": cache_type
+        }
+        
+        # Get message counts if available
+        if hasattr(bag_info, 'message_counts') and bag_info.message_counts:
+            total_messages = sum(bag_info.message_counts.values())
+            entry_details["Total messages"] = f"{total_messages:,}"
+        
+        # Calculate cache file size
+        if cache_type == "disk":
+            cache_file = cache.cache_dir / f"{key}.pkl"
+            if cache_file.exists():
+                cache_size_bytes = cache_file.stat().st_size
+                entry_details["Cache size"] = f"{cache_size_bytes / 1024:.1f} KB"
     
-    # Show what will be removed
-    out.info(f"Will remove: {bag_name}")
+    # Show what will be removed with details
+    out.newline()
+    out.section("Cache Entry to Remove")
+    if entry_details:
+        out.key_value(entry_details)
+    else:
+        out.info(f"Entry: {bag_name}")
     
     # Confirm
     if not skip_confirm:
-        out.warning("Use --yes flag to confirm")
-        return
+        try:
+            out.newline()
+            sys.stdout.write(f"Remove '{bag_name}' from cache? (y/N): ")
+            sys.stdout.flush()
+            response = input().strip().lower()
+            if response not in ['y', 'yes']:
+                out.info("Cancelled")
+                return
+        except (EOFError, KeyboardInterrupt):
+            out.newline()
+            out.info("Cancelled")
+            return
     
     # Remove the entry - handle both memory and disk cache
     success = False
+    cache_file_path = None
+    
     if cache_type == "memory":
         # Remove from memory cache
         if hasattr(cache, '_memory_cache') and key in cache._memory_cache:
@@ -232,6 +280,7 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     else:
         # Remove from disk cache - the key is already the hashed filename
         cache_file = cache.cache_dir / f"{key}.pkl"
+        cache_file_path = str(cache_file)
         if cache_file.exists():
             cache_file.unlink()
             success = True
@@ -240,7 +289,22 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
                 del cache._memory_cache[key]
     
     if success:
-        out.success(f"Removed: {bag_name}")
+        out.newline()
+        freed_size = f"{cache_size_bytes / 1024:.1f} KB" if cache_size_bytes > 0 else "N/A"
+        out.success(f"Removed cache entry")
+        
+        removal_details = {
+            "ID": target_id if target_id else "N/A",
+            "File": bag_name,
+            "Bag path": bag_path_str,
+            "Freed": freed_size
+        }
+        
+        # Add cache file path if available
+        if cache_file_path:
+            removal_details["Cache file"] = cache_file_path
+        
+        out.key_value(removal_details)
     else:
         out.error(f"Failed to remove: {bag_name}")
         raise typer.Exit(1)
@@ -256,25 +320,107 @@ def _clear_all_cache(cache, skip_confirm, out):
         return
     
     # Calculate size to free
-    size_to_free_mb = stats.get('cache_size_bytes', 0) / 1024 / 1024
+    size_to_free_mb = stats.get('total_size_bytes', 0) / 1024 / 1024
     
     # Get all entries
     all_entries = _get_all_cache_entries(cache)
     entries_to_clear = len(all_entries)
     
-    # Show what will be cleared
-    out.info(f"Will clear {entries_to_clear} cache entries ({size_to_free_mb:.2f} MB)")
+    # Collect detailed information for each entry before deletion
+    entries_info = []
+    total_bags_size = 0
+    bag_names = []
+    
+    for key, value, cache_type in all_entries:
+        entry_info = {
+            'key': key,
+            'cache_type': cache_type,
+            'bag_name': key,
+            'bag_path': 'Unknown',
+            'cache_size': 0,
+            'cache_file_path': None
+        }
+        
+        if isinstance(value, BagCacheEntry):
+            bag_info = value.bag_info
+            entry_info['bag_name'] = Path(getattr(bag_info, 'file_path', key)).name
+            entry_info['bag_path'] = getattr(bag_info, 'file_path', 'Unknown')
+            bag_names.append(entry_info['bag_name'])
+            
+            if value.file_size:
+                total_bags_size += value.file_size
+            
+            # Get cache file size
+            if cache_type == "disk":
+                cache_file = cache.cache_dir / f"{key}.pkl"
+                if cache_file.exists():
+                    entry_info['cache_size'] = cache_file.stat().st_size
+                    entry_info['cache_file_path'] = str(cache_file)
+        
+        entries_info.append(entry_info)
+    
+    # Show what will be cleared with details
+    out.newline()
+    out.section("Cache Clear Summary")
+    out.key_value({
+        "Total entries": entries_to_clear,
+        "Memory entries": stats.get('memory_entries', 0),
+        "Disk entries": stats.get('entry_count', 0),
+        "Cache size": f"{size_to_free_mb:.2f} MB",
+        "Original bags size": f"{total_bags_size / 1024 / 1024:.1f} MB" if total_bags_size > 0 else "N/A"
+    })
+    
+    if bag_names and entries_to_clear <= 10:
+        out.newline()
+        out.info("Bags to clear:")
+        for name in bag_names:
+            out.print(f"  - {name}")
+    elif bag_names:
+        out.newline()
+        out.info(f"Bags to clear: {', '.join(bag_names[:5])}{'...' if len(bag_names) > 5 else ''}")
     
     # Confirm
     if not skip_confirm:
-        out.warning("Use --yes flag to confirm")
-        return
+        try:
+            out.newline()
+            sys.stdout.write(f"Clear all {entries_to_clear} cache entries? (y/N): ")
+            sys.stdout.flush()
+            response = input().strip().lower()
+            if response not in ['y', 'yes']:
+                out.info("Cancelled")
+                return
+        except (EOFError, KeyboardInterrupt):
+            out.newline()
+            out.info("Cancelled")
+            return
     
     # Clear cache with progress
     with out.spinner("Clearing cache..."):
         cache.clear()
     
+    # Show detailed information for each deleted entry
+    out.newline()
     out.success(f"Cleared {entries_to_clear} entries, freed {size_to_free_mb:.2f} MB")
+    out.newline()
+    out.section("Deleted Cache Entries")
+    
+    for idx, entry_info in enumerate(entries_info, 1):
+        freed_size = f"{entry_info['cache_size'] / 1024:.1f} KB" if entry_info['cache_size'] > 0 else "N/A"
+        
+        entry_display = {
+            "ID": idx,
+            "File": entry_info['bag_name'],
+            "Bag path": entry_info['bag_path'],
+            "Cache size": freed_size
+        }
+        
+        # Add cache file path if available
+        if entry_info['cache_file_path']:
+            entry_display["Cache file"] = entry_info['cache_file_path']
+        
+        out.key_value(entry_display)
+        if idx < len(entries_info):  # Add separator between entries
+            out.print("")
 
 
 def _export_cache_entries(cache, output_file, name, bag_path, format, include_messages, out):

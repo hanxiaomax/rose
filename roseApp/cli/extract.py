@@ -8,6 +8,7 @@ import asyncio
 import concurrent.futures
 import glob
 import re
+import sys
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -33,6 +34,29 @@ def await_sync(coro):
         asyncio.set_event_loop(loop)
     
     return loop.run_until_complete(coro)
+
+
+def _load_bag_into_cache(bag_path: Path, out, build_index: bool = False, verbose: bool = False):
+    """Load a bag file into cache"""
+    try:
+        parser = BagParser()
+        
+        load_msg = f"Loading {bag_path.name}" + (" (building index)" if build_index else "")
+        with out.spinner(load_msg):
+            bag_info, elapsed_time = await_sync(
+                parser.load_bag_async(str(bag_path), build_index=build_index)
+            )
+        
+        if verbose:
+            out.success(f"Loaded in {elapsed_time:.2f}s")
+        else:
+            out.success("Loaded successfully")
+        
+        return True
+    except Exception as e:
+        out.error(f"Failed to load: {str(e)}")
+        logger.error(f"Error loading bag {bag_path}: {e}")
+        return False
 
 
 def find_bag_files(input_patterns: List[str]) -> List[Path]:
@@ -159,7 +183,7 @@ async def extract_single_bag(
         }
         
     except Exception as e:
-        logger.error(f"Failed to extract from {bag_path}: {e}")
+        logger.error(f"Failed to extract from {bag_path}: {e}", exc_info=True)
         return {
             'path': str(bag_path),
             'output_path': None,
@@ -177,21 +201,22 @@ def extract(
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count - 2)"),
     reverse: bool = typer.Option(False, "--reverse", help="Reverse selection - exclude specified topics instead of including them"),
     compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be extracted without doing it"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information")
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
+    load: bool = typer.Option(False, "--load", help="Load bags if not cached"),
+    build_index: bool = typer.Option(False, "--build-index", help="Build index when loading (requires --load)"),
 ):
     """
     Extract specific topics from ROS bag files (supports multiple files and patterns).
     
-    Bags must be loaded into cache first using 'rose load'.
+    Bags must be loaded into cache first using 'rose load' or use --load option.
     
     Examples:
         rose extract "*.bag" --topics gps imu                                    # Extract from all bag files
         rose extract input.bag --topics /gps/fix -o "{input}_filtered.bag"      # Single file with pattern
         rose extract bag1.bag bag2.bag --topics tf --reverse                    # Multiple files, exclude tf
         rose extract "*.bag" --topics gps --compression lz4 --workers 4         # Parallel extraction with compression
-        rose extract "*.bag" --topics gps --dry-run                             # Preview without extraction
+        rose extract "*.bag" --topics gps --load                                 # Auto load if not cached
     """
     start_total_time = time.time()
     out = get_output()
@@ -235,7 +260,7 @@ def extract(
             size_mb = bag.stat().st_size / 1024 / 1024
             out.file_info(bag, size_mb)
         
-        # Stage 2: Cache check
+        # Stage 2: Cache check and auto-load if needed
         out.info("Checking cache...")
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
@@ -243,14 +268,36 @@ def extract(
         for bag_path in valid_bags:
             cached_entry = cache_manager.get_analysis(bag_path)
             if not cached_entry or not cached_entry.is_valid(bag_path):
-                uncached_bags.append(str(bag_path))
+                uncached_bags.append(bag_path)
         
         if uncached_bags:
-            out.error(
-                f"{len(uncached_bags)} bag(s) not in cache",
-                details=f"Run: rose load {' '.join(input_bags)}"
-            )
-            raise typer.Exit(1)
+            if load:
+                # Auto-load uncached bags
+                out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                for bag_path in uncached_bags:
+                    _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose)
+            else:
+                # Ask user if they want to load
+                out.warning(f"{len(uncached_bags)} bag(s) not in cache")
+                for bag in uncached_bags:
+                    out.print(f"  - {bag.name}")
+                
+                try:
+                    out.newline()
+                    sys.stdout.write(f"Load {len(uncached_bags)} bag(s) now? (y/N): ")
+                    sys.stdout.flush()
+                    response = input().strip().lower()
+                    if response in ['y', 'yes']:
+                        out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                        for bag_path in uncached_bags:
+                            _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose)
+                    else:
+                        out.info("Cancelled")
+                        raise typer.Exit(0)
+                except (EOFError, KeyboardInterrupt):
+                    out.newline()
+                    out.info("Cancelled")
+                    raise typer.Exit(0)
         
         # Set default output pattern if not specified
         if not output:
@@ -291,42 +338,50 @@ def extract(
             )
             raise typer.Exit(1)
         
-        # Show topics info
+        # Show extraction plan (like dry-run)
         out.newline()
-        out.info(f"Topics ({operation} {len(topics_to_extract)} of {len(all_topics)}):")
+        out.section("Extraction Plan")
+        out.info(f"Operation: {operation} {len(topics_to_extract)} of {len(all_topics)} topics")
+        out.info("Topics to extract:")
         for topic in sorted(topics_to_extract)[:20]:
             out.print(f"  {topic}")
         if len(topics_to_extract) > 20:
             out.debug(f"  ... and {len(topics_to_extract) - 20} more")
         
-        # If dry run, show preview and return
-        if dry_run:
-            out.newline()
-            out.section("Extraction Plan (Dry Run)")
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            
-            columns = ["Input", "Output"]
-            rows = []
-            for bag_path in valid_bags:
-                if '{input}' in output_pattern:
-                    preview_output = output_pattern.replace('{input}', bag_path.stem)
-                elif '{timestamp}' in output_pattern:
-                    preview_output = output_pattern.replace('{timestamp}', timestamp)
-                else:
+        out.newline()
+        out.info("Output files:")
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        for bag_path in valid_bags:
+            preview_output = output_pattern
+            if '{input}' in preview_output:
+                preview_output = preview_output.replace('{input}', bag_path.stem)
+            if '{timestamp}' in preview_output:
+                preview_output = preview_output.replace('{timestamp}', timestamp)
+            else:
+                if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
                     preview_output = f"{bag_path.stem}_{output_pattern}_{timestamp}.bag"
-                rows.append([bag_path.name, preview_output])
-            
-            out.table(None, columns, rows)
+            out.print(f"  {bag_path.name} -> {preview_output}")
+        
+        # Ask for confirmation
+        if not yes:
             out.newline()
-            out.success(f"Would extract {len(valid_bags)} bag(s) with {len(topics_to_extract)} topic(s)")
-            return
+            try:
+                sys.stdout.write(f"Extract {len(topics_to_extract)} topics from {len(valid_bags)} bag(s)? (y/N): ")
+                sys.stdout.flush()
+                response = input().strip().lower()
+                if response not in ['y', 'yes']:
+                    out.info("Cancelled")
+                    return
+            except (EOFError, KeyboardInterrupt):
+                out.newline()
+                out.info("Cancelled")
+                return
         
         # Determine number of workers
         if workers is None:
             workers = max(1, (os.cpu_count() or 2) - 2)
         workers = min(workers, len(valid_bags))
         
-        # Show extraction plan
         if verbose:
             out.newline()
             out.key_value({
@@ -335,7 +390,7 @@ def extract(
                 "Compression": compression,
                 "Topics": len(topics_to_extract),
                 "Output pattern": output_pattern
-            }, title="Extraction Plan")
+            }, title="Extraction Details")
         
         # Stage 4: Extraction
         results = []
@@ -343,18 +398,24 @@ def extract(
         
         out.newline()
         
+        # Format compression display text
+        if compression == "none":
+            compression_display = "NO COMPRESSION"
+        else:
+            compression_display = compression.upper()
+        
         # Use progress bar for extraction
-        with out.progress_bar(total_bags, "Extracting") as progress:
+        with out.progress_bar(total_bags, f"Extracting ({compression_display})") as progress:
             # Use ThreadPoolExecutor for parallel extraction
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 # Submit all tasks
                 future_to_bag = {}
                 for bag_path in valid_bags:
                     def create_progress_callback(bag_name):
-                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                        def callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
                             if phase and verbose:
                                 logger.debug(f"{bag_name}: {phase}")
-                        return progress_callback
+                        return callback
                     
                     cb = create_progress_callback(bag_path.name)
                     future = executor.submit(

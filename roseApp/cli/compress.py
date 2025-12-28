@@ -8,6 +8,7 @@ import asyncio
 import concurrent.futures
 import glob
 import re
+import sys
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -33,6 +34,29 @@ def await_sync(coro):
         asyncio.set_event_loop(loop)
     
     return loop.run_until_complete(coro)
+
+
+def _load_bag_into_cache(bag_path: Path, out, build_index: bool = False, verbose: bool = False):
+    """Load a bag file into cache"""
+    try:
+        parser = BagParser()
+        
+        load_msg = f"Loading {bag_path.name}" + (" (building index)" if build_index else "")
+        with out.spinner(load_msg):
+            bag_info, elapsed_time = await_sync(
+                parser.load_bag_async(str(bag_path), build_index=build_index)
+            )
+        
+        if verbose:
+            out.success(f"Loaded in {elapsed_time:.2f}s")
+        else:
+            out.success("Loaded successfully")
+        
+        return True
+    except Exception as e:
+        out.error(f"Failed to load: {str(e)}")
+        logger.error(f"Error loading bag {bag_path}: {e}")
+        return False
 
 
 def find_bag_files(input_patterns: List[str]) -> List[Path]:
@@ -169,20 +193,21 @@ def compress(
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output pattern (use {input} for input filename, {timestamp} for timestamp, {compression} for compression type)"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count / 2, max 4)"),
     compression: str = typer.Option("lz4", "--compression", "-c", help="Compression type: bz2, lz4"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be compressed without doing it"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Answer yes to all questions (overwrite, etc.)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed compression information"),
+    load: bool = typer.Option(False, "--load", help="Load bags if not cached"),
+    build_index: bool = typer.Option(False, "--build-index", help="Build index when loading (requires --load)"),
 ):
     """
     Compress ROS bag files with different compression algorithms (supports multiple files and patterns).
     
-    Bags must be loaded into cache first using 'rose load'.
+    Bags must be loaded into cache first using 'rose load' or use --load option.
     
     Examples:
         rose compress "*.bag" --compression lz4                                      # Compress all bag files with LZ4
         rose compress input.bag --compression bz2 -o "{input}_{compression}.bag"    # Single file with pattern
         rose compress bag1.bag bag2.bag --compression lz4 --workers 4               # Multiple files, parallel compression
-        rose compress "*.bag" --compression bz2 --dry-run                           # Preview compression without doing it
+        rose compress "*.bag" --compression bz2 --load                               # Auto load if not cached
     """
     start_total_time = time.time()
     out = get_output()
@@ -219,47 +244,42 @@ def compress(
         for bag_path in valid_bags:
             cached_entry = cache_manager.get_analysis(bag_path)
             if not cached_entry or not cached_entry.is_valid(bag_path):
-                uncached_bags.append(str(bag_path))
+                uncached_bags.append(bag_path)
         
         if uncached_bags:
-            out.error(
-                f"{len(uncached_bags)} bag(s) not in cache",
-                details=f"Run: rose load {' '.join(input_bags)}"
-            )
-            raise typer.Exit(1)
+            if load:
+                # Auto-load uncached bags
+                out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                for bag_path in uncached_bags:
+                    _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose)
+            else:
+                # Ask user if they want to load
+                out.warning(f"{len(uncached_bags)} bag(s) not in cache")
+                for bag in uncached_bags:
+                    out.print(f"  - {bag.name}")
+                
+                try:
+                    out.newline()
+                    sys.stdout.write(f"Load {len(uncached_bags)} bag(s) now? (y/N): ")
+                    sys.stdout.flush()
+                    response = input().strip().lower()
+                    if response in ['y', 'yes']:
+                        out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                        for bag_path in uncached_bags:
+                            _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose)
+                    else:
+                        out.info("Cancelled")
+                        raise typer.Exit(0)
+                except (EOFError, KeyboardInterrupt):
+                    out.newline()
+                    out.info("Cancelled")
+                    raise typer.Exit(0)
         
         # Set default output pattern if not specified
         if not output:
             output_pattern = "{input}_{compression}_{timestamp}.bag"
         else:
             output_pattern = output
-        
-        # Dry run preview
-        if dry_run:
-            out.newline()
-            out.section("Compression Plan (Dry Run)")
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            
-            columns = ["Input", "Output", "Compression"]
-            rows = []
-            for bag_path in valid_bags:
-                preview_output = output_pattern
-                if '{input}' in preview_output:
-                    preview_output = preview_output.replace('{input}', bag_path.stem)
-                if '{timestamp}' in preview_output:
-                    preview_output = preview_output.replace('{timestamp}', timestamp)
-                if '{compression}' in preview_output:
-                    preview_output = preview_output.replace('{compression}', compression)
-                else:
-                    if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
-                        preview_output = f"{bag_path.stem}_{compression}_{timestamp}.bag"
-                
-                rows.append([bag_path.name, preview_output, compression])
-            
-            out.table(None, columns, rows)
-            out.newline()
-            out.success(f"Would compress {len(valid_bags)} bag(s) with {compression.upper()}")
-            return
         
         # Determine number of workers - be conservative for compression
         if workers is None:
@@ -284,8 +304,11 @@ def compress(
         
         out.newline()
         
+        # Format compression display text
+        compression_display = compression.upper()
+        
         # Use progress bar for compression
-        with out.progress_bar(total_bags, f"Compressing ({compression.upper()})") as progress:
+        with out.progress_bar(total_bags, f"Compressing ({compression_display})") as progress:
             # Use ThreadPoolExecutor for parallel compression
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 # Submit all tasks

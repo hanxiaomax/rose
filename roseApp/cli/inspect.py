@@ -2,7 +2,9 @@
 """
 Inspect command for ROS bag files.
 """
+import asyncio
 import re
+import sys
 from pathlib import Path
 from typing import Optional
 import typer
@@ -10,11 +12,46 @@ import typer
 from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
 from ..core.output import get_output
+from ..core.parser import BagParser
 
 # Initialize logger
 logger = get_logger(__name__)
 
 app = typer.Typer(help="Inspect ROS bag files")
+
+
+def await_sync(coro):
+    """Helper to run async function in sync context"""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    return loop.run_until_complete(coro)
+
+
+def _load_bag_into_cache(bag_path: Path, out, build_index: bool = False, verbose: bool = False):
+    """Load a bag file into cache"""
+    try:
+        parser = BagParser()
+        
+        load_msg = f"Loading {bag_path.name}" + (" (building index)" if build_index else "")
+        with out.spinner(load_msg):
+            bag_info, elapsed_time = await_sync(
+                parser.load_bag_async(str(bag_path), build_index=build_index)
+            )
+        
+        if verbose:
+            out.success(f"Loaded in {elapsed_time:.2f}s")
+        else:
+            out.success("Loaded successfully")
+        
+        return True
+    except Exception as e:
+        out.error(f"Failed to load: {str(e)}")
+        logger.error(f"Error loading bag {bag_path}: {e}")
+        return False
 
 
 def filter_topics(topic_list, pattern, exclude_pattern=None):
@@ -37,6 +74,8 @@ def inspect(
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
+    load: bool = typer.Option(False, "--load", help="Load bag if not cached"),
+    build_index: bool = typer.Option(False, "--build-index", help="Build index when loading (requires --load)"),
 ):
     """
     Inspect a ROS bag file and display comprehensive analysis.
@@ -49,6 +88,8 @@ def inspect(
         rose inspect demo.bag -v                   # Show detailed statistics
         rose inspect demo.bag --show-fields        # Include field analysis
         rose inspect demo.bag -t "/camera.*"       # Filter topics by regex
+        rose inspect demo.bag --load               # Auto load if not cached
+        rose inspect demo.bag --load --build-index # Auto load with index building
     """
     out = get_output()
     
@@ -74,11 +115,36 @@ def inspect(
         
         # Check if bag is in cache
         if cached_entry is None:
-            out.error(
-                f"Bag file not in cache: {bag_path}",
-                details=f"Load the bag first: rose load {bag_path}"
-            )
-            raise typer.Exit(1)
+            if load:
+                # Auto-load the bag
+                out.info(f"Bag not in cache, loading: {bag_path.name}")
+                _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose)
+                # Re-check cache
+                cached_entry = cache_manager.get_analysis(bag_path)
+                if cached_entry is None:
+                    out.error("Failed to load bag into cache")
+                    raise typer.Exit(1)
+            else:
+                # Ask user if they want to load
+                out.warning(f"Bag file not in cache: {bag_path.name}")
+                try:
+                    sys.stdout.write(f"Load '{bag_path.name}' now? (y/N): ")
+                    sys.stdout.flush()
+                    response = input().strip().lower()
+                    if response in ['y', 'yes']:
+                        _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose)
+                        # Re-check cache
+                        cached_entry = cache_manager.get_analysis(bag_path)
+                        if cached_entry is None:
+                            out.error("Failed to load bag into cache")
+                            raise typer.Exit(1)
+                    else:
+                        out.info("Cancelled")
+                        raise typer.Exit(0)
+                except (EOFError, KeyboardInterrupt):
+                    out.newline()
+                    out.info("Cancelled")
+                    raise typer.Exit(0)
         
         # Get bag info from cache
         bag_info = cached_entry.bag_info
