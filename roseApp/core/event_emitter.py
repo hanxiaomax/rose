@@ -478,7 +478,6 @@ class EventEmitter:
         Emit error event (operation failure).
         
         Automatically stops heartbeat mechanism when command fails.
-        In development mode, also prints the call stack to stderr for debugging.
         
         Args:
             code: Machine-readable error code (UPPER_SNAKE_CASE)
@@ -499,26 +498,6 @@ class EventEmitter:
             This should be the last event emitted on failure.
             Exit code should be non-zero.
         """
-        # Print call stack to stderr for development debugging
-        import traceback
-        import sys
-        import os
-        
-        # Check if we're in development mode (not in production)
-        is_dev = os.getenv('ROSE_ENV', 'development') == 'development' or os.getenv('DEBUG', '').lower() in ('1', 'true', 'yes')
-        
-        if is_dev:
-            print(f"[DEBUG] E.error called: {code} - {message}", file=sys.stderr)
-            print(f"[DEBUG] Call stack:", file=sys.stderr)
-            
-            # Get current stack, skip the current frame
-            stack = traceback.extract_stack()[:-1]
-            for frame in stack[-5:]:  # Show last 5 frames
-                print(f"  File \"{frame.filename}\", line {frame.lineno}, in {frame.name}", file=sys.stderr)
-                if frame.line:
-                    print(f"    {frame.line.strip()}", file=sys.stderr)
-            print("", file=sys.stderr)  # Empty line
-        
         payload: Dict[str, Any] = {
             "code": code,
             "message": message
