@@ -13,7 +13,7 @@ Uses Pydantic for validation and type safety.
 import os
 import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 try:
     from pydantic_settings import BaseSettings
     from pydantic import Field, validator
@@ -21,6 +21,7 @@ except ImportError:
     # Fallback for older pydantic versions
     from pydantic import BaseSettings, Field, validator
 from enum import Enum
+
 
 class CompressionType(str, Enum):
     """Available compression types"""
@@ -68,11 +69,6 @@ class RoseConfig(BaseSettings):
         description="Enable caching system"
     )
     
-    enable_plugins: bool = Field(
-        default=True,
-        description="Enable plugin system"
-    )
-    
     # ===== Default Behavior =====
     compression_default: CompressionType = Field(
         default=CompressionType.NONE,
@@ -111,18 +107,6 @@ class RoseConfig(BaseSettings):
         description="Enable colored output"
     )
     
-    # ===== Output Settings =====
-    # v2.0: Default is NDJSON (machine-readable)
-    output_mode: str = Field(
-        default="ndjson",
-        description="Output mode: ndjson (structured events) or prettify (human-readable)"
-    )
-    
-    prettify: bool = Field(
-        default=False,
-        description="Prettify output for human reading (overrides output_mode)"
-    )
-    
     # ===== Directory Settings =====
     output_directory: str = Field(
         default="output",
@@ -139,20 +123,9 @@ class RoseConfig(BaseSettings):
         description="Directory for log files"
     )
     
-    plugins_dir: Path = Field(
-        default_factory=lambda: Path.home() / ".rose" / "plugins",
-        description="Directory for user plugins"
-    )
-    
-    # ===== Interactive Command Defaults =====
-    interactive_defaults: Optional[Dict[str, Dict[str, Any]]] = Field(
-        default=None,
-        description="Default configurations for interactive commands"
-    )
-    
     # ===== Validation =====
     
-    @validator('cache_dir', 'logs_dir', 'plugins_dir', pre=True)
+    @validator('cache_dir', 'logs_dir', pre=True)
     def ensure_path(cls, v):
         """Ensure all paths are Path objects"""
         if isinstance(v, str):
@@ -166,13 +139,6 @@ class RoseConfig(BaseSettings):
             raise ValueError("parallel_workers must be at least 1")
         return v
     
-    @validator('output_mode')
-    def validate_output_mode(cls, v):
-        """Validate output mode"""
-        if v not in ['ndjson', 'prettify']:
-            raise ValueError("output_mode must be 'ndjson' or 'prettify'")
-        return v
-    
     class Config:
         env_prefix = "ROSE_"
         env_file = ".env"
@@ -183,7 +149,7 @@ class RoseConfig(BaseSettings):
     
     def ensure_directories(self) -> None:
         """Create all required directories if they don't exist"""
-        for dir_name in ['cache_dir', 'logs_dir', 'plugins_dir']:
+        for dir_name in ['cache_dir', 'logs_dir']:
             dir_path = getattr(self, dir_name)
             dir_path.mkdir(parents=True, exist_ok=True)
     
@@ -227,7 +193,6 @@ class RoseConfig(BaseSettings):
         
         # Check workers configuration
         if self.parallel_workers:
-            import os
             cpu_count = os.cpu_count() or 4
             if self.parallel_workers > cpu_count:
                 results['warnings'].append(f"Workers ({self.parallel_workers}) > CPU count ({cpu_count})")
@@ -365,32 +330,10 @@ def get_config() -> RoseConfig:
         _config = RoseConfig.load()
         _config.ensure_directories()
         
-        # Note: Don't use logger here before logging system is configured
-        # Logger will be configured based on this config's log_level
-        
         loaded_path = getattr(_config, '_loaded_config_path', None)
         
         # Validate configuration
         validation = _config.validate_config()
-        
-        # Log config loading status (before logging reconfiguration)
-        # Note: Use print for config loading messages since logging isn't configured yet
-        import sys
-        
-        if loaded_path:
-            print(f"Config: {loaded_path}", file=sys.stderr)
-        else:
-            print(f"Config: Using defaults (no rose.config.yaml)", file=sys.stderr)
-        
-        # Show validation warnings
-        if validation['warnings']:
-            for warning in validation['warnings']:
-                print(f"Warning: {warning}", file=sys.stderr)
-        
-        if not validation['valid']:
-            print(f"Configuration validation failed:", file=sys.stderr)
-            for error in validation['errors']:
-                print(f"  - {error}", file=sys.stderr)
         
         # After config is loaded, reconfigure logging with the correct level
         from .logging import reconfigure_logging
@@ -458,11 +401,6 @@ def get_cache_dir() -> Path:
     return get_config().cache_dir
 
 
-def get_plugins_dir() -> Path:
-    """Get plugins directory path"""
-    return get_config().plugins_dir
-
-
 def get_logs_dir() -> Path:
     """Get logs directory path"""
     return get_config().logs_dir
@@ -471,11 +409,6 @@ def get_logs_dir() -> Path:
 def is_cache_enabled() -> bool:
     """Check if cache is enabled"""
     return get_config().enable_cache
-
-
-def is_plugins_enabled() -> bool:
-    """Check if plugins are enabled"""
-    return get_config().enable_plugins
 
 
 def get_compression_default() -> str:
@@ -491,5 +424,3 @@ def get_theme_file() -> str:
 def get_log_level() -> str:
     """Get current log level"""
     return get_config().log_level.value
-
-

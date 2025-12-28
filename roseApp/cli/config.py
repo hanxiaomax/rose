@@ -2,11 +2,9 @@
 Configuration management CLI commands for Rose.
 
 Provides commands to initialize and edit Rose configuration.
-Headless NDJSON mode - pure event emission.
 """
 
 import os
-import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,7 +12,7 @@ from typing import Optional
 import typer
 
 from ..core.logging import get_logger
-from ..core.event_emitter import E, ndjson_command
+from ..core.output import get_output
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -22,8 +20,8 @@ logger = get_logger(__name__)
 
 app = typer.Typer(help="Configuration management commands")
 
+
 @app.command()
-@ndjson_command("config-init")
 def init(
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing configuration file")
 ):
@@ -33,7 +31,7 @@ def init(
     This command creates the Rose configuration directory and copies the default
     configuration template.
     """
-    # Using global E emitter (context set by @ndjson_command)
+    out = get_output()
     
     # Fixed output location
     rose_dir = Path.home() / ".rose"
@@ -41,21 +39,10 @@ def init(
     
     # Check if file already exists
     if config_file.exists() and not force:
-        E.data(
-            data={
-                "config_file": str(config_file),
-                "exists": True,
-                "force": False
-            },
-            label="init_check"
-        )
-        E.error(
-            "CONFIG_EXISTS",
-            f"Configuration file already exists: {config_file}",
-            details={
-                "config_file": str(config_file),
-                "suggestion": "Use --force flag to overwrite"
-            }
+        out.warning(f"Configuration file already exists: {config_file}")
+        out.error(
+            "File exists",
+            details="Use --force flag to overwrite"
         )
         raise typer.Exit(1)
     
@@ -65,6 +52,7 @@ def init(
         if not rose_dir.exists():
             rose_dir.mkdir(parents=True, exist_ok=True)
             created_dir = True
+            out.info(f"Created directory: {rose_dir}")
         
         # Find the default configuration template
         template_locations = [
@@ -80,73 +68,47 @@ def init(
                 break
         
         if not template_file:
-            E.error(
-                "TEMPLATE_NOT_FOUND",
+            out.error(
                 "Could not find rose.config.default.yaml template",
-                details={
-                    "searched_locations": [str(loc) for loc in template_locations]
-                }
+                details="Template not found in expected locations"
             )
             raise typer.Exit(1)
         
-        # Emit initialization plan
-        E.data(
-            data={
-                "rose_dir": str(rose_dir),
-                "config_file": str(config_file),
-                "template_file": str(template_file),
-                "created_dir": created_dir,
-                "force": force
-            },
-            label="init_plan"
-        )
-        
         # Copy the template file
+        out.info(f"Copying template from: {template_file}")
         shutil.copy2(template_file, config_file)
         
-        # Emit success
-        E.done({
-            "config_file": str(config_file),
-            "template_file": str(template_file),
-            "created_dir": created_dir,
-            "action": "initialized"
-        })
+        # Success
+        out.success(f"Configuration initialized: {config_file}")
+        
+        if created_dir:
+            out.info(f"Created new directory: {rose_dir}")
         
     except typer.Exit:
         raise
     except Exception as e:
-        E.error(
-            "CONFIG_INIT_ERROR",
-            f"Error initializing configuration: {str(e)}",
-            details={"config_file": str(config_file)}
-        )
+        out.error(f"Error initializing configuration: {str(e)}")
         logger.error(f"Config init error: {e}", exc_info=True)
         raise typer.Exit(1)
 
+
 @app.command()
-@ndjson_command("config-edit")
 def edit():
     """
     Edit Rose configuration file in your default editor.
     
     Opens ~/.rose/rose.config.yaml in vim (or $EDITOR if set).
     If the config file doesn't exist, run 'rose config init' first.
-    
-    Note: This command is interactive and may not work in pure headless environments.
     """
-    # Using global E emitter (context set by @ndjson_command)
+    out = get_output()
     
     config_file = Path.home() / ".rose" / "rose.config.yaml"
     
     # Check if config file exists
     if not config_file.exists():
-        E.error(
-            "CONFIG_NOT_FOUND",
+        out.error(
             f"Configuration file not found: {config_file}",
-            details={
-                "config_file": str(config_file),
-                "suggestion": "Run 'rose config init' to create it first"
-            }
+            details="Run 'rose config init' to create it first"
         )
         raise typer.Exit(1)
     
@@ -154,59 +116,73 @@ def edit():
     editor = _find_editor()
     
     if not editor:
-        E.error(
-            "NO_EDITOR",
+        out.error(
             "No suitable editor found",
-            details={
-                "config_file": str(config_file),
-                "suggestions": [
-                    "Set EDITOR environment variable",
-                    "Install vim, nano, or code",
-                    f"Edit the file manually: {config_file}"
-                ]
-            }
+            details=f"Set EDITOR env var or install vim/nano. File: {config_file}"
         )
         raise typer.Exit(1)
-
     
     try:
-        # Emit edit plan
-        E.data(
-            data={
-                "config_file": str(config_file),
-                "editor": editor,
-                "action": "opening_editor"
-            },
-            label="edit_plan"
-        )
-        
+        out.info(f"Opening {config_file} with {editor}...")
         result = subprocess.run([editor, str(config_file)])
         
-        # Emit done
-        E.done({
-            "config_file": str(config_file),
-            "editor": editor,
-            "exit_code": result.returncode,
-            "action": "edited"
-        })
+        if result.returncode == 0:
+            out.success("Configuration file edited")
+        else:
+            out.warning(f"Editor exited with code: {result.returncode}")
         
     except KeyboardInterrupt:
-        E.error(
-            "EDIT_CANCELLED",
-            "Editor cancelled by user",
-            details={"config_file": str(config_file)}
-        )
+        out.warning("Editor cancelled by user")
         raise typer.Exit(1)
     except Exception as e:
-        E.error(
-            "EDIT_ERROR",
-            f"Error opening editor: {str(e)}",
-            details={
-                "config_file": str(config_file),
-                "editor": editor
-            }
-        )
+        out.error(f"Error opening editor: {str(e)}")
         logger.error(f"Config edit error: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def show():
+    """
+    Show current configuration settings.
+    """
+    out = get_output()
+    
+    try:
+        from ..core.config import get_config
+        config = get_config()
+        
+        out.section("Rose Configuration")
+        
+        # Show loaded config path
+        loaded_path = getattr(config, '_loaded_config_path', None)
+        if loaded_path:
+            out.info(f"Loaded from: {loaded_path}")
+        else:
+            out.info("Using default configuration")
+        
+        out.newline()
+        
+        # Display configuration values
+        out.key_value({
+            "Parallel workers": config.parallel_workers,
+            "Memory limit": f"{config.memory_limit_mb} MB",
+            "Cache enabled": config.enable_cache,
+            "Verbose default": config.verbose_default,
+            "Build index default": config.build_index_default,
+            "Compression default": config.compression_default.value,
+            "Log level": config.log_level.value,
+            "Theme file": config.theme_file,
+            "Colors enabled": config.enable_colors,
+        }, title="Settings")
+        
+        out.newline()
+        out.key_value({
+            "Cache dir": str(config.cache_dir),
+            "Logs dir": str(config.logs_dir),
+        }, title="Directories")
+        
+    except Exception as e:
+        out.error(f"Error reading configuration: {str(e)}")
         raise typer.Exit(1)
 
 
@@ -224,5 +200,3 @@ def _find_editor() -> Optional[str]:
             return editor
     
     return None
-
-
