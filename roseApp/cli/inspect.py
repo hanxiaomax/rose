@@ -101,11 +101,15 @@ def inspect(
         # Helper to process events from a pipeline generator
         def process_events(gen):
             nonlocal bag_info, not_cached
+            from contextlib import ExitStack
             
-            steps.section(f"Inspecting {bag_path.name}")
+            # Initial phase
+            current_phase = "check"
+            steps.section("Checking cache status")
             
-            with out.live_status("Processing") as live_status:
-                # Add main item
+            stack = ExitStack()
+            try:
+                live_status = stack.enter_context(out.live_status("Processing"))
                 live_status.add_item("main", bag_path.name, "processing")
                 
                 for event in gen:
@@ -113,22 +117,33 @@ def inspect(
                     
                     if isinstance(event, LogEvent):
                         if event.level == "INFO":
-                            if "Loading bag" in event.message: # Covers "Loading bag (quick)..." etc
-                                # Extract detail like "(quick)" or "(with index)"
-                                mode = ""
-                                if "(" in event.message:
-                                    mode = event.message[event.message.find("("):event.message.find(")")+1]
-                                live_status.update_item("main", "processing", f"{mode}")
-                            elif "Reloading" in event.message:
+                            # Transition detection
+                            if "Loading bag" in event.message and current_phase == "check":
+                                # Transition to loading phase
+                                # Mark previous as proper status before switching?
+                                # Actually "Loading bag" means check decided to load.
+                                # So check is "done" (Analysis determined load needed) or "skip" (Not cached).
+                                # Let's say check is done.
+                                live_status.update_item("main", "done", "(Cache miss/Force)")
+                                stack.close() # Close current live status
+                                
+                                # Start new section
+                                load_desc = event.message
+                                steps.section(load_desc.replace("...", ""))
+                                stack = ExitStack()
+                                live_status = stack.enter_context(out.live_status("Processing"))
+                                live_status.add_item("main", bag_path.name, "processing")
+                                current_phase = "load"
+                                continue
+
+                            if "Reloading" in event.message:
                                 live_status.update_item("main", "processing", "(Upgrading index...)")
-                            elif "Retrieved analysis" in event.message:
-                                pass
                             elif verbose:
                                 out.info(event.message)
                                 
                         elif event.level == "WARN":
                              if "Bag not in cache" in event.message:
-                                 live_status.update_item("main", "warning", "(Not in cache)")
+                                 live_status.update_item("main", "skip", "(Not in cache)")
                              if verbose:
                                 out.warning(event.message)
                         elif event.level == "ERROR":
@@ -141,19 +156,22 @@ def inspect(
                     elif isinstance(event, ProgressEvent):
                         # Update loading progress
                         if "Loading" in event.description:
-                             live_status.update_item("main", "processing", f"(Loading {event.current}%)")
+                             pct = f"{event.current}%"
+                             live_status.update_item("main", "processing", f"(Loading {pct})")
                         
                     elif isinstance(event, ResultEvent):
                         data = event.data
                         if data.get('status') == 'success':
                             bag_info = data.get('bag_info')
-                            live_status.update_item("main", "done")
+                            live_status.update_item("main", "done", "(Ready)")
                         elif data.get('status') == 'not_cached':
                             not_cached = True
                             live_status.update_item("main", "warning", "(Not in cache)")
                         elif data.get('status') == 'error':
                             live_status.update_item("main", "error", "(Failed)")
                             raise typer.Exit(1)
+            finally:
+                stack.close()
                             
         # First run
         process_events(pipeline)

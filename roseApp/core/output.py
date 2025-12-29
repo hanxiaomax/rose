@@ -453,37 +453,29 @@ class LiveStatus:
             
             if status == "processing":
                 # Status label first, padded
-                result.append("[processing]".ljust(STATUS_WIDTH), style=self._theme.info)
+                result.append("[Processing]".ljust(STATUS_WIDTH), style=self._theme.info)
                 result.append(" ")
                 # Show animated spinner
                 spinner_text = self._spinner.render(self._console.get_time())
                 result.append_text(spinner_text)
                 result.append(f" {name}", style=self._theme.info)
             elif status == "done":
-                result.append("[done]".ljust(STATUS_WIDTH), style=self._theme.success)
-                result.append(" ")
-                result.append("✓", style=self._theme.success)
+                result.append("[Done]".ljust(STATUS_WIDTH), style=self._theme.success)
                 result.append(f" {name}")
                 if extra:
                     result.append(f" {extra}", style=self._theme.muted)
             elif status == "error":
-                result.append("[error]".ljust(STATUS_WIDTH), style=self._theme.error)
-                result.append(" ")
-                result.append("✗", style=self._theme.error)
+                result.append("[Error]".ljust(STATUS_WIDTH), style=self._theme.error)
                 result.append(f" {name}")
                 if extra:
                     result.append(f" {extra}", style=self._theme.muted)
             elif status == "skip":
-                result.append("[skip]".ljust(STATUS_WIDTH), style=self._theme.muted)
-                result.append(" ")
-                result.append("·", style=self._theme.muted)
+                result.append("[Skip]".ljust(STATUS_WIDTH), style=self._theme.muted)
                 result.append(f" {name}", style=self._theme.muted)
                 if extra:
                     result.append(f" {extra}", style=self._theme.muted)
             else:  # pending
-                result.append("[pending]".ljust(STATUS_WIDTH), style=self._theme.muted)
-                result.append(" ")
-                result.append("·", style=self._theme.muted)
+                result.append("[Pending]".ljust(STATUS_WIDTH), style=self._theme.muted)
                 result.append(f" {name}", style=self._theme.muted)
             
             result.append("\n")
