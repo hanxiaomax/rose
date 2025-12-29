@@ -14,7 +14,7 @@ from roseApp.core.output import get_output
 from roseApp.cli.load import load as load_main
 from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.compress import compress as compress_main
-from roseApp.cli.inspect import app as inspect_app
+from roseApp.cli.inspect import inspect as inspect_main
 from roseApp.cli.list import app as list_app
 from roseApp.cli.config import app as config_app
 
@@ -39,7 +39,7 @@ def callback(ctx: typer.Context):
 app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
 app.command(name="compress")(compress_main)
-app.add_typer(inspect_app)
+app.command(name="inspect")(inspect_main)
 app.add_typer(list_app, name="list")
 app.add_typer(config_app, name="config")
 

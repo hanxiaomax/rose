@@ -515,6 +515,9 @@ class BagParser:
                 else:
                     _logger.warning("No messages found in bag file")
                 
+                # Update aggregated statistics from DataFrames
+                quick_info.refresh_all_statistics_from_dataframes()
+                
                 # Update metadata
                 quick_info.last_updated = time.time()
                 self._current_bag_info = quick_info
