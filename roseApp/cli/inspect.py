@@ -225,7 +225,7 @@ def inspect(
         # Refresh statistics (optional, can be skipped for speed)
         # if debug and bag_info.has_any_dataframes(): ...
         
-        out.section("Bag Information")
+        steps.section("Bag Information")
         
         duration = bag_info.duration_seconds or 0.0
         if duration > 60:
@@ -292,7 +292,7 @@ def inspect(
         # Display
         out.newline()
         filter_info = f" (filtered: {topics_filter})" if topics_filter else ""
-        out.section(f"Topics ({len(topics_data)}{filter_info})")
+        steps.section(f"Topics ({len(topics_data)}{filter_info})")
         
         if verbose:
             columns = ["Topic", "Type", "Count", "Freq (Hz)", "Size"]
