@@ -40,6 +40,7 @@ def inspect(
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
     load: bool = typer.Option(False, "--load", help="Load bag if not cached (without building index)"),
     load_index: bool = typer.Option(False, "--load-index", help="Load bag with index building if not cached"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
 ):
 
     """
@@ -50,10 +51,8 @@ def inspect(
     
     Examples:
         rose inspect demo.bag                      # Show basic bag info
-        rose inspect demo.bag -v                   # Show detailed statistics
-        rose inspect demo.bag --show-fields        # Include field analysis
-        rose inspect demo.bag -t "/camera.*"       # Filter topics by regex
         rose inspect demo.bag --load               # Auto load if not cached
+        rose inspect demo.bag --load --force       # Force reload
         rose inspect demo.bag --load-index         # Auto load with index building
     """
     out = get_output()
@@ -83,7 +82,7 @@ def inspect(
         
         # Generator for processing events
         def run_pipeline(load_flag):
-            return inspect_orchestrator(bag_path, load_if_missing=load_flag, build_index=build_index)
+            return inspect_orchestrator(bag_path, load_if_missing=load_flag, build_index=build_index, force=force)
 
         pipeline = run_pipeline(attempt_load)
         

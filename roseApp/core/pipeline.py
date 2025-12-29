@@ -531,6 +531,7 @@ def step_inspect_bag(
     bag_path: Path, 
     load_if_missing: bool = False, 
     build_index: bool = False,
+    force: bool = False,
     parser: Optional[BagParser] = None
 ) -> Generator[Any, None, Dict[str, Any]]:
     """
@@ -552,7 +553,7 @@ def step_inspect_bag(
         is_cached = cached_entry is not None and cached_entry.is_valid(bag_path)
         needs_upgrade = False
         
-        if is_cached and build_index:
+        if is_cached and build_index and not force:
             # Check if we have index
             # Accessing value directly to avoid importing AnalysisLevel Enum
             current_level = getattr(cached_entry.bag_info.analysis_level, 'value', str(cached_entry.bag_info.analysis_level))
@@ -560,13 +561,20 @@ def step_inspect_bag(
                 needs_upgrade = True
                 yield LogEvent("Cache exists but missing message index. Reloading...", level="INFO")
         
-        if not is_cached or needs_upgrade:
-            if load_if_missing or needs_upgrade:
+        if force or not is_cached or needs_upgrade:
+            if force or load_if_missing or needs_upgrade:
                 load_mode = "with index" if build_index else "quick"
-                yield LogEvent(f"Loading bag ({load_mode})...", level="INFO")
+                msg = f"Loading bag ({load_mode})"
+                if force:
+                    msg += " (forced)"
+                elif needs_upgrade:
+                    msg += " (upgrade needed)"
+                msg += "..."
+                
+                yield LogEvent(msg, level="INFO")
                 # Reuse step_load_bag to load
                 # If needs_upgrade is True, we must force reload
-                yield from step_load_bag(bag_path, build_index=build_index, force=(needs_upgrade or not is_cached), parser=parser)
+                yield from step_load_bag(bag_path, build_index=build_index, force=(force or needs_upgrade or not is_cached), parser=parser)
                 
                 # Re-fetch from cache
                 cached_entry = cache_manager.get_analysis(bag_path)
@@ -617,7 +625,8 @@ def step_inspect_bag(
 def inspect_orchestrator(
     bag_path: Path, 
     load_if_missing: bool = False,
-    build_index: bool = False
+    build_index: bool = False,
+    force: bool = False
 ) -> Generator[Any, None, Dict[str, Any]]:
     """
     Orchestrator for inspection. Single file focused.
@@ -630,7 +639,7 @@ def inspect_orchestrator(
     yield LogEvent(f"Validating {bag_path.name}", level="DEBUG")
     
     # Run inspection step
-    result = yield from step_inspect_bag(bag_path, load_if_missing, build_index)
+    result = yield from step_inspect_bag(bag_path, load_if_missing, build_index, force)
     
     # The result event is already yielded by step_inspect_bag
     return result
