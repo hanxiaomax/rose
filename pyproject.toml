@@ -33,6 +33,7 @@ dependencies = [
     "rich>=13.0.0",
     "typer>=0.9.0",
     "pydantic>=2.0.0",
+    "pydantic-settings",
     "click>=8.0.0",
     "InquirerPy",
     "matplotlib>=3.5.0",

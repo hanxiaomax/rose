@@ -103,93 +103,104 @@ def inspect(
         def process_events(gen):
             nonlocal bag_info, not_cached
             
-            # Start visual status
-            with out.live_status("Analyzing bag...") as status:
-                # Add initial step
-                steps.add_item("check", "Checking cache status", "processing")
+            steps.section(f"Inspecting {bag_path.name}")
+            
+            with out.live_status("Processing") as live_status:
+                # Add main item
+                live_status.add_item("main", bag_path.name, "processing")
                 
                 for event in gen:
                     executed_events.append(event)
                     
                     if isinstance(event, LogEvent):
                         if event.level == "INFO":
-                            if "Inspecting" in event.message:
-                                steps.update_item("check", "done", "Cache checked")
-                            elif "Loading bag" in event.message:
-                                steps.add_item("load", event.message, "processing")
+                            if "Loading bag" in event.message: # Covers "Loading bag (quick)..." etc
+                                # Extract detail like "(quick)" or "(with index)"
+                                mode = ""
+                                if "(" in event.message:
+                                    mode = event.message[event.message.find("("):event.message.find(")")+1]
+                                live_status.update_item("main", "processing", f"{mode}")
                             elif "Reloading" in event.message:
-                                steps.add_item("reload", "Upgrading index...", "processing")
+                                live_status.update_item("main", "processing", "(Upgrading index...)")
                             elif "Retrieved analysis" in event.message:
-                                steps.complete_item("check", "Analysis retrieved")
+                                pass
                             elif verbose:
                                 out.info(event.message)
                                 
                         elif event.level == "WARN":
                              if "Bag not in cache" in event.message:
-                                 steps.update_item("check", "warning", "Not in cache")
+                                 live_status.update_item("main", "warning", "(Not in cache)")
                              if verbose:
                                 out.warning(event.message)
                         elif event.level == "ERROR":
-                             steps.update_item("check", "error", "Error")
+                             live_status.update_item("main", "error", f"Error: {event.message}")
                              out.error(event.message)
                         elif event.level == "DEBUG":
                              if debug:
                                  out.debug(event.message)
                                  
                     elif isinstance(event, ProgressEvent):
-                        # Update loading progress if valid
-                        if "Loading" in event.description or "Processing" in event.description:
-                             steps.update_item("load", "processing", f"{event.current}%")
-                        if event.current == event.total and event.total > 0:
-                            steps.complete_item("load", "Loaded")
-                            if steps.get_item_status("reload"):
-                                steps.complete_item("reload", "Index built")
+                        # Update loading progress
+                        if "Loading" in event.description:
+                             live_status.update_item("main", "processing", f"(Loading {event.current}%)")
                         
                     elif isinstance(event, ResultEvent):
                         data = event.data
                         if data.get('status') == 'success':
                             bag_info = data.get('bag_info')
-                            steps.complete_item("check", "Done")
+                            live_status.update_item("main", "done")
                         elif data.get('status') == 'not_cached':
                             not_cached = True
-                            steps.update_item("check", "warning", "Not cached")
+                            live_status.update_item("main", "warning", "(Not in cache)")
                         elif data.get('status') == 'error':
-                            steps.update_item("check", "error", "Failed")
+                            live_status.update_item("main", "error", "(Failed)")
                             raise typer.Exit(1)
                             
         # First run
         process_events(pipeline)
         
         if not_cached and not should_load:
-            # Interactive prompt
+            # Interactive prompt for loading
             out.newline()
-            questions = [f"Bag '{bag_path.name}' is not in cache.", "Load it now? (y/N)"]
-            # Join differently based on whether we printed anything
-            sys.stdout.write(" ".join(questions) + ": ")
+            out.warning(f"Bag '{bag_path.name}' is not in cache.")
+            
+            # Use Rich Prompt if available or simple input
+            # We'll use simple input with manual options
+            sys.stdout.write("Load options: [l]oad quick, load with [i]ndex, [N]o? [l/i/N]: ")
             sys.stdout.flush()
             
             try:
                 response = input().strip().lower()
-                if response in ['y', 'yes']:
+                load_retry = False
+                
+                if response in ['l', 'y', 'yes', 'load']:
                     out.newline()
-                    # Re-run with load=True
-                    # Default to fast load (build_index=False) unless user specified otherwise? 
-                    # User didn't specify load, so default False.
-                    pipeline_retry = run_pipeline(True)
-                    # Reset flags
-                    not_cached = False
-                    process_events(pipeline_retry)
+                    build_index = False
+                    load_retry = True
+                elif response in ['i', 'index']:
+                    out.newline()
+                    build_index = True
+                    load_retry = True
                 else:
                     out.info("Cancelled")
                     raise typer.Exit(0)
+                
+                if load_retry:
+                    # Re-run pipeline with new settings
+                    pipeline_retry = inspect_orchestrator(bag_path, load_if_missing=True, build_index=build_index)
+                    # Reset flags
+                    not_cached = False
+                    bag_info = None
+                    process_events(pipeline_retry)
+                    
             except (EOFError, KeyboardInterrupt):
                 out.newline()
                 out.info("Cancelled")
                 raise typer.Exit(0)
                 
         if not bag_info:
-            if not not_cached: # If it was not cached and we declined, we exited. If we accepted, bag_info should be set or error raised.
-                 out.error("Failed to retrieve bag analysis")
+            if not not_cached: 
+                 out.error("Failed to retrieve bag analysis details.")
             raise typer.Exit(1)
             
         # --- Display Logic (reused) ---

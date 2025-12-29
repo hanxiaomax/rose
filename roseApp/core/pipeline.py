@@ -579,11 +579,13 @@ def step_inspect_bag(
                     }
             else:
                 yield LogEvent(f"Bag not in cache: {bag_path.name}", level="WARN")
-                return {
+                result = {
                     'path': str(bag_path),
                     'status': 'not_cached',
                     'message': 'Bag not in cache'
                 }
+                yield ResultEvent(success=False, data=result)
+                return result
         
         # Retrieve info
         bag_info = cached_entry.bag_info
@@ -603,11 +605,13 @@ def step_inspect_bag(
 
     except Exception as e:
         yield LogEvent(f"Failed to inspect {bag_path.name}: {e}", level="ERROR")
-        return {
+        result = {
             'path': str(bag_path),
             'status': 'error',
             'message': str(e)
         }
+        yield ResultEvent(success=False, data=result)
+        return result
 
 
 def inspect_orchestrator(
