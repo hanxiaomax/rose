@@ -352,28 +352,36 @@ def compress(
                 raise typer.Exit(0)
         
         # Stage 4: Perform compression with real-time status
-        steps.section("Compressing bags")
+        # Determine processing mode
+        is_parallel = workers > 1
+        mode_str = f"parallel, {workers} workers" if is_parallel else "serial"
+        steps.section(f"Compressing bags ({mode_str})")
+        
         results = []
         total_bags = len(valid_bags)
+        bag_list = list(valid_bags)  # Convert to list for indexing
         
         # Process bags with live status
         with out.live_status(f"Processing", total=total_bags) as status:
             # Add all bags as pending first
-            for bag_path in valid_bags:
+            for bag_path in bag_list:
                 status.add_item(bag_path.name, bag_path.name, "pending")
             
             # Process bags
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks and mark as processing
                 futures = {}
-                for bag_path in valid_bags:
-                    status.update_item(bag_path.name, "processing")
-                    
-                    def create_progress_callback(bag_name):
-                        def callback(percent):
-                            if verbose:
-                                logger.debug(f"{bag_name}: {percent:.1f}%")
-                        return callback
+                
+                def create_progress_callback(bag_name):
+                    def callback(percent):
+                        if verbose:
+                            logger.debug(f"{bag_name}: {percent:.1f}%")
+                    return callback
+                
+                # Submit all tasks
+                for i, bag_path in enumerate(bag_list):
+                    # Only mark first `workers` items as processing initially
+                    if i < workers:
+                        status.update_item(bag_path.name, "processing")
                     
                     cb = create_progress_callback(bag_path.name)
                     future = executor.submit(
@@ -388,11 +396,14 @@ def compress(
                             cache_manager=cache_manager
                         )
                     )
-                    futures[future] = bag_path
+                    futures[future] = (i, bag_path)
+                
+                # Track completed count to know when to mark next as processing
+                completed_count = 0
                 
                 # Collect results as they complete
                 for future in concurrent.futures.as_completed(futures):
-                    bag_path = futures[future]
+                    idx, bag_path = futures[future]
                     
                     try:
                         result = future.result()
@@ -428,6 +439,14 @@ def compress(
                             bag_path.name, "error",
                             f"· Unexpected error"
                         )
+                    
+                    completed_count += 1
+                    
+                    # Mark next pending item as processing (if any)
+                    next_processing_idx = workers + completed_count - 1
+                    if next_processing_idx < total_bags:
+                        next_bag = bag_list[next_processing_idx]
+                        status.update_item(next_bag.name, "processing")
         
         # Stage 5: Summary
         # Calculate summary

@@ -429,6 +429,7 @@ def extract(
         # Stage 4: Extraction
         results = []
         total_bags = len(valid_bags)
+        bag_list = list(valid_bags)  # Convert to list for indexing
         
         # Determine number of workers
         if workers is None:
@@ -437,37 +438,45 @@ def extract(
         
         # Show extraction settings
         compression_display = "None" if compression == "none" else compression.upper()
-        steps.section(f"Extracting topics (compression: {compression_display}, workers: {workers})")
+        is_parallel = workers > 1
+        mode_str = f"parallel, {workers} workers" if is_parallel else "serial"
+        steps.section(f"Extracting topics ({mode_str}, compression: {compression_display})")
         
         # Process bags with live status
         with out.live_status(f"Processing", total=total_bags) as status:
             # Add all bags as pending first
-            for bag_path in valid_bags:
+            for bag_path in bag_list:
                 status.add_item(bag_path.name, bag_path.name, "pending")
             
             # Process bags
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks and mark as processing
                 future_to_bag = {}
-                for bag_path in valid_bags:
-                    status.update_item(bag_path.name, "processing")
-                    
-                    def create_progress_callback(bag_name):
-                        def callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                            if phase and verbose:
-                                logger.debug(f"{bag_name}: {phase}")
-                        return callback
+                
+                def create_progress_callback(bag_name):
+                    def callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                        if phase and verbose:
+                            logger.debug(f"{bag_name}: {phase}")
+                    return callback
+                
+                # Submit all tasks
+                for i, bag_path in enumerate(bag_list):
+                    # Only mark first `workers` items as processing initially
+                    if i < workers:
+                        status.update_item(bag_path.name, "processing")
                     
                     cb = create_progress_callback(bag_path.name)
                     future = executor.submit(
                         await_sync, 
                         extract_single_bag(bag_path, topics_to_extract, output_pattern, compression, yes, verbose, cb)
                     )
-                    future_to_bag[future] = bag_path
+                    future_to_bag[future] = (i, bag_path)
+                
+                # Track completed count
+                completed_count = 0
                 
                 # Collect results as they complete
                 for future in concurrent.futures.as_completed(future_to_bag):
-                    bag_path = future_to_bag[future]
+                    idx, bag_path = future_to_bag[future]
                     
                     try:
                         result = future.result()
@@ -502,6 +511,14 @@ def extract(
                             bag_path.name, "error",
                             f"· Unexpected error"
                         )
+                    
+                    completed_count += 1
+                    
+                    # Mark next pending item as processing (if any)
+                    next_processing_idx = workers + completed_count - 1
+                    if next_processing_idx < total_bags:
+                        next_bag = bag_list[next_processing_idx]
+                        status.update_item(next_bag.name, "processing")
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'extracted')

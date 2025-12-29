@@ -245,8 +245,10 @@ def load(
         # Limit workers to number of bags
         workers = min(workers, len(valid_bags))
         
-        # Show loading plan
-        steps.section(f"Loading bags (workers: {workers}, build_index: {build_index})")
+        # Show loading plan with mode info
+        is_parallel = workers > 1
+        mode_str = f"parallel, {workers} workers" if is_parallel else "serial"
+        steps.section(f"Loading bags ({mode_str}, build_index: {build_index})")
         
         # Initialize parser
         parser = BagParser()
@@ -260,38 +262,44 @@ def load(
         # Load bags with live status
         results = []
         total_bags = len(valid_bags)
+        bag_list = list(valid_bags)  # Convert to list for indexing
         
         # Process bags with live status
         with out.live_status(f"Processing", total=total_bags) as status:
             # Add all bags as pending first
-            for bag_path in valid_bags:
+            for bag_path in bag_list:
                 status.add_item(bag_path.name, bag_path.name, "pending")
+            
+            # Progress callback factory
+            def create_progress_callback(bag_name):
+                def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
+                    if phase and verbose:
+                        logger.debug(f"{bag_name}: {phase}")
+                return progress_callback
             
             # Use ThreadPoolExecutor for parallel loading
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks and mark as processing
                 future_to_bag = {}
-                for bag_path in valid_bags:
-                    status.update_item(bag_path.name, "processing")
-                    
-                    # Progress callback
-                    def create_progress_callback(bag_name):
-                        def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
-                            if phase and verbose:
-                                logger.debug(f"{bag_name}: {phase}")
-                        return progress_callback
+                
+                # Submit all tasks
+                for i, bag_path in enumerate(bag_list):
+                    # Only mark first `workers` items as processing initially
+                    if i < workers:
+                        status.update_item(bag_path.name, "processing")
                     
                     cb = create_progress_callback(bag_path.name)
-                    
                     future = executor.submit(
                         await_sync, 
                         load_single_bag(bag_path, parser, verbose, build_index, cb)
                     )
-                    future_to_bag[future] = bag_path
+                    future_to_bag[future] = (i, bag_path)
+                
+                # Track completed count
+                completed_count = 0
                 
                 # Collect results as they complete
                 for future in concurrent.futures.as_completed(future_to_bag):
-                    bag_path = future_to_bag[future]
+                    idx, bag_path = future_to_bag[future]
                     
                     try:
                         result = future.result()
@@ -329,6 +337,14 @@ def load(
                             bag_path.name, "error",
                             f"· error: {e}"
                         )
+                    
+                    completed_count += 1
+                    
+                    # Mark next pending item as processing (if any)
+                    next_processing_idx = workers + completed_count - 1
+                    if next_processing_idx < total_bags:
+                        next_bag = bag_list[next_processing_idx]
+                        status.update_item(next_bag.name, "processing")
         
         # Calculate summary
         loaded_count = sum(1 for r in results if r['status'] == 'loaded')
