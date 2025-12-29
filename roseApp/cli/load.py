@@ -24,6 +24,7 @@ from ..core.errors import (
 )
 from ..core.config import get_config
 from ..core.output import get_output
+from ..core.steps import StepManager
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -187,6 +188,7 @@ def load(
     """
     start_total_time = time.time()
     out = get_output()
+    steps = StepManager()
     
     try:
         # Get configuration with defaults
@@ -209,33 +211,30 @@ def load(
             workers = config.parallel_workers
         
         # Stage 1: Discovery
-        out.info("Finding bag files...")
+        steps.section("Finding bag files")
+        steps.add_item("scan", "Scanning directories", "processing")
         
         # Find bag files using patterns
         valid_bags = find_bag_files(input)
         
         if not valid_bags:
-            out.error(
-                "No valid bag files found",
-                details="Check file path, ensure files have .bag extension"
-            )
+            steps.error_item("scan", "No valid bag files found")
             raise typer.Exit(1)
         
-        # Display found bags
-        out.info(f"Found {len(valid_bags)} bag file(s):")
+        steps.complete_item("scan", f"Found {len(valid_bags)} bag file(s)")
+        
+        # Display found bags directly
         for bag in valid_bags:
             size_mb = bag.stat().st_size / 1024 / 1024 if bag.exists() else 0
-            out.file_info(bag, size_mb)
+            out.print(f"  {bag.name} ({size_mb:.1f} MB)")
         
         # Handle dry run
         if dry_run:
+            steps.section("Load plan (dry-run)")
+            out.print(f"  Build index: {build_index}")
+            out.print(f"  Workers: {workers}")
+            out.print(f"  Force reload: {force}")
             out.newline()
-            out.key_value({
-                "Build index": build_index,
-                "Workers": workers,
-                "Force reload": force,
-                "Mode": "dry_run"
-            }, title="Load plan")
             out.success(f"Would load {len(valid_bags)} bag(s)")
             return
         
@@ -247,15 +246,7 @@ def load(
         workers = min(workers, len(valid_bags))
         
         # Show loading plan
-        if verbose:
-            out.newline()
-            out.key_value({
-                "Total bags": len(valid_bags),
-                "Workers": workers,
-                "Build index": build_index,
-                "Force reload": force,
-                "Analysis type": "with index building" if build_index else "quick"
-            }, title="Load plan")
+        steps.section(f"Loading bags (workers: {workers}, build_index: {build_index})")
         
         # Initialize parser
         parser = BagParser()
@@ -266,14 +257,12 @@ def load(
             for bag_path in valid_bags:
                 cache_manager.clear(bag_path)
         
-        # Load bags with progress
+        # Load bags with spinner for each
         results = []
         total_bags = len(valid_bags)
         
-        out.newline()
-        
-        # Use progress bar for loading
-        with out.progress_bar(total_bags, "Loading bags") as progress:
+        # Process bags with live status spinner
+        with out.live_status(f"Processing 0/{total_bags} bags...", total=total_bags) as status:
             # Use ThreadPoolExecutor for parallel loading
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 # Submit all tasks
@@ -295,21 +284,37 @@ def load(
                     future_to_bag[future] = bag_path
                 
                 # Collect results as they complete
+                completed = 0
                 for future in concurrent.futures.as_completed(future_to_bag):
                     bag_path = future_to_bag[future]
+                    completed += 1
                     
                     try:
                         result = future.result()
                         results.append(result)
                         
-                        if verbose:
-                            status = result['status']
-                            if status == 'loaded':
-                                out.debug(f"  Loaded: {bag_path.name}")
-                            elif status == 'already_cached':
-                                out.debug(f"  Cached: {bag_path.name}")
-                            else:
-                                out.debug(f"  Error: {bag_path.name}")
+                        # Update status based on result
+                        result_status = result['status']
+                        elapsed = result.get('elapsed', 0)
+                        
+                        if result_status == 'loaded':
+                            status.log(
+                                f"{bag_path.name} · loaded ({elapsed:.2f}s) [{completed}/{total_bags}]",
+                                "done"
+                            )
+                        elif result_status == 'already_cached':
+                            status.log(
+                                f"{bag_path.name} · already cached [{completed}/{total_bags}]",
+                                "skip"
+                            )
+                        else:
+                            status.log(
+                                f"{bag_path.name} · {result.get('message', 'error')} [{completed}/{total_bags}]",
+                                "error"
+                            )
+                        
+                        # Update spinner message
+                        status.update(f"Processing {completed}/{total_bags} bags...")
                         
                     except Exception as e:
                         logger.error(f"Unexpected error loading {bag_path}: {e}")
@@ -319,8 +324,10 @@ def load(
                             'message': f"Unexpected error: {e}",
                             'elapsed': 0.0
                         })
-                    
-                    progress.update(progress.task_id, advance=1)
+                        status.log(
+                            f"{bag_path.name} · error: {e} [{completed}/{total_bags}]",
+                            "error"
+                        )
         
         # Calculate summary
         loaded_count = sum(1 for r in results if r['status'] == 'loaded')
@@ -328,23 +335,6 @@ def load(
         error_count = sum(1 for r in results if r['status'] == 'error')
         total_ready = loaded_count + cached_count
         total_time = time.time() - start_total_time
-        
-        # Show results
-        out.newline()
-        
-        if verbose:
-            # Show detailed results
-            out.section("Results")
-            columns = ["File", "Status", "Time"]
-            rows = [
-                [
-                    Path(r['path']).name,
-                    r['status'],
-                    f"{r.get('elapsed', 0):.2f}s"
-                ]
-                for r in results
-            ]
-            out.table(None, columns, rows)
         
         # Show summary
         out.summary(

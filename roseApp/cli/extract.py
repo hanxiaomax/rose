@@ -18,6 +18,7 @@ from ..core.parser import BagParser, ExtractOption
 from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
 from ..core.output import get_output
+from ..core.steps import create_step_manager
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -203,8 +204,8 @@ def extract(
     compression: str = typer.Option("none", "--compression", "-c", help="Compression type: none, bz2, lz4"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
-    load: bool = typer.Option(False, "--load", help="Load bags if not cached"),
-    build_index: bool = typer.Option(False, "--build-index", help="Build index when loading (requires --load)"),
+    load: bool = typer.Option(False, "--load", help="Load bags if not cached (without building index)"),
+    load_index: bool = typer.Option(False, "--load-index", help="Load bags with index building if not cached"),
 ):
     """
     Extract specific topics from ROS bag files (supports multiple files and patterns).
@@ -220,6 +221,19 @@ def extract(
     """
     start_total_time = time.time()
     out = get_output()
+    steps = create_step_manager()
+    
+    # Check mutually exclusive options
+    if load and load_index:
+        out.error(
+            "Options --load and --load-index are mutually exclusive",
+            details="Use --load for quick load without index, or --load-index to build index"
+        )
+        raise typer.Exit(1)
+    
+    # Determine effective load mode
+    should_load = load or load_index
+    build_index = load_index
     
     try:
         # Validate input arguments
@@ -247,21 +261,23 @@ def extract(
             raise typer.Exit(1)
         
         # Stage 1: Discovery
-        out.info("Finding bag files...")
+        steps.section("Finding bag files")
+        steps.add_item("scan", "Scanning directories", "processing")
         valid_bags = find_bag_files(input_bags)
         
         if not valid_bags:
-            out.error("No bag files found")
+            steps.error_item("scan", "No bag files found")
             raise typer.Exit(1)
         
-        # Display found bags
-        out.info(f"Found {len(valid_bags)} bag file(s):")
+        steps.complete_item("scan", f"Found {len(valid_bags)} bag file(s)")
+        
+        # Display found bags directly (not as items)
         for bag in valid_bags:
             size_mb = bag.stat().st_size / 1024 / 1024
-            out.file_info(bag, size_mb)
+            out.print(f"  {bag.name} ({size_mb:.1f} MB)")
         
         # Stage 2: Cache check and auto-load if needed
-        out.info("Checking cache...")
+        steps.section("Checking cache")
         cache_manager = create_bag_cache_manager()
         uncached_bags = []
         
@@ -271,16 +287,27 @@ def extract(
                 uncached_bags.append(bag_path)
         
         if uncached_bags:
-            if load:
+            if should_load:
                 # Auto-load uncached bags
-                out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                steps.add_item("load", f"Loading {len(uncached_bags)} bag(s)", "processing")
+                
+                # Show uncached bags directly
+                for bag in uncached_bags:
+                    out.print(f"  {bag.name}")
+                
                 for bag_path in uncached_bags:
-                    _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose)
+                    if not _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose):
+                        steps.error_item("load", "Failed to load bags")
+                        raise typer.Exit(1)
+                
+                steps.complete_item("load", f"Loaded {len(uncached_bags)} bag(s)")
             else:
                 # Ask user if they want to load
-                out.warning(f"{len(uncached_bags)} bag(s) not in cache")
+                steps.add_item("cache_check", f"{len(uncached_bags)} bag(s) not in cache", "error")
+                
+                # Show uncached bags directly
                 for bag in uncached_bags:
-                    out.print(f"  - {bag.name}")
+                    out.print(f"  {bag.name}")
                 
                 try:
                     out.newline()
@@ -288,9 +315,12 @@ def extract(
                     sys.stdout.flush()
                     response = input().strip().lower()
                     if response in ['y', 'yes']:
-                        out.info(f"Loading {len(uncached_bags)} uncached bag(s)...")
+                        steps.update_item("cache_check", f"Loading {len(uncached_bags)} bag(s)", "processing")
                         for bag_path in uncached_bags:
-                            _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose)
+                            if not _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose):
+                                steps.error_item("cache_check", "Failed to load bags")
+                                raise typer.Exit(1)
+                        steps.complete_item("cache_check", f"Loaded {len(uncached_bags)} bag(s)")
                     else:
                         out.info("Cancelled")
                         raise typer.Exit(0)
@@ -298,6 +328,8 @@ def extract(
                     out.newline()
                     out.info("Cancelled")
                     raise typer.Exit(0)
+        else:
+            steps.add_item("cache_check", "All bags cached", "done")
         
         # Set default output pattern if not specified
         if not output:
@@ -306,7 +338,9 @@ def extract(
             output_pattern = output
         
         # Stage 3: Topic analysis
-        out.info("Analyzing topics...")
+        steps.section("Analyzing topics")
+        steps.add_item("analyze", "Scanning topics from cached data", "processing")
+        
         all_topics_set = set()
         for bag_path in valid_bags:
             cached_entry = cache_manager.get_analysis(bag_path)
@@ -317,10 +351,15 @@ def extract(
         
         all_topics = list(all_topics_set)
         if not all_topics:
-            out.error("No topics found in cached bag analysis")
+            steps.error_item("analyze", "No topics found in cached bag analysis")
             raise typer.Exit(1)
         
+        steps.complete_item("analyze", f"Found {len(all_topics)} unique topics")
+        
         # Apply topic filtering
+        steps.section("Filtering topics")
+        steps.add_item("filter", f"Applying pattern: {', '.join(topics)}", "processing")
+        
         if reverse:
             # Reverse selection: exclude topics that match the patterns
             topics_to_exclude = filter_topics(all_topics, topics, None)
@@ -332,24 +371,18 @@ def extract(
             operation = "including"
         
         if not topics_to_extract:
-            out.error(
-                f"No topics match the patterns: {', '.join(topics)}",
-                details=f"Available topics: {', '.join(all_topics[:10])}{'...' if len(all_topics) > 10 else ''}"
-            )
+            steps.error_item("filter", f"No topics match: {', '.join(topics)}")
             raise typer.Exit(1)
         
-        # Show extraction plan (like dry-run)
-        out.newline()
-        out.section("Extraction Plan")
-        out.info(f"Operation: {operation} {len(topics_to_extract)} of {len(all_topics)} topics")
-        out.info("Topics to extract:")
-        for topic in sorted(topics_to_extract)[:20]:
-            out.print(f"  {topic}")
-        if len(topics_to_extract) > 20:
-            out.debug(f"  ... and {len(topics_to_extract) - 20} more")
+        steps.complete_item("filter", f"Selected {len(topics_to_extract)} of {len(all_topics)} topics ({operation})")
         
-        out.newline()
-        out.info("Output files:")
+        # Show selected topics directly (not as items)
+        out.print(f"  Topics to extract:")
+        for topic in sorted(topics_to_extract):
+            out.print(f"    {topic}")
+        
+        # Show extraction plan
+        steps.section("Extraction plan")
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         for bag_path in valid_bags:
             preview_output = output_pattern
@@ -360,7 +393,7 @@ def extract(
             else:
                 if '{input}' not in output_pattern and '{timestamp}' not in output_pattern:
                     preview_output = f"{bag_path.stem}_{output_pattern}_{timestamp}.bag"
-            out.print(f"  {bag_path.name} -> {preview_output}")
+            out.print(f"  {bag_path.name} → {preview_output}")
         
         # Ask for confirmation
         if not yes:
@@ -384,10 +417,11 @@ def extract(
         
         if verbose:
             out.newline()
+            compression_display = "None" if compression == "none" else compression.upper()
             out.key_value({
                 "Total bags": len(valid_bags),
                 "Workers": workers,
-                "Compression": compression,
+                "Compression": compression_display,
                 "Topics": len(topics_to_extract),
                 "Output pattern": output_pattern
             }, title="Extraction Details")
@@ -396,17 +430,18 @@ def extract(
         results = []
         total_bags = len(valid_bags)
         
-        out.newline()
+        # Determine number of workers
+        if workers is None:
+            workers = max(1, (os.cpu_count() or 2) - 2)
+        workers = min(workers, len(valid_bags))
         
-        # Format compression display text
-        if compression == "none":
-            compression_display = "NO COMPRESSION"
-        else:
-            compression_display = compression.upper()
+        # Show extraction settings
+        compression_display = "None" if compression == "none" else compression.upper()
+        steps.section(f"Extracting topics (compression: {compression_display}, workers: {workers})")
         
-        # Use progress bar for extraction
-        with out.progress_bar(total_bags, f"Extracting ({compression_display})") as progress:
-            # Use ThreadPoolExecutor for parallel extraction
+        # Process bags with live status spinner
+        with out.live_status(f"Processing 0/{total_bags} bags...", total=total_bags) as status:
+            # Process bags and show real-time status
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 # Submit all tasks
                 future_to_bag = {}
@@ -425,19 +460,33 @@ def extract(
                     future_to_bag[future] = bag_path
                 
                 # Collect results as they complete
+                completed = 0
                 for future in concurrent.futures.as_completed(future_to_bag):
                     bag_path = future_to_bag[future]
+                    completed += 1
                     
                     try:
                         result = future.result()
                         results.append(result)
                         
-                        if verbose:
-                            status = result['status']
-                            if status == 'extracted':
-                                out.debug(f"  Extracted: {bag_path.name} -> {Path(result['output_path']).name}")
-                            else:
-                                out.debug(f"  Error: {bag_path.name}")
+                        # Update status based on result
+                        result_status = result['status']
+                        if result_status == 'extracted':
+                            output_name = Path(result['output_path']).name if result.get('output_path') else 'N/A'
+                            elapsed = result.get('elapsed_time', 0)
+                            status.log(
+                                f"{bag_path.name} → {output_name} ({elapsed:.1f}s) [{completed}/{total_bags}]",
+                                "done"
+                            )
+                        else:
+                            error_msg = result.get('message', 'Unknown error')
+                            status.log(
+                                f"{bag_path.name} · {error_msg} [{completed}/{total_bags}]",
+                                "error"
+                            )
+                        
+                        # Update spinner message
+                        status.update(f"Processing {completed}/{total_bags} bags...")
                         
                     except Exception as e:
                         logger.error(f"Unexpected error extracting {bag_path}: {e}")
@@ -448,8 +497,10 @@ def extract(
                             'message': f"Unexpected error: {e}",
                             'elapsed_time': 0.0
                         })
-                    
-                    progress.update(progress.task_id, advance=1)
+                        status.log(
+                            f"{bag_path.name} · Unexpected error [{completed}/{total_bags}]",
+                            "error"
+                        )
         
         # Calculate summary
         success_count = sum(1 for r in results if r['status'] == 'extracted')

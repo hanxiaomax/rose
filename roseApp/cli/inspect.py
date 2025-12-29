@@ -13,6 +13,7 @@ from ..core.logging import get_logger
 from ..core.cache import create_bag_cache_manager
 from ..core.output import get_output
 from ..core.parser import BagParser
+from ..core.steps import StepManager
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -29,29 +30,6 @@ def await_sync(coro):
         asyncio.set_event_loop(loop)
     
     return loop.run_until_complete(coro)
-
-
-def _load_bag_into_cache(bag_path: Path, out, build_index: bool = False, verbose: bool = False):
-    """Load a bag file into cache"""
-    try:
-        parser = BagParser()
-        
-        load_msg = f"Loading {bag_path.name}" + (" (building index)" if build_index else "")
-        with out.spinner(load_msg):
-            bag_info, elapsed_time = await_sync(
-                parser.load_bag_async(str(bag_path), build_index=build_index)
-            )
-        
-        if verbose:
-            out.success(f"Loaded in {elapsed_time:.2f}s")
-        else:
-            out.success("Loaded successfully")
-        
-        return True
-    except Exception as e:
-        out.error(f"Failed to load: {str(e)}")
-        logger.error(f"Error loading bag {bag_path}: {e}")
-        return False
 
 
 def filter_topics(topic_list, pattern, exclude_pattern=None):
@@ -74,8 +52,8 @@ def inspect(
     reverse_sort: bool = typer.Option(False, "--reverse", help="Reverse sort order"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Show debug logs"),
-    load: bool = typer.Option(False, "--load", help="Load bag if not cached"),
-    build_index: bool = typer.Option(False, "--build-index", help="Build index when loading (requires --load)"),
+    load: bool = typer.Option(False, "--load", help="Load bag if not cached (without building index)"),
+    load_index: bool = typer.Option(False, "--load-index", help="Load bag with index building if not cached"),
 ):
     """
     Inspect a ROS bag file and display comprehensive analysis.
@@ -89,54 +67,85 @@ def inspect(
         rose inspect demo.bag --show-fields        # Include field analysis
         rose inspect demo.bag -t "/camera.*"       # Filter topics by regex
         rose inspect demo.bag --load               # Auto load if not cached
-        rose inspect demo.bag --load --build-index # Auto load with index building
+        rose inspect demo.bag --load-index         # Auto load with index building
     """
     out = get_output()
+    steps = StepManager()
+    
+    # Check mutually exclusive options
+    if load and load_index:
+        out.error(
+            "Options --load and --load-index are mutually exclusive",
+            details="Use --load for quick load without index, or --load-index to build index"
+        )
+        raise typer.Exit(1)
+    
+    # Determine effective load mode
+    should_load = load or load_index
+    build_index = load_index
     
     try:
-        # Validate bag file exists
+        # Stage 1: Validation
+        steps.section("Validating input")
+        
         if not bag_path:
-            out.error(
-                "Bag file path is required",
-                details="Provide a bag file path: rose inspect demo.bag"
-            )
+            steps.add_item("validate", "Bag file path is required", "error")
             raise typer.Exit(1)
         
         if not bag_path.exists():
-            out.error(
-                f"Bag file not found: {bag_path}",
-                details="Check the file path and ensure the file exists"
-            )
+            steps.add_item("validate", f"Bag file not found: {bag_path}", "error")
             raise typer.Exit(1)
         
-        # Get cache manager and check current status
+        size_mb = bag_path.stat().st_size / 1024 / 1024
+        steps.add_item("validate", f"{bag_path.name} ({size_mb:.1f} MB)", "done")
+        
+        # Stage 2: Cache check
+        steps.section("Checking cache")
         cache_manager = create_bag_cache_manager()
         cached_entry = cache_manager.get_analysis(bag_path)
         
-        # Check if bag is in cache
         if cached_entry is None:
-            if load:
-                # Auto-load the bag
-                out.info(f"Bag not in cache, loading: {bag_path.name}")
-                _load_bag_into_cache(bag_path, out, build_index=build_index, verbose=verbose)
+            if should_load:
+                # Auto-load the bag with spinner
+                load_mode = "with index" if build_index else "quick"
+                steps.add_item("cache", f"Loading bag ({load_mode})", "processing")
+                
+                with out.spinner(f"Loading {bag_path.name}..."):
+                    parser = BagParser()
+                    bag_info, elapsed_time = await_sync(
+                        parser.load_bag_async(str(bag_path), build_index=build_index)
+                    )
+                
+                steps.complete_item("cache", f"Loaded in {elapsed_time:.2f}s")
+                
                 # Re-check cache
                 cached_entry = cache_manager.get_analysis(bag_path)
                 if cached_entry is None:
-                    out.error("Failed to load bag into cache")
+                    steps.error_item("cache", "Failed to load bag into cache")
                     raise typer.Exit(1)
             else:
                 # Ask user if they want to load
-                out.warning(f"Bag file not in cache: {bag_path.name}")
+                steps.add_item("cache", "Bag not in cache", "error")
                 try:
+                    out.newline()
                     sys.stdout.write(f"Load '{bag_path.name}' now? (y/N): ")
                     sys.stdout.flush()
                     response = input().strip().lower()
                     if response in ['y', 'yes']:
-                        _load_bag_into_cache(bag_path, out, build_index=False, verbose=verbose)
+                        steps.update_item("cache", "Loading bag", "processing")
+                        
+                        with out.spinner(f"Loading {bag_path.name}..."):
+                            parser = BagParser()
+                            bag_info, elapsed_time = await_sync(
+                                parser.load_bag_async(str(bag_path), build_index=False)
+                            )
+                        
+                        steps.complete_item("cache", f"Loaded in {elapsed_time:.2f}s")
+                        
                         # Re-check cache
                         cached_entry = cache_manager.get_analysis(bag_path)
                         if cached_entry is None:
-                            out.error("Failed to load bag into cache")
+                            steps.error_item("cache", "Failed to load bag into cache")
                             raise typer.Exit(1)
                     else:
                         out.info("Cancelled")
@@ -145,6 +154,8 @@ def inspect(
                     out.newline()
                     out.info("Cancelled")
                     raise typer.Exit(0)
+        else:
+            steps.add_item("cache", "Using cached data", "done")
         
         # Get bag info from cache
         bag_info = cached_entry.bag_info

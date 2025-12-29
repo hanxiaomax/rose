@@ -220,6 +220,75 @@ class Output:
             progress.task_id = task_id  # Store for easy access
             yield progress
     
+    @contextmanager
+    def live_status(self, message: str, total: Optional[int] = None) -> Generator['LiveStatus', None, None]:
+        """
+        Context manager for live status with spinner that allows real-time output.
+        
+        Args:
+            message: Initial status message
+            total: Optional total count for progress display
+            
+        Yields:
+            LiveStatus object with update() and log() methods
+            
+        Usage:
+            with out.live_status("Processing", total=5) as status:
+                for i, item in enumerate(items):
+                    status.update(f"Processing {item}... [{i+1}/5]")
+                    result = process(item)
+                    status.log(f"Done: {item}")
+        """
+        status = LiveStatus(self._console, self._theme, message, total)
+        with status:
+            yield status
+    
+    def spin_print(self, message: str) -> None:
+        """
+        Print a status message with spinner icon (static, non-animated).
+        Use this for showing 'in progress' state before actual work.
+        
+        Args:
+            message: Status message
+        """
+        # Using a simple arrow to indicate processing
+        self._console.print(f"  [{self._theme.info}]⟳[/{self._theme.info}] {message}")
+    
+    def status_item(self, message: str, status: str = "processing") -> None:
+        """
+        Print a status item with icon.
+        
+        Args:
+            message: Status message
+            status: Status type - "processing", "done", "error", "skip"
+        """
+        icons = {
+            "processing": "→",
+            "done": "✓",
+            "error": "✗",
+            "skip": "·"
+        }
+        colors = {
+            "processing": self._theme.info,
+            "done": self._theme.success,
+            "error": self._theme.error,
+            "skip": self._theme.muted
+        }
+        
+        icon = icons.get(status, "·")
+        color = colors.get(status, self._theme.info)
+        
+        self._console.print(f"  [{color}]{icon}[/{color}] {message}")
+    
+    def step_section(self, title: str) -> None:
+        """
+        Print a step section header (like ➤ in the example).
+        
+        Args:
+            title: Section title
+        """
+        self._console.print(f"\n[bold {self._theme.highlight}]➤ {title}[/bold {self._theme.highlight}]")
+    
     # === Data Display ===
     
     def table(
@@ -344,6 +413,83 @@ class Output:
         
         for key, value in stats.items():
             self._console.print(f"  {key}: {value}")
+
+
+class LiveStatus:
+    """
+    Helper class for live status updates with animated spinner.
+    Uses rich.progress.Progress for reliable animated spinner.
+    """
+    
+    def __init__(self, console: Console, theme: ThemeColors, message: str, total: Optional[int] = None):
+        self._console = console
+        self._theme = theme
+        self._message = message
+        self._total = total
+        self._completed = 0
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[{task.description}]"),
+            console=console,
+            transient=True,  # Spinner line will be removed when done
+            refresh_per_second=10
+        )
+        self._task_id = None
+    
+    def __enter__(self):
+        self._progress.start()
+        self._task_id = self._progress.add_task(
+            f"[{self._theme.info}]{self._message}[/{self._theme.info}]",
+            total=self._total
+        )
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._progress:
+            self._progress.stop()
+        return False
+    
+    def update(self, message: str) -> None:
+        """Update the spinner message."""
+        self._message = message
+        if self._task_id is not None:
+            self._progress.update(
+                self._task_id,
+                description=f"[{self._theme.info}]{message}[/{self._theme.info}]"
+            )
+    
+    def log(self, message: str, status: str = "done") -> None:
+        """
+        Log a completed item (prints and spinner continues).
+        
+        Args:
+            message: Message to log
+            status: Status type - "done", "error", "skip"
+        """
+        icons = {"done": "✓", "error": "✗", "skip": "·"}
+        colors = {
+            "done": self._theme.success,
+            "error": self._theme.error,
+            "skip": self._theme.muted
+        }
+        
+        icon = icons.get(status, "·")
+        color = colors.get(status, self._theme.info)
+        
+        # Print log line - Progress handles this correctly
+        self._progress.console.print(f"  [{color}]{icon}[/{color}] {message}")
+        
+        self._completed += 1
+        
+        # Update spinner message with remaining count
+        if self._total:
+            remaining = self._total - self._completed
+            if remaining > 0:
+                self.update(f"Processing... ({remaining} remaining)")
+    
+    def advance(self) -> None:
+        """Advance the completed count."""
+        self._completed += 1
 
 
 # Global output instance
