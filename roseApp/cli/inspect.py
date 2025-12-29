@@ -220,26 +220,21 @@ def inspect(
                  out.error("Failed to retrieve bag analysis details.")
             raise typer.Exit(1)
             
-        # --- Display Logic (reused) ---
-        
-        # Refresh statistics (optional, can be skipped for speed)
-        # if debug and bag_info.has_any_dataframes(): ...
-        
-        steps.section("Bag Information")
+        steps.section("Bag Inspection Results")
         
         duration = bag_info.duration_seconds or 0.0
         if duration > 60:
             duration_str = f"{int(duration // 60)}m {duration % 60:.1f}s"
         else:
             duration_str = f"{duration:.2f}s"
-        
+        out.newline()
         out.key_value({
             "File": bag_info.file_path,
             "Size": f"{bag_info.file_size_mb:.2f} MB",
             "Duration": duration_str,
             "Topics": len(bag_info.topics),
             "Messages": bag_info.total_messages or "N/A",
-        })
+        },title="Bag Information")
         
         if verbose and bag_info.time_range:
             out.newline()
@@ -292,7 +287,7 @@ def inspect(
         # Display
         out.newline()
         filter_info = f" (filtered: {topics_filter})" if topics_filter else ""
-        steps.section(f"Topics ({len(topics_data)}{filter_info})")
+        out.section(f"Topics ({len(topics_data)}{filter_info})")
         
         if verbose:
             columns = ["Topic", "Type", "Count", "Freq (Hz)", "Size"]
