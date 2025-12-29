@@ -356,13 +356,19 @@ def compress(
         results = []
         total_bags = len(valid_bags)
         
-        # Process bags with live status spinner
-        with out.live_status(f"Processing 0/{total_bags} bags...", total=total_bags) as status:
-            # Process bags and show real-time status
+        # Process bags with live status
+        with out.live_status(f"Processing", total=total_bags) as status:
+            # Add all bags as pending first
+            for bag_path in valid_bags:
+                status.add_item(bag_path.name, bag_path.name, "pending")
+            
+            # Process bags
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks
+                # Submit all tasks and mark as processing
                 futures = {}
                 for bag_path in valid_bags:
+                    status.update_item(bag_path.name, "processing")
+                    
                     def create_progress_callback(bag_name):
                         def callback(percent):
                             if verbose:
@@ -385,10 +391,8 @@ def compress(
                     futures[future] = bag_path
                 
                 # Collect results as they complete
-                completed = 0
                 for future in concurrent.futures.as_completed(futures):
                     bag_path = futures[future]
-                    completed += 1
                     
                     try:
                         result = future.result()
@@ -400,19 +404,16 @@ def compress(
                             ratio = result.get('compression_ratio', 0)
                             output_name = Path(result['output_file']).name if result.get('output_file') else 'N/A'
                             elapsed = result.get('elapsed_time', 0)
-                            status.log(
-                                f"{bag_path.name} → {output_name} (ratio: {ratio:.1f}%, {elapsed:.1f}s) [{completed}/{total_bags}]",
-                                "done"
+                            status.update_item(
+                                bag_path.name, "done",
+                                f"→ {output_name} (ratio: {ratio:.1f}%, {elapsed:.1f}s)"
                             )
                         else:
                             error_msg = result.get('message', 'Unknown error')
-                            status.log(
-                                f"{bag_path.name}: {error_msg} [{completed}/{total_bags}]",
-                                "error"
+                            status.update_item(
+                                bag_path.name, "error",
+                                f"· {error_msg}"
                             )
-                        
-                        # Update spinner message
-                        status.update(f"Processing {completed}/{total_bags} bags...")
                         
                     except Exception as e:
                         logger.error(f"Unexpected error compressing {bag_path}: {str(e)}")
@@ -423,9 +424,9 @@ def compress(
                             'error': str(e),
                             'message': str(e)
                         })
-                        status.log(
-                            f"{bag_path.name}: Unexpected error: {e} [{completed}/{total_bags}]",
-                            "error"
+                        status.update_item(
+                            bag_path.name, "error",
+                            f"· Unexpected error"
                         )
         
         # Stage 5: Summary
@@ -441,37 +442,17 @@ def compress(
             if successful_results else 0
         )
         
-        # Show results
-        out.newline()
+        # Show summary as step
+        if error_count == 0:
+            steps.section("Compression complete")
+        else:
+            steps.section("Compression complete (with errors)")
         
-        if verbose:
-            # Show detailed results
-            out.section("Results")
-            columns = ["Input", "Output", "Size", "Ratio", "Time"]
-            rows = [
-                [
-                    Path(r['input_file']).name,
-                    Path(r['output_file']).name if r.get('output_file') else "-",
-                    f"{r.get('input_size_mb', 0):.1f} -> {r.get('output_size_mb', 0):.1f} MB",
-                    f"{r.get('compression_ratio', 0):.1f}%",
-                    f"{r.get('elapsed_time', 0):.2f}s"
-                ]
-                for r in results
-            ]
-            out.table(None, columns, rows)
-        
-        # Show summary
-        out.summary(
-            "Compression Complete" if error_count == 0 else "Compression Complete (with errors)",
-            {
-                "Compressed": success_count,
-                "Failed": error_count,
-                "Algorithm": compression.upper(),
-                "Avg ratio": f"{avg_compression_ratio:.1f}%",
-                "Time": f"{total_time:.2f}s"
-            },
-            success=(error_count == 0)
-        )
+        out.print(f"  Compressed: {success_count}")
+        out.print(f"  Failed    : {error_count}")
+        out.print(f"  Algorithm : {compression.upper()}")
+        out.print(f"  Avg ratio : {avg_compression_ratio:.1f}%")
+        out.print(f"  Time      : {total_time:.2f}s")
         
         # Exit with error if any compressions failed
         if error_count > 0:

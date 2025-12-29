@@ -10,11 +10,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, List, Any, Dict, Generator
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.panel import Panel
 from rich.text import Text
+from rich.live import Live
+from rich.spinner import Spinner
 
 
 class ThemeColors:
@@ -418,7 +420,7 @@ class Output:
 class LiveStatus:
     """
     Helper class for live status updates with animated spinner.
-    Uses rich.progress.Progress for reliable animated spinner.
+    Shows all items with their individual status (pending/processing/done/error).
     """
     
     def __init__(self, console: Console, theme: ThemeColors, message: str, total: Optional[int] = None):
@@ -427,65 +429,99 @@ class LiveStatus:
         self._message = message
         self._total = total
         self._completed = 0
-        self._progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[{task.description}]"),
-            console=console,
-            transient=True,  # Spinner line will be removed when done
-            refresh_per_second=10
-        )
-        self._task_id = None
+        self._items: Dict[str, Dict[str, Any]] = {}  # key -> {name, status, message}
+        self._live = None
+        self._spinner = Spinner("dots", style=theme.info)
+    
+    def __rich__(self) -> Text:
+        """Rich protocol - returns renderable for Live display."""
+        return self._render()
+    
+    def _render(self) -> Text:
+        """Render all items with their current status."""
+        result = Text()
+        
+        for key, item in self._items.items():
+            status = item.get("status", "pending")
+            name = item.get("name", key)
+            extra = item.get("extra", "")
+            
+            result.append("  ")
+            
+            if status == "processing":
+                # Show animated spinner - use current time for animation
+                spinner_text = self._spinner.render(self._console.get_time())
+                result.append_text(spinner_text)
+                result.append(f" {name}", style=self._theme.info)
+                result.append(f" [processing]", style=self._theme.info)
+            elif status == "done":
+                result.append("✓", style=self._theme.success)
+                result.append(f" {name}")
+                result.append(f" [done]", style=self._theme.success)
+                if extra:
+                    result.append(f" {extra}", style=self._theme.muted)
+            elif status == "error":
+                result.append("✗", style=self._theme.error)
+                result.append(f" {name}")
+                result.append(f" [error]", style=self._theme.error)
+                if extra:
+                    result.append(f" {extra}", style=self._theme.muted)
+            elif status == "skip":
+                result.append("·", style=self._theme.muted)
+                result.append(f" {name}", style=self._theme.muted)
+                result.append(f" [skip]", style=self._theme.muted)
+                if extra:
+                    result.append(f" {extra}", style=self._theme.muted)
+            else:  # pending
+                result.append("·", style=self._theme.muted)
+                result.append(f" {name}", style=self._theme.muted)
+                result.append(f" [pending]", style=self._theme.muted)
+            
+            result.append("\n")
+        
+        return result
     
     def __enter__(self):
-        self._progress.start()
-        self._task_id = self._progress.add_task(
-            f"[{self._theme.info}]{self._message}[/{self._theme.info}]",
-            total=self._total
+        self._live = Live(
+            self,  # Pass self as renderable, Live will call __rich__()
+            console=self._console,
+            refresh_per_second=10,
+            transient=False
         )
+        self._live.start()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._progress:
-            self._progress.stop()
+        if self._live:
+            self._live.stop()
         return False
     
+    def add_item(self, key: str, name: str, status: str = "pending") -> None:
+        """Add an item to track."""
+        self._items[key] = {"name": name, "status": status, "extra": ""}
+    
+    def update_item(self, key: str, status: str, extra: str = "") -> None:
+        """Update an item's status."""
+        if key in self._items:
+            self._items[key]["status"] = status
+            self._items[key]["extra"] = extra
+    
     def update(self, message: str) -> None:
-        """Update the spinner message."""
+        """Update the overall message (legacy compatibility)."""
         self._message = message
-        if self._task_id is not None:
-            self._progress.update(
-                self._task_id,
-                description=f"[{self._theme.info}]{message}[/{self._theme.info}]"
-            )
     
     def log(self, message: str, status: str = "done") -> None:
-        """
-        Log a completed item (prints and spinner continues).
-        
-        Args:
-            message: Message to log
-            status: Status type - "done", "error", "skip"
-        """
+        """Legacy log method - just prints to console."""
         icons = {"done": "✓", "error": "✗", "skip": "·"}
         colors = {
             "done": self._theme.success,
             "error": self._theme.error,
             "skip": self._theme.muted
         }
-        
         icon = icons.get(status, "·")
         color = colors.get(status, self._theme.info)
-        
-        # Print log line - Progress handles this correctly
-        self._progress.console.print(f"  [{color}]{icon}[/{color}] {message}")
-        
+        self._console.print(f"  [{color}]{icon}[/{color}] {message}")
         self._completed += 1
-        
-        # Update spinner message with remaining count
-        if self._total:
-            remaining = self._total - self._completed
-            if remaining > 0:
-                self.update(f"Processing... ({remaining} remaining)")
     
     def advance(self) -> None:
         """Advance the completed count."""

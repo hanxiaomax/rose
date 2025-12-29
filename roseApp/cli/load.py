@@ -257,17 +257,23 @@ def load(
             for bag_path in valid_bags:
                 cache_manager.clear(bag_path)
         
-        # Load bags with spinner for each
+        # Load bags with live status
         results = []
         total_bags = len(valid_bags)
         
-        # Process bags with live status spinner
-        with out.live_status(f"Processing 0/{total_bags} bags...", total=total_bags) as status:
+        # Process bags with live status
+        with out.live_status(f"Processing", total=total_bags) as status:
+            # Add all bags as pending first
+            for bag_path in valid_bags:
+                status.add_item(bag_path.name, bag_path.name, "pending")
+            
             # Use ThreadPoolExecutor for parallel loading
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks
+                # Submit all tasks and mark as processing
                 future_to_bag = {}
                 for bag_path in valid_bags:
+                    status.update_item(bag_path.name, "processing")
+                    
                     # Progress callback
                     def create_progress_callback(bag_name):
                         def progress_callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
@@ -284,10 +290,8 @@ def load(
                     future_to_bag[future] = bag_path
                 
                 # Collect results as they complete
-                completed = 0
                 for future in concurrent.futures.as_completed(future_to_bag):
                     bag_path = future_to_bag[future]
-                    completed += 1
                     
                     try:
                         result = future.result()
@@ -298,23 +302,20 @@ def load(
                         elapsed = result.get('elapsed', 0)
                         
                         if result_status == 'loaded':
-                            status.log(
-                                f"{bag_path.name} · loaded ({elapsed:.2f}s) [{completed}/{total_bags}]",
-                                "done"
+                            status.update_item(
+                                bag_path.name, "done",
+                                f"· loaded ({elapsed:.2f}s)"
                             )
                         elif result_status == 'already_cached':
-                            status.log(
-                                f"{bag_path.name} · already cached [{completed}/{total_bags}]",
-                                "skip"
+                            status.update_item(
+                                bag_path.name, "skip",
+                                f"· already cached"
                             )
                         else:
-                            status.log(
-                                f"{bag_path.name} · {result.get('message', 'error')} [{completed}/{total_bags}]",
-                                "error"
+                            status.update_item(
+                                bag_path.name, "error",
+                                f"· {result.get('message', 'error')}"
                             )
-                        
-                        # Update spinner message
-                        status.update(f"Processing {completed}/{total_bags} bags...")
                         
                     except Exception as e:
                         logger.error(f"Unexpected error loading {bag_path}: {e}")
@@ -324,9 +325,9 @@ def load(
                             'message': f"Unexpected error: {e}",
                             'elapsed': 0.0
                         })
-                        status.log(
-                            f"{bag_path.name} · error: {e} [{completed}/{total_bags}]",
-                            "error"
+                        status.update_item(
+                            bag_path.name, "error",
+                            f"· error: {e}"
                         )
         
         # Calculate summary
@@ -336,18 +337,17 @@ def load(
         total_ready = loaded_count + cached_count
         total_time = time.time() - start_total_time
         
-        # Show summary
-        out.summary(
-            "Load Complete" if error_count == 0 else "Load Complete (with errors)",
-            {
-                "Loaded": loaded_count,
-                "Already cached": cached_count,
-                "Failed": error_count,
-                "Total ready": total_ready,
-                "Time": f"{total_time:.2f}s"
-            },
-            success=(error_count == 0)
-        )
+        # Show summary as step
+        if error_count == 0:
+            steps.section("Load complete")
+        else:
+            steps.section("Load complete (with errors)")
+        
+        out.print(f"  Loaded        : {loaded_count}")
+        out.print(f"  Already cached: {cached_count}")
+        out.print(f"  Failed        : {error_count}")
+        out.print(f"  Total ready   : {total_ready}")
+        out.print(f"  Time          : {total_time:.2f}s")
         
         # Exit with error if any bags failed
         if error_count > 0:

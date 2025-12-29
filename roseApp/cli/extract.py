@@ -439,13 +439,19 @@ def extract(
         compression_display = "None" if compression == "none" else compression.upper()
         steps.section(f"Extracting topics (compression: {compression_display}, workers: {workers})")
         
-        # Process bags with live status spinner
-        with out.live_status(f"Processing 0/{total_bags} bags...", total=total_bags) as status:
-            # Process bags and show real-time status
+        # Process bags with live status
+        with out.live_status(f"Processing", total=total_bags) as status:
+            # Add all bags as pending first
+            for bag_path in valid_bags:
+                status.add_item(bag_path.name, bag_path.name, "pending")
+            
+            # Process bags
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit all tasks
+                # Submit all tasks and mark as processing
                 future_to_bag = {}
                 for bag_path in valid_bags:
+                    status.update_item(bag_path.name, "processing")
+                    
                     def create_progress_callback(bag_name):
                         def callback(phase: str = "", progress_pct: float = 0.0, **kwargs):
                             if phase and verbose:
@@ -460,10 +466,8 @@ def extract(
                     future_to_bag[future] = bag_path
                 
                 # Collect results as they complete
-                completed = 0
                 for future in concurrent.futures.as_completed(future_to_bag):
                     bag_path = future_to_bag[future]
-                    completed += 1
                     
                     try:
                         result = future.result()
@@ -474,19 +478,16 @@ def extract(
                         if result_status == 'extracted':
                             output_name = Path(result['output_path']).name if result.get('output_path') else 'N/A'
                             elapsed = result.get('elapsed_time', 0)
-                            status.log(
-                                f"{bag_path.name} → {output_name} ({elapsed:.1f}s) [{completed}/{total_bags}]",
-                                "done"
+                            status.update_item(
+                                bag_path.name, "done",
+                                f"→ {output_name} ({elapsed:.1f}s)"
                             )
                         else:
                             error_msg = result.get('message', 'Unknown error')
-                            status.log(
-                                f"{bag_path.name} · {error_msg} [{completed}/{total_bags}]",
-                                "error"
+                            status.update_item(
+                                bag_path.name, "error",
+                                f"· {error_msg}"
                             )
-                        
-                        # Update spinner message
-                        status.update(f"Processing {completed}/{total_bags} bags...")
                         
                     except Exception as e:
                         logger.error(f"Unexpected error extracting {bag_path}: {e}")
@@ -497,9 +498,9 @@ def extract(
                             'message': f"Unexpected error: {e}",
                             'elapsed_time': 0.0
                         })
-                        status.log(
-                            f"{bag_path.name} · Unexpected error [{completed}/{total_bags}]",
-                            "error"
+                        status.update_item(
+                            bag_path.name, "error",
+                            f"· Unexpected error"
                         )
         
         # Calculate summary
@@ -507,36 +508,17 @@ def extract(
         error_count = sum(1 for r in results if r['status'] == 'error')
         total_time = time.time() - start_total_time
         
-        # Show results
-        out.newline()
+        # Show summary as step
+        if error_count == 0:
+            steps.section("Extraction complete")
+        else:
+            steps.section("Extraction complete (with errors)")
         
-        if verbose:
-            # Show detailed results
-            out.section("Results")
-            columns = ["Input", "Output", "Status", "Time"]
-            rows = [
-                [
-                    Path(r['path']).name,
-                    Path(r['output_path']).name if r.get('output_path') else "-",
-                    r['status'],
-                    f"{r.get('elapsed_time', 0):.2f}s"
-                ]
-                for r in results
-            ]
-            out.table(None, columns, rows)
-        
-        # Show summary
-        out.summary(
-            "Extraction Complete" if error_count == 0 else "Extraction Complete (with errors)",
-            {
-                "Extracted": success_count,
-                "Failed": error_count,
-                "Topics": len(topics_to_extract),
-                "Compression": compression,
-                "Time": f"{total_time:.2f}s"
-            },
-            success=(error_count == 0)
-        )
+        out.print(f"  Extracted : {success_count}")
+        out.print(f"  Failed    : {error_count}")
+        out.print(f"  Topics    : {len(topics_to_extract)}")
+        out.print(f"  Compression: {compression}")
+        out.print(f"  Time      : {total_time:.2f}s")
         
         # Exit with error if any extractions failed
         if error_count > 0:
