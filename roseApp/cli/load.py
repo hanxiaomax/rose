@@ -83,65 +83,66 @@ def load(
         current_bag = None
         
         # Start the pipeline
-        for event in pipeline:
-            if isinstance(event, LogEvent):
-                if event.level == "INFO":
-                    # Heuristic to detect section changes or major steps
-                    if "Scanning directories" in event.message:
-                        steps.section("Finding bag files")
-                        steps.add_item("scan", event.message)
-                    elif "Found" in event.message and "bag file(s)" in event.message:
-                        steps.complete_item("scan", event.message)
-                    elif "Processing" in event.message and "/" not in event.message: 
-                        # "Processing bag_name..."
+        with out.spinner("Initializing...") as sp:
+            for event in pipeline:
+                if isinstance(event, LogEvent):
+                    if event.level == "INFO":
+                        sp.update(event.message)
+                        # Heuristic to detect section changes or major steps
+                        if "Scanning directories" in event.message:
+                            steps.section("Finding bag files")
+                            steps.add_item("scan", event.message)
+                        elif "Found" in event.message and "bag file(s)" in event.message:
+                            steps.complete_item("scan", event.message)
+                        elif "Processing" in event.message and "/" not in event.message: 
+                            # "Processing bag_name..."
+                            pass
+                        else:
+                            if verbose:
+                                logger.info(event.message)
+                                
+                    elif event.level == "WARN":
+                        logger.warning(event.message)
+                    elif event.level == "ERROR":
+                        logger.error(event.message)
+                        
+                elif isinstance(event, ProgressEvent):
+                    if event.description:
+                        sp.update(event.description)
+                    # Update progress
+                    # If we have a current bag, update its status
+                    if event.description and "Processing" in event.description and "/" in event.description:
+                         # Overall progress
+                         pass
+                    elif "Loading" in event.description:
                         pass
-                    else:
-                        if verbose:
-                            logger.info(event.message)
-                            
-                elif event.level == "WARN":
-                    logger.warning(event.message)
-                elif event.level == "ERROR":
-                    logger.error(event.message)
-                    
-            elif isinstance(event, ProgressEvent):
-                # Update progress
-                # If we have a current bag, update its status
-                if event.description and "Processing" in event.description and "/" in event.description:
-                     # Overall progress
-                     pass
-                elif "Loading" in event.description:
-                    pass
-            
-            elif isinstance(event, ResultEvent):
-                if isinstance(event.data, list):
-                    # This might be the list of found bags from find_bags step
-                    if event.data and isinstance(event.data[0], (str, os.PathLike)): # It returns Path objects
-                         # Found bags
-                         steps.section(f"Loading bags (sequential, build_index: {build_index})")
-                         
-                elif isinstance(event.data, dict):
-                    # Single bag result
-                    res = event.data
-                    bag_path = res.get('path', 'unknown')
-                    status = res.get('status')
-                    msg = res.get('message')
-                    elapsed = res.get('elapsed', 0)
-                    
-                    if status == 'loaded':
-                        loaded_count += 1
-                        steps.add_item(bag_path, f"Loaded {os.path.basename(bag_path)}")
-                        steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({elapsed:.2f}s)")
-                    elif status == 'already_cached':
-                        cached_count += 1
-                        steps.add_item(bag_path, f"Cached {os.path.basename(bag_path)}")
-                        steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
-                    else:
-                        error_count += 1
-                        steps.add_item(bag_path, f"Error {os.path.basename(bag_path)}")
-                        steps.error_item(bag_path, f"Failed {os.path.basename(bag_path)}", error=msg)
-                    
-                    results.append(res)
+                
+                elif isinstance(event, ResultEvent):
+                    if isinstance(event.data, list):
+                        # This might be the list of found bags from find_bags step
+                        if event.data and isinstance(event.data[0], (str, os.PathLike)): # It returns Path objects
+                             # Found bags
+                             steps.section(f"Loading bags (sequential, build_index: {build_index})")
+                             
+                    elif isinstance(event.data, dict):
+                        # Single bag result
+                        res = event.data
+                        bag_path = res.get('path', 'unknown')
+                        status = res.get('status')
+                        msg = res.get('message')
+                        elapsed = res.get('elapsed', 0)
+                        
+                        if status == 'loaded':
+                            loaded_count += 1
+                            steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({elapsed:.2f}s)")
+                        elif status == 'already_cached':
+                            cached_count += 1
+                            steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
+                        else:
+                            error_count += 1
+                            steps.error_item(bag_path, f"Failed {os.path.basename(bag_path)}", error=msg)
+                        
+                        results.append(res)
         
         total_time = time.time() - start_total_time
         total_ready = loaded_count + cached_count

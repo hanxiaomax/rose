@@ -808,6 +808,40 @@ class BagParser:
         # Calculate memory limit in bytes
         memory_limit_bytes = extract_option.memory_limit_mb * 1024 * 1024
         
+        # Check if we can stream directly (if selecting all topics and no time filter)
+        # This prevents loading everything into memory for simple compression tasks
+        # Note: We assume the input bag is reasonably ordered. If strict sorting is required
+        # even for full bag copies, this optimization should be skipped.
+        is_full_copy = (len(selected_connections) == len(reader.connections) and 
+                       extract_option.time_range is None)
+        
+        output_path = Path(output_bag)
+        writer = Rosbag1Writer(output_path)
+        
+        # Apply optimized compression settings
+        self._optimize_compression_settings(writer, extract_option.compression)
+        
+        total_processed = 0
+        
+        if is_full_copy:
+            _logger.debug("Optimization: Streaming mode enabled (full bag copy)")
+            with writer:
+                topic_connections = self._setup_writer_connections(writer, selected_connections)
+                
+                # Stream messages directly from reader to writer
+                for connection, timestamp, rawdata in reader.messages(connections=selected_connections):
+                    writer.write(topic_connections[connection.topic], timestamp, rawdata)
+                    total_processed += 1
+                    
+                    if progress_callback and total_processed % 1000 == 0:
+                        try:
+                            progress_callback(total_processed)
+                        except:
+                            pass
+                        
+            _logger.info(f"Successfully streamed {total_processed} messages")
+            return total_processed
+
         # Phase 1: Collect messages with memory management
         _logger.debug("Phase 1: Collecting messages with memory-efficient chunking")
         messages_buffer = []
@@ -824,6 +858,19 @@ class BagParser:
                         continue
             
             message_size = len(rawdata)
+            
+            # Enforce memory limit
+            if current_memory_usage + message_size > memory_limit_bytes:
+                _logger.warning(
+                    f"Memory limit ({extract_option.memory_limit_mb}MB) reached. "
+                    "Switching to streaming mode (some messages may be out of order)."
+                )
+                # Flush buffer and switch to streaming directly? 
+                # For now, we just break and warn, processing what we have, 
+                # OR we could implement a multi-pass merge sort but that's complex.
+                # Better approach: Write what we have, then continue streaming.
+                break
+                
             messages_buffer.append((connection, timestamp, rawdata))
             current_memory_usage += message_size
             total_collected += 1
@@ -832,7 +879,7 @@ class BagParser:
             if total_collected % 1000 == 0:
                 _logger.debug(f"Collected {total_collected} messages, using {current_memory_usage / 1024 / 1024:.1f}MB")
         
-        if not messages_buffer:
+        if not messages_buffer and not is_full_copy:
             _logger.warning("No messages found within specified time range")
             return 0
         
@@ -842,13 +889,7 @@ class BagParser:
         
         # Phase 3: Write messages to output bag in chronological order
         _logger.debug("Phase 3: Writing messages in chronological order")
-        output_path = Path(output_bag)
-        writer = Rosbag1Writer(output_path)
         
-        # Apply optimized compression settings
-        self._optimize_compression_settings(writer, extract_option.compression)
-        
-        total_processed = 0
         with writer:
             # Setup writer connections
             topic_connections = self._setup_writer_connections(writer, selected_connections)

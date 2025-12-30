@@ -189,8 +189,8 @@ class Output:
             with out.spinner("Loading..."):
                 do_work()
         """
-        with self._console.status(f"[{self._theme.info}]{message}[/{self._theme.info}]"):
-            yield
+        with self._console.status(f"[{self._theme.info}]{message}[/{self._theme.info}]") as status:
+            yield status
     
     @contextmanager
     def progress_bar(self, total: int, description: str = "Processing") -> Generator[Progress, None, None]:

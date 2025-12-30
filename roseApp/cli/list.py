@@ -133,6 +133,7 @@ def _show_cache_info(cache, show_content, verbose, out):
                         "topics_count": len(getattr(bag_info, 'topics', [])),
                         "duration_sec": getattr(bag_info, 'duration_seconds', 0),
                         "size_mb": value.file_size / 1024 / 1024 if value.file_size else 0,
+                        "has_index": getattr(bag_info, 'has_message_index', lambda: False)()
                     })
                 
                 entries_data.append(entry_dict)
@@ -145,7 +146,7 @@ def _show_cache_info(cache, show_content, verbose, out):
         
         if verbose or show_content:
             # Detailed table view
-            columns = ["ID", "File", "Topics", "Duration", "Size", "Location"]
+            columns = ["ID", "File", "Topics", "Duration", "Size", "Index", "Location"]
             rows = []
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
@@ -155,6 +156,7 @@ def _show_cache_info(cache, show_content, verbose, out):
                     str(e.get('topics_count', '-')),
                     f"{e.get('duration_sec', 0):.1f}s",
                     f"{e.get('size_mb', 0):.1f} MB",
+                    "Yes" if e.get('has_index') else "No",
                     e['location']
                 ])
             out.table(None, columns, rows)
@@ -163,7 +165,8 @@ def _show_cache_info(cache, show_content, verbose, out):
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
                 size_mb = e.get('size_mb', 0)
-                out.print(f"  [{e['id']}] {bag_name} ({size_mb:.1f} MB)")
+                idx_str = " [Indexed]" if e.get('has_index') else ""
+                out.print(f"  [{e['id']}] {bag_name} ({size_mb:.1f} MB){idx_str}")
         
         out.newline()
         out.info(f"Use 'rose list remove <id|path>' to remove a specific entry")
