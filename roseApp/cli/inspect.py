@@ -138,6 +138,9 @@ def inspect(
 
                             if "Reloading" in event.message:
                                 live_status.update_item("main", "processing", "(Upgrading index...)")
+                            elif event.message.startswith("Inspecting"):
+                                # Suppress top-level start message to avoid UI clutter
+                                pass
                             elif verbose:
                                 out.info(event.message)
                                 
