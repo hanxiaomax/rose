@@ -10,8 +10,7 @@ from typing import Optional, List, Any, Dict
 import typer
 
 from ..core.logging import get_logger
-from ..core.output import get_output
-from ..core.steps import create_step_manager
+from ..core.output import get_output, create_step_manager
 from ..core.pipeline import inspect_orchestrator
 from ..core.events import LogEvent, ProgressEvent, ResultEvent
 

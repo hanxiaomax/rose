@@ -14,7 +14,7 @@ from ..core.logging import get_logger
 from ..core.errors import RoseError, handle_cli_error
 from ..core.config import get_config
 from ..core.output import get_output
-from ..core.steps import StepManager
+from ..core.output import get_output, StepManager
 
 # Initialize logger
 logger = get_logger(__name__)

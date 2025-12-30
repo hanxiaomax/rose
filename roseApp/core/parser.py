@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag1 import Writer as Rosbag1Writer
-from rosbags.serde import deserialize_cdr
+
 from roseApp.core.logging import get_logger
 from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
@@ -772,17 +772,40 @@ class BagParser:
                 if connection.ext.callerid is not None:
                     callerid = connection.ext.callerid
             
-            msgdef = getattr(connection, 'msgdef', None)
+            # Extract basic fields
+            topic = connection.topic
+            msgtype = connection.msgtype
+            
+            # Handle message definition (handle both string and MessageDefinition object)
+            msgdef_raw = getattr(connection, 'msgdef', None)
+            msgdef = ""
+            if isinstance(msgdef_raw, str):
+                msgdef = msgdef_raw
+            elif hasattr(msgdef_raw, 'definition'):
+                # rosbags > 0.9.15
+                msgdef = msgdef_raw.definition
+            elif hasattr(msgdef_raw, '__str__'):
+                # Fallback
+                msgdef = str(msgdef_raw)
+            
+            # Handle md5sum/digest
             md5sum = getattr(connection, 'digest', None)
+            if md5sum is None:
+                # Try to get from msgdef object if available
+                if hasattr(msgdef_raw, 'digest'):
+                    md5sum = msgdef_raw.digest
+                else:
+                    # Fallback or error? Empty string might work 
+                    md5sum = ""
             
             new_connection = writer.add_connection(
-                topic=connection.topic,
-                msgtype=connection.msgtype,
+                topic=topic,
+                msgtype=msgtype,
                 msgdef=msgdef,
                 md5sum=md5sum,
                 callerid=callerid
             )
-            topic_connections[connection.topic] = new_connection
+            topic_connections[topic] = new_connection
         
         return topic_connections
     

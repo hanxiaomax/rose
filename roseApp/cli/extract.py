@@ -13,8 +13,7 @@ import typer
 from ..core.pipeline import extract_orchestrator
 from ..core.events import LogEvent, ProgressEvent, ResultEvent
 from ..core.logging import get_logger
-from ..core.output import get_output
-from ..core.steps import create_step_manager
+from ..core.output import get_output, create_step_manager
 
 # Initialize logger
 logger = get_logger(__name__)

@@ -5,20 +5,21 @@ import os
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
+
 from roseApp.core.events import LogEvent, ProgressEvent, ResultEvent
-from roseApp.core.pipeline import step_find_bags, step_load_bag, load_orchestrator, extract_orchestrator, compress_orchestrator
+from roseApp.core.pipeline import find_bags, load_orchestrator, extract_orchestrator, compress_orchestrator
 
 def test_events():
     print("Testing SDK Events...")
     
-    print("\n--- Testing step_find_bags ---")
-    gen = step_find_bags(["*.bag"]) 
+    print("\n--- Testing find_bags ---")
+    gen = find_bags(["*.bag"]) 
     for event in gen:
         print(f"Event: {event}")
 
-    print("\n--- Testing step_load_bag (Mocked) ---")
-    dummy_path = Path("non_existent.bag")
-    gen2 = step_load_bag(dummy_path)
+    # load_orchestrator covers step_load_bag logic
+    print("\n--- Testing load_orchestrator (Mocked) ---")
+    gen2 = load_orchestrator(["non_existent.bag"])
     for event in gen2:
         print(f"Event: {event}")
 
@@ -35,3 +36,4 @@ def test_events():
 
 if __name__ == "__main__":
     test_events()
+
