@@ -25,16 +25,25 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 - 🎉 ROS Environment independent using [rosbags](https://pypi.org/project/rosbags/)
 - 🌟 Command-line interface for automation
 - Filter ROS bag files 
-  - 🌟 with topic selection (fuzzy matching supported)
+  - 🌟 **Interactive Mode** (`-i`): Fuzzy search and multi-select topics for extraction
+  - with topic selection (fuzzy matching supported via `--topic` in inspect)
   - with manually selected topics
   - by time range (available in extract command)
 - 🌟 **Bag file compression support** - Reduce file sizes significantly
   - BZ2 compression (best compression ratio)
   - LZ4 compression (faster compression/decompression)
   - No compression (fastest processing)
+- 🌟 **Advanced TUI Inspector**:
+  - Full-featured terminal UI with Plotting and Data Tree
+  - Real-time visualization with zoom/pan
+  - Tabbed interface for Data and Plots
 - 🌟 Multi-file batch processing with parallel workers
 - 🌟 Docker support for cross-platform usage
 - 🌟 Customizable cassette futurism theme via YAML configuration
+
+## Documentation
+
+For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md).
 
 ## Getting Started
 
@@ -86,7 +95,9 @@ The Docker container includes:
 # Process bag files in your mounted directory
 rose load *.bag
 rose inspect demo.bag
+rose inspect demo.bag --topic /gps/fix  # Inspect specific topic (Tree view or TUI)
 rose extract input.bag --topics gps imu
+rose extract *.bag -i                   # Interactive extract (Fuzzy search)
 ```
 
 To uninstall Rose, run:

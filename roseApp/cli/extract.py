@@ -33,6 +33,7 @@ def extract(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed extraction information"),
     load: bool = typer.Option(False, "--load", help="Load bags if not cached (without building index)"),
     load_index: bool = typer.Option(False, "--load-index", help="Load bags with index building if not cached"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive topic selection"),
 ):
     """
     Extract specific topics from ROS bag files (supports multiple files and patterns).
@@ -60,7 +61,7 @@ def extract(
             )
             raise typer.Exit(1)
         
-        if not topics:
+        if not topics and not interactive:
             out.error(
                 "No topics specified",
                 details="Use --topics to specify topics: rose extract demo.bag --topics gps imu"
@@ -75,6 +76,74 @@ def extract(
                 details=f"Valid options: {', '.join(valid_compression)}"
             )
             raise typer.Exit(1)
+            
+        if interactive:
+            from InquirerPy import inquirer
+            from InquirerPy.base.control import Choice
+            from ..core.cache import create_bag_cache_manager
+            from glob import glob
+            from rosbags.highlevel import AnyReader
+            
+            # Resolve files
+            files = []
+            for pattern in input_bags:
+                # Handle direct paths too
+                if Path(pattern).exists():
+                    files.append(Path(pattern))
+                else:
+                    files.extend([Path(p) for p in glob(pattern)])
+            
+            # De-duplicate
+            files = list(set(files))
+            
+            if not files:
+                out.error("No bag files found matching input patterns")
+                raise typer.Exit(1)
+                
+            all_topics = set()
+            manager = create_bag_cache_manager()
+            
+            with out.spinner("Scanning bags for topics..."):
+                for f in files:
+                    try:
+                        # Try cache first
+                        info = manager.get_analysis(f)
+                        if info and info.topics:
+                            for t in info.topics:
+                                all_topics.add(t.name)
+                        else:
+                            # Fallback to direct read
+                            with AnyReader([f]) as reader:
+                                for c in reader.connections:
+                                    all_topics.add(c.topic)
+                    except Exception as e:
+                        out.warning(f"Could not read topics from {f.name}: {e}")
+            
+            if not all_topics:
+                out.error("No topics found in specified bags.")
+                raise typer.Exit(1)
+                
+            # Interactive Selection
+            sorted_topics = sorted(list(all_topics))
+            
+            choices = []
+            for t in sorted_topics:
+                choices.append(Choice(t, name=t))
+                
+            out.print("Select topics (Type to filter):")
+            out.print("  [Space]: Toggle  [Enter]: Confirm")
+            out.print("  [Alt-a]: Select All  [Alt-i]: Invert")
+            
+            selected = inquirer.checkbox(
+                message="Topics:",
+                choices=choices,
+                instruction="(Filter/Fuzzy match supported)",
+                validate=lambda result: len(result) > 0,
+                invalid_message="Please select at least one topic",
+                cycle=False,
+            ).execute()
+            
+            topics = selected
         
         # Run Orchestrator
         pipeline = extract_orchestrator(

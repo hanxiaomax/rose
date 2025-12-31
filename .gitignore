@@ -55,3 +55,8 @@ rose.config.yaml
 .verification_report
 .cursor/
 *.bag
+.claude/
+.agent/
+.temp_venv/
+.venv/
+.cursorrules
