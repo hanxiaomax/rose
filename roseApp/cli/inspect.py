@@ -40,6 +40,7 @@ def inspect(
     load: bool = typer.Option(False, "--load", help="Load bag if not cached (without building index)"),
     load_index: bool = typer.Option(False, "--load-index", help="Load bag with index building if not cached"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode (TUI)"),
 ):
 
     """
@@ -221,6 +222,16 @@ def inspect(
             if not not_cached: 
                  out.error("Failed to retrieve bag analysis details.")
             raise typer.Exit(1)
+            
+        if interactive:
+            from ..tui.inspect_app import InspectApp
+            app = InspectApp(
+                bag_path=str(bag_path), 
+                bag_info=bag_info, 
+                theme=out.theme
+            )
+            app.run()
+            raise typer.Exit(0)
             
         steps.section("Bag Inspection Results")
         
