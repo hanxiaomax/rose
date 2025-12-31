@@ -10,4 +10,5 @@ docker run -it --rm \
     -w /workspace \
     -e TERM=xterm-256color \
     -e PYTHONPATH=/workspace \
-    rose:latest
+    rose:latest \
+    bash -c "pip install -e . && bash"

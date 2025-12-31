@@ -10,6 +10,7 @@ ENV LANG=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     vim \
+    wget \
     build-essential \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -30,6 +31,7 @@ RUN pip install --no-cache-dir \
     pycryptodomex \
     rosbags>=0.9.16 \
     pydantic>=2.0.0 \
+    pydantic-settings \
     click>=8.0.0 \
     plotly>=5.0.0 \
     pandas>=1.3.0 

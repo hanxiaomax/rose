@@ -2,7 +2,7 @@
 """
 Rose CLI - ROS bag filter utility.
 
-A powerful tool for ROS bag manipulation with headless NDJSON output.
+A powerful tool for ROS bag manipulation.
 """
 
 import sys
@@ -10,11 +10,12 @@ import typer
 
 # Import necessary functions from utility modules
 from roseApp.core.logging import get_logger, log_cli_error
+from roseApp.core.output import get_output
 from roseApp.cli.load import load as load_main
 from roseApp.cli.extract import extract as extract_main
 from roseApp.cli.compress import compress as compress_main
-from roseApp.cli.inspect import app as inspect_app
-from roseApp.cli.cache import app as cache_app
+from roseApp.cli.inspect import inspect as inspect_main
+from roseApp.cli.list import app as list_app
 from roseApp.cli.config import app as config_app
 
 # Initialize logger
@@ -27,17 +28,10 @@ app = typer.Typer(help="ROS bag filter utility - A powerful tool for ROS bag man
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
-    # Initialize event emitter (headless mode - pure NDJSON output)
-    from roseApp.core.event_emitter import init_emitter
-    init_emitter()
-    
-    # If no subcommand is provided, emit error event
+    # If no subcommand is provided, show error
     if ctx.invoked_subcommand is None:
-        from roseApp.core.event_emitter import E
-        E.error(
-            "NO_COMMAND",
-            "No command specified. Use --help for usage."
-        )
+        out = get_output()
+        out.error("No command specified", details="Use --help for usage")
         raise typer.Exit(1)
 
 
@@ -45,8 +39,8 @@ def callback(ctx: typer.Context):
 app.command(name="load")(load_main)
 app.command(name="extract")(extract_main)
 app.command(name="compress")(compress_main)
-app.add_typer(inspect_app)
-app.add_typer(cache_app)
+app.command(name="inspect")(inspect_main)
+app.add_typer(list_app, name="list")
 app.add_typer(config_app, name="config")
 
 
