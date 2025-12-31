@@ -323,15 +323,7 @@ class TimeRange:
         }
 
 
-@dataclass
-class TopicStatistics:
-    """Statistics for a single topic"""
-    topic_name: str
-    message_count: int = 0
-    total_size_bytes: int = 0
-    average_message_size: int = 0
-    min_message_size: int = 0
-    max_message_size: int = 0
+
 
 
 @dataclass
@@ -350,6 +342,7 @@ class ComprehensiveBagInfo:
     # === BASIC METADATA (always present) ===
     file_path: str
     file_size: int
+    file_mtime: float = 0.0  # Added for cache validation
     analysis_level: AnalysisLevel = AnalysisLevel.NONE
     last_updated: float = field(default_factory=time.time)
     
@@ -364,7 +357,6 @@ class ComprehensiveBagInfo:
     
     # === FULL ANALYSIS DATA ===
     # Statistics organized as list of objects instead of nested dictionaries
-    topic_statistics: List[TopicStatistics] = field(default_factory=list)
     total_messages: Optional[int] = None
     total_size: Optional[int] = None
     
@@ -377,15 +369,8 @@ class ComprehensiveBagInfo:
     topic_dataframes: Dict[str, Any] = field(default_factory=dict)  # topic_name -> TopicDataFrame
     topics_by_type: Dict[str, List[str]] = field(default_factory=dict)  # message_type -> [topic_names]
     
-    # === METADATA FOR PERSISTENCE AND MEMORY MANAGEMENT ===
-    _memory_footprint: Optional[int] = field(default=None, init=False)
-    _access_count: int = field(default=0, init=False)
-    _last_accessed: float = field(default_factory=time.time, init=False)
-    
-    def __post_init__(self):
-        """Initialize computed fields after creation"""
-        self._calculate_memory_footprint()
-        self._last_accessed = time.time()
+    # === METADATA FOR PERSISTENCE ===
+    # Minimal metadata needed for cache validation is now integrated (file_size, file_mtime)
     
     
     @property
@@ -439,12 +424,7 @@ class ComprehensiveBagInfo:
                 return msg_type
         return None
     
-    def find_topic_statistics(self, topic_name: str) -> Optional[TopicStatistics]:
-        """Find statistics for a topic"""
-        for stats in self.topic_statistics:
-            if stats.topic_name == topic_name:
-                return stats
-        return None
+
     
     # === DATAFRAME MANAGEMENT METHODS ===
     
@@ -582,17 +562,14 @@ class ComprehensiveBagInfo:
     
     def get_topic_names(self) -> List[str]:
         """Get list of all topic names"""
-        self._record_access()
         return [topic if isinstance(topic, str) else topic.name for topic in self.topics]
     
     def get_message_type_names(self) -> List[str]:
         """Get list of all message type names"""
-        self._record_access()
         return [msg_type if isinstance(msg_type, str) else msg_type.message_type for msg_type in self.message_types]
     
     def get_topic_fields(self, topic_name: str) -> Optional[List[MessageFieldInfo]]:
         """Get field structure for a specific topic"""
-        self._record_access()
         
         topic = self.find_topic(topic_name)
         if not topic:
@@ -605,7 +582,6 @@ class ComprehensiveBagInfo:
     
     def get_topic_field_paths(self, topic_name: str) -> List[str]:
         """Get flattened field paths for a specific topic"""
-        self._record_access()
         
         fields = self.get_topic_fields(topic_name)
         if not fields:
@@ -637,14 +613,7 @@ class ComprehensiveBagInfo:
                 return
         self.message_types.append(message_type_info)
     
-    def add_topic_statistics(self, stats: TopicStatistics) -> None:
-        """Add topic statistics (used by parser during full analysis)"""
-        # Check if statistics already exist, replace if so
-        for i, existing_stats in enumerate(self.topic_statistics):
-            if existing_stats.topic_name == stats.topic_name:
-                self.topic_statistics[i] = stats
-                return
-        self.topic_statistics.append(stats)
+
     
     def set_time_range(self, start_time: Tuple[int, int], end_time: Tuple[int, int]) -> None:
         """Set time range (used by parser)"""
@@ -652,85 +621,24 @@ class ComprehensiveBagInfo:
         self.duration_seconds = self.time_range.get_duration_seconds()
     
     # === MEMORY MANAGEMENT ===
-    
-    def _record_access(self) -> None:
-        """Record access for memory management"""
-        self._access_count += 1
-        self._last_accessed = time.time()
-    
-    def _calculate_memory_footprint(self) -> int:
-        """Calculate approximate memory footprint in bytes"""
-        try:
-            import sys
-            
-            footprint = 0
-            
-            # Basic fields
-            footprint += sys.getsizeof(self.file_path)
-            footprint += sys.getsizeof(self.analysis_level)
-            footprint += sys.getsizeof(self.last_updated)
-            
-            # Topics list
-            footprint += sys.getsizeof(self.topics)
-            footprint += sum(sys.getsizeof(topic) for topic in self.topics)
-            
-            # Message types list
-            footprint += sys.getsizeof(self.message_types)
-            footprint += sum(sys.getsizeof(msg_type) for msg_type in self.message_types)
-            
-            # Time range
-            if self.time_range:
-                footprint += sys.getsizeof(self.time_range)
-            
-            # Statistics
-            footprint += sys.getsizeof(self.topic_statistics)
-            footprint += sum(sys.getsizeof(stats) for stats in self.topic_statistics)
-            
-            # Cached message topics
-            footprint += sys.getsizeof(self.cached_message_topics)
-            footprint += sum(sys.getsizeof(topic) for topic in self.cached_message_topics)
-            
-            self._memory_footprint = footprint
-            return footprint
-            
-        except Exception as e:
-            logger.warning(f"Failed to calculate memory footprint: {e}")
-            self._memory_footprint = 0
-            return 0
-    
-    def get_memory_footprint(self) -> int:
-        """Get current memory footprint in bytes"""
-        if self._memory_footprint is None:
-            return self._calculate_memory_footprint()
-        return self._memory_footprint
-    
-    def is_stale(self, max_age_seconds: float = 3600) -> bool:
-        """Check if the data is stale based on last access time"""
-        return (time.time() - self._last_accessed) > max_age_seconds
-    
-    def should_evict(self, max_age_seconds: float = 3600, 
-                     min_access_count: int = 1) -> bool:
-        """Determine if this instance should be evicted from memory"""
-        return (self.is_stale(max_age_seconds) and 
-                self._access_count < min_access_count)
+    # Removed runtime memory management for simplification
+
     
     # === SERIALIZATION (SIMPLIFIED) ===
     
     def to_json(self) -> str:
         """Serialize to JSON string (simplified without complex dict conversions)"""
-        self._record_access()
         
         # Use dataclass's built-in serialization capabilities
         data = {
             'file_path': self.file_path,
             'file_size': self.file_size,
+            'file_mtime': self.file_mtime,
             'analysis_level': self.analysis_level.value,
             'last_updated': self.last_updated,
             'duration_seconds': self.duration_seconds,
             'total_messages': self.total_messages,
             'total_size': self.total_size,
-            '_access_count': self._access_count,
-            '_last_accessed': self._last_accessed,
             
             # Serialize lists directly (much simpler than dict conversion)
             'topics': [
@@ -769,16 +677,7 @@ class ComprehensiveBagInfo:
                 'end_time': self.time_range.end_time
             } if self.time_range else None,
             
-            'topic_statistics': [
-                {
-                    'topic_name': ts.topic_name,
-                    'message_count': ts.message_count,
-                    'total_size_bytes': ts.total_size_bytes,
-                    'average_message_size': ts.average_message_size,
-                    'min_message_size': ts.min_message_size,
-                    'max_message_size': ts.max_message_size
-                } for ts in self.topic_statistics
-            ],
+
             
             'cached_message_topics': self.cached_message_topics,
             
@@ -802,6 +701,7 @@ class ComprehensiveBagInfo:
         instance = cls(
             file_path=data['file_path'],
             file_size=data['file_size'],
+            file_mtime=data.get('file_mtime', 0.0),
             analysis_level=AnalysisLevel(data['analysis_level']),
             last_updated=data['last_updated'],
             duration_seconds=data.get('duration_seconds'),

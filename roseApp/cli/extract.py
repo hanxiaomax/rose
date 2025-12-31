@@ -176,7 +176,16 @@ def extract(
                                 output_path = res.get('output_path')
                                 output_name = os.path.basename(output_path) if output_path else "unknown"
                                 elapsed = res.get('elapsed_time', 0)
-                                live_status.update_item(bag_name, "done", f"→ {output_name} ({elapsed:.1f}s)")
+                                size_mb = res.get('output_size', 0) / 1024 / 1024
+                                live_status.update_item(bag_name, "done", f"→ {output_name} ({size_mb:.1f} MB, {elapsed:.1f}s)")
+                                
+                                if verbose:
+                                    # Print detailed info if verbose
+                                    topics_list = res.get('topics_list', [])
+                                    out.info(f"  Extracted {len(topics_list)} topics to {output_name}:")
+                                    for t in topics_list:
+                                        out.print(f"    - {t}")
+                                    out.print(f"  Size: {size_mb:.2f} MB")
                             elif status == 'loaded':
                                 # Implicit load result
                                 steps.complete_item("implicit_load", "Metadata loaded")

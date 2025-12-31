@@ -13,7 +13,6 @@ from typing import List, Dict, Tuple, Optional, Callable, Any, Union, TYPE_CHECK
 from dataclasses import dataclass, field
 from enum import Enum
 from rosbags.highlevel import AnyReader
-from rosbags.highlevel import AnyReader
 
 
 from roseApp.core.logging import get_logger
@@ -225,9 +224,11 @@ class BagReader:
                 if (self._current_bag_info is None or 
                     self._current_bag_info.file_path != bag_path):
                     file_size = os.path.getsize(bag_path)
+                    file_mtime = os.path.getmtime(bag_path)
                     self._current_bag_info = ComprehensiveBagInfo(
                         file_path=bag_path,
                         file_size=file_size,
+                        file_mtime=file_mtime,
                         analysis_level=AnalysisLevel.QUICK
                     )
                 

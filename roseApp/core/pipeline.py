@@ -132,7 +132,7 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
                     start_load = True
                 else:
                     # Check if upgrade needed
-                     if target_level == AnalysisLevel.INDEX and not cached_info.bag_info.has_message_index():
+                     if target_level == AnalysisLevel.INDEX and not cached_info.has_message_index():
                          start_load = True
                          yield LogEvent(f"Upgrading analysis to INDEX level for {bag_path.name}...", level="INFO")
             
@@ -171,7 +171,7 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
                     'status': 'success',
                     'loaded': False, 
                     'cached': True,
-                    'bag_info': cached_info.bag_info
+                    'bag_info': cached_info
                 }
             
             results.append(result)
@@ -219,12 +219,11 @@ def extract_orchestrator(
     uncached_bags = []
     
     for bag_path in bag_files:
-        cached_entry = cache_manager.get_analysis(bag_path)
-        if not cached_entry or not cached_entry.is_valid(bag_path):
+        bag_info = cache_manager.get_analysis(bag_path)
+        if not bag_info:
             uncached_bags.append(bag_path)
         else:
-            bag_info = cached_entry.bag_info
-            if bag_info and hasattr(bag_info, 'topics') and bag_info.topics:
+            if hasattr(bag_info, 'topics') and bag_info.topics:
                  for t in bag_info.topics:
                      all_topics_set.add(t.name if hasattr(t, 'name') else str(t))
 
@@ -245,9 +244,9 @@ def extract_orchestrator(
                 # But to be safe and consistent, we can just use the parser's current state implied ??
                 # Actually load_bag_async returns bag_info.
                 # But to fit the previous loop structure, let's just re-get from cache.
-                cached_entry = cache_manager.get_analysis(bag_path)
-                if cached_entry and cached_entry.bag_info:
-                    for t in cached_entry.bag_info.topics:
+                cached_info = cache_manager.get_analysis(bag_path)
+                if cached_info:
+                    for t in cached_info.topics:
                         all_topics_set.add(t.name if hasattr(t, 'name') else str(t))
             except Exception as e:
                 yield LogEvent(f"Failed to load {bag_path.name}: {e}", level="WARN")
@@ -325,7 +324,9 @@ def extract_orchestrator(
                 'status': 'extracted',
                 'message': result_message,
                 'topics_count': len(final_topics),
-                'elapsed_time': extraction_time
+                'elapsed_time': extraction_time,
+                'topics_list': final_topics,
+                'output_size': output_path.stat().st_size if output_path.exists() else 0
             }
             yield ResultEvent(success=True, data=res)
             results.append(res)
@@ -386,11 +387,10 @@ def compress_orchestrator(
             output_path = Path(output_str)
             
             # Get topics
-            cached_entry = cache_manager.get_analysis(bag_path)
+            bag_info = cache_manager.get_analysis(bag_path)
             all_topics = []
             
-            if cached_entry and cached_entry.is_valid(bag_path):
-                 bag_info = cached_entry.bag_info
+            if bag_info:
                  all_topics = [t.name for t in bag_info.topics]
             else:
                   yield LogEvent("Reading bag info...", level="DEBUG")
@@ -470,7 +470,7 @@ def inspect_orchestrator(bag_path: Path, load_if_missing: bool = False, build_in
     if not cached_info:
         needs_load = True
         reason = "Bag not in cache"
-    elif target_level == AnalysisLevel.INDEX and not cached_info.bag_info.has_message_index():
+    elif target_level == AnalysisLevel.INDEX and not cached_info.has_message_index():
         needs_load = True
         reason = "Index upgrade required"
     
@@ -497,6 +497,6 @@ def inspect_orchestrator(bag_path: Path, load_if_missing: bool = False, build_in
             return {'status': 'error', 'message': str(e)}
 
     # Cached available and sufficient
-    yield LogEvent(f"Using cached analysis (Level: {cached_info.bag_info.analysis_level.value})", level="INFO")
-    yield ResultEvent(success=True, data={'status': 'success', 'bag_info': cached_info.bag_info})
-    return {'status': 'success', 'bag_info': cached_info.bag_info}
+    yield LogEvent(f"Using cached analysis (Level: {cached_info.analysis_level.value})", level="INFO")
+    yield ResultEvent(success=True, data={'status': 'success', 'bag_info': cached_info})
+    return {'status': 'success', 'bag_info': cached_info}

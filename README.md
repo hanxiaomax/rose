@@ -1,5 +1,6 @@
 # ROSE - Yet Another ROS Bag Filter- **Core Modules**:
-  - `parser`: High-performance ROS bag parsing using `rosbags`
+  - `parser`: High-performance ROS bag reading (BagReader)
+  - `writer`: Bag writing and processing (BagWriter)
   - `pipeline`: Orchestration of complex operations
   - `cache`: Intelligent caching system
   - `output`: Centralized CLI output management
@@ -366,8 +367,8 @@ project_root/
 │   │   ├── list.py         # List/Cache command
 │   │   └── config.py       # Config command
 │   ├── core/               # Core functionality
-│   │   ├── parser.py       # Bag file parser
-│   │   ├── BagManager.py   # Bag management
+│   │   ├── parser.py       # Bag file reader (BagReader)
+│   │   ├── writer.py       # Bag file writer (BagWriter)
 │   │   ├── pipeline.py     # Command orchestration
 │   │   ├── steps.py        # Progress tracking
 │   │   ├── cache.py        # Caching system

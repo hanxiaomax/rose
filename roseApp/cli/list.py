@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Optional, List
 import typer
 
-from ..core.cache import get_cache, BagCacheEntry
+from ..core.cache import get_cache
+from ..core.model import ComprehensiveBagInfo
 from ..core.output import get_output
 
 app = typer.Typer(name="list", help="List and manage cached bag files")
@@ -126,13 +127,13 @@ def _show_cache_info(cache, show_content, verbose, out):
                     "location": cache_type
                 }
                 
-                if isinstance(value, BagCacheEntry):
-                    bag_info = value.bag_info
+                if isinstance(value, ComprehensiveBagInfo):
+                    bag_info = value
                     entry_dict.update({
                         "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
                         "topics_count": len(getattr(bag_info, 'topics', [])),
                         "duration_sec": getattr(bag_info, 'duration_seconds', 0),
-                        "size_mb": value.file_size / 1024 / 1024 if value.file_size else 0,
+                        "size_mb": bag_info.file_size / 1024 / 1024 if bag_info.file_size else 0,
                         "has_index": getattr(bag_info, 'has_message_index', lambda: False)()
                     })
                 
@@ -199,8 +200,8 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
         # Not a number, treat as path - need to find the ID
         identifier_path = Path(identifier)
         for idx, (key, value, cache_type) in enumerate(all_entries, 1):
-            if isinstance(value, BagCacheEntry):
-                bag_info = value.bag_info
+            if isinstance(value, ComprehensiveBagInfo):
+                bag_info = value
                 bag_path = Path(getattr(bag_info, 'file_path', ''))
                 if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path):
                     target_entry = (key, value, cache_type)
@@ -221,8 +222,8 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     entry_details = {}
     cache_size_bytes = 0
     
-    if isinstance(value, BagCacheEntry):
-        bag_info = value.bag_info
+    if isinstance(value, ComprehensiveBagInfo):
+        bag_info = value
         bag_name = Path(getattr(bag_info, 'file_path', key)).name
         bag_path_str = getattr(bag_info, 'file_path', 'Unknown')
         
@@ -232,14 +233,13 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
             "Path": bag_path_str,
             "Topics": len(getattr(bag_info, 'topics', [])),
             "Duration": f"{getattr(bag_info, 'duration_seconds', 0):.1f}s",
-            "Original size": f"{value.file_size / 1024 / 1024:.1f} MB" if value.file_size else "Unknown",
+            "Original size": f"{bag_info.file_size / 1024 / 1024:.1f} MB" if bag_info.file_size else "Unknown",
             "Cache location": cache_type
         }
         
-        # Get message counts if available
-        if hasattr(bag_info, 'message_counts') and bag_info.message_counts:
-            total_messages = sum(bag_info.message_counts.values())
-            entry_details["Total messages"] = f"{total_messages:,}"
+        # Get message counts if available - check deprecated message_counts too just in case
+        if hasattr(bag_info, 'total_messages') and bag_info.total_messages:
+            entry_details["Total messages"] = f"{bag_info.total_messages:,}"
         
         # Calculate cache file size
         if cache_type == "disk":
@@ -275,11 +275,9 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     success = False
     cache_file_path = None
     
-    if cache_type == "memory":
+    if False: # Removed memory cache support
         # Remove from memory cache
-        if hasattr(cache, '_memory_cache') and key in cache._memory_cache:
-            del cache._memory_cache[key]
-            success = True
+        pass
     else:
         # Remove from disk cache - the key is already the hashed filename
         cache_file = cache.cache_dir / f"{key}.pkl"
@@ -287,9 +285,6 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
         if cache_file.exists():
             cache_file.unlink()
             success = True
-            # Also try to remove from memory cache if it exists there
-            if hasattr(cache, '_memory_cache') and key in cache._memory_cache:
-                del cache._memory_cache[key]
     
     if success:
         out.newline()
@@ -344,14 +339,14 @@ def _clear_all_cache(cache, skip_confirm, out):
             'cache_file_path': None
         }
         
-        if isinstance(value, BagCacheEntry):
-            bag_info = value.bag_info
+        if isinstance(value, ComprehensiveBagInfo):
+            bag_info = value
             entry_info['bag_name'] = Path(getattr(bag_info, 'file_path', key)).name
             entry_info['bag_path'] = getattr(bag_info, 'file_path', 'Unknown')
             bag_names.append(entry_info['bag_name'])
             
-            if value.file_size:
-                total_bags_size += value.file_size
+            if bag_info.file_size:
+                total_bags_size += bag_info.file_size
             
             # Get cache file size
             if cache_type == "disk":
@@ -508,11 +503,9 @@ def _get_all_cache_entries(cache) -> List[tuple]:
     """Get all cache entries from memory and disk"""
     all_entries = []
     
-    # Get memory cache entries
-    if hasattr(cache, '_memory_cache'):
-        memory_entries = [(key, entry.value if hasattr(entry, 'value') else entry, 'memory') 
-                        for key, entry in cache._memory_cache.items()]
-        all_entries.extend(memory_entries)
+    # Get memory cache entries - Removed
+    # if hasattr(cache, '_memory_cache'):
+    #    ...
     
     # Get file cache entries
     seen_keys = set()
@@ -550,7 +543,7 @@ def _prepare_export_data(all_entries, include_messages):
                 'timestamp': time.time()
             }
             
-            if isinstance(value, BagCacheEntry):
+            if isinstance(value, ComprehensiveBagInfo):
                 entry_data['content'] = _bag_cache_to_dict(value, include_messages)
             else:
                 content_str = str(value)
@@ -568,17 +561,16 @@ def _prepare_export_data(all_entries, include_messages):
     return export_data
 
 
-def _bag_cache_to_dict(bag_cache_entry, include_messages=False):
-    """Convert BagCacheEntry to dictionary for export"""
+def _bag_cache_to_dict(bag_info, include_messages=False):
+    """Convert ComprehensiveBagInfo to dictionary for export"""
     try:
-        bag_info = bag_cache_entry.bag_info
         result = {
             'file_path': getattr(bag_info, 'file_path', 'Unknown'),
             'topics_count': len(getattr(bag_info, 'topics', [])),
             'duration_seconds': getattr(bag_info, 'duration_seconds', 0),
-            'cache_timestamp': bag_cache_entry.cache_timestamp,
-            'file_mtime': bag_cache_entry.file_mtime,
-            'file_size': bag_cache_entry.file_size
+            'last_updated': getattr(bag_info, 'last_updated', 0),
+            'file_mtime': getattr(bag_info, 'file_mtime', 0),
+            'file_size': getattr(bag_info, 'file_size', 0)
         }
         
         if hasattr(bag_info, 'topics') and bag_info.topics:
@@ -590,14 +582,11 @@ def _bag_cache_to_dict(bag_cache_entry, include_messages=False):
                 for t in bag_info.topics
             ]
         
-        if hasattr(bag_info, 'message_counts') and bag_info.message_counts:
-            result['message_counts'] = bag_info.message_counts
-            result['total_messages'] = sum(bag_info.message_counts.values())
+        if hasattr(bag_info, 'total_messages') and bag_info.total_messages:
+            result['total_messages'] = bag_info.total_messages
         
-        if include_messages and hasattr(bag_cache_entry, 'cached_messages') and bag_cache_entry.cached_messages:
-            result['cached_messages'] = {
-                topic: len(messages) for topic, messages in bag_cache_entry.cached_messages.items()
-            }
+        if include_messages and hasattr(bag_info, 'cached_message_topics') and bag_info.cached_message_topics:
+            result['cached_message_topics'] = bag_info.cached_message_topics
         
         return result
         

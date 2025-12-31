@@ -38,7 +38,22 @@ Rose follows a strict **"Load → Cache → Process"** philosophy to ensure high
     2.  **Load (If Missing)**: If not found, invoke `BagReader` to load it.
     3.  **Process**: Pass the valid `ComprehensiveBagInfo` to `BagWriter` or consume it for `inspect`.
 
-## 3. Workflows
+## 3. Data Model (`core/model.py`)
+The system centers around the `ComprehensiveBagInfo` data structure, optimized for memory and access speed.
+
+### ComprehensiveBagInfo
+The master object containing all known data about a bag file.
+- **Metadata**: `file_path`, `file_size`, `analysis_level`, `last_updated`
+- **Topic Data**: `topics: List[TopicInfo]`, `message_types: List[MessageTypeInfo]`
+- **Time Data**: `start_time`, `end_time`, `duration`
+- **Optimization**: Uses simple lists instead of heavy dictionaries where possible to reduce memory footprint.
+
+### Analysis Levels
+- **NONE**: No analysis.
+- **QUICK**: Basic metadata (topics, counts, duration). Sufficient for `compress` and basic `inspect`.
+- **INDEX**: Full message indexing (DataFrames). Required for complex analysis.
+
+## 4. Workflows
 
 ### Standard Process Flow
 ```mermaid
@@ -74,7 +89,7 @@ graph TD
 - **Goal**: Create new dataset.
 - **Flow**: `Orchestrator` -> `UnifiedCache` -> `BagWriter`.
 
-## 4. Directory Structure
+## 5. Directory Structure
 ```
 roseApp/
 ├── cli/            # Interface Layer (Typer)

@@ -62,7 +62,7 @@ graph TD
     subgraph "Headless SDK (Core)"
         Orchestrator --> Step1["Step: inspect bag"]
         Orchestrator --> Step2["Step: load bag"]
-        Step2 --> Parser["BagParser"]
+        Step2 --> Parser["BagReader"]
         Step2 --> Cache["CacheManager"]
     end
     
