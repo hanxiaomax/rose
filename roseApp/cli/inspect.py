@@ -313,9 +313,9 @@ def inspect(
             out.section("Field Analysis")
             for topic_data in topics_data:
                 if 'field_paths' in topic_data and topic_data['field_paths']:
-                    out.print(f"\n  {topic_data['name']}:")
+                    out.print(f"\n  [{out.theme.accent}]{topic_data['name']}[/{out.theme.accent}]:")
                     for field in sorted(topic_data['field_paths'])[:20]:
-                        out.print(f"    - {field}")
+                        out.print(f"    - [{out.theme.info}]{field}[/{out.theme.info}]")
                     if len(topic_data['field_paths']) > 20:
                         out.debug(f"    ... and {len(topic_data['field_paths']) - 20} more fields")
         
