@@ -11,7 +11,7 @@ except ImportError:
             super().__init__("Plotting requires 'textual-plotext'.\nInstall with: pip install textual-plotext", *args, **kwargs)
             self.plt = None
 
-from textual.widgets import Header, Footer, Input, Label, Static, Button, ListView, ListItem, Tree
+from textual.widgets import Header, Footer, Input, Label, Static, Button, ListView, ListItem, Tree, TabbedContent, TabPane
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.message import Message
@@ -336,21 +336,31 @@ class InspectApp(App):
     }
 
     /* Main Area */
-    #main-row {
+    /* Main Area - Now using Tabs */
+    TabbedContent {
         height: 1fr;
-        layout: horizontal;
+    }
+    
+    ContentSwitcher {
+        height: 1fr;
+    }
+
+    TabPane {
+        height: 100%;
+        padding: 0;
     }
 
     #data-pane {
-        width: 30%;
+        width: 100%;
         height: 100%;
         layout: vertical;
         padding: 0 1;
-        border-right: solid $primary;
+        /* Border moved to Tabs or just remove visual separation since tabs separate them */
+        /* border-right: solid $primary; */ 
     }
 
     #plot-pane {
-        width: 70%;
+        width: 100%;
         height: 100%;
         background: $surface-lighten-1;
         content-align: center middle;
@@ -430,6 +440,7 @@ class InspectApp(App):
 
     current_msg_index = reactive(0)
     current_field_filter = reactive("")
+    current_plot_field: str = ""
     
     # Plotting Data
     plot_data_x: List[float] = []
@@ -441,6 +452,8 @@ class InspectApp(App):
         Navigate message using path with support for array indexing.
         Returns (value, success).
         """
+        if not path:
+             return msg, True
         current = msg
         try:
             parts = path.split('.')
@@ -517,18 +530,19 @@ class InspectApp(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True, id="header")
 
-        with Horizontal(id="main-row"):
-            # Swapped: Data Left, Plot Right
-            with Vertical(id="data-pane"):
-                yield Static("No topic selected. Press '/' to search.", id="topic-bar")
-                yield Tree("Root", id="data-tree")
-                
-            with Vertical(id="plot-pane"):
-                yield Label("Plot Area (Numeric Data Only)", id="plot-label")
-                if PLOTEXT_AVAILABLE:
-                    yield PlotextPlot(id="plot-graph")
-                else:
-                    yield Static("\n[bold red]Dependency Missing[/]\n\nPlease install 'textual-plotext' to view plots.\n\nRun:\npip install textual-plotext", id="plot-graph", classes="error-msg")
+        with TabbedContent(initial="raw-tab"):
+            with TabPane("Raw Data", id="raw-tab"):
+                with Vertical(id="data-pane"):
+                    yield Static("No topic selected. Press '/' to search.", id="topic-bar")
+                    yield Tree("Root", id="data-tree")
+                    
+            with TabPane("Plot", id="plot-tab"):
+                with Vertical(id="plot-pane"):
+                    yield Label("Plot Area (Numeric Data Only)", id="plot-label")
+                    if PLOTEXT_AVAILABLE:
+                        yield PlotextPlot(id="plot-graph")
+                    else:
+                        yield Static("\n[bold red]Dependency Missing[/]\n\nPlease install 'textual-plotext' to view plots.\n\nRun:\npip install textual-plotext", id="plot-graph", classes="error-msg")
 
         with Vertical(id="bottom-bar"):
             # Row 1: Current Time/Frame Info
@@ -545,13 +559,24 @@ class InspectApp(App):
             
         yield Footer()
 
-    def on_key(self, event: events.Key) -> None:
-        if isinstance(self.focused, Input):
+    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        """Handle tree node selection to update plot."""
+        if not event.node.data:
             return
-        if event.key == "left":
-            self.action_prev_msg()
-        elif event.key == "right":
-            self.action_next_msg()
+            
+        # If node has valid path data, update plot field
+        path = str(event.node.data)
+        
+        # Only update if different
+        if path != self.current_plot_field:
+            self.current_plot_field = path
+             
+            # Trigger load plot data
+            if PLOTEXT_AVAILABLE:
+                self.load_full_plot_data()
+                
+            # Trigger load message to update highlight
+            self.load_message()
 
     def action_show_search(self) -> None:
         query = ""
@@ -578,6 +603,7 @@ class InspectApp(App):
                 self.select_topic(topic, field_filter)
 
     def select_topic(self, topic: TopicInfo, field_filter: str = "") -> None:
+        # Check if topic changed or filter changed significantly
         if topic != self.current_topic or field_filter != self.current_field_filter:
             self.plot_data_x.clear()
             self.plot_data_y.clear()
@@ -591,6 +617,8 @@ class InspectApp(App):
         self.current_topic = topic
         self.current_msg_index = 0
         self.current_field_filter = field_filter
+        # Sync plot field with filter initially
+        self.current_plot_field = field_filter
         
         info_str = f"{topic.name} ({topic.message_type})"
         if field_filter:
@@ -617,18 +645,18 @@ class InspectApp(App):
         self.query_one("#start-time-label", Label).update(start_str)
         self.query_one("#end-time-label", Label).update(end_str)
         
-        if field_filter and PLOTEXT_AVAILABLE:
+        if self.current_plot_field and PLOTEXT_AVAILABLE:
              self.load_full_plot_data()
         
         self.load_message()
 
     def load_full_plot_data(self) -> None:
-        """Load all data points for the selected field for plotting."""
-        if not self.current_topic or not self.current_field_filter:
+        """Load all data points for the selected plot field."""
+        if not self.current_topic or not self.current_plot_field:
             return
             
         plot_label = self.query_one("#plot-label", Label)
-        plot_label.update("Loading plot data...")
+        plot_label.update(f"Loading data for {self.current_plot_field}...")
         self.refresh() # Force UI update if possible
         
         self.plot_data_x = []
@@ -657,7 +685,7 @@ class InspectApp(App):
                 msg = self.reader.deserialize(raw, conn.msgtype)
                 
                 # Use robust getter
-                val, valid = self._get_field_value(msg, self.current_field_filter)
+                val, valid = self._get_field_value(msg, self.current_plot_field)
                 
                 if valid and isinstance(val, (int, float)):
                     self.plot_data_x.append(rel_time)
@@ -672,6 +700,33 @@ class InspectApp(App):
         else:
             plot_label.update("No numeric data found for field.")
 
+    def on_mount(self) -> None:
+        """Apply theme colors to UI elements dynamically."""
+        try:
+            # Map rose_theme colors to UI
+            primary = self.rose_theme.primary
+            accent = self.rose_theme.accent
+            
+            # Update borders
+            # self.query_one("#data-pane").styles.border_right = ("solid", primary) # Removed for tabs
+            self.query_one("#topic-bar").styles.border_bottom = ("solid", primary)
+            self.query_one("#bottom-bar").styles.border_top = ("solid", accent)
+            
+            # Style Tabs?
+            # from textual.widgets import Tabs
+            # self.query_one(Tabs).styles.color = primary 
+            # self.query_one(Tabs).styles.background = ... # Textual defaults are okay usually
+
+            self.query_one("#topic-bar").styles.border_bottom = ("solid", primary)
+            self.query_one("#bottom-bar").styles.border_top = ("solid", accent)
+            
+            # Update labels
+            self.query_one("#frame-counter").styles.color = primary
+            self.query_one("#percent-display").styles.color = primary
+            
+        except Exception:
+            pass
+
     def _update_plot(self) -> None:
         if not PLOTEXT_AVAILABLE: return
         try:
@@ -681,24 +736,69 @@ class InspectApp(App):
             plot_widget.visible = True
             plt = plot_widget.plt
             plt.clear_data()
-            plt.title(f"Field: {self.current_field_filter}")
+            
+            # 1. Full Path Title
+            full_path = f"{self.current_topic.name}.{self.current_plot_field}" if self.current_topic else self.current_plot_field
+            plt.title(f"{full_path}")
+            
             plt.xlabel("Time (s)")
             
-            # 1. Main Series
-            if self.plot_data_x:
-                plt.plot(self.plot_data_x, self.plot_data_y)
+            # 2. Main Series with Legend
+            color = self.rose_theme.primary
             
-            # 2. Highlight Current Point
+            # Determine legend label
+            legend_label = "History"
+            if self.current_plot_point:
+                legend_label = f"Val: {self.current_plot_point[1]:.4f}" # Current value in legend
+            
+            if self.plot_data_x:
+                plt.plot(self.plot_data_x, self.plot_data_y, color=color, label=legend_label)
+            
+            # 3. Highlight Current Point
             if self.current_plot_point:
                 cx, cy = self.current_plot_point
-                plt.scatter([cx], [cy], marker="x", color="red")
-                # Add text annotation
+                # Use accent/error for highlight
+                h_color = self.rose_theme.error
+                
+                # Marker: "inverse color pixel" -> Use a solid block char or circle
+                # plotext 'marker' can be a single char.
+                # "inverse" effect is hard without bg color control per pixel, but high contrast helps.
+                # Use a filled square or circle
+                plt.scatter([cx], [cy], marker="█", color=h_color)
+                
+                # Calculate alignment and offset based on position
+                y_min = min(self.plot_data_y) if self.plot_data_y else cy
+                y_max = max(self.plot_data_y) if self.plot_data_y else cy
+                y_range = max(1e-6, y_max - y_min)
+                
+                # Logic:
+                # 1. Y-Axis: If near bottom, place text ABOVE. Else BELOW.
+                # Threshold: Bottom 10% of range
+                is_near_bottom = (cy - y_min) < (0.1 * y_range)
+                text_y = cy + (y_range * 0.05) if is_near_bottom else cy - (y_range * 0.05)
+                
+                # 2. X-Axis: If near left, align LEFT. Else align RIGHT.
+                # Need X range logic
+                x_min = min(self.plot_data_x) if self.plot_data_x else cx
+                x_max = max(self.plot_data_x) if self.plot_data_x else cx
+                x_range = max(1e-6, x_max - x_min)
+                
+                is_near_left = (cx - x_min) < (0.1 * x_range)
+                text_align = "left" if is_near_left else "right"
+
                 # Plotext text(s, x, y)
-                plt.text(f" {cy:.4f} ", cx, cy, alignment="left", color="red")
+                plt.text(f" {cy:.4f} ", cx, text_y, alignment=text_align, color=h_color)
             
-            plot_widget.refresh()
+            # Force deep refresh of the widget chain
+            plot_widget.refresh(layout=True)
+            self.query_one("#plot-pane").refresh()
+            self.query_one(TabbedContent).refresh()
+            # self.refresh() # App refresh might be too broad/slow, try targeted first
+            
+            # Update label to just show count, not value (since value is in legend)
             if self.plot_data_x:
                 plot_label.update(f"Loaded {len(self.plot_data_x)} points")
+                
         except: pass
 
     def watch_current_msg_index(self, new_val: int) -> None:
@@ -717,7 +817,7 @@ class InspectApp(App):
         if self.current_topic and self.current_msg_index < self.current_topic.message_count - 1:
              self.current_msg_index += 1
 
-    def load_message(self) -> None:
+    def load_message(self, skip_tree: bool = False) -> None:
         if not self.current_topic:
             return
             
@@ -732,14 +832,18 @@ class InspectApp(App):
         self.query_one("#percent-display", Label).update(f"{percent}%")
 
         tree = self.query_one("#data-tree", Tree)
-        tree.clear()
         
-        root_label = f"{self.current_topic.name}"
-        if self.current_field_filter:
-            root_label += f".{self.current_field_filter}"
+        if not skip_tree:
+            tree.clear()
             
-        tree.root.label = Text(root_label, style=f"bold {self.rose_theme.accent}")
-        tree.root.expand()
+            root_label = f"{self.current_topic.name}"
+            if self.current_field_filter:
+                root_label += f".{self.current_field_filter}"
+                
+            tree.root.label = Text(root_label, style=f"bold {self.rose_theme.accent}")
+            # Ensure root has the base path data
+            tree.root.data = self.current_field_filter
+            tree.root.expand()
         
         try:
             # Efficiently seek to current message
@@ -757,11 +861,8 @@ class InspectApp(App):
                 
                 msg = self.reader.deserialize(raw, conn.msgtype)
                 
-                # Apply filter using robust getter
+                # Apply filter to get DATA TO SHOW IN TREE
                 data_to_show = msg
-                current_val = None
-                current_time_rel = None
-                
                 if self.current_field_filter:
                     val, valid = self._get_field_value(msg, self.current_field_filter)
                     if valid:
@@ -769,16 +870,23 @@ class InspectApp(App):
                     else:
                         data_to_show = f"<Field '{self.current_field_filter}' not found/valid>"
 
-                # Calculate visualization data regardless of plot mode
-                if isinstance(data_to_show, (int, float)):
-                    current_val = float(data_to_show)
+                if not skip_tree:
+                    self.build_tree(tree.root, data_to_show, self.current_field_filter)
+
+                # CALCULATE PLOT HIGHLIGHT based on current_plot_field
+                current_val = None
+                current_time_rel = None
+                
+                # We need the value for current_plot_field
+                pval, pvalid = self._get_field_value(msg, self.current_plot_field)
+                
+                if pvalid and isinstance(pval, (int, float)):
+                    current_val = float(pval)
                     # Calc relative time
                     start_ts = 0.0
                     if self.current_topic.first_message_time:
                          start_ts = self.current_topic.first_message_time[0]
                     current_time_rel = ts_sec - start_ts
-
-                self.build_tree(tree.root, data_to_show)
                 
                 # Update plot highlight
                 plot_label = self.query_one("#plot-label", Label)
@@ -793,15 +901,16 @@ class InspectApp(App):
                          self._update_plot()
                      else:
                          plot_label.update("Selected data is not numeric.")
-
             else:
-                tree.root.add(Text("Message not found", style="bold red"))
-                self.query_one("#current-time-display", Label).update("--:--:--")
+                 if not skip_tree:
+                    tree.root.add(Text("Message not found", style="bold red"))
+                 self.query_one("#current-time-display", Label).update("--:--:--")
                 
         except Exception as e:
-            tree.root.add(Text(f"Error: {e}", style="bold red"))
+            if not skip_tree:
+                tree.root.add(Text(f"Error: {e}", style="bold red"))
 
-    def build_tree(self, node: Tree, data: any) -> None:
+    def build_tree(self, node: Tree, data: any, path_prefix: str = "") -> None:
         """Recursively add nodes to the tree."""
         from rich.text import Text
         
@@ -809,17 +918,17 @@ class InspectApp(App):
         if hasattr(data, '__slots__'):
             for field in data.__slots__:
                 val = getattr(data, field)
-                self._add_child_node(node, field, val)
+                self._add_child_node(node, field, val, path_prefix)
                 
         elif hasattr(data, '__dict__'):
             for field, val in data.__dict__.items():
                 if field.startswith('_'): continue
-                self._add_child_node(node, field, val)
+                self._add_child_node(node, field, val, path_prefix)
                 
         # 2. Handle Dicts
         elif isinstance(data, dict):
             for key, val in data.items():
-                self._add_child_node(node, str(key), val)
+                self._add_child_node(node, str(key), val, path_prefix)
                 
         # 3. Handle Lists/Arrays
         elif isinstance(data, (list, tuple)):
@@ -827,19 +936,30 @@ class InspectApp(App):
             if len(data) > 0 and isinstance(data[0], (int, float, bool)) and len(data) > 20:
                  # Show summary
                  summary = f"<Array[{len(data)}] {data[:5]}...>"
-                 node.add(Text(summary, style="dim italic"))
+                 # Arrays themselves can be plotted if index is selected
+                 node.add(Text(summary, style="dim italic"), data=path_prefix)
             else:
                 for i, item in enumerate(data):
-                    self._add_child_node(node, f"[{i}]", item)
+                    self._add_child_node(node, f"[{i}]", item, path_prefix)
                     
         # 4. Handle Primitives (Leaf nodes)
         else:
-             node.add(Text(str(data), style=self.rose_theme.info))
+             # Leaf node data is already set by parent via _add_child_node
+             node.add(Text(str(data), style=self.rose_theme.info), data=path_prefix)
 
-    def _add_child_node(self, parent: Tree, label: str, value: any) -> None:
+    def _add_child_node(self, parent: Tree, label: str, value: any, path_prefix: str) -> None:
         """Helper to format and add a child node."""
         from rich.text import Text
         
+        # Construct full path for this node
+        new_path = ""
+        if not path_prefix:
+            new_path = label
+        elif label.startswith('['):
+            new_path = f"{path_prefix}{label}"
+        else:
+            new_path = f"{path_prefix}.{label}"
+
         is_container = False
         if hasattr(value, '__slots__') or hasattr(value, '__dict__') or isinstance(value, (dict, list, tuple)):
              is_container = True
@@ -847,9 +967,14 @@ class InspectApp(App):
         if is_container:
             # Container: label is the key, expand to show children
             # Styling: Key in default/blue
-            subtree = parent.add(Text(label, style="bold " + self.rose_theme.info))
-            self.build_tree(subtree, value)
-            subtree.expand() 
+            subtree = parent.add(Text(label, style="bold " + self.rose_theme.info), data=new_path)
+            self.build_tree(subtree, value, new_path)
+            # subtree.expand() # Don't auto-expand everything, too noisy? User can expand.
+            # Only expand primitive containers or small ones
+            if isinstance(value, (list, tuple)) and len(value) < 10:
+                subtree.expand()
+            elif not isinstance(value, (list, tuple)):
+                subtree.expand()
         else:
             # Leaf: "label: value"
             # Value styling: Green for numbers, etc
@@ -858,4 +983,5 @@ class InspectApp(App):
                 (f"{label}: ", "bold " + self.rose_theme.info),
                 (str(value), style_val)
             )
-            parent.add(text)
+            # Add node with path data
+            parent.add(text, data=new_path)
