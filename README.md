@@ -43,7 +43,7 @@ More than mere retro styling, this approach serves as poetic resistance to digit
 
 ## Documentation
 
-For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md).
+For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md) and [Detailed Design](docs/design.md).
 
 ## Getting Started
 

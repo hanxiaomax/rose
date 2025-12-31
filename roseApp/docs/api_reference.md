@@ -11,7 +11,7 @@ Defines the core data structures for ROS bag analysis.
 
 **Key Classes:**
 
-*   **`ComprehensiveBagInfo`**: The central data structure holding all information about a bag file.
+*   **`BagInfo`**: The central data structure holding all information about a bag file.
     *   `file_path`: Path to the bag file.
     *   `topics`: List of `TopicInfo` objects.
     *   `message_types`: List of `MessageTypeInfo` objects.
@@ -51,8 +51,8 @@ Manages caching of analysis results to speed up operations.
 
 **Key Classes:**
 
-*   **`UnifiedCache`**: Core caching system using `pickle` for persistence.
-    *   `get_bag_analysis(path)`: Retrieves `ComprehensiveBagInfo` if cached and valid.
+*   **`Cache`**: Core caching system using `pickle` for persistence.
+    *   `get_bag_analysis(path)`: Retrieves `BagInfo` if cached and valid.
     *   `put_bag_analysis(path, info)`: Caches analysis results.
     *   Validation is performed using `file_size` and `file_mtime`.
 

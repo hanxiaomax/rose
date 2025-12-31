@@ -26,7 +26,7 @@ import re
 from typing import Optional, List, Tuple, Any
 from datetime import datetime
 
-from ..core.model import ComprehensiveBagInfo, TopicInfo
+from ..core.model import BagInfo, TopicInfo
 from ..core.output import ThemeColors
 
 class Timeline(Static):
@@ -488,7 +488,7 @@ class InspectApp(App):
 
     SearchItem = Tuple[str, TopicInfo, str]
 
-    def __init__(self, bag_path: str, bag_info: ComprehensiveBagInfo, theme: ThemeColors, initial_topic: Optional[str] = None, **kwargs):
+    def __init__(self, bag_path: str, bag_info: BagInfo, theme: ThemeColors, initial_topic: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
         self.bag_path = bag_path
         self.bag_info = bag_info

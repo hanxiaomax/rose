@@ -16,7 +16,7 @@ from rosbags.highlevel import AnyReader
 
 
 from roseApp.core.logging import get_logger
-from .model import ComprehensiveBagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
+from .model import BagInfo, AnalysisLevel, TopicInfo, MessageTypeInfo, MessageFieldInfo, TimeRange
 
 try:
     import pandas as pd
@@ -55,7 +55,7 @@ class BagReader:
             return
         
         # Current bag information
-        self._current_bag_info: Optional[ComprehensiveBagInfo] = None
+        self._current_bag_info: Optional[BagInfo] = None
         
         # Type system optimization
         self._typestore = None
@@ -71,7 +71,7 @@ class BagReader:
         bag_path: str, 
         level: AnalysisLevel = AnalysisLevel.QUICK,
         progress_callback: Optional[Callable[[str, float], None]] = None
-    ) -> Tuple[ComprehensiveBagInfo, float]:
+    ) -> Tuple[BagInfo, float]:
         """
         Asynchronously load bag into cache with configurable analysis level
         
@@ -81,7 +81,7 @@ class BagReader:
             progress_callback: Optional callback for progress updates (phase, progress_pct)
             
         Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+            Tuple of (BagInfo, elapsed_time_seconds)
         """
         start_time = time.time()
         loop = asyncio.get_event_loop()
@@ -179,7 +179,7 @@ class BagReader:
         
         return True
     
-    def _analyze_bag_quick(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+    def _analyze_bag_quick(self, bag_path: str) -> Tuple[BagInfo, float]:
         """
         Perform quick analysis without message traversal
         
@@ -189,7 +189,7 @@ class BagReader:
             bag_path: Path to the bag file
             
         Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+            Tuple of (BagInfo, elapsed_time_seconds)
         """
         start_time = time.time()
         
@@ -225,7 +225,7 @@ class BagReader:
                     self._current_bag_info.file_path != bag_path):
                     file_size = os.path.getsize(bag_path)
                     file_mtime = os.path.getmtime(bag_path)
-                    self._current_bag_info = ComprehensiveBagInfo(
+                    self._current_bag_info = BagInfo(
                         file_path=bag_path,
                         file_size=file_size,
                         file_mtime=file_mtime,
@@ -279,7 +279,7 @@ class BagReader:
             _logger.error(f"Error in quick analysis for {bag_path}: {e}")
             raise Exception(f"Error in quick analysis: {e}")
     
-    def _analyze_bag_with_index(self, bag_path: str) -> Tuple[ComprehensiveBagInfo, float]:
+    def _analyze_bag_with_index(self, bag_path: str) -> Tuple[BagInfo, float]:
         """
         Perform analysis with message indexing and DataFrame creation
         
@@ -290,7 +290,7 @@ class BagReader:
             bag_path: Path to the bag file
             
         Returns:
-            Tuple of (ComprehensiveBagInfo, elapsed_time_seconds)
+            Tuple of (BagInfo, elapsed_time_seconds)
         """
         start_time = time.time()
         

@@ -13,7 +13,7 @@ from typing import Optional, List
 import typer
 
 from ..core.cache import get_cache
-from ..core.model import ComprehensiveBagInfo
+from ..core.model import BagInfo
 from ..core.output import get_output
 
 app = typer.Typer(name="list", help="List and manage cached bag files")
@@ -127,7 +127,7 @@ def _show_cache_info(cache, show_content, verbose, out):
                     "location": cache_type
                 }
                 
-                if isinstance(value, ComprehensiveBagInfo):
+                if isinstance(value, BagInfo):
                     bag_info = value
                     entry_dict.update({
                         "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
@@ -200,7 +200,7 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
         # Not a number, treat as path - need to find the ID
         identifier_path = Path(identifier)
         for idx, (key, value, cache_type) in enumerate(all_entries, 1):
-            if isinstance(value, ComprehensiveBagInfo):
+            if isinstance(value, BagInfo):
                 bag_info = value
                 bag_path = Path(getattr(bag_info, 'file_path', ''))
                 if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path):
@@ -222,7 +222,7 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     entry_details = {}
     cache_size_bytes = 0
     
-    if isinstance(value, ComprehensiveBagInfo):
+    if isinstance(value, BagInfo):
         bag_info = value
         bag_name = Path(getattr(bag_info, 'file_path', key)).name
         bag_path_str = getattr(bag_info, 'file_path', 'Unknown')
@@ -339,7 +339,7 @@ def _clear_all_cache(cache, skip_confirm, out):
             'cache_file_path': None
         }
         
-        if isinstance(value, ComprehensiveBagInfo):
+        if isinstance(value, BagInfo):
             bag_info = value
             entry_info['bag_name'] = Path(getattr(bag_info, 'file_path', key)).name
             entry_info['bag_path'] = getattr(bag_info, 'file_path', 'Unknown')
@@ -543,7 +543,7 @@ def _prepare_export_data(all_entries, include_messages):
                 'timestamp': time.time()
             }
             
-            if isinstance(value, ComprehensiveBagInfo):
+            if isinstance(value, BagInfo):
                 entry_data['content'] = _bag_cache_to_dict(value, include_messages)
             else:
                 content_str = str(value)
