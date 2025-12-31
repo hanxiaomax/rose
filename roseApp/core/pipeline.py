@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, Generator, List, Optional, Tuple, Dict, Set
 
 from roseApp.core.events import LogEvent, ProgressEvent, ResultEvent
-from roseApp.core.parser import BagParser, ExtractOption
+from roseApp.core.parser import BagReader
+from roseApp.core.writer import BagWriter, WriterOption
+from roseApp.core.model import AnalysisLevel
+
 from roseApp.core.cache import create_bag_cache_manager
 from roseApp.core.errors import BagFileError, validate_bag_file
 
@@ -86,8 +89,14 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
     """
     Main orchestrator for loading bags.
     """
+    # Map boolean build_index to AnalysisLevel
+    # If build_index is True, we use INDEX level
+    # If False, we default to QUICK (Metadata) level
+    target_level = AnalysisLevel.INDEX if build_index else AnalysisLevel.QUICK
+    
     # 1. Find bags
     try:
+        # yield from returns the return value of the generator
         bag_files = yield from find_bags(patterns)
     except Exception as e:
         yield LogEvent(f"Discovery failed: {e}", level="ERROR")
@@ -98,7 +107,7 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
         return []
 
     results = []
-    parser = BagParser()
+    reader = BagReader()
     cache_manager = create_bag_cache_manager()
 
     # 2. Process bags sequentially
@@ -108,50 +117,64 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
         yield LogEvent(f"Processing {bag_path.name}...", level="INFO")
         
         try:
-            # Check cache
-            if not force:
-                cached_entry = cache_manager.get_analysis(bag_path)
+            # Load logic embedded here
+            cache_manager = create_bag_cache_manager()
+            
+            # Check cache with level awareness
+            # For simplicity in this refactor step, we just check existence for now
+            # But ideally we should check if cached level >= target_level
+            cached_info = cache_manager.get_analysis(bag_path)
+            
+            # Determine if we need to load
+            start_load = force
+            if not start_load:
+                if not cached_info:
+                    start_load = True
+                else:
+                    # Check if upgrade needed
+                     if target_level == AnalysisLevel.INDEX and not cached_info.bag_info.has_message_index():
+                         start_load = True
+                         yield LogEvent(f"Upgrading analysis to INDEX level for {bag_path.name}...", level="INFO")
+            
+            if start_load:
+                yield LogEvent(f"Loading {bag_path.name} (Level: {target_level.value})...", level="INFO")
                 
-                if cached_entry and cached_entry.is_valid(bag_path):
-                    if build_index and not cached_entry.bag_info.has_message_index():
-                        # Needs upgrade
-                        pass
-                    else:
-                        yield LogEvent(f"Bag {bag_path.name} already cached", level="INFO")
-                        res = {
-                            'path': str(bag_path),
-                            'status': 'already_cached',
-                            'message': 'Already in cache'
-                        }
-                        yield ResultEvent(success=True, data=res)
-                        results.append(res)
-                        continue
+                # Setup callback for progress
+                current_phase = "Initializing"
+                
+                def progress_cb(phase, pct):
+                    nonlocal current_phase
+                    current_phase = phase
+                    # We can't yield from a callback easily without extensive refactoring
+                    # So we rely on the orchestrator to yield updates or simple prints?
+                    # Since this is async running in sync context, we can't yield.
+                    # We'll trust the parser logs or add specific event hooks if needed.
+                    pass
 
-            yield ProgressEvent(0, 100, f"Loading {bag_path.name}")
-            yield LogEvent("Starting analysis...", level="DEBUG")
-
-            start_time = time.time()
+                # Run async load
+                bag_info, elapsed = await_sync(reader.load_bag_async(str(bag_path), level=target_level, progress_callback=progress_cb))
+                
+                result = {
+                    'path': str(bag_path),
+                    'status': 'success',
+                    'loaded': True,
+                    'level': target_level.value,
+                    'time': elapsed,
+                    'bag_info': bag_info
+                }
+                yield ResultEvent(success=True, data=result)
+                yield LogEvent(f"Loaded {bag_path.name} in {elapsed:.2f}s", level="SUCCESS")
+            else:
+                yield LogEvent(f"Using cached analysis for {bag_path.name}", level="INFO")
+                result = {
+                    'path': str(bag_path),
+                    'status': 'success',
+                    'loaded': False, 
+                    'cached': True,
+                    'bag_info': cached_info.bag_info
+                }
             
-            # Run async load
-            bag_info, elapsed_time = await_sync(parser.load_bag_async(
-                str(bag_path), 
-                build_index=build_index
-            ))
-            
-            yield ProgressEvent(100, 100, "Load complete")
-            yield LogEvent(f"Successfully loaded {bag_path.name} in {elapsed_time:.3f}s", level="INFO")
-            
-            result_data = {
-                'path': str(bag_path),
-                'status': 'loaded',
-                'message': 'Successfully loaded into cache',
-                'topics_count': len(bag_info.topics) if bag_info.topics else 0,
-                'duration': bag_info.duration_seconds if bag_info.duration_seconds else 0,
-                'elapsed': elapsed_time
-            }
-            
-            yield ResultEvent(success=True, data=result_data)
-            results.append(result_data)
+            results.append(result)
 
         except Exception as e:
             yield LogEvent(f"Error loading {bag_path.name}: {e}", level="ERROR")
@@ -189,7 +212,7 @@ def extract_orchestrator(
     
     yield LogEvent("Analyzing topics...", level="INFO")
     cache_manager = create_bag_cache_manager()
-    parser = BagParser()
+    reader = BagReader()
     
     # Identify topics and uncached bags
     all_topics_set = set()
@@ -215,7 +238,7 @@ def extract_orchestrator(
                 build_idx = False # Extraction doesn't strictly need index, just connection info
                 yield LogEvent(f"Loading {bag_path.name}...", level="DEBUG")
                 # Load synchronously
-                await_sync(parser.load_bag_async(str(bag_path), build_index=build_idx))
+                await_sync(reader.load_bag_async(str(bag_path), level=AnalysisLevel.QUICK))
                 
                 # Retrieve fresh info
                 # Note: load_bag_async caches it, so we can check cache or use return value
@@ -276,7 +299,7 @@ def extract_orchestrator(
             
             output_path = Path(output_str)
             
-            extract_option = ExtractOption(
+            writer_option = WriterOption(
                 topics=final_topics,
                 compression=compression,
                 overwrite=overwrite
@@ -285,10 +308,12 @@ def extract_orchestrator(
             yield ProgressEvent(0, 100, f"Extracting {bag_path.name}")
             start_time = time.time()
             
-            result_message, extraction_time = parser.extract(
-                str(bag_path),
+            # Perform extraction
+            writer = BagWriter()
+            result_message, extraction_time = writer.write(
+                bag_info,
                 str(output_path),
-                extract_option
+                writer_option
             )
             
             yield ProgressEvent(100, 100, "Extraction complete")
@@ -337,7 +362,7 @@ def compress_orchestrator(
         output_pattern = "{input}_{compression}_{timestamp}.bag"
 
     results = []
-    parser = BagParser()
+    reader = BagReader()
     cache_manager = create_bag_cache_manager()
     total = len(bag_files)
     
@@ -365,13 +390,14 @@ def compress_orchestrator(
             all_topics = []
             
             if cached_entry and cached_entry.is_valid(bag_path):
-                 all_topics = [t.name for t in cached_entry.bag_info.topics]
-            else:
-                 yield LogEvent("Reading bag info...", level="DEBUG")
-                 bag_info, _ = await_sync(parser.load_bag_async(str(bag_path), build_index=False))
+                 bag_info = cached_entry.bag_info
                  all_topics = [t.name for t in bag_info.topics]
+            else:
+                  yield LogEvent("Reading bag info...", level="DEBUG")
+                  bag_info, _ = await_sync(reader.load_bag_async(str(bag_path), level=AnalysisLevel.QUICK))
+                  all_topics = [t.name for t in bag_info.topics]
 
-            extract_option = ExtractOption(
+            writer_option = WriterOption(
                 topics=all_topics,
                 compression=compression,
                 overwrite=overwrite,
@@ -381,10 +407,12 @@ def compress_orchestrator(
             yield ProgressEvent(0, 100, f"Compressing {bag_path.name}")
             start_time = time.time()
             
-            result_message, elapsed_time = parser.extract(
-                str(bag_path),
+            # Perform compression (using writer)
+            writer = BagWriter()
+            result_message, elapsed_time = writer.write(
+                bag_info,
                 str(output_path),
-                extract_option
+                writer_option
             )
             
             # Stats
@@ -424,76 +452,51 @@ def compress_orchestrator(
     yield ResultEvent(success=True, data=results)
     return results
 
-def inspect_orchestrator(
-    bag_path: Path, 
-    load_if_missing: bool = False,
-    build_index: bool = False,
-    force: bool = False
-) -> Generator[Any, None, Dict[str, Any]]:
+def inspect_orchestrator(bag_path: Path, load_if_missing: bool = False, build_index: bool = False, force: bool = False) -> Generator[Any, None, Dict[str, Any]]:
     """
-    Orchestrator for inspection. Single file focused.
+    Orchestrator for inspecting a bag file.
     """
-    if not bag_path.exists():
-        yield LogEvent(f"Bag file not found: {bag_path}", level="ERROR")
-        return {'status': 'error', 'message': f"Bag file not found: {bag_path}"}
-        
+    target_level = AnalysisLevel.INDEX if build_index else AnalysisLevel.QUICK
+    
     yield LogEvent(f"Inspecting {bag_path.name}...", level="INFO")
     
-    try:
-        parser = BagParser()
-        cache_manager = create_bag_cache_manager()
-        cached_entry = cache_manager.get_analysis(bag_path)
+    # Check cache first
+    cache_manager = create_bag_cache_manager()
+    cached_info = cache_manager.get_analysis(bag_path)
+    
+    needs_load = force
+    reason = "Forced reload" if force else "Unknown reason"
+    
+    if not cached_info:
+        needs_load = True
+        reason = "Bag not in cache"
+    elif target_level == AnalysisLevel.INDEX and not cached_info.bag_info.has_message_index():
+        needs_load = True
+        reason = "Index upgrade required"
+    
+    if needs_load:
+        if not load_if_missing:
+             yield LogEvent(f"Bag not in cache: {bag_path}", level="WARN")
+             yield ResultEvent(success=False, data={'status': 'not_cached'})
+             return {'status': 'not_cached'}
         
-        is_cached = cached_entry is not None and cached_entry.is_valid(bag_path)
-        needs_upgrade = False
+        yield LogEvent(f"Loading bag ({reason})...", level="INFO")
         
-        if is_cached and build_index and not force:
-            current_level = getattr(cached_entry.bag_info.analysis_level, 'value', str(cached_entry.bag_info.analysis_level))
-            if current_level != 'index':
-                needs_upgrade = True
-                yield LogEvent("Cache exists but missing message index. Reloading...", level="INFO")
+        reader = BagReader()
         
-        if force or not is_cached or needs_upgrade:
-            if force or load_if_missing or needs_upgrade:
-                load_mode = "with index" if build_index else "quick"
-                msg = f"Loading bag ({load_mode})"
-                if force: msg += " (forced)"
-                elif needs_upgrade: msg += " (upgrade needed)"
-                msg += "..."
-                
-                yield LogEvent(msg, level="INFO")
-                
-                # Load
-                try:
-                    await_sync(parser.load_bag_async(str(bag_path), build_index=build_index))
-                    # Reload cache
-                    cached_entry = cache_manager.get_analysis(bag_path)
-                    if cached_entry is None:
-                        raise Exception("Failed to retrieve analysis after load")
-                except Exception as e:
-                    yield LogEvent(f"Failed to load bag: {e}", level="ERROR")
-                    res = {'path': str(bag_path), 'status': 'error', 'message': str(e)}
-                    yield ResultEvent(success=False, data=res)
-                    return res
-            else:
-                yield LogEvent(f"Bag not in cache: {bag_path.name}", level="WARN")
-                res = {'path': str(bag_path), 'status': 'not_cached', 'message': 'Bag not in cache'}
-                yield ResultEvent(success=False, data=res)
-                return res
-        
-        bag_info = cached_entry.bag_info
-        yield LogEvent(f"Retrieved analysis for {bag_path.name}", level="DEBUG")
-        
-        res = {
-            'path': str(bag_path),
-            'status': 'success',
-            'bag_info': bag_info
-        }
-        yield ResultEvent(success=True, data=res)
-        return res
+        try:
+             # Run async load
+             bag_info, elapsed = await_sync(reader.load_bag_async(str(bag_path), level=target_level))
+             yield LogEvent(f"Loaded bag in {elapsed:.2f}s", level="INFO")
+             yield ResultEvent(success=True, data={'status': 'success', 'bag_info': bag_info})
+             return {'status': 'success', 'bag_info': bag_info}
+             
+        except Exception as e:
+            yield LogEvent(f"Failed to load bag: {e}", level="ERROR")
+            yield ResultEvent(success=False, data={'status': 'error', 'message': str(e)})
+            return {'status': 'error', 'message': str(e)}
 
-    except Exception as e:
-        yield LogEvent(f"Failed to inspect {bag_path.name}: {e}", level="ERROR")
-        res = {'path': str(bag_path), 'status': 'error', 'message': str(e)}
-        yield ResultEvent(success=False, data=res)
-        return res
+    # Cached available and sufficient
+    yield LogEvent(f"Using cached analysis (Level: {cached_info.bag_info.analysis_level.value})", level="INFO")
+    yield ResultEvent(success=True, data={'status': 'success', 'bag_info': cached_info.bag_info})
+    return {'status': 'success', 'bag_info': cached_info.bag_info}

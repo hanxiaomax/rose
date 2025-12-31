@@ -25,7 +25,6 @@ class AnalysisLevel(Enum):
     """Analysis depth levels for bag processing"""
     NONE = "none"      # No analysis performed
     QUICK = "quick"    # Basic metadata without message traversal
-    FULL = "full"      # Full statistics with message traversal
     INDEX = "index"    # Message indexing with DataFrame creation
 
 
@@ -398,15 +397,9 @@ class ComprehensiveBagInfo:
     
     def has_quick_analysis(self) -> bool:
         """Check if quick analysis data is available"""
-        return (self.analysis_level.value in ['quick', 'full'] and 
+        return (self.analysis_level.value in ['quick', 'index'] and 
                 len(self.topics) > 0 and 
                 self.time_range is not None)
-    
-    def has_full_analysis(self) -> bool:
-        """Check if full analysis data is available"""
-        return (self.analysis_level == AnalysisLevel.FULL and 
-                self.total_messages is not None and 
-                self.total_size is not None)
     
     def has_field_analysis(self) -> bool:
         """Check if message field analysis data is available"""

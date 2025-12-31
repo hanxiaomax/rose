@@ -1,6 +1,9 @@
-# ROSE - Yet Another ROS Bag Filter Tool
-
-A high-performance ROS bag filtering tool that allows you to extract specific topics from ROSv1 bag files. Built with Python and provides a command-line interface for efficient bag file processing.
+# ROSE - Yet Another ROS Bag Filter- **Core Modules**:
+  - `parser`: High-performance ROS bag parsing using `rosbags`
+  - `pipeline`: Orchestration of complex operations
+  - `cache`: Intelligent caching system
+  - `output`: Centralized CLI output management
+e interface for efficient bag file processing.
 
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)

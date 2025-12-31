@@ -132,12 +132,21 @@ def load(
                         msg = res.get('message')
                         elapsed = res.get('elapsed', 0)
                         
-                        if status == 'loaded':
-                            loaded_count += 1
-                            steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({elapsed:.2f}s)")
-                        elif status == 'already_cached':
-                            cached_count += 1
-                            steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
+                        if status == 'loaded' or status == 'success':
+                            loaded = res.get('loaded', False)
+                            cached = res.get('cached', False)
+                            
+                            if loaded:
+                                loaded_count += 1
+                                level = res.get('level', 'unknown')
+                                steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({level}, {elapsed:.2f}s)")
+                            elif cached:
+                                cached_count += 1
+                                steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
+                            else:
+                                # Fallback
+                                loaded_count += 1
+                                steps.complete_item(bag_path, f"Processed {os.path.basename(bag_path)}", status="done")
                         else:
                             error_count += 1
                             steps.error_item(bag_path, f"Failed {os.path.basename(bag_path)}", error=msg)
