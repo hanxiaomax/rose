@@ -166,7 +166,6 @@ def show():
         out.key_value({
             "Parallel workers": config.parallel_workers,
             "Memory limit": f"{config.memory_limit_mb} MB",
-            "Cache enabled": config.enable_cache,
             "Verbose default": config.verbose_default,
             "Build index default": config.build_index_default,
             "Compression default": config.compression_default.value,

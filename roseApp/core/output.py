@@ -31,22 +31,53 @@ class ThemeColors:
         """
         data = theme_data or {}
         
-        # Core colors
-        self.primary = data.get("primary", "cyan")
-        self.accent = data.get("accent", "cyan")
+        if "base00" in data:
+            self._apply_base16(data)
+        else:
+            # Core colors
+            self.primary = data.get("primary", "cyan")
+            self.accent = data.get("accent", "cyan")
+            
+            # Status colors
+            self.success = data.get("success", "green")
+            self.warning = data.get("warning", "yellow")
+            self.error = data.get("error", "red")
+            self.info = data.get("info", "cyan")
+            
+            # UI colors
+            self.muted = data.get("muted", "dim")
+            self.highlight = data.get("highlight", "bold white")
+            
+            # Semantic colors
+            self.path = data.get("path", "cyan")
+
+    def _apply_base16(self, data: Dict[str, str]) -> None:
+        """
+        Apply Base16 styling.
         
-        # Status colors
-        self.success = data.get("success", "green")
-        self.warning = data.get("warning", "yellow")
-        self.error = data.get("error", "red")
-        self.info = data.get("info", "cyan")
+        Mapping:
+        primary   -> base0D (Blue/Functions)
+        accent    -> base09 (Orange/Integers)
+        success   -> base0B (Green/Strings)
+        warning   -> base0A (Yellow/Classes)
+        error     -> base08 (Red/Variables)
+        info      -> base0C (Cyan/Support)
+        muted     -> base03 (Comments)
+        highlight -> base06 (Light FG) or base05 (Default FG)
+        path      -> base0D (Blue)
+        """
+        self.primary = data.get("base0D", "blue")
+        self.accent = data.get("base09", "orange1")
         
-        # UI colors
-        self.muted = data.get("muted", "dim")
-        self.highlight = data.get("highlight", "bold white")
+        self.success = data.get("base0B", "green")
+        self.warning = data.get("base0A", "yellow")
+        self.error = data.get("base08", "red")
+        self.info = data.get("base0C", "cyan")
         
-        # Semantic colors
-        self.path = data.get("path", "cyan")
+        self.muted = data.get("base03", "bright_black")
+        self.highlight = data.get("base06", "white")
+        
+        self.path = data.get("base0D", "blue")
 
 
 class Output:
@@ -93,9 +124,14 @@ class Output:
         if theme_file:
             theme_path = Path(theme_file)
             if not theme_path.exists():
-                # Try relative to project root
-                project_root = Path(__file__).parent.parent.parent
-                theme_path = project_root / theme_file
+                # Try roseApp/config (new location)
+                app_config_dir = Path(__file__).parent.parent / "config"
+                if (app_config_dir / theme_file).exists():
+                    theme_path = app_config_dir / theme_file
+                else:
+                    # Try relative to project root (legacy)
+                    project_root = Path(__file__).parent.parent.parent
+                    theme_path = project_root / theme_file
             
             if theme_path.exists():
                 try:

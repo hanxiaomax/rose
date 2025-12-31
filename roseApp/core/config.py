@@ -64,10 +64,6 @@ class RoseConfig(BaseSettings):
     )
     
     # ===== Feature Toggles =====
-    enable_cache: bool = Field(
-        default=True,
-        description="Enable caching system"
-    )
     
     # ===== Default Behavior =====
     compression_default: CompressionType = Field(
@@ -99,7 +95,7 @@ class RoseConfig(BaseSettings):
     # ===== UI Settings =====
     theme_file: str = Field(
         default="rose.theme.default.yaml",
-        description="Path to theme YAML file"
+        description="Path to theme YAML file (name in config dir or absolute path)"
     )
     
     enable_colors: bool = Field(
@@ -170,10 +166,17 @@ class RoseConfig(BaseSettings):
         # Check theme file exists
         theme_path = Path(self.theme_file)
         if not theme_path.exists():
-            # Try project root
-            root_theme = Path(__file__).parent.parent.parent / self.theme_file
-            if not root_theme.exists():
-                results['warnings'].append(f"Theme file not found: {self.theme_file}")
+            # Try roseApp/config
+            app_config_theme = Path(__file__).parent.parent / "config" / self.theme_file
+            if app_config_theme.exists():
+                # Update to full path if found in config dir
+                # But self.theme_file is immutable in validation? No, usually valid.
+                pass 
+            else:
+                 # Try project root (legacy)
+                 root_theme = Path(__file__).parent.parent.parent / self.theme_file
+                 if not root_theme.exists():
+                     results['warnings'].append(f"Theme file not found: {self.theme_file}")
         
         # Check directories are writable
         for dir_name in ['cache_dir', 'logs_dir']:
@@ -267,6 +270,7 @@ class RoseConfig(BaseSettings):
             # Search in priority order
             search_paths = [
                 Path("rose.config.yaml"),  # Current directory
+                Path(__file__).parent.parent / "config" / "rose.config.yaml", # App config path
                 Path.home() / ".rose" / "rose.config.yaml",  # User config
             ]
             
@@ -406,9 +410,6 @@ def get_logs_dir() -> Path:
     return get_config().logs_dir
 
 
-def is_cache_enabled() -> bool:
-    """Check if cache is enabled"""
-    return get_config().enable_cache
 
 
 def get_compression_default() -> str:
