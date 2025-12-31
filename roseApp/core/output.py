@@ -124,9 +124,11 @@ class Output:
         if theme_file:
             theme_path = Path(theme_file)
             if not theme_path.exists():
-                # Try roseApp/config (new location)
+                # Try roseApp/config/themes (new location)
                 app_config_dir = Path(__file__).parent.parent / "config"
-                if (app_config_dir / theme_file).exists():
+                if (app_config_dir / "themes" / theme_file).exists():
+                    theme_path = app_config_dir / "themes" / theme_file
+                elif (app_config_dir / theme_file).exists():
                     theme_path = app_config_dir / theme_file
                 else:
                     # Try relative to project root (legacy)

@@ -1,0 +1,19 @@
+# Rose Theme - Claude Code (Anthropic)
+# Helpful, harmless, and honest colors.
+
+base00: "#252529" # Background (Warm Dark Grey)
+base01: "#323236"
+base02: "#454550"
+base03: "#6b6b6b" # Muted
+base04: "#b0b0b0"
+base05: "#e6e6e6" # Foreground (Off-white)
+base06: "#ffffff" # Highlight
+base07: "#f0f0f0"
+base08: "#da7756" # Red/Orange (Primary Brand Color) - used for errors/variables
+base09: "#e89e82" # Soft Orange
+base0A: "#eebb85" # Warm Yellow
+base0B: "#76a67e" # Soft Green
+base0C: "#83b8b8" # Soft Cyan
+base0D: "#da7756" # Using Brand Orange for Primary/Functions (Distinction)
+base0E: "#a98db8" # Soft Purple
+base0F: "#d08770" # Terracotta
