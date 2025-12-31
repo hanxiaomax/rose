@@ -1,10 +1,4 @@
-# ROSE - Yet Another ROS Bag Filter- **Core Modules**:
-  - `parser`: High-performance ROS bag reading (BagReader)
-  - `writer`: Bag writing and processing (BagWriter)
-  - `pipeline`: Orchestration of complex operations
-  - `cache`: Intelligent caching system
-  - `output`: Centralized CLI output management
-e interface for efficient bag file processing.
+# ROSE - Yet Another ROS Bag Filter
 
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
@@ -333,6 +327,14 @@ Rose uses a simple YAML-based theme system to customize UI colors. By default, R
    ```yaml
    theme_file: rose.theme.custom.yaml
    ```
+
+   ```
+   
+## Documentation
+
+*   [**API Reference**](roseApp/docs/api_reference.md): Detailed module documentation.
+*   [**Configuration Guide**](roseApp/docs/configuration.md): Settings and options.
+*   [**Theming & Colors**](roseApp/docs/theming.md): Customizing the look and feel (Base16 support).
 
 ## Development
 

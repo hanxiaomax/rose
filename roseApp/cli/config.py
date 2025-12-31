@@ -141,6 +141,147 @@ def edit():
 
 
 @app.command()
+def theme():
+    """
+    Interactively select and apply a theme.
+    """
+    out = get_output()
+    from InquirerPy import inquirer
+    from InquirerPy.base.control import Choice
+    from ..core.config import get_config
+    import yaml
+    
+    # 1. Find available themes
+    themes_dir = Path(__file__).parent.parent / "config" / "themes"
+    if not themes_dir.exists():
+        out.error("Themes directory not found", details=str(themes_dir))
+        raise typer.Exit(1)
+        
+    theme_files = sorted(list(themes_dir.glob("*.yaml")))
+    
+    if not theme_files:
+        out.error("No themes found in directory", details=str(themes_dir))
+        raise typer.Exit(1)
+
+    from ..core.output import ThemeColors
+    
+    # Display Preview Table
+    out.section("Available Themes")
+    preview_rows = []
+    
+    for f_path in theme_files:
+        try:
+            with open(f_path) as f:
+                data = yaml.safe_load(f) or {}
+                
+            # Use shared logic to resolve colors
+            tc = ThemeColors(data)
+            
+            name = f_path.name.replace("rose.theme.", "").replace(".yaml", "")
+            
+            # Rich styling for preview - Compact blocks for all colors
+            # Pri, Acc, Suc, War, Err, Inf, Mut, Hgh
+            preview_block = (
+                f"[{tc.primary}]██[/{tc.primary}] "
+                f"[{tc.accent}]██[/{tc.accent}] "
+                f"[{tc.success}]██[/{tc.success}] "
+                f"[{tc.warning}]██[/{tc.warning}] "
+                f"[{tc.error}]██[/{tc.error}] "
+                f"[{tc.info}]██[/{tc.info}] "
+                f"[{tc.muted}]██[/{tc.muted}] "
+                f"[{tc.highlight}]██[/{tc.highlight}]"
+            )
+            preview_rows.append([name, preview_block])
+        except Exception:
+             preview_rows.append([f_path.name, "Error reading file"])
+             
+    out.table(None, ["Theme", "Preview (Pri/Acc/Suc/War/Err/Inf/Mut/Hgh)"], preview_rows)
+    out.newline()
+
+    # Generate choices (simple filenames)
+    choices = [Choice(value=f.name, name=f.name) for f in theme_files]
+
+    # 2. Get current config to know active theme
+    config = get_config()
+    current_theme = config.theme_file
+    
+    # Find active choice index
+    default_choice = None
+    for c in choices:
+        if c.value == current_theme:
+            default_choice = c.value
+            break
+    
+    # 3. Prompt user
+    try:
+        selected_theme = inquirer.select(
+            message="Select a theme (Primary | Accent | Success | Bg):",
+            choices=choices,
+            default=default_choice,
+            pointer="➤",
+        ).execute()
+    except KeyboardInterrupt:
+        out.warning("Cancelled")
+        raise typer.Exit(0)
+        
+    if not selected_theme:
+        return
+
+    # 4. Update configuration file
+    # We need to find WHICH config file is active to update it
+    # If using default (no file), we should probably init one?
+    # Or just tell user?
+    
+    loaded_path = getattr(config, '_loaded_config_path', None)
+    
+    if not loaded_path:
+        out.warning("No configuration file found.")
+        if inquirer.confirm("Create new configuration file at ~/.rose/rose.config.yaml?", default=True).execute():
+            # Trigger init
+            from .config import init
+            init(force=False)
+            # Re-locate
+            loaded_path = Path.home() / ".rose" / "rose.config.yaml"
+        else:
+            out.error("Cannot save theme selection without a configuration file.")
+            raise typer.Exit(1)
+
+    # Update the file
+    try:
+        # Read content
+        lines = []
+        with open(loaded_path, 'r') as f:
+            lines = f.readlines()
+            
+        # Modify theme_file line
+        new_lines = []
+        updated = False
+        theme_line_regex = "theme_file:"
+        
+        for line in lines:
+            if line.strip().startswith("theme_file:"):
+                new_lines.append(f"theme_file: {selected_theme}\n")
+                updated = True
+            else:
+                new_lines.append(line)
+        
+        if not updated:
+            # Append if missing
+            new_lines.append(f"\ntheme_file: {selected_theme}\n")
+            
+        # Write back
+        with open(loaded_path, 'w') as f:
+            f.writelines(new_lines)
+            
+        out.success(f"Theme updated to: {selected_theme}")
+        out.info(f"Updated config file: {loaded_path}")
+        
+    except Exception as e:
+        out.error(f"Failed to update configuration: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def show():
     """
     Show current configuration settings.
@@ -166,7 +307,6 @@ def show():
         out.key_value({
             "Parallel workers": config.parallel_workers,
             "Memory limit": f"{config.memory_limit_mb} MB",
-            "Cache enabled": config.enable_cache,
             "Verbose default": config.verbose_default,
             "Build index default": config.build_index_default,
             "Compression default": config.compression_default.value,
@@ -180,6 +320,27 @@ def show():
             "Cache dir": str(config.cache_dir),
             "Logs dir": str(config.logs_dir),
         }, title="Directories")
+        
+        # Theme Preview
+        out.newline()
+        out.section("Theme Preview")
+        
+        theme_colors = [
+            ("Primary", out.theme.primary),
+            ("Accent", out.theme.accent),
+            ("Success", out.theme.success),
+            ("Warning", out.theme.warning),
+            ("Error", out.theme.error),
+            ("Info", out.theme.info),
+            ("Muted", out.theme.muted),
+            ("Highlight", out.theme.highlight),
+            ("Path", out.theme.path),
+        ]
+        
+        for name, color in theme_colors:
+            # Create a block of color
+            block = "██████"
+            out.print(f"  [{config.theme_file}]{name.ljust(12)}[/]: [{color}]{block}[/{color}]  ({color})")
         
     except Exception as e:
         out.error(f"Error reading configuration: {str(e)}")

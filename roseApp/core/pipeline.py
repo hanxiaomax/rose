@@ -307,6 +307,13 @@ def extract_orchestrator(
             yield ProgressEvent(0, 100, f"Extracting {bag_path.name}")
             start_time = time.time()
             
+            # Fetch bag_info for correct bag
+            bag_info = cache_manager.get_analysis(bag_path)
+            if not bag_info:
+                # Should have been loaded by previous step, but just in case
+                yield LogEvent(f"Reloading info for {bag_path.name}...", level="DEBUG")
+                bag_info, _ = await_sync(reader.load_bag_async(str(bag_path), level=AnalysisLevel.QUICK))
+            
             # Perform extraction
             writer = BagWriter()
             result_message, extraction_time = writer.write(
