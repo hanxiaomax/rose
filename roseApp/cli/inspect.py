@@ -234,6 +234,39 @@ def inspect(
                  out.error("Failed to retrieve bag analysis details.")
             raise typer.Exit(1)
 
+        # Check for upgrade needed for interactive mode
+        # TUI requires message index for plots and values
+        if interactive and not bag_info.has_message_index():
+            out.newline()
+            out.warning("Interactive mode requires message index for full functionality (plots, values).")
+            out.info(f"Current analysis level: {bag_info.analysis_level.name if hasattr(bag_info, 'analysis_level') else 'QUICK'}")
+            
+            sys.stdout.write("Build message index now? [Y/n]: ")
+            sys.stdout.flush()
+            
+            try:
+                resp = input().strip().lower()
+                if resp in ['', 'y', 'yes']:
+                    out.newline()
+                    build_index = True
+                    # Re-run pipeline for upgrade
+                    pipeline_upgrade = inspect_orchestrator(bag_path, load_if_missing=True, build_index=True)
+                    # Reset
+                    bag_info = None
+                    process_events(pipeline_upgrade)
+                    
+                    if not bag_info or not bag_info.has_message_index():
+                         out.error("Index build failed. Cannot proceed with TUI.")
+                         raise typer.Exit(1)
+                else:
+                    out.info("Index required for TUI. Exiting.")
+                    raise typer.Exit(0)
+            except (EOFError, KeyboardInterrupt):
+                out.newline()
+                out.info("Cancelled")
+                raise typer.Exit(0)
+
+
         # Handle --topic non-interactive mode (Rich Tree output)
         if topic and not interactive:
             # Find exact topic
