@@ -436,6 +436,7 @@ class InspectApp(App):
         Binding("g", "show_jump", "Jump to Frame"),
         Binding("left,h", "prev_msg", "Previous"),
         Binding("right,l", "next_msg", "Next"),
+        Binding("down", "focus_tree", "Focus Tree", show=False),
     ]
 
     current_msg_index = reactive(0)
@@ -487,19 +488,30 @@ class InspectApp(App):
 
     SearchItem = Tuple[str, TopicInfo, str]
 
-    def __init__(self, bag_path: str, bag_info: ComprehensiveBagInfo, theme: ThemeColors, **kwargs):
+    def __init__(self, bag_path: str, bag_info: ComprehensiveBagInfo, theme: ThemeColors, initial_topic: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
         self.bag_path = bag_path
         self.bag_info = bag_info
         self.rose_theme = theme
+        self.initial_topic = initial_topic
         self.topics = sorted(bag_info.topics, key=lambda t: t.name)
         self.current_topic: Optional[TopicInfo] = None
         self.reader = AnyReader([Path(bag_path)])
         self.reader.open()
         
-        # Build search index
         self.search_index: List[InspectApp.SearchItem] = []
         self._build_search_index()
+
+    def action_focus_tree(self) -> None:
+        """Focus the data tree to allow navigation."""
+        if not self.current_topic:
+             # Enhance UX: If no topic, Down key opens search
+             self.action_show_search()
+             return
+
+        tree = self.query_one("#data-tree")
+        if self.focused != tree:
+            tree.focus()
 
     def _build_search_index(self) -> None:
         """Flatten topics and fields into a searchable list."""
@@ -726,6 +738,17 @@ class InspectApp(App):
             
         except Exception:
             pass
+
+        # Handle Initial Topic Selection
+        if self.initial_topic:
+            # Find exact match
+            match = next((t for t in self.topics if t.name == self.initial_topic), None)
+            if match:
+                self.select_topic(match)
+                # Auto focus tree for immediate traversal
+                self.query_one("#data-tree").focus()
+            else:
+                self.notify(f"Topic '{self.initial_topic}' not found.", severity="error")
 
     def _update_plot(self) -> None:
         if not PLOTEXT_AVAILABLE: return

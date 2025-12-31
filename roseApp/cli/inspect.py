@@ -5,9 +5,11 @@ Inspect command for ROS bag files.
 import asyncio
 import re
 import sys
+import difflib
 from pathlib import Path
 from typing import Optional, List, Any, Dict
 import typer
+from rich.tree import Tree
 
 from ..core.logging import get_logger
 from ..core.output import get_output, create_step_manager
@@ -41,6 +43,7 @@ def inspect(
     load_index: bool = typer.Option(False, "--load-index", help="Load bag with index building if not cached"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode (TUI)"),
+    topic: Optional[str] = typer.Option(None, "--topic", help="Auto-select exact matching topic in interactive mode"),
 ):
 
     """
@@ -54,6 +57,7 @@ def inspect(
         rose inspect demo.bag --load               # Auto load if not cached
         rose inspect demo.bag --load --force       # Force reload
         rose inspect demo.bag --load-index         # Auto load with index building
+        rose inspect demo.bag -i --topic /gps/fix  # Open TUI with /gps/fix selected
     """
     out = get_output()
     steps = create_step_manager()
@@ -63,6 +67,13 @@ def inspect(
         out.error(
             "Options --load and --load-index are mutually exclusive",
             details="Use --load for quick load without index, or --load-index to build index"
+        )
+        raise typer.Exit(1)
+        
+    if topic and topics_filter:
+        out.error(
+            "Options --topic and --topics are mutually exclusive",
+            details="--topic is for exact single topic match, --topics is for regex filtering."
         )
         raise typer.Exit(1)
     
@@ -222,13 +233,75 @@ def inspect(
             if not not_cached: 
                  out.error("Failed to retrieve bag analysis details.")
             raise typer.Exit(1)
+
+        # Handle --topic non-interactive mode (Rich Tree output)
+        if topic and not interactive:
+            # Find exact topic
+            target_topic = next((t for t in bag_info.topics if t.name == topic), None)
+            if not target_topic:
+                 out.error(f"Topic '{topic}' not found in bag.")
+                 # Fuzzy Match
+                 all_names = [t.name for t in bag_info.topics]
+                 matches = difflib.get_close_matches(topic, all_names, n=5, cutoff=0.3)
+                 if matches:
+                     out.info(f"Did you mean: {', '.join(matches)}?")
+                 else:
+                     out.info(f"Available topics: {', '.join(all_names[:5])}...")
+                 raise typer.Exit(1)
+            
+            # Create Rich Tree
+            root = Tree(f"[bold {out.theme.primary}]{target_topic.name}[/]")
+            root.add(f"Type: [dim]{target_topic.message_type}[/]")
+            root.add(f"Count: {target_topic.message_count}")
+            
+            # Get Fields
+            msg_type_info = bag_info.find_message_type(target_topic.message_type)
+            if msg_type_info and msg_type_info.fields:
+                fields_node = root.add(f"[bold {out.theme.accent}]Fields[/]")
+                
+                paths = msg_type_info.get_all_field_paths()
+                paths.sort()
+                
+                # Build tree from paths
+                # Map path -> Tree Node
+                node_map = {"": fields_node} 
+                
+                for path in paths:
+                    parts = path.split('.')
+                    # Ensure all parents check?
+                    # Since paths might not include intermediate parents if they are just field names?
+                    # get_all_field_paths usually returns leaves?
+                    # If it returns leaves 'a.b.c', we need 'a' and 'a.b' nodes.
+                    
+                    current_path = ""
+                    parent_node = fields_node
+                    
+                    for part in parts:
+                        prev_path = current_path
+                        current_path = f"{current_path}.{part}" if current_path else part
+                        
+                        if current_path not in node_map:
+                            # Add new node to parent
+                            # Style leaf differently?
+                            # If it's the full path, it might be a leaf.
+                            # But we are iterating, so we are building down.
+                            # We don't know if it's a leaf yet easily, but Rich Tree handles it.
+                            new_node = parent_node.add(f"[{out.theme.info}]{part}[/]")
+                            node_map[current_path] = new_node
+                            parent_node = new_node
+                        else:
+                            parent_node = node_map[current_path]
+            
+            out.print(root)
+            raise typer.Exit(0)
             
         if interactive:
             from ..tui.inspect_app import InspectApp
             app = InspectApp(
                 bag_path=str(bag_path), 
                 bag_info=bag_info, 
-                theme=out.theme
+                theme=out.theme,
+                initial_topic=topic
             )
             app.run()
             raise typer.Exit(0)
