@@ -1,0 +1,23 @@
+# Rose Theme - Base42 (Deep Thought)
+# A deep space theme using the Base16 schema
+# "The Answer to the Ultimate Question of Life, the Universe, and Everything"
+
+# Scheme: Base42
+# Author: Deep Thought
+
+base00: "#0d0f18" # Default Background (Deep Void)
+base01: "#151926" # Lighter Background
+base02: "#1f2538" # Selection Background
+base03: "#485168" # Comments (Muted Slate)
+base04: "#6f7a94" # Dark Foreground
+base05: "#a8b3ce" # Default Foreground (Starlight)
+base06: "#dfe5f2" # Light Foreground
+base07: "#f0f4fc" # Light Background
+base08: "#ff4971" # Red (Variables) - Nebular Red
+base09: "#f39c12" # Orange (Integers) - Stellar Flare
+base0A: "#f1c40f" # Yellow (Classes) - Gold
+base0B: "#2ecc71" # Green (Strings) - Bio-Green
+base0C: "#00d2d3" # Cyan (Support) - Ice
+base0D: "#3498db" # Blue (Functions) - Hologram Blue
+base0E: "#9b59b6" # Purple (Keywords) - Void Purple
+base0F: "#e67e22" # Brown (Deprecated)

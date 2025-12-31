@@ -150,6 +150,11 @@ class Output:
             theme_file: Path to new theme file
         """
         self._theme = self._load_theme(theme_file)
+        
+    @property
+    def theme(self) -> ThemeColors:
+        """Get current theme colors."""
+        return self._theme
     
     # === Basic Messages ===
     

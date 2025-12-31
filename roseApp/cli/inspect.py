@@ -297,8 +297,8 @@ def inspect(
             for t in topics_data:
                 size_kb = t['size_bytes'] / 1024 if t['size_bytes'] else 0
                 rows.append([
-                    t['name'],
-                    t['message_type'].split('/')[-1] if '/' in t['message_type'] else t['message_type'],
+                    f"[{out.theme.primary}]{t['name']}[/{out.theme.primary}]",
+                    f"[{out.theme.muted}]{t['message_type']}[/{out.theme.muted}]",
                     str(t['message_count']),
                     f"{t['frequency']:.1f}",
                     f"{size_kb:.1f} KB" if size_kb > 0 else "-"
@@ -306,7 +306,7 @@ def inspect(
             out.table(None, columns, rows)
         else:
             for t in topics_data:
-                out.print(f"  {t['name']} ({t['message_type']})")
+                out.print(f"  [{out.theme.primary}]{t['name']}[/{out.theme.primary}] ([{out.theme.muted}]{t['message_type']}[/{out.theme.muted}])")
         
         if show_fields and len(bag_info.message_types) > 0:
             out.newline()

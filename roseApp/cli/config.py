@@ -180,6 +180,27 @@ def show():
             "Logs dir": str(config.logs_dir),
         }, title="Directories")
         
+        # Theme Preview
+        out.newline()
+        out.section("Theme Preview")
+        
+        theme_colors = [
+            ("Primary", out.theme.primary),
+            ("Accent", out.theme.accent),
+            ("Success", out.theme.success),
+            ("Warning", out.theme.warning),
+            ("Error", out.theme.error),
+            ("Info", out.theme.info),
+            ("Muted", out.theme.muted),
+            ("Highlight", out.theme.highlight),
+            ("Path", out.theme.path),
+        ]
+        
+        for name, color in theme_colors:
+            # Create a block of color
+            block = "██████"
+            out.print(f"  [{config.theme_file}]{name.ljust(12)}[/]: [{color}]{block}[/{color}]  ({color})")
+        
     except Exception as e:
         out.error(f"Error reading configuration: {str(e)}")
         raise typer.Exit(1)
