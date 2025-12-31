@@ -23,7 +23,7 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 from itertools import islice
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 from datetime import datetime
 
 from ..core.model import ComprehensiveBagInfo, TopicInfo
@@ -139,10 +139,14 @@ class SearchModal(ModalScreen[Tuple[Optional[str], str]]):
             return
 
         query_lower = query.lower()
+        # Remove array indices for matching against index
+        # e.g. "foo[1]" -> "foo"
+        query_base = re.sub(r'\[\d+\]', '', query_lower)
+        
         matches = []
         
         try:
-            regex_pattern = ".*".join(map(re.escape, query_lower))
+            regex_pattern = ".*".join(map(re.escape, query_base))
             regex = re.compile(regex_pattern)
             
             count = 0
@@ -150,9 +154,9 @@ class SearchModal(ModalScreen[Tuple[Optional[str], str]]):
                 score = 0
                 name_lower = display_name.lower()
                 
-                if name_lower.startswith(query_lower):
+                if name_lower.startswith(query_base):
                     score = 2 # Prefix match
-                elif query_lower in name_lower:
+                elif query_base in name_lower:
                     score = 1 # Substring match
                 elif regex.search(name_lower):
                     score = 0 # Fuzzy match
@@ -163,13 +167,118 @@ class SearchModal(ModalScreen[Tuple[Optional[str], str]]):
                 
             matches.sort(key=lambda x: (-x[0], x[1]))
             
-            for _, display_name, topic, field_filter in matches[:20]:
+            # Increased limit to 100
+            for _, display_name, topic, field_filter in matches[:100]:
                 item_value = f"{topic.name}|{field_filter}"
+                # If user typed an index, append it to the filter for the result
+                # This is tricky: we matched "foo" against "foo", but user wanted "foo[1]".
+                # We should probably just return the raw field_filter from index, 
+                # and let the user's manual input (not list selection) handle specific indices?
+                # OR, if the user picks from list, we just give them the array root.
+                # BUT, if they typed "points[0]", and we matched "points", we should probably 
+                # try to pass "points[0]" if they hit enter on that specific filter.
+                # However, the list item name is used for selection.
+                
+                # If we want to support selecting specific index via search, we'd need to dynamically generate list items.
+                # For now, let's just make sure "points[0]" finds "points".
+                # If they select "points", they get the array.
+                # If they want "points[0]", they might need to use the Input field directly...
+                # Wait, on_list_view_selected uses event.item.name.
+                
                 label = f"{display_name} ({topic.message_type})"
                 results_list.append(ListItem(Label(label), name=item_value))
                 
         except Exception:
             pass
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Allow manual submission for deep paths or array indices not in index."""
+        val = event.value.strip()
+        if not val:
+            self.dismiss((None, ""))
+            return
+            
+        # Try to find a matching topic prefix
+        # We need access to topics. We passed search_index, which has topic objects.
+        # Let's collect unique topics from search_index (inefficient but safe)
+        # Or better, just iterate search_index to find best match?
+        # Actually, InspectApp passes 'search_index' which is List[(display, topic, filter)].
+        
+        # Simple heuristic: Exact match in results list?
+        # If the input matches a result item name exactly, select it.
+        results_list = self.query_one("#results_list", ListView)
+        if len(results_list.children) > 0 and results_list.highlighted_child:
+             # If user is highlighting something, select that (default behavior of list view on enter? No, list view needs separate enter handling usually, but Input enter falls through?)
+             # Textual: Input.Submitted is separate.
+             # If we want "Enter" to pick selected item if list has focus? No, Input has focus.
+             # If Input has focus, and user hits Enter:
+             # 1. If exact match in index, use it.
+             # 2. If valid "Topic.Field" structure manually typed, use it.
+             pass
+        
+        # Helper to extract topic
+        # val might be "/gps/fix.header.stamp" or "header.stamp" (if context?)
+        # Search is usually global "Topic.Field" or just "Topic".
+        
+        best_topic = None
+        best_filter = ""
+        
+        # We search for the longest topic name that matches the start of val
+        unique_topics = {t for _, t, _ in self.search_index}
+        
+        for topic in unique_topics:
+            t_name = topic.name
+            # Check if val starts with topic name
+            # Handle potential leading slash consistency
+            if val.startswith(t_name):
+                # Candidate.
+                # Check if what follows is empty or a separator (dot or slash converted to dot)
+                remainder = val[len(t_name):]
+                if not remainder:
+                    best_topic = topic
+                    best_filter = ""
+                    break # Exact match
+                elif remainder.startswith('.') or remainder.startswith('/'):
+                    # Match!
+                    # If existing best match is shorter, replace?
+                    # Since we allow arbitrary topics, logic is tricky if topics overlap (e.g. /foo and /foo/bar).
+                    # We should match longest topic.
+                    if best_topic is None or len(t_name) > len(best_topic.name):
+                        best_topic = topic
+                        # strip separator
+                        best_filter = remainder[1:]
+        
+        if best_topic:
+            self.dismiss((best_topic.name, best_filter))
+        else:
+            # If no topic found, maybe it's a field filter on CURRENT topic?
+            # But SearchModal doesn't know current topic context easily unless passed.
+            # We only passed initial_query.
+            # Let's assume if it fails to match a topic, we return None (cancellation) or try logic?
+            # User expectation: If I type "gps", I want to filter. 
+            # If I type "/diagnostics.status[0]", I expect it to work.
+            
+            # Fallback: Check if the input value directly matches a "Name" in the list val
+            # (already covered by list selection if they cursored down).
+            
+            # If they just typed something and hit enter, assume they might mean a topic if it matches logic, 
+            # otherwise maybe they just typed "status[0]" expecting context?
+            # Since this is a global search (modally), forcing Topic prefix is safer.
+            pass
+            
+        # If we couldn't resolve a topic, just try to return what we have if it looks like a topic name?
+        # Or Just dismiss with nothing to avoid bad state.
+        if best_topic:
+             pass 
+        else:
+             # Try one last check: exact match of any display string in index?
+             for disp, topic, filt in self.search_index:
+                 if disp == val:
+                     self.dismiss((topic.name, filt))
+                     return
+             
+             # If absolute failure
+             self.app.notify("Could not resolve topic from input. Format: /topic.field", severity="error")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         val = event.item.name
@@ -326,6 +435,42 @@ class InspectApp(App):
     plot_data_x: List[float] = []
     plot_data_y: List[float] = []
     current_plot_point: Optional[Tuple[float, float]] = None
+
+    def _get_field_value(self, msg: Any, path: str) -> Tuple[Any, bool]:
+        """
+        Navigate message using path with support for array indexing.
+        Returns (value, success).
+        """
+        current = msg
+        try:
+            parts = path.split('.')
+            for part in parts:
+                match = re.match(r"(\w+)\[(\d+)\]", part)
+                if match:
+                    field_name = match.group(1)
+                    index = int(match.group(2))
+                    
+                    if hasattr(current, field_name):
+                        current = getattr(current, field_name)
+                    elif isinstance(current, dict) and field_name in current:
+                        current = current[field_name]
+                    else:
+                        return None, False
+                        
+                    if isinstance(current, (list, tuple)) and 0 <= index < len(current):
+                        current = current[index]
+                    else:
+                        return None, False
+                else:
+                    if hasattr(current, part):
+                        current = getattr(current, part)
+                    elif isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        return None, False
+            return current, True
+        except Exception:
+            return None, False
 
     SearchItem = Tuple[str, TopicInfo, str]
 
@@ -503,8 +648,6 @@ class InspectApp(App):
         # Iterate with step
         try:
              # We use islice to step through the generator efficiently
-             # But islice doesn't support 'step' for simple iterators well if we also need index, 
-             # actually standard islice(gen, 0, None, step) works!
             for conn, ts, raw in islice(gen, 0, None, step):
                 ts_sec = ts / 1_000_000_000
                 rel_time = ts_sec - start_ts
@@ -513,19 +656,8 @@ class InspectApp(App):
                 # This is the heavy part.
                 msg = self.reader.deserialize(raw, conn.msgtype)
                 
-                # Extract value
-                val = msg
-                valid = True
-                
-                parts = self.current_field_filter.replace('/', '.').split('.')
-                for part in parts:
-                    if hasattr(val, part):
-                         val = getattr(val, part)
-                    elif isinstance(val, dict) and part in val:
-                         val = val[part]
-                    else:
-                         valid = False
-                         break
+                # Use robust getter
+                val, valid = self._get_field_value(msg, self.current_field_filter)
                 
                 if valid and isinstance(val, (int, float)):
                     self.plot_data_x.append(rel_time)
@@ -625,23 +757,19 @@ class InspectApp(App):
                 
                 msg = self.reader.deserialize(raw, conn.msgtype)
                 
-                # Apply filter
+                # Apply filter using robust getter
                 data_to_show = msg
-                if self.current_field_filter:
-                    parts = self.current_field_filter.replace('/', '.').split('.')
-                    for part in parts:
-                        if hasattr(data_to_show, part):
-                             data_to_show = getattr(data_to_show, part)
-                        elif isinstance(data_to_show, dict) and part in data_to_show:
-                             data_to_show = data_to_show[part]
-                        else:
-                             data_to_show = f"<Field '{part}' not found>"
-                             break
-                
-                # Calculate visualization data regardless of plot mode
                 current_val = None
                 current_time_rel = None
                 
+                if self.current_field_filter:
+                    val, valid = self._get_field_value(msg, self.current_field_filter)
+                    if valid:
+                        data_to_show = val
+                    else:
+                        data_to_show = f"<Field '{self.current_field_filter}' not found/valid>"
+
+                # Calculate visualization data regardless of plot mode
                 if isinstance(data_to_show, (int, float)):
                     current_val = float(data_to_show)
                     # Calc relative time

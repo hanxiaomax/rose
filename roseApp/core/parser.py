@@ -623,18 +623,46 @@ class BagReader:
                         nested_fields = self._parse_message_section(nested_content)
                         nested_types[msg_type] = nested_fields
         
-        # Now link nested fields to their parent fields
-        for field in main_fields:
-            if not field.is_builtin:
-                # Try exact match first
-                if field.field_type in nested_types:
-                    field.nested_fields = nested_types[field.field_type]
-                else:
-                    # Try partial match (e.g., 'Header' matches 'std_msgs/Header')
-                    for nested_type_name, nested_fields in nested_types.items():
-                        if nested_type_name.endswith('/' + field.field_type) or nested_type_name == field.field_type:
-                            field.nested_fields = nested_fields
-                            break
+        # Helper to recursively link nested fields
+        def link_fields(fields_list, visited_types=None):
+            if visited_types is None:
+                visited_types = set()
+                
+            for field in fields_list:
+                if not field.is_builtin and field.nested_fields is None:
+                    # Avoid infinite recursion if type references itself
+                    if field.field_type in visited_types:
+                        continue
+                        
+                    # Try exact match first
+                    target_nested = None
+                    if field.field_type in nested_types:
+                        target_nested = nested_types[field.field_type]
+                    else:
+                        # Try partial match (e.g., 'Header' matches 'std_msgs/Header')
+                        for nested_type_name, nested_fields_list in nested_types.items():
+                            if nested_type_name.endswith('/' + field.field_type) or nested_type_name == field.field_type:
+                                target_nested = nested_fields_list
+                                break
+                    
+                    if target_nested:
+                        # Create a copy to prevent shared state issues if we modify it
+                        # But MessageFieldInfo is a dataclass...
+                        # Actually we need to link deeply.
+                        
+                        # IMPORTANT: We must propagate this linking!
+                        # But we can't just assign the list, we need to potentially link *its* children.
+                        
+                        # Let's clone the list of fields to attach to this node
+                        import copy
+                        field.nested_fields = copy.deepcopy(target_nested)
+                        
+                        # Recurse into these new fields
+                        new_visited = visited_types | {field.field_type}
+                        link_fields(field.nested_fields, new_visited)
+
+        # Now link nested fields to their parent fields recursively
+        link_fields(main_fields)
         
         return main_fields
     
