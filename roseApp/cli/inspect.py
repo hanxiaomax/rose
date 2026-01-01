@@ -77,6 +77,22 @@ def inspect(
         )
         raise typer.Exit(1)
     
+    # Auto-enable interactive if no bag path provided
+    if bag_path is None and not interactive:
+        interactive = True
+
+    if bag_path is None and interactive:
+        # Launch interactive bag picker
+        from .interactive import select_bags_interactive
+        selected_files, idx_choice = select_bags_interactive(None, load_index, allow_multiple=False)
+        
+        if selected_files:
+            if len(selected_files) > 1:
+                out.warning(f"Inspect supports only one bag at a time. Selecting first one: {selected_files[0]}")
+            bag_path = Path(selected_files[0])
+            if idx_choice:
+                load_index = True
+
     if not bag_path:
         out.error("Bag file path is required")
         raise typer.Exit(1)

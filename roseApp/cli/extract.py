@@ -54,44 +54,40 @@ def extract(
         
     try:
         # Validate input arguments
-        if not input_bags:
-            out.error(
-                "No bag files specified",
-                details="Provide bag file patterns: rose extract '*.bag' --topics gps"
-            )
-            raise typer.Exit(1)
-        
-        if not topics and not interactive:
-            out.error(
-                "No topics specified",
-                details="Use --topics to specify topics: rose extract demo.bag --topics gps imu"
-            )
-            raise typer.Exit(1)
-        
-        # Validate compression option
-        valid_compression = ["none", "bz2", "lz4"]
-        if compression not in valid_compression:
-            out.error(
-                f"Invalid compression: {compression}",
-                details=f"Valid options: {', '.join(valid_compression)}"
-            )
-            raise typer.Exit(1)
-            
+        if not input_bags and not interactive:
+             interactive = True
+
         if interactive:
+            from .interactive import select_bags_interactive
+            # Interactive mode for bags
+            if not input_bags:
+                # If no bag provided, select bag first
+                # Default build_index is False for extract usually, unless user wants it?
+                # Extract doesn't strictly need index usually unless using complex queries?
+                # Actually extract orchestrator reads messages. 
+                # We pass None for default_build_index
+                selected_files, idx_choice = select_bags_interactive(input_bags, load_index)
+                input_bags = selected_files
+                if idx_choice:
+                    load_index = True
+            
+            # If still no bags, error handled below
+            
+            # Interactive topic selection logic follows...
             from InquirerPy import inquirer
             from InquirerPy.base.control import Choice
             from ..core.cache import create_bag_cache_manager
             from glob import glob
             from rosbags.highlevel import AnyReader
             
-            # Resolve files
+            # Resolve files from input_bags (which might have come from interactive or args)
             files = []
-            for pattern in input_bags:
-                # Handle direct paths too
-                if Path(pattern).exists():
-                    files.append(Path(pattern))
-                else:
-                    files.extend([Path(p) for p in glob(pattern)])
+            if input_bags:
+                for pattern in input_bags:
+                    if Path(pattern).exists():
+                        files.append(Path(pattern))
+                    else:
+                        files.extend([Path(p) for p in glob(pattern)])
             
             # De-duplicate
             files = list(set(files))

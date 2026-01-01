@@ -152,12 +152,12 @@ def _show_cache_info(cache, show_content, verbose, out):
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
                 rows.append([
-                    str(e['id']),
-                    bag_name,
+                    f"[{out.theme.highlight}]{e['id']}[/{out.theme.highlight}]",
+                    f"[{out.theme.path}]{bag_name}[/{out.theme.path}]",
                     str(e.get('topics_count', '-')),
                     f"{e.get('duration_sec', 0):.1f}s",
-                    f"{e.get('size_mb', 0):.1f} MB",
-                    "Yes" if e.get('has_index') else "No",
+                    f"[{out.theme.muted}]{e.get('size_mb', 0):.1f} MB[/{out.theme.muted}]",
+                    f"[{out.theme.success}]Yes[/{out.theme.success}]" if e.get('has_index') else f"[{out.theme.muted}]No[/{out.theme.muted}]",
                     e['location']
                 ])
             out.table(None, columns, rows)
@@ -166,8 +166,11 @@ def _show_cache_info(cache, show_content, verbose, out):
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
                 size_mb = e.get('size_mb', 0)
-                idx_str = " [Indexed]" if e.get('has_index') else ""
-                out.print(f"  [{e['id']}] {bag_name} ({size_mb:.1f} MB){idx_str}")
+                idx_str = f" [{out.theme.success}][Indexed][/{out.theme.success}]" if e.get('has_index') else ""
+                
+                out.print(f"  [{out.theme.highlight}][{e['id']}][/{out.theme.highlight}] "
+                         f"[{out.theme.path}]{bag_name}[/{out.theme.path}] "
+                         f"([{out.theme.muted}]{size_mb:.1f} MB[/{out.theme.muted}]){idx_str}")
         
         out.newline()
         out.info(f"Use 'rose list remove <id|path>' to remove a specific entry")
