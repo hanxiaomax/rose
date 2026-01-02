@@ -15,6 +15,8 @@ from textual.widget import Widget
 from textual.widgets import Input, Label, OptionList
 from textual.widgets.option_list import Option
 
+from roseApp.tui.widgets.hint import Hint
+
 GLOBAL_BINDINGS = [
     Binding("tab", "autocomplete", "Complete"),
     Binding("down", "cursor_down", "Down", show=True),
@@ -28,40 +30,6 @@ GLOBAL_BINDINGS = [
 class PathInput(Widget):
     """
     A widget for path input with auto-completion and directory navigation.
-    """
-
-    DEFAULT_CSS = """
-    PathInput {
-        height: auto;
-        width: 100%;
-        background: $surface;
-    }
-    
-    PathInput > Input {
-        width: 100%;
-        background: transparent;
-        padding: 0;
-        margin: 0;
-    }
-    
-    PathInput > Input:focus {
-        background: transparent;
-        padding: 0;
-        margin: 0;
-    }
-    
-    PathInput > OptionList {
-        height: auto;
-        max-height: 10;
-        width: 100%;
-        display: none;
-        background: transparent;
-        margin-top: 0;
-    }
-    
-    PathInput.show-suggestions > OptionList {
-        display: block;
-    }
     """
     
     BINDINGS = GLOBAL_BINDINGS
@@ -87,7 +55,7 @@ class PathInput(Widget):
     def compose(self) -> ComposeResult:
         yield Input(value=self.initial_value, id="path-input", placeholder="Enter path relative to ./ or absolute...")
         yield OptionList(id="suggestions")
-        yield Label("[dim]↑/↓ to navigate, Tab to complete, Enter to select[/]", id="hint")
+        yield Hint("[dim]↑/↓ to navigate, Tab to complete, Enter to select[/]")
 
     def on_mount(self) -> None:
         self.query_one(Input).focus()

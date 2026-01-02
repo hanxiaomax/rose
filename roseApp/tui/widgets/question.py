@@ -40,45 +40,7 @@ class NonSelectableLabel(Label):
 
 class Option(containers.HorizontalGroup):
     ALLOW_SELECT = False
-    DEFAULT_CSS = """
-    Option {
-
-        &:hover {
-            background: $boost;
-        }
-        color: $text-muted;
-        #caret {
-            visibility: hidden;
-            padding: 0 1;
-        }
-        #index {
-            padding-right: 1;
-        }
-        #label {
-            width: 1fr;
-        }
-        &.-active {            
-            color: $text-accent;
-            #caret {
-                visibility: visible;
-            }
-        }
-        &.-selected {
-            opacity: 0.5;
-        }
-        &.-active.-selected {
-            opacity: 1.0;
-            background: transparent;
-            color: $text-accent;            
-            #label {
-                text-style: underline;
-            }
-            #caret {
-                visibility: hidden;
-            }
-        }
-    }
-    """
+    DEFAULT_CSS = ""
 
     @dataclass
     class Selected(Message):
@@ -126,29 +88,7 @@ class Question(Widget, can_focus=True):
             Binding("escape", "quit", "Cancel"),
     ]
 
-    DEFAULT_CSS = """
-    Question {
-        width: 1fr;
-        height: auto;
-        padding: 0 1; 
-        background: transparent;
-        #prompt {
-            margin-bottom: 1;
-            color: $text-primary;
-        }                
-        &.-blink Option.-active #caret {
-            opacity: 0.2;
-        }
-        &:blur {
-            #index {
-                opacity: 0.3;
-            }
-            #caret {
-                opacity: 0.3;
-            }
-        }
-    }
-    """
+    DEFAULT_CSS = ""
 
     question: var[str] = var("")
     options: var[Options] = var(list)
@@ -160,12 +100,6 @@ class Question(Widget, can_focus=True):
         self.set_class(selected, "-selected")
     blink: var[bool] = var(False)
 
-    DEFAULT_KINDS = {
-        "allow_once": "a",
-        "allow_always": "A",
-        "reject_once": "r",
-        "reject_always": "R",
-    }
 
     @dataclass
     class Answer(Message):

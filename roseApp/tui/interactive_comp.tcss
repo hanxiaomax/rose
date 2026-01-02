@@ -1,19 +1,23 @@
 /* Global reset for interactive dialogs */
 
-
-Screen {
+Label {
     background: transparent;
+    width: 100%;
+    display: block;
+    text-align: left;
 }
 
-/* PathInput specific overrides for compact look */
+/* --- PathInput --- */
+
 PathInput {
     height: auto;
+    width: 100%;
     background: transparent;
 }
 
 PathInput > Input {
     width: 100%;
-    border: round $primary 50%; /* Using 50% alpha/dimmer if possible, or just primary */
+    border: round $primary 50%;
     padding: 0 1;
     background: transparent;
     height: auto;
@@ -23,22 +27,19 @@ PathInput > Input {
 PathInput > Input:focus {
     border: none;
     background: transparent;
-}
-
-/* OptionList container modifications */
-PathInput > OptionList {
-    margin-top: 0;
-    background: transparent;
-    border: none; /* Always open top to merge with input? Or only when shown? */
-    /* Actually better to handle via state */
     padding: 0;
-    display: none; /* Default hidden */
+    margin: 0;
 }
 
-/* When suggestions are shown, merge borders */
-PathInput.show-suggestions > Input {
-    border: none; 
-    height: auto; /* Ensure it shrinks to fit content+top border */
+PathInput > OptionList {
+    height: auto;
+    max-height: 10;
+    width: 100%;
+    display: none;
+    background: transparent;
+    border: none;
+    margin-top: 0;
+    padding: 0;
 }
 
 PathInput.show-suggestions > OptionList {
@@ -47,26 +48,153 @@ PathInput.show-suggestions > OptionList {
     margin-top: 0;
 }
 
+/* When suggestions are shown, merge borders */
+PathInput.show-suggestions > Input {
+    border: none;
+    height: auto;
+}
+
 PathInput > OptionList > .option-list--option-highlighted {
     background: $primary 50%;
     color: $text;
     text-style: bold;
 }
 
-/* MultiSelection specific */
+/* --- MultiSelection --- */
+
 MultiSelection {
-    padding: 0;
+    width: 1fr;
+    height: auto;
+    padding: 0 1;
     background: transparent;
+}
+
+MultiSelection #message {
+    margin-bottom: 1;
+    color: $text-primary;
+    text-style: bold;
 }
 
 MultiSelection > Input {
-    margin: 0;
+    margin-bottom: 1;
     border: none;
+    height: 1;
+    padding: 0;
     background: transparent;
 }
 
-/* Question widget specific */
-Question {
-    padding: 0;
+MultiSelection > Input:focus {
+    border: none;
+}
+
+/* MultiSelectionOption styles */
+MultiSelectionOption {
     background: transparent;
+    color: $text-muted;
+}
+
+MultiSelectionOption:hover {
+    background: $boost;
+}
+
+MultiSelectionOption #cursor {
+    width: 1;
+    padding-right: 1;
+    color: $accent;
+    text-style: bold;
+    display: block;
+    visibility: hidden;
+}
+
+MultiSelectionOption.-active #cursor {
+    visibility: visible;
+}
+
+MultiSelectionOption #status {
+    width: 2;
+    padding-right: 1;
+}
+
+MultiSelectionOption #label {
+    width: 1fr;
+}
+
+MultiSelectionOption.-active {
+    color: $text;
+}
+
+MultiSelectionOption.-selected {
+    color: $text-accent;
+}
+
+/* --- Question --- */
+
+Question {
+    width: 1fr;
+    height: auto;
+    padding: 0 1; 
+    background: transparent;
+}
+
+Question #prompt {
+    margin-bottom: 1;
+    color: $text-primary;
+}
+
+Question.-blink Option.-active #caret {
+    opacity: 0.2;
+}
+
+Question:blur #index,
+Question:blur #caret {
+    opacity: 0.3;
+}
+
+/* Question Option styles */
+Option {
+    background: transparent;
+    color: $text-muted;
+}
+
+Option:hover {
+    background: $boost;
+}
+
+Option #caret {
+    visibility: hidden;
+    padding: 0 1;
+}
+
+Option #index {
+    padding-right: 1;
+}
+
+Option #label {
+    width: 1fr;
+}
+
+Option.-active {            
+    color: $text-accent;
+}
+
+Option.-active #caret {
+    visibility: visible;
+}
+
+Option.-selected {
+    opacity: 0.5;
+}
+
+Option.-active.-selected {
+    opacity: 1.0;
+    background: transparent;
+    color: $text-accent;            
+}
+
+Option.-active.-selected #label {
+    text-style: underline;
+}
+
+Option.-active.-selected #caret {
+    visibility: hidden;
 }

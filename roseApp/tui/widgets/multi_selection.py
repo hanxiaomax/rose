@@ -73,45 +73,7 @@ class SearchInput(Input):
 
 class MultiSelectionOption(containers.HorizontalGroup):
     ALLOW_SELECT = False
-    DEFAULT_CSS = """
-    MultiSelectionOption {
-        &:hover {
-            background: $boost;
-        }
-        color: $text-muted;
-        
-        #cursor {
-            width: 1;
-            padding-right: 1;
-            color: $accent;
-            text-style: bold;
-            display: block;
-            visibility: hidden;
-        }
-        
-        &.-active #cursor {
-            visibility: visible;
-        }
-        
-        #status {
-            width: 2;
-            padding-right: 1;
-        }
-
-        #label {
-            width: 1fr;
-        }
-
-        
-        &.-active {
-            color: $text;
-        }
-        
-        &.-selected {
-            color: $text-accent;
-        }
-    }
-    """
+    DEFAULT_CSS = ""
 
     @dataclass
     class Toggled(Message):
@@ -151,29 +113,7 @@ class MultiSelection(Widget, can_focus=True):
     
     BINDINGS = GLOBAL_BINDINGS
 
-    DEFAULT_CSS = """
-    MultiSelection {
-        width: 1fr;
-        height: auto;
-        padding: 0 1; 
-        background: transparent;
-        #message {
-            margin-bottom: 1;
-            color: $text-primary;
-            text-style: bold;
-        }
-        Input {
-            margin-bottom: 1;
-            border: none;
-            height: 1;
-            padding: 0;
-            background: transparent;
-        }
-        Input:focus {
-            border: none;
-        }
-    }
-    """
+    DEFAULT_CSS = ""
 
     message: var[str] = var("")
     options: var[Options] = var(list)
