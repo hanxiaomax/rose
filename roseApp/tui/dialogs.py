@@ -42,7 +42,6 @@ class QuestionDialogApp(App[Union[Answer, None]]):
             question=self.question_text,
             options=self.options,
             id=self.widget_id,
-            multi_select=True,
         )
         yield Footer()
     

@@ -15,6 +15,8 @@ def select_bags_interactive(
     initial_input: Optional[List[str]] = None,
     default_build_index: Optional[bool] = None,
     allow_multiple: bool = True,
+    require_index: bool = False,
+    ignore_cache: bool = False,
 ) -> Tuple[List[str], bool]:
     """
     Interactive bag selection with cache prioritization and glob support.
@@ -23,17 +25,18 @@ def select_bags_interactive(
         initial_input: List of input patterns or paths provided by CLI args.
         default_build_index: Default value for build_index flag.
         allow_multiple: Whether to allow selecting multiple files.
+        require_index: Whether to only show bags with message index.
+        ignore_cache: Whether to ignore cached bags and go straight to picker.
         
     Returns:
         Tuple[List[str], bool]: (Selected bag files, key 'build_index' flag)
     """
     out = get_output()
     try:
-        from InquirerPy import inquirer
-        from InquirerPy.validator import Validator
-        from InquirerPy.base.control import Choice
+        from ..tui.dialogs import ask_selection
+        from ..tui.widgets.multi_selection import SelectionItem
     except ImportError:
-        out.error("InquirerPy not installed. Install with: pip install InquirerPy")
+        # Should not happen if app is installed correctly
         raise typer.Exit(1)
 
     # 0. If initial input provided, try to resolve it first
@@ -65,23 +68,28 @@ def select_bags_interactive(
 
     # 1. Fetch Cached Bags
     cached_options = []
-    try:
-        cache = get_cache()
-        if hasattr(cache, 'cache_dir') and cache.cache_dir.exists():
-            for pkl_path in cache.cache_dir.glob("*.pkl"):
-                try:
-                    with open(pkl_path, 'rb') as f:
-                        data = pickle.load(f)
-                    if isinstance(data, BagInfo):
-                        path = getattr(data, 'file_path', 'unknown')
-                        size_mb = data.file_size / (1024*1024) if hasattr(data, 'file_size') else 0
-                        name = f"{os.path.basename(path)} ({size_mb:.1f} MB)"
-                        cached_options.append(Choice(value=path, name=name))
-                except:
-                    continue
-    except Exception as e:
-        # Ignore cache errors, fallback to picker
-        pass
+    if not ignore_cache:
+        try:
+            cache = get_cache()
+            if hasattr(cache, 'cache_dir') and cache.cache_dir.exists():
+                for pkl_path in cache.cache_dir.glob("*.pkl"):
+                    try:
+                        with open(pkl_path, 'rb') as f:
+                            data = pickle.load(f)
+                        
+                        if isinstance(data, BagInfo):
+                            if require_index and not data.has_message_index():
+                                continue
+                                
+                            path = getattr(data, 'file_path', 'unknown')
+                            size_mb = data.file_size / (1024*1024) if hasattr(data, 'file_size') else 0
+                            name = f"{os.path.basename(path)} ({size_mb:.1f} MB)"
+                            cached_options.append(SelectionItem(text=name, id=path))
+                    except:
+                        continue
+        except Exception as e:
+            # Ignore cache errors, fallback to picker
+            pass
 
     # 2. Main Selection Loop (if no args resolved)
     
@@ -92,7 +100,7 @@ def select_bags_interactive(
     if cached_options:
         choices.extend(cached_options)
     
-    choices.append(Choice(value=LOAD_NEW_VAL, name="Load New File(s)..."))
+    choices.append(SelectionItem(text="Load New File(s)...", id=LOAD_NEW_VAL))
     
     selected_values = []
     
@@ -103,16 +111,12 @@ def select_bags_interactive(
         selected_values = [LOAD_NEW_VAL]
     else:
         out.print("Select bags to process (supports fuzzy search):")
-        result = inquirer.fuzzy(
+        result = ask_selection(
             message="Select bags:",
-            choices=choices,
-            multiselect=allow_multiple,
-            instruction="(Tab to select multiple)" if allow_multiple else "(Enter to select)",
-            match_exact=True,
-        ).execute()
+            options=choices
+        )
+        # ask_selection returns list of IDs
         
-        if not isinstance(result, list):
-            result = [result]
         selected_values = result
 
     # Process Selection

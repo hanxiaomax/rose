@@ -53,7 +53,7 @@ def load(
         # Interactive selection
         if interactive:
             from .interactive import select_bags_interactive
-            selected_files, idx_choice = select_bags_interactive(input, build_index)
+            selected_files, idx_choice = select_bags_interactive(input, build_index, ignore_cache=True)
             input = selected_files
             if idx_choice:
                 build_index = True

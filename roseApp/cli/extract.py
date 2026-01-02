@@ -74,8 +74,6 @@ def extract(
             # If still no bags, error handled below
             
             # Interactive topic selection logic follows...
-            from InquirerPy import inquirer
-            from InquirerPy.base.control import Choice
             from ..core.cache import create_bag_cache_manager
             from glob import glob
             from rosbags.highlevel import AnyReader
@@ -122,24 +120,23 @@ def extract(
             # Interactive Selection
             sorted_topics = sorted(list(all_topics))
             
-            choices = []
-            for t in sorted_topics:
-                choices.append(Choice(t, name=t))
-                
-            out.print("Select topics (Type to filter):")
-            out.print("  [Space]: Toggle  [Enter]: Confirm")
-            out.print("  [Alt-a]: Select All  [Alt-i]: Invert")
+            from ..tui.dialogs import ask_selection
+            from ..tui.widgets.multi_selection import SelectionItem
             
-            selected = inquirer.checkbox(
-                message="Topics:",
-                choices=choices,
-                instruction="(Filter/Fuzzy match supported)",
-                validate=lambda result: len(result) > 0,
-                invalid_message="Please select at least one topic",
-                cycle=False,
-            ).execute()
+            selection_items = [SelectionItem(t, t) for t in sorted_topics]
             
-            topics = selected
+            out.print("Select topics (Type to filter, Space to toggle, Enter to confirm):")
+            
+            selected_ids = ask_selection(
+                message="Select topics to extract:",
+                options=selection_items
+            )
+            
+            if not selected_ids:
+                out.info("No topics selected.")
+                raise typer.Exit(0)
+            
+            topics = selected_ids
         
         # Run Orchestrator
         pipeline = extract_orchestrator(

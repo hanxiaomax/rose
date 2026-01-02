@@ -84,7 +84,8 @@ def inspect(
     if bag_path is None and interactive:
         # Launch interactive bag picker
         from .interactive import select_bags_interactive
-        selected_files, idx_choice = select_bags_interactive(None, load_index, allow_multiple=False)
+        # If running interactive inspection, we prefer bags that are already indexed
+        selected_files, idx_choice = select_bags_interactive(None, load_index, allow_multiple=False, require_index=True)
         
         if selected_files:
             if len(selected_files) > 1:
