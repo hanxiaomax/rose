@@ -10,7 +10,7 @@ class QuestionDialogApp(App[Union[Answer, None]]):
     """An app that displays a question and returns the answer."""
 
     CSS_PATH = "styles.tcss" # Re-use styles if possible or define inline
-    
+    ENABLE_COMMAND_PALETTE = False
     # Inline styles to ensure it looks okay even if main styles.tcss is missing specific bits
     CSS = """
     QuestionDialogApp {
@@ -62,6 +62,7 @@ class MultiSelectionDialogApp(App[List[str]]):
     """An app that displays a multi-selection list."""
     
     # Inline styles 
+    ENABLE_COMMAND_PALETTE = False
     CSS = """
     MultiSelectionDialogApp {
         align: left top;
