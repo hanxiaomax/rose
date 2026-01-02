@@ -15,6 +15,8 @@ import typer
 from ..core.cache import get_cache
 from ..core.model import BagInfo
 from ..core.output import get_output
+from ..tui.dialogs import ask_selection
+from ..tui.widgets.multi_selection import SelectionItem
 
 app = typer.Typer(name="list", help="List and manage cached bag files")
 
@@ -56,14 +58,54 @@ def list_export(
 
 @app.command("remove")
 def list_remove(
-    bag_path: str = typer.Argument(..., help="Bag file path or ID to remove from cache"),
+    bag_path: Optional[str] = typer.Argument(None, help="Bag file path or ID to remove from cache"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation")
 ):
     """Remove a specific bag file from cache"""
     out = get_output()
     try:
         cache = get_cache()
-        _remove_cache_entry(cache, bag_path, yes, out)
+        
+        if bag_path is None:
+            # Interactive mode
+            all_entries = _get_all_cache_entries(cache)
+            if not all_entries:
+                out.info("Cache is empty")
+                raise typer.Exit(0)
+                
+            selection_items = []
+            for idx, (key, value, _) in enumerate(all_entries, 1):
+                name = key
+                if isinstance(value, BagInfo):
+                    # Match the display format of 'rose list' somewhat
+                    bag_name = Path(getattr(value, 'file_path', key)).name
+                    name = f"[{idx}] {bag_name}"
+                else:
+                    name = f"[{idx}] {key}"
+                    
+                selection_items.append(SelectionItem(text=name, id=str(idx)))
+            
+            selected_ids = ask_selection("Select caches to remove (Space to toggle, Enter to confirm):", selection_items)
+            
+            if not selected_ids:
+                out.info("No cache entries selected")
+                raise typer.Exit(0)
+            
+            # Map selected numeric IDs back to Cache Keys to ensure safe deletion 
+            # (indices shift after deletion, so we can't use IDs sequentially)
+            id_to_key_map = {str(idx): key for idx, (key, _, _) in enumerate(all_entries, 1)}
+            
+            keys_to_remove = []
+            for sid in selected_ids:
+                key = id_to_key_map.get(sid)
+                if key:
+                    keys_to_remove.append(key)
+            
+            for key in keys_to_remove:
+                 # We skip individual confirmation since user selected them in TUI
+                _remove_cache_entry(cache, key, True, out)
+        else:
+            _remove_cache_entry(cache, bag_path, yes, out)
     except Exception as e:
         out.error(f"Error removing cache entry: {str(e)}")
         raise typer.Exit(1)
@@ -206,7 +248,7 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
             if isinstance(value, BagInfo):
                 bag_info = value
                 bag_path = Path(getattr(bag_info, 'file_path', ''))
-                if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path):
+                if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path) or key == identifier:
                     target_entry = (key, value, cache_type)
                     target_key = key
                     target_id = idx

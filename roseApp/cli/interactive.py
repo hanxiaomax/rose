@@ -8,6 +8,8 @@ from typing import List, Tuple, Optional
 from ..core.output import get_output
 from ..core.cache import get_cache
 from ..core.model import BagInfo
+from ..tui.dialogs import ask_question
+from ..tui.widgets.question import Answer
 
 def select_bags_interactive(
     initial_input: Optional[List[str]] = None,
@@ -174,19 +176,20 @@ def select_bags_interactive(
         return final_files, True
     
     out.newline()
-    choice = inquirer.select(
-        message="Action:",
-        choices=[
-            Choice("quick", name="Load (Quick Analysis)"),
-            Choice("index", name="Load + Build Message Index (TUI Ready)"),
-            Choice("cancel", name="Cancel"),
-        ],
-        default="index" if default_build_index else "quick",
-    ).execute()
+    choice_answer = ask_question(
+        question="Do you want to build message index?",
+        options=[
+            Answer("Load (Quick Analysis)", "quick"),
+            Answer("Load + Build Message Index (TUI Ready)", "index"),
+            Answer("Cancel", "cancel"),
+        ]
+    )
     
-    if choice == "cancel":
+    if not choice_answer or choice_answer.id == "cancel":
          out.info("Cancelled")
          raise typer.Exit(0)
+    
+    choice = choice_answer.id
     
     build_index = (choice == "index")
     return final_files, build_index
