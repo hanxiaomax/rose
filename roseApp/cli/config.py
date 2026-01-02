@@ -56,6 +56,7 @@ def init(
         
         # Find the default configuration template
         template_locations = [
+            Path(__file__).parent.parent / "config" / "rose.config.default.yaml", # Correct location
             Path(__file__).parent.parent.parent / "rose.config.default.yaml",  # Installed location
             Path.cwd() / "rose.config.default.yaml",  # Current directory
             Path(__file__).parent.parent.parent.parent / "rose.config.default.yaml",  # Development location
@@ -123,7 +124,7 @@ def edit():
         raise typer.Exit(1)
     
     try:
-        out.info(f"Opening {config_file} with {editor}...")
+        out.info(f"Opening {out.format_path(config_file)} with {editor}...")
         result = subprocess.run([editor, str(config_file)])
         
         if result.returncode == 0:
@@ -297,7 +298,7 @@ def show():
         # Show loaded config path
         loaded_path = getattr(config, '_loaded_config_path', None)
         if loaded_path:
-            out.info(f"Loaded from: {loaded_path}")
+            out.info(f"Loaded from: {out.format_path(loaded_path)}")
         else:
             out.info("Using default configuration")
         
@@ -317,8 +318,8 @@ def show():
         
         out.newline()
         out.key_value({
-            "Cache dir": str(config.cache_dir),
-            "Logs dir": str(config.logs_dir),
+            "Cache dir": out.format_path(config.cache_dir),
+            "Logs dir": out.format_path(config.logs_dir),
         }, title="Directories")
         
         # Theme Preview
