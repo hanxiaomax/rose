@@ -152,7 +152,7 @@ def select_bags_interactive(
     out.section("Selected Bags")
     display_limit = 10
     for f in final_files[:display_limit]:
-        out.print(f"  - {f}")
+        out.print(f"  - {out.format_path(f)}")
     if len(final_files) > display_limit:
         out.print(f"  ... and {len(final_files)-display_limit} more")
     
@@ -200,7 +200,7 @@ def select_bags_interactive(
 
 def _launch_file_picker(out, initial_input, allow_multiple):
     # Use Textual PathInput
-    from ..tui.dialogs import ask_path
+    from ..tui.dialogs import ask_bags
     
     start_path = "./"
     if initial_input and len(initial_input) == 1 and os.path.isdir(initial_input[0]):
@@ -208,33 +208,14 @@ def _launch_file_picker(out, initial_input, allow_multiple):
          if not start_path.endswith('/'):
              start_path += '/'
     
-    # We loop until valid selection or cancel
-    while True:
-        selected_path = ask_path(
-            message=f"Enter path (Tab to complete) [Start: {start_path}]", 
-            start_path=start_path
-        )
-        
-        if not selected_path:
-            out.info("Cancelled")
-            raise typer.Exit(0)
-            
-        # Check logic
-        if os.path.isfile(selected_path):
-            return [selected_path]
-            
-        elif glob.has_magic(selected_path):
-             matches = glob.glob(selected_path)
-             if matches:
-                 if not allow_multiple and len(matches) > 1:
-                     out.warning(f"Ambiguous glob: matches {len(matches)} files. Please select a single specific file.")
-                     start_path = selected_path # Let user refine
-                     continue
-                 return matches
-             else:
-                 out.error(f"No match for pattern: {selected_path}")
-                 start_path = selected_path
-                 continue
-        else:
-             out.error("File not found.")
-             start_path = selected_path 
+    picker_files = ask_bags(
+        message=f"Enter path (Tab to complete) [Start: {start_path}]", 
+        start_path=start_path, 
+        allow_multiple=allow_multiple
+    )
+
+    if not picker_files:
+        out.info("Cancelled")
+        raise typer.Exit(0)
+    
+    return picker_files

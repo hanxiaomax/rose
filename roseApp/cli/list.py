@@ -452,14 +452,14 @@ def _clear_all_cache(cache, skip_confirm, out):
         
         entry_display = {
             "ID": idx,
-            "File": entry_info['bag_name'],
-            "Bag path": entry_info['bag_path'],
+            "File": out.format_path(entry_info['bag_name']),
+            "Bag path": out.format_path(entry_info['bag_path']),
             "Cache size": freed_size
         }
         
         # Add cache file path if available
         if entry_info['cache_file_path']:
-            entry_display["Cache file"] = entry_info['cache_file_path']
+            entry_display["Cache file"] = out.format_path(entry_info['cache_file_path'])
         
         out.key_value(entry_display)
         if idx < len(entries_info):  # Add separator between entries

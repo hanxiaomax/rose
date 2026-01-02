@@ -274,7 +274,7 @@ def theme():
             f.writelines(new_lines)
             
         out.success(f"Theme updated to: {selected_theme}")
-        out.info(f"Updated config file: {loaded_path}")
+        out.info(f"Updated config file: {out.format_path(loaded_path)}")
         
     except Exception as e:
         out.error(f"Failed to update configuration: {e}")

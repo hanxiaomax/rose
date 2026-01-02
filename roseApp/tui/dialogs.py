@@ -1,4 +1,6 @@
-from typing import Any, List, Optional, Union
+import os
+import glob
+from typing import Any, List, Optional, Union, Callable
 
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label
@@ -8,8 +10,6 @@ from roseApp.tui.widgets.multi_selection import MultiSelection, SelectionItem
 from roseApp.tui.widgets.path_search import PathInput
 
 class QuestionDialogApp(App[Union[Answer, None]]):
-    """An app that displays a question and returns the answer."""
-
     CSS_PATH = "interactive_comp.tcss"
     ENABLE_COMMAND_PALETTE = False
 
@@ -79,11 +79,18 @@ class PathDialogApp(App[Optional[str]]):
     ENABLE_COMMAND_PALETTE = False
     CSS_PATH = "interactive_comp.tcss"
 
-    def __init__(self, message: str, start_path: str = ".", id: Optional[str] = None):
+    def __init__(
+        self, 
+        message: str, 
+        start_path: str = ".", 
+        id: Optional[str] = None,
+        validator: Optional[Callable[[str], Optional[str]]] = None
+    ):
         super().__init__()
         self.message = message
         self.start_path = start_path
         self.widget_id = id
+        self.validator = validator
 
     def compose(self) -> ComposeResult:
         # We can add a Label for the message if desired, 
@@ -92,8 +99,10 @@ class PathDialogApp(App[Optional[str]]):
         yield Label(self.message)
         yield PathInput(
             value=self.start_path,
-            id=self.widget_id
+            id=self.widget_id,
+            validator=self.validator
         )
+        yield Footer()
 
     def on_path_input_submitted(self, message: PathInput.Submitted) -> None:
         self.exit(message.path)
@@ -101,10 +110,37 @@ class PathDialogApp(App[Optional[str]]):
     def on_path_input_cancelled(self, message: PathInput.Cancelled) -> None:
         self.exit(None)
 
-def ask_path(message: str, start_path: str = ".") -> Optional[str]:
+def ask_path(
+    message: str, 
+    start_path: str = ".", 
+    validator: Optional[Callable[[str], Optional[str]]] = None
+) -> Optional[str]:
     """
     Run a TUI path selection dialog.
     Returns selected path string or None if cancelled.
     """
-    app = PathDialogApp(message, start_path)
+    app = PathDialogApp(message, start_path, validator=validator)
     return app.run(inline=True)
+
+def ask_bags(message: str, start_path: str = "./", allow_multiple: bool = True) -> List[str]:
+    """
+    Ask user to select valid .bag file(s).
+    Returns list of resolved paths (files or glob matches).
+    Returns empty list if cancelled.
+    """
+    from roseApp.tui.widgets.path_search import get_default_bag_validator
+    
+    validator = get_default_bag_validator(allow_multiple=allow_multiple)
+    result = ask_path(message, start_path=start_path, validator=validator)
+    
+    if result:
+        # Resolver logic moved here
+        if os.path.isfile(result):
+            return [result]
+        
+        if glob.has_magic(result):
+            matches = glob.glob(result)
+            return [m for m in matches if m.endswith(".bag")]
+            
+        return []
+    return []

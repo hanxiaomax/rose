@@ -6,9 +6,10 @@ All CLI commands should use this interface instead of direct console.print() cal
 """
 
 import yaml
+import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, List, Any, Dict, Generator
+from typing import Optional, List, Any, Dict, Generator, Union
 
 from rich.console import Console, Group
 from rich.table import Table
@@ -414,6 +415,26 @@ class Output:
             self._console.print(f"  {path_str} ({size_str}) - {extra}")
         else:
             self._console.print(f"  {path_str} ({size_str})")
+
+    def format_path(self, path: Union[str, Path]) -> str:
+        """
+        Format path with distinct colors for directory and filename.
+        
+        Args:
+            path: Path string or object
+            
+        Returns:
+            Rich formatted string
+        """
+        p = Path(path)
+        dirname = str(p.parent)
+        basename = p.name
+        
+        if dirname == ".":
+            return f"[{self._theme.path}]{basename}[/{self._theme.path}]"
+            
+        # Directory in muted color, filename in path color (cyan/blue)
+        return f"[{self._theme.muted}]{dirname}{os.sep}[/{self._theme.muted}][{self._theme.path}]{basename}[/{self._theme.path}]"
     
     # === Sections ===
     

@@ -1,6 +1,6 @@
 /* Global reset for interactive dialogs */
 
-Label {
+Hints {
     background: transparent;
     width: 100%;
     display: block;

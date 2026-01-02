@@ -152,17 +152,17 @@ def load(
                             if loaded:
                                 loaded_count += 1
                                 level = res.get('level', 'unknown')
-                                steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({level}, {elapsed:.2f}s)")
+                                steps.complete_item(bag_path, f"Loaded {out.format_path(bag_path)}", status="done", details=f"({level}, {elapsed:.2f}s)")
                             elif cached:
                                 cached_count += 1
-                                steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
+                                steps.complete_item(bag_path, f"Skipped {out.format_path(bag_path)}", status="skip", details="(already cached)")
                             else:
                                 # Fallback
                                 loaded_count += 1
-                                steps.complete_item(bag_path, f"Processed {os.path.basename(bag_path)}", status="done")
+                                steps.complete_item(bag_path, f"Processed {out.format_path(bag_path)}", status="done")
                         else:
                             error_count += 1
-                            steps.error_item(bag_path, f"Failed {os.path.basename(bag_path)}", error=msg)
+                            steps.error_item(bag_path, f"Failed {out.format_path(bag_path)}", error=msg)
                         
                         results.append(res)
         

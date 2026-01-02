@@ -26,12 +26,61 @@ GLOBAL_BINDINGS = [
     Binding("escape", "dismiss", "Dismiss"),
 ]
 
+def get_default_bag_validator(allow_multiple: bool = True) -> Callable[[str], Optional[str]]:
+    """
+    Returns a validator function for .bag files.
+    
+    Args:
+        allow_multiple: Whether to allow matching multiple files via glob.
+    """
+    def validate(path: str) -> Optional[str]:
+        if not path:
+             return "Please enter a path."
+             
+        # Rule 1: Disallow raw directories (require * or file)
+        if os.path.isdir(path):
+            return "Please select a file or use a glob pattern (e.g. /*) to match files."
+
+        # Rule 2: If it's an existing file, must be .bag
+        if os.path.isfile(path):
+            if not path.endswith(".bag"):
+                return "Selected file must be a .bag file."
+            return None # Valid file
+            
+        # Rule 3: Glob patterns
+        if glob.has_magic(path):
+             matches = glob.glob(path)
+             if not matches:
+                 return f"No match for pattern: {path}"
+             
+             # Filter only .bag files
+             bag_matches = [m for m in matches if m.endswith(".bag")]
+             
+             if not bag_matches:
+                 return f"No .bag files found matching pattern: {path}"
+
+             if not allow_multiple and len(bag_matches) > 1:
+                 return f"Ambiguous glob: matches {len(bag_matches)} .bag files. Please select a single file."
+                 
+             return None # Valid glob
+             
+        # Fallback
+        return "File not found."
+    return validate
+
+
+class PathInputField(Input):
+    """Input with explicit bindings for Footer visibility."""
+    
+    # We explicitly bind enter here so it shows up in Footer while Input handles the event
+    BINDINGS = GLOBAL_BINDINGS
 
 class PathInput(Widget):
     """
     A widget for path input with auto-completion and directory navigation.
     """
     
+    # Parent bindings for navigation that Input ignores
     BINDINGS = GLOBAL_BINDINGS
 
     path = reactive("")
@@ -47,18 +96,23 @@ class PathInput(Widget):
         """Input cancelled."""
         pass
 
-    def __init__(self, value: str = "", id: str | None = None) -> None:
+    def __init__(
+        self, 
+        value: str = "", 
+        id: str | None = None,
+        validator: Optional[Callable[[str], Optional[str]]] = None
+    ) -> None:
         super().__init__(id=id)
         self.initial_value = value
         self._suggestion_paths: List[str] = []
+        self.validator = validator
 
     def compose(self) -> ComposeResult:
-        yield Input(value=self.initial_value, id="path-input", placeholder="Enter path relative to ./ or absolute...")
+        yield PathInputField(value=self.initial_value, id="path-input", placeholder="Enter path relative to ./ or absolute...")
         yield OptionList(id="suggestions")
-        yield Hint("[dim]↑/↓ to navigate, Tab to complete, Enter to select[/]")
 
     def on_mount(self) -> None:
-        self.query_one(Input).focus()
+        self.query_one(PathInputField).focus()
         self.path = self.initial_value
 
     def _get_expanded_path(self, path_str: str) -> str:
@@ -72,7 +126,6 @@ class PathInput(Widget):
     def on_input_changed(self, event: Input.Changed) -> None:
         self.path = event.value
         self._update_suggestions(self.path)
-
     def _update_suggestions(self, input_path: str) -> None:
         """Scan directory and update suggestions."""
         # Hide if input is empty
@@ -128,11 +181,14 @@ class PathInput(Widget):
             option_list.add_options(options)
             self.add_class("show-suggestions")
             option_list.highlighted = 0
+            # Ensure footer knows we can nav up/down
         else:
             self.remove_class("show-suggestions")
 
     def action_autocomplete(self) -> None:
         """Handle Tab key for completion."""
+        # Bubble up from Input
+        
         # Check if suggestions visible
         if not self.has_class("show-suggestions"):
             return # Nothing to complete
@@ -142,7 +198,6 @@ class PathInput(Widget):
             # Complete with the HIGHLIGHTED suggestion
              selection = self._suggestion_paths[option_list.highlighted]
         else:
-            # Or common prefix?
             # Standard: fill with common prefix first
             if not self._suggestion_paths:
                 return
@@ -152,52 +207,40 @@ class PathInput(Widget):
             elif len(self._suggestion_paths) == 1:
                  selection = self._suggestion_paths[0]
             else:
-                 # Rotate selection if multiple?
-                 # For now let's just use highlighted if available
                  return 
         
-        # Apply completion
-        # We need to replace the basename of current input with selection
-        current_input = self.query_one(Input).value
-        expanded = self._get_expanded_path(current_input)
-        
-        if current_input.endswith(os.sep):
-             # We are in a dir, appending
-            new_val = current_input + selection
-        else:
-            # Replacing basename
-            parent = os.path.dirname(current_input)
-            if parent:
-                new_val = os.path.join(parent, selection)
-            else:
-                new_val = selection
-                
-        # Fix: os.path.join might remove trailing slash of parent if empty?
-        # Manually:
-        # If parent is empty, it means we are in relative root
-        
-        self.query_one(Input).value = new_val
-        self.query_one(Input).cursor_position = len(new_val)
+        self._apply_completion(selection)
 
+    # Navigation actions (bubbled from Input or handled by Parent if Input ignores?)
+    # Input doesn't use Up/Down, so they should bubble to PathInput.
     def action_cursor_down(self) -> None:
         """Move cursor in suggestion list."""
         if self.has_class("show-suggestions"):
             self.query_one(OptionList).action_cursor_down()
-        else:
-             pass # Maybe history?
 
     def action_cursor_up(self) -> None:
         """Move cursor in suggestion list."""
         if self.has_class("show-suggestions"):
             self.query_one(OptionList).action_cursor_up()
-        else:
-            pass
 
     @on(Input.Submitted)
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Input submission (Enter key)."""
+        event.stop() # we handle it
         self.action_submit()
         
+    def _validate_and_submit(self, path: str) -> None:
+        """Run validation and submit if valid."""
+        if self.validator:
+            error = self.validator(path)
+            
+            if error:
+                # Use Notify for error
+                self.notify(error, title="Invalid Path", severity="error")
+                return
+        
+        self.post_message(self.Submitted(path))
+
     def action_submit(self) -> None:
         """Handle Enter key."""
         # 1. Check if OptionList has active highlight
@@ -213,41 +256,38 @@ class PathInput(Widget):
                      return
                  else:
                      # File -> Submit
-                     current_input = self.query_one(Input).value
+                     current_input = self.query_one(PathInputField).value
                      parent = os.path.dirname(self._get_expanded_path(current_input))
                      full_path = os.path.join(parent, selection) if parent else selection
-                     self.post_message(self.Submitted(full_path))
+                     self._validate_and_submit(full_path)
                      return
 
         # 2. No suggestion selected, process current input
-        input_val = self.query_one(Input).value
+        input_val = self.query_one(PathInputField).value
         expanded = self._get_expanded_path(input_val)
         
         if os.path.isdir(expanded) and not input_val.endswith(os.sep):
              # Enter directory
              new_val = input_val + os.sep
-             self.query_one(Input).value = new_val
-             self.query_one(Input).cursor_position = len(new_val)
+             self.query_one(PathInputField).value = new_val
+             self.query_one(PathInputField).cursor_position = len(new_val)
              return
 
         if os.path.isfile(expanded):
-             self.post_message(self.Submitted(expanded))
+             self._validate_and_submit(expanded)
              return
              
         # Fallback for globs / new files
         if "*" in input_val or "?" in input_val:
-             self.post_message(self.Submitted(input_val))
+             self._validate_and_submit(input_val)
              return
         
-        # If path looks like a new file in existing dir?
-        # For strict existing file search, maybe error?
-        # But for 'load' generic, maybe we accept typed path if user insists?
-        # Let's emit it and let higher level validate.
+        # Explicit submit of typed path
         if input_val.strip():
-            self.post_message(self.Submitted(input_val))
+            self._validate_and_submit(input_val)
 
     def _apply_completion(self, selection: str) -> None:
-        current_input = self.query_one(Input).value
+        current_input = self.query_one(PathInputField).value
         expanded = self._get_expanded_path(current_input)
         
         if current_input.endswith(os.sep):
@@ -264,8 +304,8 @@ class PathInput(Widget):
             else:
                 new_val = selection
                 
-        self.query_one(Input).value = new_val
-        self.query_one(Input).cursor_position = len(new_val)
+        self.query_one(PathInputField).value = new_val
+        self.query_one(PathInputField).cursor_position = len(new_val)
 
     def action_quit(self) -> None:
         self.post_message(self.Cancelled())
