@@ -1,35 +1,17 @@
 from typing import Any, List, Optional, Union
 
 from textual.app import App, ComposeResult
-from textual.widgets import Footer
+from textual.widgets import Footer, Label
 
 from roseApp.tui.widgets.question import Question, Answer
 from roseApp.tui.widgets.multi_selection import MultiSelection, SelectionItem
+from roseApp.tui.widgets.path_search import PathInput
 
 class QuestionDialogApp(App[Union[Answer, None]]):
     """An app that displays a question and returns the answer."""
 
-    CSS_PATH = "styles.tcss" # Re-use styles if possible or define inline
+    CSS_PATH = "interactive_comp.tcss"
     ENABLE_COMMAND_PALETTE = False
-    # Inline styles to ensure it looks okay even if main styles.tcss is missing specific bits
-    CSS = """
-    QuestionDialogApp {
-        align: left top;
-        height: auto;
-        background: transparent;
-    }
-    
-    Question {
-        width: 100%;
-        height: auto;
-        border: round $accent;
-        background: transparent;
-        #prompt {
-            color: $text;
-            text-style: bold;
-        }
-    }
-    """
 
     def __init__(self, question: str, options: List[Answer], id: Optional[str] = None):
         super().__init__()
@@ -62,21 +44,7 @@ class MultiSelectionDialogApp(App[List[str]]):
     
     # Inline styles 
     ENABLE_COMMAND_PALETTE = False
-    CSS = """
-    MultiSelectionDialogApp {
-        align: left top;
-        height: auto;
-        background: transparent;
-    }
-    
-    MultiSelection {
-        width: 100%;
-        height: auto;
-        border: round $accent;
-        padding: 0 1;
-        background: transparent;
-    }
-    """
+    CSS_PATH = "interactive_comp.tcss"
 
     def __init__(self, message: str, options: List[SelectionItem], id: Optional[str] = None):
         super().__init__()
@@ -104,3 +72,39 @@ def ask_selection(message: str, options: List[SelectionItem]) -> List[str]:
     app = MultiSelectionDialogApp(message, options)
     res = app.run(inline=True)
     return res if res is not None else []
+
+class PathDialogApp(App[Optional[str]]):
+    """An app that displays a path input dialog."""
+    
+    ENABLE_COMMAND_PALETTE = False
+    CSS_PATH = "interactive_comp.tcss"
+
+    def __init__(self, message: str, start_path: str = ".", id: Optional[str] = None):
+        super().__init__()
+        self.message = message
+        self.start_path = start_path
+        self.widget_id = id
+
+    def compose(self) -> ComposeResult:
+        # We can add a Label for the message if desired, 
+        # but PathInput compose doesn't have one builtin.
+        # Let's add one here.
+        yield Label(self.message)
+        yield PathInput(
+            value=self.start_path,
+            id=self.widget_id
+        )
+
+    def on_path_input_submitted(self, message: PathInput.Submitted) -> None:
+        self.exit(message.path)
+        
+    def on_path_input_cancelled(self, message: PathInput.Cancelled) -> None:
+        self.exit(None)
+
+def ask_path(message: str, start_path: str = ".") -> Optional[str]:
+    """
+    Run a TUI path selection dialog.
+    Returns selected path string or None if cancelled.
+    """
+    app = PathDialogApp(message, start_path)
+    return app.run(inline=True)

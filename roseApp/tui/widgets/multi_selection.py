@@ -27,7 +27,7 @@ GLOBAL_BINDINGS = [
         Binding("q", "quit", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit"),
         Binding("f", "focus_filter", "Filter", show=False),
-        Binding("escape", "clear_filter_focus", "Exit Filter", show=False),
+        Binding("escape", "quit", "Quit"),
     ]
 @dataclass
 class SelectionItem:

@@ -1,0 +1,72 @@
+/* Global reset for interactive dialogs */
+
+
+Screen {
+    background: transparent;
+}
+
+/* PathInput specific overrides for compact look */
+PathInput {
+    height: auto;
+    background: transparent;
+}
+
+PathInput > Input {
+    width: 100%;
+    border: round $primary 50%; /* Using 50% alpha/dimmer if possible, or just primary */
+    padding: 0 1;
+    background: transparent;
+    height: auto;
+    margin: 0;
+}
+
+PathInput > Input:focus {
+    border: none;
+    background: transparent;
+}
+
+/* OptionList container modifications */
+PathInput > OptionList {
+    margin-top: 0;
+    background: transparent;
+    border: none; /* Always open top to merge with input? Or only when shown? */
+    /* Actually better to handle via state */
+    padding: 0;
+    display: none; /* Default hidden */
+}
+
+/* When suggestions are shown, merge borders */
+PathInput.show-suggestions > Input {
+    border: none; 
+    height: auto; /* Ensure it shrinks to fit content+top border */
+}
+
+PathInput.show-suggestions > OptionList {
+    display: block;
+    border: round $primary 50%;
+    margin-top: 0;
+}
+
+PathInput > OptionList > .option-list--option-highlighted {
+    background: $primary 50%;
+    color: $text;
+    text-style: bold;
+}
+
+/* MultiSelection specific */
+MultiSelection {
+    padding: 0;
+    background: transparent;
+}
+
+MultiSelection > Input {
+    margin: 0;
+    border: none;
+    background: transparent;
+}
+
+/* Question widget specific */
+Question {
+    padding: 0;
+    background: transparent;
+}

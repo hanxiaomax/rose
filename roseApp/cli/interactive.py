@@ -33,7 +33,7 @@ def select_bags_interactive(
     """
     out = get_output()
     try:
-        from ..tui.dialogs import ask_selection
+        from ..tui.dialogs import ask_selection, ask_path
         from ..tui.widgets.multi_selection import SelectionItem
     except ImportError:
         # Should not happen if app is installed correctly
@@ -199,59 +199,42 @@ def select_bags_interactive(
     return final_files, build_index
 
 def _launch_file_picker(out, initial_input, allow_multiple):
-    from InquirerPy import inquirer
-    from InquirerPy.validator import Validator
-    from prompt_toolkit.validation import ValidationError
+    # Use Textual PathInput
+    from ..tui.dialogs import ask_path
     
-    class GlobPathValidator(Validator):
-        def __init__(self, allow_multiple=True):
-            self.allow_multiple = allow_multiple
-
-        def validate(self, document):
-            text = document.text
-            if os.path.isfile(text):
-                return True
-            
-            matches = glob.glob(text)
-            if matches:
-                # If valid matches found
-                if not self.allow_multiple and len(matches) > 1:
-                    raise ValidationError(message=f"Ambiguous glob: matches {len(matches)} files. Please select a single specific file.")
-                return True
-            
-            if not text:
-                return False 
-            raise ValidationError(message="Input must be a file or valid glob pattern matching files")
-
     start_path = "./"
     if initial_input and len(initial_input) == 1 and os.path.isdir(initial_input[0]):
          start_path = initial_input[0]
          if not start_path.endswith('/'):
              start_path += '/'
     
-    out.print(f"Select bag file or enter glob pattern (Start: {start_path})")
-    out.print("  [Tab]: Complete/Expand  [Enter]: Select")
-    
-    selected_path = inquirer.filepath(
-        message="Bag/Glob:",
-        default=start_path,
-        validate=GlobPathValidator(allow_multiple=allow_multiple),
-        only_files=False,
-    ).execute()
-    
-    resolved = []
-    if selected_path:
-        matches = glob.glob(selected_path)
-        if matches:
-            resolved = matches
-        elif os.path.isfile(selected_path):
-            resolved = [selected_path]
-        else:
-             out.error(f"No files matched pattern: {selected_path}")
-             raise typer.Exit(1)
-             
-    if not resolved:
-        out.info("No file selected.")
-        raise typer.Exit(0)
+    # We loop until valid selection or cancel
+    while True:
+        selected_path = ask_path(
+            message=f"Enter path (Tab to complete) [Start: {start_path}]", 
+            start_path=start_path
+        )
         
-    return resolved
+        if not selected_path:
+            out.info("Cancelled")
+            raise typer.Exit(0)
+            
+        # Check logic
+        if os.path.isfile(selected_path):
+            return [selected_path]
+            
+        elif glob.has_magic(selected_path):
+             matches = glob.glob(selected_path)
+             if matches:
+                 if not allow_multiple and len(matches) > 1:
+                     out.warning(f"Ambiguous glob: matches {len(matches)} files. Please select a single specific file.")
+                     start_path = selected_path # Let user refine
+                     continue
+                 return matches
+             else:
+                 out.error(f"No match for pattern: {selected_path}")
+                 start_path = selected_path
+                 continue
+        else:
+             out.error("File not found.")
+             start_path = selected_path 

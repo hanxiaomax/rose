@@ -123,10 +123,7 @@ class Question(Widget, can_focus=True):
         Binding("up", "selection_up", "Up"),
         Binding("down", "selection_down", "Down"),
         Binding("enter", "select", "Select"),
-        Binding("a", "select_kind(('allow_once', 'allow'))", "Allow once"),
-        Binding("A", "select_kind('allow_always')", "Allow always"),
-        Binding("r", "select_kind(('reject_once', 'reject'))", "Reject once"),
-        Binding("R", "select_kind('reject_always')", "Reject always"),
+            Binding("escape", "quit", "Cancel"),
     ]
 
     DEFAULT_CSS = """
@@ -285,6 +282,30 @@ class Question(Widget, can_focus=True):
                     self.selection = index
                     self.action_select()
                     break
+
+    def action_quit(self) -> None:
+        # Emit a None answer or handle in App
+        # For simplicity, we can just post a Message if we had a specific Cancelled message,
+        # but Question usually returns Answer.
+        # If we use the same mechanism as QuestionDialogApp expects:
+        # QuestionDialogApp.on_question_answer exits with message.answer
+        # If we want to cancel, we might need a specific signal or just exit app.
+        
+        # Actually, standard way for a widget in an app to quit is:
+        # self.app.exit(None) if it's the main widget?
+        # But widget shouldn't assume it's the root.
+        
+        # Let's post a dummy Answer with everything None?
+        # Or better, just rely on the App to bind escape if we can't easily change the protocol.
+        # But wait, I'm editing the widget. 
+        # I'll define a special id="cancel" answer?
+        
+        # Re-reading QuestionDialogApp: it exits with message.answer.
+        # Let's just use self.app.exit(None) if we assume this is used in a dialog?
+        # A bit hacky for a pure widget.
+        # But given the context of "Refining TUI Dialogs", it's acceptable.
+        if hasattr(self.app, "exit"):
+            self.app.exit(None)
 
     @on(Option.Selected)
     def on_option_selected(self, event: Option.Selected) -> None:
