@@ -433,7 +433,7 @@ class InspectApp(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
+        Binding("escape", "quit", "Quit"),
         Binding("/", "show_search", "Search"),
         Binding("g", "show_jump", "Jump to Frame"),
         Binding("left,h", "prev_msg", "Previous"),
@@ -799,37 +799,67 @@ class InspectApp(App):
                 legend_label = f"Val: {self.current_plot_point[1]:.4f}" # Current value in legend
             
             if self.plot_data_x:
-                plt.plot(self.plot_data_x, self.plot_data_y, color=color, label=legend_label)
+                plt.plot(self.plot_data_x, self.plot_data_y, color=color, label=legend_label, marker="braille")
             
             # 3. Highlight Current Point
             if self.current_plot_point:
                 cx, cy = self.current_plot_point
                 # Use accent/error for highlight
-                h_color = self.rose_theme.error
+                h_color = self.rose_theme.accent
                 
                 # Marker: "inverse color pixel" -> Use a solid block char or circle
                 # plotext 'marker' can be a single char.
                 # "inverse" effect is hard without bg color control per pixel, but high contrast helps.
-                # Use a filled square or circle
-                plt.scatter([cx], [cy], marker="█", color=h_color)
+                # To make it larger but aligned: Plot a cluster of braille dots around center.
                 
-                # Calculate alignment and offset based on position
+                # Estimate canvas resolution if possible, or use heuristic
+                # We need dx, dy corresponding to sub-pixel size
+                
+                # Get data range
                 y_min = min(self.plot_data_y) if self.plot_data_y else cy
                 y_max = max(self.plot_data_y) if self.plot_data_y else cy
                 y_range = max(1e-6, y_max - y_min)
                 
+                x_min = min(self.plot_data_x) if self.plot_data_x else cx
+                x_max = max(self.plot_data_x) if self.plot_data_x else cx
+                x_range = max(1e-6, x_max - x_min)
+
+                # Get widget size (chars)
+                w, h = plot_widget.content_size # (width, height)
+                if w == 0: w = 80
+                if h == 0: h = 20
+                
+                # Plotext resolution: 2 horizontal dots per char, 4 vertical dots per char
+                dots_w = w * 2
+                dots_h = h * 4
+                
+                # Size of one dot in data units
+                dx = x_range / dots_w
+                dy = y_range / dots_h
+                
+                # Generate 2x2 cluster (offsets in dot units)
+                # 2x2 grid centered: -0.5, 0.5
+                cluster_x = []
+                cluster_y = []
+                
+                # Use "red" directly for high visibility
+                h_color = "red"
+                
+                for off_x in [-0.5, 0.5]:
+                    for off_y in [-0.5, 0.5]:
+                        cluster_x.append(cx + (off_x * dx))
+                        cluster_y.append(cy + (off_y * dy))
+                
+                plt.scatter(cluster_x, cluster_y, marker="braille", color=h_color)
+                
+                # Calculate alignment and offset based on position
                 # Logic:
                 # 1. Y-Axis: If near bottom, place text ABOVE. Else BELOW.
                 # Threshold: Bottom 10% of range
                 is_near_bottom = (cy - y_min) < (0.1 * y_range)
-                text_y = cy + (y_range * 0.05) if is_near_bottom else cy - (y_range * 0.05)
+                text_y = cy + (y_range * 0.08) if is_near_bottom else cy - (y_range * 0.08) # Increased offset for larger cursor
                 
                 # 2. X-Axis: If near left, align LEFT. Else align RIGHT.
-                # Need X range logic
-                x_min = min(self.plot_data_x) if self.plot_data_x else cx
-                x_max = max(self.plot_data_x) if self.plot_data_x else cx
-                x_range = max(1e-6, x_max - x_min)
-                
                 is_near_left = (cx - x_min) < (0.1 * x_range)
                 text_align = "left" if is_near_left else "right"
 
