@@ -100,20 +100,14 @@ def select_bags_interactive(
     if cached_options:
         choices.extend(cached_options)
     
-    choices.append(SelectionItem(text="Load New File(s)...", id=LOAD_NEW_VAL))
-    
-    selected_values = []
-    
-    # If no cached bags, skip straight to file picker?
-    # Maybe user wants to see "Load New" explicitly? 
-    # If empty cache, just go to picker to save strict.
     if not cached_options:
         selected_values = [LOAD_NEW_VAL]
     else:
         out.print("Select bags to process (supports fuzzy search):")
         result = ask_selection(
             message="Select bags:",
-            options=choices
+            options=choices,
+            load_new_id=LOAD_NEW_VAL
         )
         # ask_selection returns list of IDs
         

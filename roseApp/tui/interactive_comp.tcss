@@ -1,5 +1,9 @@
 /* Global reset for interactive dialogs */
 
+Footer {
+    margin-top: 1;
+}
+
 Hints {
     background: transparent;
     width: 100%;
@@ -12,21 +16,21 @@ Hints {
 PathInput {
     height: auto;
     width: 100%;
-    background: transparent;
+    background: $surface;
 }
 
 PathInput > Input {
     width: 100%;
-    border: round $primary 50%;
+    border: round $primary;
     padding: 0 1;
-    background: transparent;
+    background: $surface;
     height: auto;
     margin: 0;
 }
 
 PathInput > Input:focus {
     border: none;
-    background: transparent;
+    background: $surface;
     padding: 0;
     margin: 0;
 }
@@ -36,7 +40,7 @@ PathInput > OptionList {
     max-height: 10;
     width: 100%;
     display: none;
-    background: transparent;
+    background: $surface;
     border: none;
     margin-top: 0;
     padding: 0;
@@ -44,7 +48,7 @@ PathInput > OptionList {
 
 PathInput.show-suggestions > OptionList {
     display: block;
-    border: round $primary 50%;
+    border: round $primary;
     margin-top: 0;
 }
 
@@ -55,7 +59,7 @@ PathInput.show-suggestions > Input {
 }
 
 PathInput > OptionList > .option-list--option-highlighted {
-    background: $primary 50%;
+    background: $primary;
     color: $text;
     text-style: bold;
 }
@@ -66,7 +70,7 @@ MultiSelection {
     width: 1fr;
     height: auto;
     padding: 0 1;
-    background: transparent;
+    background: $surface;
 }
 
 MultiSelection #message {
@@ -80,7 +84,7 @@ MultiSelection > Input {
     border: none;
     height: 1;
     padding: 0;
-    background: transparent;
+    background: $surface;
 }
 
 MultiSelection > Input:focus {
@@ -89,7 +93,7 @@ MultiSelection > Input:focus {
 
 /* MultiSelectionOption styles */
 MultiSelectionOption {
-    background: transparent;
+    background: $surface;
     color: $text-muted;
 }
 
@@ -120,6 +124,19 @@ MultiSelectionOption #label {
 }
 
 MultiSelectionOption.-active {
+    background: $primary;
+    color: $text;
+}
+
+MultiSelectionOption.-active #cursor {
+    /* Hide cursor if we use background highlight, or keep it? 
+       User said "reference path_search", path_search usually doesn't have a cursor char.
+       But MultiSelection implementation yields a cursor label.
+       Let's keep it visible but maybe adjust color if needed.
+       Actually, if background is primary (often orange), cursor (accent) might clash.
+       Let's rely on background.
+    */
+    visibility: visible;
     color: $text;
 }
 

@@ -28,6 +28,7 @@ GLOBAL_BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("f", "focus_filter", "Filter", show=False),
         Binding("escape", "quit", "Quit"),
+        Binding("ctrl+l", "load_new", "Load New", show=True), # Hidden from default footer if not active
     ]
 @dataclass
 class SelectionItem:
@@ -130,16 +131,22 @@ class MultiSelection(Widget, can_focus=True):
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
+        load_new_id: Optional[str] = None,
     ):
         super().__init__(name=name, id=id, classes=classes)
         self.set_reactive(MultiSelection.message, message)
         self.set_reactive(MultiSelection.options, options)
+        self.load_new_id = load_new_id
 
     display_options: var[List[tuple[int, SelectionItem, Text]]] = var(list)
 
     def compose(self) -> ComposeResult:
         yield Label(self.message, id="message")
         yield SearchInput(id="search", placeholder="Filter...")
+        if self.load_new_id:
+            # Add hint for loading new
+            yield Label("[dim]Hint: Press 'l' to load new file...[/dim]", classes="hint")
+            
         with containers.VerticalGroup(id="option-container"):
             pass # Children will be mounted dynamically
 
@@ -258,6 +265,11 @@ class MultiSelection(Widget, can_focus=True):
         event.stop()
         self.cursor_index = event.index
         self.action_toggle()
+
+    def action_load_new(self) -> None:
+        """Handle 'l' shortcut to load new items."""
+        if self.load_new_id:
+            self.post_message(self.Confirmed([self.load_new_id]))
 
     def action_toggle(self) -> None:
         self._toggle_current()

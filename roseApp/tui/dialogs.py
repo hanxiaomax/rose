@@ -8,6 +8,7 @@ from textual.widgets import Footer, Label
 from roseApp.tui.widgets.question import Question, Answer
 from roseApp.tui.widgets.multi_selection import MultiSelection, SelectionItem
 from roseApp.tui.widgets.path_search import PathInput
+from roseApp.tui.theme import ALL_THEMES
 
 class QuestionDialogApp(App[Union[Answer, None]]):
     CSS_PATH = "interactive_comp.tcss"
@@ -15,6 +16,10 @@ class QuestionDialogApp(App[Union[Answer, None]]):
 
     def __init__(self, question: str, options: List[Answer], id: Optional[str] = None):
         super().__init__()
+        for t in ALL_THEMES.values():
+            self.register_theme(t)
+        if "claude" in ALL_THEMES:
+            self.theme = "claude"
         self.question_text = question
         self.options = options
         self.widget_id = id
@@ -46,30 +51,36 @@ class MultiSelectionDialogApp(App[List[str]]):
     ENABLE_COMMAND_PALETTE = False
     CSS_PATH = "interactive_comp.tcss"
 
-    def __init__(self, message: str, options: List[SelectionItem], id: Optional[str] = None):
+    def __init__(self, message: str, options: List[SelectionItem], id: Optional[str] = None, load_new_id: Optional[str] = None):
         super().__init__()
+        for t in ALL_THEMES.values():
+            self.register_theme(t)
+        if "claude" in ALL_THEMES:
+            self.theme = "claude"
         self.message = message
         self.options = options
         self.widget_id = id
+        self.load_new_id = load_new_id
 
     def compose(self) -> ComposeResult:
         yield MultiSelection(
             message=self.message,
             options=self.options,
-            id=self.widget_id
+            id=self.widget_id,
+            load_new_id=self.load_new_id
         )
         yield Footer()
 
     def on_multi_selection_confirmed(self, message: MultiSelection.Confirmed) -> None:
         self.exit(message.selected_ids)
 
-def ask_selection(message: str, options: List[SelectionItem]) -> List[str]:
+def ask_selection(message: str, options: List[SelectionItem], load_new_id: Optional[str] = None) -> List[str]:
     """
     Run a TUI multi-selection dialog.
     Returns list of selected IDs.
     Returns empty list if cancelled.
     """
-    app = MultiSelectionDialogApp(message, options)
+    app = MultiSelectionDialogApp(message, options, load_new_id=load_new_id)
     res = app.run(inline=True)
     return res if res is not None else []
 
@@ -87,6 +98,10 @@ class PathDialogApp(App[Optional[str]]):
         validator: Optional[Callable[[str], Optional[str]]] = None
     ):
         super().__init__()
+        for t in ALL_THEMES.values():
+            self.register_theme(t)
+        if "claude" in ALL_THEMES:
+            self.theme = "claude"
         self.message = message
         self.start_path = start_path
         self.widget_id = id

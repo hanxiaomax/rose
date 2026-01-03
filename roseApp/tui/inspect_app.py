@@ -28,6 +28,7 @@ from datetime import datetime
 
 from ..core.model import BagInfo, TopicInfo
 from ..core.output import ThemeColors
+from .theme import ALL_THEMES
 
 class Timeline(Static):
     """Interactive timeline widget."""
@@ -490,6 +491,17 @@ class InspectApp(App):
 
     def __init__(self, bag_path: str, bag_info: BagInfo, theme: ThemeColors, initial_topic: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
+        for t in ALL_THEMES.values():
+            self.register_theme(t)
+            
+        # Determine theme name from config if possible, or argument
+        # We can try to map the passed 'theme' (ThemeColors) back to a name?
+        # Or just default to 'claude' or 'default' if available.
+        if "claude" in ALL_THEMES:
+            self.theme = "claude"
+        elif "default" in ALL_THEMES:
+            self.theme = "default"
+            
         self.bag_path = bag_path
         self.bag_info = bag_info
         self.rose_theme = theme

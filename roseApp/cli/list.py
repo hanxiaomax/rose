@@ -151,7 +151,7 @@ def _show_cache_info(cache, show_content, verbose, out):
             "Memory entries": stats.get('memory_entries', 0),
             "Disk entries": stats.get('entry_count', 0),
             "Total size": f"{total_size_mb:.2f} MB",
-            "Cache directory": cache_dir
+            "Cache directory": out.format_path(cache_dir)
         })
         
         if entry_count == 0:

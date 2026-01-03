@@ -43,8 +43,3 @@ PathSearch {
     margin: 1;
 }
 
-/* Prompt Styles */
-Prompt {
-    margin: 1;
-}
-
