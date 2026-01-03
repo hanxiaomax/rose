@@ -9,6 +9,7 @@ from roseApp.tui.widgets.question import Question, Answer
 from roseApp.tui.widgets.multi_selection import MultiSelection, SelectionItem
 from roseApp.tui.widgets.path_search import PathInput
 from roseApp.tui.theme import ALL_THEMES
+from roseApp.core.config import get_config
 
 class QuestionDialogApp(App[Union[Answer, None]]):
     CSS_PATH = "interactive_comp.tcss"
@@ -16,10 +17,23 @@ class QuestionDialogApp(App[Union[Answer, None]]):
 
     def __init__(self, question: str, options: List[Answer], id: Optional[str] = None):
         super().__init__()
+    def __init__(self, question: str, options: List[Answer], id: Optional[str] = None):
+        super().__init__()
         for t in ALL_THEMES.values():
             self.register_theme(t)
-        if "claude" in ALL_THEMES:
+            
+        config = get_config()
+        # Parse theme name from file "rose.theme.NAME.yaml"
+        theme_name = "claude"
+        parts = config.theme_file.split('.')
+        if len(parts) >= 3:
+            theme_name = parts[2]
+            
+        if theme_name in ALL_THEMES:
+            self.theme = theme_name
+        elif "claude" in ALL_THEMES:
             self.theme = "claude"
+
         self.question_text = question
         self.options = options
         self.widget_id = id
@@ -55,8 +69,18 @@ class MultiSelectionDialogApp(App[List[str]]):
         super().__init__()
         for t in ALL_THEMES.values():
             self.register_theme(t)
-        if "claude" in ALL_THEMES:
+            
+        config = get_config()
+        theme_name = "claude"
+        parts = config.theme_file.split('.')
+        if len(parts) >= 3:
+            theme_name = parts[2]
+
+        if theme_name in ALL_THEMES:
+            self.theme = theme_name
+        elif "claude" in ALL_THEMES:
             self.theme = "claude"
+
         self.message = message
         self.options = options
         self.widget_id = id
@@ -100,8 +124,18 @@ class PathDialogApp(App[Optional[str]]):
         super().__init__()
         for t in ALL_THEMES.values():
             self.register_theme(t)
-        if "claude" in ALL_THEMES:
+
+        config = get_config()
+        theme_name = "claude"
+        parts = config.theme_file.split('.')
+        if len(parts) >= 3:
+            theme_name = parts[2]
+
+        if theme_name in ALL_THEMES:
+            self.theme = theme_name
+        elif "claude" in ALL_THEMES:
             self.theme = "claude"
+
         self.message = message
         self.start_path = start_path
         self.widget_id = id

@@ -28,6 +28,7 @@ from datetime import datetime
 
 from ..core.model import BagInfo, TopicInfo
 from ..core.output import ThemeColors
+from ..core.config import get_config
 from .theme import ALL_THEMES
 
 class Timeline(Static):
@@ -494,10 +495,21 @@ class InspectApp(App):
         for t in ALL_THEMES.values():
             self.register_theme(t)
             
-        # Determine theme name from config if possible, or argument
-        # We can try to map the passed 'theme' (ThemeColors) back to a name?
-        # Or just default to 'claude' or 'default' if available.
-        if "claude" in ALL_THEMES:
+        # Determine theme name from config
+        config = get_config()
+        theme_file = config.theme_file
+        # theme_file is like "rose.theme.nord.yaml" -> extract "nord"
+        # Or just match logic in theme.py
+        theme_name = "claude" # fallback
+        
+        # Try to parse name from filename
+        parts = theme_file.split('.')
+        if len(parts) >= 3 and parts[0] == "rose" and parts[1] == "theme":
+            theme_name = parts[2]
+            
+        if theme_name in ALL_THEMES:
+            self.theme = theme_name
+        elif "claude" in ALL_THEMES:
             self.theme = "claude"
         elif "default" in ALL_THEMES:
             self.theme = "default"
