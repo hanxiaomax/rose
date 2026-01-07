@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rose-bag"
-version = "0.8.33"
+version = "0.9.0"
 description = "A modern CLI/TUI tool for ROS bag file analysis and filtering"
 readme = "README.md"
 authors = [

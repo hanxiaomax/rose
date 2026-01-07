@@ -74,7 +74,50 @@ class SearchInput(Input):
 
 class MultiSelectionOption(containers.HorizontalGroup):
     ALLOW_SELECT = False
-    DEFAULT_CSS = ""
+    DEFAULT_CSS = """
+    MultiSelectionOption {
+        background: $surface;
+        color: $text-muted;
+        height: 1;
+        padding: 0 1;
+    }
+
+    MultiSelectionOption:hover {
+        background: $boost;
+    }
+
+    MultiSelectionOption #cursor {
+        width: 1;
+        padding-right: 1;
+        color: $accent;
+        text-style: bold;
+        display: block;
+        visibility: hidden;
+    }
+
+    MultiSelectionOption.-active #cursor {
+        visibility: visible;
+        color: $text;
+    }
+
+    MultiSelectionOption #status {
+        width: 2;
+        padding-right: 1;
+    }
+
+    MultiSelectionOption #label {
+        width: 1fr;
+    }
+
+    MultiSelectionOption.-active {
+        background: $primary;
+        color: $text;
+    }
+
+    MultiSelectionOption.-selected {
+        color: $secondary;
+    }
+    """
 
     @dataclass
     class Toggled(Message):
@@ -114,7 +157,38 @@ class MultiSelection(Widget, can_focus=True):
     
     BINDINGS = GLOBAL_BINDINGS
 
-    DEFAULT_CSS = ""
+    DEFAULT_CSS = """
+    MultiSelection {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+        background: $surface;
+    }
+
+    MultiSelection #message {
+        margin-bottom: 1;
+        color: $text-primary;
+        text-style: bold;
+    }
+
+    MultiSelection > SearchInput {
+        margin-bottom: 1;
+        border: none;
+        height: 1;
+        padding: 0;
+        background: $surface;
+    }
+
+    MultiSelection > SearchInput:focus {
+        border: none;
+    }
+    
+    MultiSelection > .hint {
+        text-align: center;
+        color: $text-muted;
+        padding-bottom: 1;
+    }
+    """
 
     message: var[str] = var("")
     options: var[Options] = var(list)

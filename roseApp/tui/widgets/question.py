@@ -40,7 +40,55 @@ class NonSelectableLabel(Label):
 
 class Option(containers.HorizontalGroup):
     ALLOW_SELECT = False
-    DEFAULT_CSS = ""
+    DEFAULT_CSS = """
+    Option {
+        background: transparent;
+        color: $text-muted;
+    }
+
+    Option:hover {
+        background: $boost;
+    }
+
+    Option #caret {
+        visibility: hidden;
+        padding: 0 1;
+    }
+
+    Option #index {
+        padding-right: 1;
+    }
+
+    Option #label {
+        width: 1fr;
+    }
+
+    Option.-active {            
+        color: $text-accent;
+    }
+
+    Option.-active #caret {
+        visibility: visible;
+    }
+
+    Option.-selected {
+        opacity: 0.5;
+    }
+
+    Option.-active.-selected {
+        opacity: 1.0;
+        background: transparent;
+        color: $text-accent;            
+    }
+
+    Option.-active.-selected #label {
+        text-style: underline;
+    }
+
+    Option.-active.-selected #caret {
+        visibility: hidden;
+    }
+    """
 
     @dataclass
     class Selected(Message):
@@ -88,7 +136,28 @@ class Question(Widget, can_focus=True):
             Binding("escape", "quit", "Cancel"),
     ]
 
-    DEFAULT_CSS = ""
+    DEFAULT_CSS = """
+    Question {
+        width: 1fr;
+        height: auto;
+        padding: 0 1; 
+        background: transparent;
+    }
+
+    Question #prompt {
+        margin-bottom: 1;
+        color: $text-primary;
+    }
+
+    Question.-blink Option.-active #caret {
+        opacity: 0.2;
+    }
+
+    Question:blur #index,
+    Question:blur #caret {
+        opacity: 0.3;
+    }
+    """
 
     question: var[str] = var("")
     options: var[Options] = var(list)

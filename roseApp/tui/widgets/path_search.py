@@ -15,7 +15,7 @@ from textual.widget import Widget
 from textual.widgets import Input, Label, OptionList
 from textual.widgets.option_list import Option
 
-from roseApp.tui.widgets.hint import Hint
+
 
 GLOBAL_BINDINGS = [
     Binding("tab", "autocomplete", "Complete"),
@@ -85,6 +85,60 @@ class PathInput(Widget):
 
     path = reactive("")
     suggestions = reactive([])
+    
+    DEFAULT_CSS = """
+    PathInput {
+        height: auto;
+        width: 100%;
+        background: $surface;
+    }
+
+    PathInput > PathInputField {
+        width: 100%;
+        border: round $primary;
+        padding: 0 1;
+        background: $surface;
+        height: auto;
+        margin: 0;
+    }
+
+    PathInput > PathInputField:focus {
+        border: none;
+        background: $surface;
+        padding: 0;
+        margin: 0;
+    }
+
+    PathInput > OptionList {
+        height: auto;
+        max-height: 10;
+        width: 100%;
+        display: none;
+        background: $surface;
+        border: none;
+        margin-top: 0;
+        padding: 0;
+    }
+
+    PathInput.show-suggestions > OptionList {
+        display: block;
+        border: round $primary;
+        margin-top: 0;
+    }
+
+    /* When suggestions are shown, merge borders */
+    PathInput.show-suggestions > PathInputField {
+        border: none;
+        height: auto;
+    }
+
+    PathInput > OptionList > .option-list--option-highlighted {
+        background: $primary;
+        color: $text;
+        text-style: bold;
+    }
+    """
+
     
     class Submitted(Message):
         """Path submitted."""
