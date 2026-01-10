@@ -23,11 +23,14 @@ from ..core.config import get_config
 class SettingRow(VerticalGroup):
     """A setting row with label and value."""
     
+    # Fixed label width for alignment
+    LABEL_WIDTH = 22
+    
     DEFAULT_CSS = """
     SettingRow {
         height: auto;
-        padding: 0 1;
-        margin: 0;
+        padding: 0 2;
+        margin: 0 0 1 0;
     }
     
     SettingRow.-active {
@@ -39,21 +42,21 @@ class SettingRow(VerticalGroup):
     }
     
     SettingRow #label {
-        color: $text;
+        color: $text-muted;
     }
     
     SettingRow.-active #label {
+        color: $text;
+    }
+    
+    SettingRow #value {
         color: $accent;
         text-style: bold;
     }
     
-    SettingRow #value {
-        color: $text-muted;
-        padding-left: 2;
-    }
-    
     SettingRow.-active #value {
-        color: $text;
+        color: $warning;
+        text-style: bold;
     }
     """
     
@@ -72,16 +75,19 @@ class SettingRow(VerticalGroup):
         self.options = options or []
         
     def compose(self) -> ComposeResult:
-        with VerticalGroup(id="label-row"):
-            yield Label(f"{self.label_text}: {self._format_value()}", id="label")
+        with HorizontalGroup(id="label-row"):
+            # Fixed-width label for alignment
+            padded_label = self.label_text.ljust(self.LABEL_WIDTH)
+            yield Label(padded_label, id="label")
+            yield Label(self._format_value(), id="value")
     
     def _format_value(self) -> str:
         if self.setting_type == "toggle":
-            return "ON" if self.current_value else "OFF"
+            return "[ON]" if self.current_value else "[OFF]"
         return str(self.current_value)
     
     def update_display(self) -> None:
-        self.query_one("#label", Label).update(f"{self.label_text}: {self._format_value()}")
+        self.query_one("#value", Label).update(self._format_value())
     
     def toggle(self) -> bool:
         """Toggle value if this is a toggle type. Returns True if toggled."""
@@ -154,15 +160,24 @@ class SettingsPanel(Vertical):
 class AboutPanel(Vertical):
     """About panel with app info."""
     
+    # ASCII Art Banner
+    BANNER = r"""
+  ██████╗  ██████╗ ███████╗███████╗
+  ██╔══██╗██╔═══██╗██╔════╝██╔════╝
+  ██████╔╝██║   ██║███████╗█████╗  
+  ██╔══██╗██║   ██║╚════██║██╔══╝  
+  ██║  ██║╚██████╔╝███████║███████╗
+  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
+    """
+    
     DEFAULT_CSS = """
     AboutPanel {
         height: auto;
-        padding: 2;
+        padding: 1 2;
     }
     
-    AboutPanel .title {
+    AboutPanel .banner {
         text-align: center;
-        text-style: bold;
         color: $primary;
     }
     
@@ -174,22 +189,26 @@ class AboutPanel(Vertical):
     
     AboutPanel .info {
         color: $text;
-        margin-top: 1;
+        padding-left: 2;
+    }
+    
+    AboutPanel .info-label {
+        color: $text-muted;
     }
     """
     
     def compose(self) -> ComposeResult:
-        yield Label("ROSE", classes="title")
+        yield Static(self.BANNER, classes="banner")
         yield Label("Yet Another ROS Bag Picker & Analyzer", classes="subtitle")
         yield Label("", classes="info")
-        yield Label("Version: 0.3.5", classes="info")
-        yield Label("Author: hanxiaomax", classes="info")
-        yield Label("License: MIT", classes="info")
+        yield Label("Version     0.3.5", classes="info")
+        yield Label("Author      hanxiaomax", classes="info")
+        yield Label("License     MIT", classes="info")
         yield Label("", classes="info")
-        yield Label("Inspired by: Cassette Futurism & Synthwave", classes="info")
-        yield Label("Built with: Textual, Rich, Typer, Plotext", classes="info")
+        yield Label("Aesthetic   Cassette Futurism & Synthwave", classes="info")
+        yield Label("Framework   Textual, Rich, Typer, Plotext", classes="info")
         yield Label("", classes="info")
-        yield Label("GitHub: [link]https://github.com/hanxiaomax/rose[/link]", classes="info")
+        yield Label("GitHub      [link]https://github.com/hanxiaomax/rose[/link]", classes="info")
 
 
 class SelectDialog(ModalScreen[Optional[str]]):
