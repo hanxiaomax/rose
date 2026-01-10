@@ -842,8 +842,8 @@ class InspectApp(App):
                 cluster_x = []
                 cluster_y = []
                 
-                # Use "red" directly for high visibility
-                h_color = "red"
+                # Use theme error color for high visibility
+                h_color = self.rose_theme.error
                 
                 for off_x in [-0.5, 0.5]:
                     for off_y in [-0.5, 0.5]:
@@ -980,12 +980,12 @@ class InspectApp(App):
                          plot_label.update("Selected data is not numeric.")
             else:
                  if not skip_tree:
-                    tree.root.add(Text("Message not found", style="bold red"))
+                    tree.root.add(Text("Message not found", style=f"bold {self.rose_theme.error}"))
                  self.query_one("#current-time-display", Label).update("--:--:--")
                 
         except Exception as e:
             if not skip_tree:
-                tree.root.add(Text(f"Error: {e}", style="bold red"))
+                tree.root.add(Text(f"Error: {e}", style=f"bold {self.rose_theme.error}"))
 
     def build_tree(self, node: Tree, data: any, path_prefix: str = "") -> None:
         """Recursively add nodes to the tree."""
@@ -1054,8 +1054,8 @@ class InspectApp(App):
                 subtree.expand()
         else:
             # Leaf: "label: value"
-            # Value styling: Green for numbers, etc
-            style_val = "green" if isinstance(value, (int, float)) else "white"
+            # Value styling: Success color for numbers, highlight for others
+            style_val = self.rose_theme.success if isinstance(value, (int, float)) else self.rose_theme.highlight
             text = Text.assemble(
                 (f"{label}: ", "bold " + self.rose_theme.info),
                 (str(value), style_val)

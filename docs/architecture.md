@@ -7,7 +7,7 @@ Rose is designed with a layered architecture focusing on modularity, performance
 The system is divided into three main layers:
 1.  **Core Layer**: Handles data processing, caching, and ROS bag interaction.
 2.  **CLI Layer**: Provides command-line interface and terminal output styling.
-3.  **TUI Layer**: Offers interactive visual inspection using Textual.
+3.  **TUI Layer**: Offers interactive visual inspection and widgets using Textual.
 
 ## System Diagram
 
@@ -15,10 +15,13 @@ The system is divided into three main layers:
 graph TD
     User(["User"])
     
-    subgraph "CLI Layer (Rose)"
-        CmdInspect["Inspect Command"]
-        CmdExtract["Extract Command"]
-        CmdLoad["Load Command"]
+    subgraph "CLI Layer"
+        CmdInspect["inspect.py"]
+        CmdExtract["extract.py"]
+        CmdLoad["load.py"]
+        CmdCompress["compress.py"]
+        CmdList["list.py"]
+        Interactive["interactive.py"]
     end
     
     subgraph "Core Layer"
@@ -26,19 +29,36 @@ graph TD
         Cache["Cache (Pickle)"]
         BagMgr["Bag Cache Manager"]
         Reader["Bag Reader (rosbags)"]
+        Writer["Bag Writer"]
+        Output["Output (Rich)"]
+        Config["Config Manager"]
     end
     
     subgraph "TUI Layer"
-        InspectApp["InspectApp (Textual)"]
-        Widgets["Widgets: Tree, Plot, Timeline"]
+        InspectApp["InspectApp"]
+        Dialogs["Dialogs"]
+        Widgets["Widgets"]
+    end
+    
+    subgraph "TUI Widgets"
+        Question["Question"]
+        MultiQuestion["MultiQuestion"]
+        PathInput["PathInput"]
     end
     
     User --> CmdInspect
     User --> CmdExtract
+    User --> CmdLoad
     
     CmdInspect --> Orchestrator
     CmdExtract --> Orchestrator
-    CmdExtract -.->|Interactive| BagMgr
+    CmdLoad --> Orchestrator
+    
+    Interactive --> Dialogs
+    Dialogs --> Widgets
+    Widgets --> Question
+    Widgets --> MultiQuestion
+    Widgets --> PathInput
     
     Orchestrator --> BagMgr
     BagMgr --> Cache
@@ -46,24 +66,126 @@ graph TD
     
     CmdInspect -.->|Interactive| InspectApp
     InspectApp --> BagMgr
-    InspectApp --> Widgets
 ```
 
 ## Component Details
 
 ### Core Layer
 
-*   **Pipeline Pattern**: All heavy operations (loading, analysis, extraction) are implemented as generator-based pipelines in `roseApp.core.pipeline`. This allows the CLI and TUI to consume events (`LogEvent`, `ProgressEvent`) and render progress in real-time without blocking.
-*   **Unified Cache**: To improve performance, bag analysis results (structure, message counts, types) are cached using `roseApp.core.cache`. The cache uses file hashing to ensure validity.
-*   **Bag Abstraction**: Rose uses `rosbags` high-level `AnyReader` to support both legacy ROS1 (`.bag`) and ROS2 (`.mcap`) formats without requiring a full ROS environment.
+| Component             | File          | Description                                          |
+| --------------------- | ------------- | ---------------------------------------------------- |
+| Pipeline Orchestrator | `pipeline.py` | Generator-based pipelines for async event processing |
+| Cache Manager         | `cache.py`    | Pickle-based caching with file hash validation       |
+| Bag Reader            | `parser.py`   | Unified reader supporting ROS1/ROS2 formats          |
+| Bag Writer            | `writer.py`   | Writing filtered/compressed bags                     |
+| Output                | `output.py`   | Rich-based terminal output with theming              |
+| Config                | `config.py`   | YAML configuration management                        |
+| Model                 | `model.py`    | Data models (BagInfo, TopicInfo, etc.)               |
 
 ### CLI Layer
 
-*   **Typer & Rich**: Built with `Typer` for argument parsing and `Rich` for beautiful terminal output.
-*   **Theme System**: Integrating a "Cassette Futurism" aesthetic, the `Output` class (`roseApp.core.output`) manages consistent coloring and formatting across all commands.
+| Component   | File             | Description                    |
+| ----------- | ---------------- | ------------------------------ |
+| Load        | `load.py`        | Load bags into cache           |
+| Extract     | `extract.py`     | Filter and extract topics      |
+| Compress    | `compress.py`    | Compress bag files             |
+| Inspect     | `inspect.py`     | Inspect bag contents (CLI/TUI) |
+| List        | `list.py`        | Cache management               |
+| Interactive | `interactive.py` | Interactive mode helpers       |
 
 ### TUI Layer
 
-*   **Textual Framework**: The interactive inspector is a full TUI application using Textual.
-*   **Async Event Handling**: TUI components update asynchronously based on user input and background data loading.
-*   **Plotting**: Integration with `plotext` allows for real-time data visualization directly in the terminal.
+| Component     | File                        | Description                        |
+| ------------- | --------------------------- | ---------------------------------- |
+| InspectApp    | `inspect_app.py`            | Main TUI inspector application     |
+| Dialogs       | `dialogs.py`                | Modal dialogs for user interaction |
+| Question      | `widgets/question.py`       | Single-select prompt widget        |
+| MultiQuestion | `widgets/multi_question.py` | Multi-select prompt widget         |
+| PathInput     | `widgets/path_search.py`    | File picker with tree view         |
+
+## Widget Architecture
+
+```mermaid
+classDiagram
+    class Answer {
+        +str text
+        +str id
+        +str kind
+    }
+    
+    class Question {
+        +str question
+        +List~Answer~ options
+        +reactive selection
+        +action_confirm()
+    }
+    
+    class MultiQuestion {
+        +str question
+        +List~Answer~ options
+        +Set~int~ checked_indices
+        +action_toggle()
+        +action_select_all()
+        +action_invert_selection()
+    }
+    
+    class PathInput {
+        +str path
+        +bool tree_mode
+        +FilteredDirectoryTree tree
+        +action_autocomplete()
+        +action_toggle_tree()
+    }
+    
+    class FilteredDirectoryTree {
+        +str filter_text
+        +filter_paths()
+    }
+    
+    Question --> Answer : uses
+    MultiQuestion --> Answer : uses
+    PathInput --> FilteredDirectoryTree : contains
+```
+
+## Key Design Patterns
+
+### Generator-Based Pipelines
+
+All heavy operations use generator pipelines that yield events:
+
+```python
+for event in load_orchestrator(bag_path):
+    if isinstance(event, LogEvent):
+        # Handle log messages
+    elif isinstance(event, ProgressEvent):
+        # Update progress bar
+    elif isinstance(event, ResultEvent):
+        # Process result
+```
+
+### Reactive Widget State
+
+TUI widgets use Textual's reactive properties for automatic UI updates:
+
+```python
+class Question(Widget):
+    selection: reactive[int] = reactive(0)
+    
+    def watch_selection(self, old, new):
+        # Automatically called when selection changes
+        self._update_highlight()
+```
+
+### Event-Driven Architecture
+
+Components communicate via Textual messages:
+
+```python
+@dataclass
+class Answers(Message):
+    indices: List[int]
+    answers: List[Answer]
+
+# Post message when user confirms
+self.post_message(self.Answers(indices=selected, answers=selected_answers))
+```

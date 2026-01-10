@@ -301,7 +301,7 @@ def inspect(
             
             # Create Rich Tree
             root = Tree(f"[bold {out.theme.primary}]{target_topic.name}[/]")
-            root.add(f"Type: [dim]{target_topic.message_type}[/]")
+            root.add(f"Type: [{out.theme.muted}]{target_topic.message_type}[/]")
             root.add(f"Count: {target_topic.message_count}")
             
             # Get Fields
