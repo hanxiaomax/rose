@@ -120,23 +120,23 @@ def extract(
             # Interactive Selection
             sorted_topics = sorted(list(all_topics))
             
-            from ..tui.dialogs import ask_selection
-            from ..tui.widgets.multi_selection import SelectionItem
+            from ..tui.dialogs import ask_multi_selection
+            from ..tui.widgets.question import Answer
             
-            selection_items = [SelectionItem(t, t) for t in sorted_topics]
+            selection_items = [Answer(t, t) for t in sorted_topics]
             
             out.print("Select topics (Type to filter, Space to toggle, Enter to confirm):")
             
-            selected_ids = ask_selection(
-                message="Select topics to extract:",
+            selected_answers = ask_multi_selection(
+                question="Select topics to extract:",
                 options=selection_items
             )
             
-            if not selected_ids:
+            if not selected_answers:
                 out.info("No topics selected.")
                 raise typer.Exit(0)
             
-            topics = selected_ids
+            topics = [a.id for a in selected_answers]
         
         # Run Orchestrator
         pipeline = extract_orchestrator(

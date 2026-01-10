@@ -1,4 +1,4 @@
 from .question import Question
-from .multi_selection import MultiSelection
+from .multi_question import MultiQuestion
 
-__all__ = ["Question", "MultiSelection"]
+__all__ = ["Question", "MultiQuestion"]

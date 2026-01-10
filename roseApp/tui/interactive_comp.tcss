@@ -64,85 +64,69 @@ PathInput > OptionList > .option-list--option-highlighted {
     text-style: bold;
 }
 
-/* --- MultiSelection --- */
 
-MultiSelection {
+/* --- MultiQuestion --- */
+
+MultiQuestion {
     width: 1fr;
     height: auto;
     padding: 0 1;
-    background: $surface;
+    background: transparent;
 }
 
-MultiSelection #message {
+MultiQuestion #prompt {
     margin-bottom: 1;
     color: $text-primary;
-    text-style: bold;
 }
 
-MultiSelection > Input {
-    margin-bottom: 1;
-    border: none;
-    height: 1;
-    padding: 0;
-    background: $surface;
+MultiQuestion.-blink MultiOption.-active #caret {
+    opacity: 0.2;
 }
 
-MultiSelection > Input:focus {
-    border: none;
+MultiQuestion:blur #checkbox,
+MultiQuestion:blur #caret {
+    opacity: 0.3;
 }
 
-/* MultiSelectionOption styles */
-MultiSelectionOption {
-    background: $surface;
+/* MultiOption styles */
+MultiOption {
+    background: transparent;
     color: $text-muted;
 }
 
-MultiSelectionOption:hover {
+MultiOption:hover {
     background: $boost;
 }
 
-MultiSelectionOption #cursor {
-    width: 1;
-    padding-right: 1;
-    color: $accent;
-    text-style: bold;
-    display: block;
+MultiOption #caret {
     visibility: hidden;
+    padding: 0 1;
 }
 
-MultiSelectionOption.-active #cursor {
-    visibility: visible;
-}
-
-MultiSelectionOption #status {
-    width: 2;
+MultiOption #checkbox {
     padding-right: 1;
 }
 
-MultiSelectionOption #label {
+MultiOption #label {
     width: 1fr;
 }
 
-MultiSelectionOption.-active {
-    background: $primary;
-    color: $text;
-}
-
-MultiSelectionOption.-active #cursor {
-    /* Hide cursor if we use background highlight, or keep it? 
-       User said "reference path_search", path_search usually doesn't have a cursor char.
-       But MultiSelection implementation yields a cursor label.
-       Let's keep it visible but maybe adjust color if needed.
-       Actually, if background is primary (often orange), cursor (accent) might clash.
-       Let's rely on background.
-    */
-    visibility: visible;
-    color: $text;
-}
-
-MultiSelectionOption.-selected {
+MultiOption.-active {            
     color: $text-accent;
 }
+
+MultiOption.-active #caret {
+    visibility: visible;
+}
+
+MultiOption.-checked {
+    /* No text color change for checked, keep default */
+}
+
+MultiOption.-checked #checkbox {
+    color: $accent;
+}
+
 
 /* --- Question --- */
 

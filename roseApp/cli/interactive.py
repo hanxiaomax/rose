@@ -33,8 +33,8 @@ def select_bags_interactive(
     """
     out = get_output()
     try:
-        from ..tui.dialogs import ask_selection, ask_path
-        from ..tui.widgets.multi_selection import SelectionItem
+        from ..tui.dialogs import ask_multi_selection, ask_path
+        from ..tui.widgets.question import Answer
     except ImportError:
         # Should not happen if app is installed correctly
         raise typer.Exit(1)
@@ -84,7 +84,7 @@ def select_bags_interactive(
                             path = getattr(data, 'file_path', 'unknown')
                             size_mb = data.file_size / (1024*1024) if hasattr(data, 'file_size') else 0
                             name = f"{os.path.basename(path)} ({size_mb:.1f} MB)"
-                            cached_options.append(SelectionItem(text=name, id=path))
+                            cached_options.append(Answer(text=name, id=path))
                     except:
                         continue
         except Exception as e:
@@ -103,15 +103,24 @@ def select_bags_interactive(
     if not cached_options:
         selected_values = [LOAD_NEW_VAL]
     else:
-        out.print("Select bags to process (supports fuzzy search):")
-        result = ask_selection(
-            message="Select bags:",
-            options=choices,
-            load_new_id=LOAD_NEW_VAL
-        )
-        # ask_selection returns list of IDs
+        out.print("Select bag(s) to process:")
         
-        selected_values = result
+        if allow_multiple:
+            # Multi-select mode
+            result = ask_multi_selection(
+                question="Select bags:",
+                options=choices,
+            )
+            # ask_multi_selection returns list of Answer
+            selected_values = [a.id for a in result] if result else []
+        else:
+            # Single-select mode - use Question widget
+            result = ask_question(
+                question="Select a bag:",
+                options=choices,
+            )
+            # ask_question returns single Answer or None
+            selected_values = [result.id] if result else []
 
     # Process Selection
     final_files = []

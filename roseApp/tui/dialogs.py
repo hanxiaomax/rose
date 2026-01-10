@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label
 
 from roseApp.tui.widgets.question import Question, Answer
-from roseApp.tui.widgets.multi_selection import MultiSelection, SelectionItem
+from roseApp.tui.widgets.multi_question import MultiQuestion
 from roseApp.tui.widgets.path_search import PathInput
 from roseApp.tui.theme import ALL_THEMES
 from roseApp.core.config import get_config
@@ -58,14 +58,14 @@ def ask_question(question: str, options: List[Answer]) -> Optional[Answer]:
     return app.run(inline=True)
 
 
-class MultiSelectionDialogApp(App[List[str]]):
-    """An app that displays a multi-selection list."""
+class MultiQuestionDialogApp(App[List[Answer]]):
+    """An app that displays a multi-selection question."""
     
     # Inline styles 
     ENABLE_COMMAND_PALETTE = False
     CSS_PATH = "interactive_comp.tcss"
 
-    def __init__(self, message: str, options: List[SelectionItem], id: Optional[str] = None, load_new_id: Optional[str] = None):
+    def __init__(self, question: str, options: List[Answer], id: Optional[str] = None):
         super().__init__()
         for t in ALL_THEMES.values():
             self.register_theme(t)
@@ -81,30 +81,28 @@ class MultiSelectionDialogApp(App[List[str]]):
         elif "claude" in ALL_THEMES:
             self.theme = "claude"
 
-        self.message = message
+        self.question_text = question
         self.options = options
         self.widget_id = id
-        self.load_new_id = load_new_id
 
     def compose(self) -> ComposeResult:
-        yield MultiSelection(
-            message=self.message,
+        yield MultiQuestion(
+            question=self.question_text,
             options=self.options,
             id=self.widget_id,
-            load_new_id=self.load_new_id
         )
         yield Footer()
 
-    def on_multi_selection_confirmed(self, message: MultiSelection.Confirmed) -> None:
-        self.exit(message.selected_ids)
+    def on_multi_question_answers(self, message: MultiQuestion.Answers) -> None:
+        self.exit(message.answers)
 
-def ask_selection(message: str, options: List[SelectionItem], load_new_id: Optional[str] = None) -> List[str]:
+def ask_multi_selection(question: str, options: List[Answer]) -> List[Answer]:
     """
     Run a TUI multi-selection dialog.
-    Returns list of selected IDs.
+    Returns list of selected Answers.
     Returns empty list if cancelled.
     """
-    app = MultiSelectionDialogApp(message, options, load_new_id=load_new_id)
+    app = MultiQuestionDialogApp(question, options)
     res = app.run(inline=True)
     return res if res is not None else []
 

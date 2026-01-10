@@ -15,8 +15,8 @@ import typer
 from ..core.cache import get_cache
 from ..core.model import BagInfo
 from ..core.output import get_output
-from ..tui.dialogs import ask_selection
-from ..tui.widgets.multi_selection import SelectionItem
+from ..tui.dialogs import ask_multi_selection
+from ..tui.widgets.question import Answer
 
 app = typer.Typer(name="list", help="List and manage cached bag files")
 
@@ -83,11 +83,11 @@ def list_remove(
                 else:
                     name = f"[{idx}] {key}"
                     
-                selection_items.append(SelectionItem(text=name, id=str(idx)))
+                selection_items.append(Answer(text=name, id=str(idx)))
             
-            selected_ids = ask_selection("Select caches to remove (Space to toggle, Enter to confirm):", selection_items)
+            selected = ask_multi_selection("Select caches to remove (Space to toggle, Enter to confirm):", selection_items)
             
-            if not selected_ids:
+            if not selected:
                 out.info("No cache entries selected")
                 raise typer.Exit(0)
             
@@ -96,8 +96,8 @@ def list_remove(
             id_to_key_map = {str(idx): key for idx, (key, _, _) in enumerate(all_entries, 1)}
             
             keys_to_remove = []
-            for sid in selected_ids:
-                key = id_to_key_map.get(sid)
+            for answer in selected:
+                key = id_to_key_map.get(answer.id)
                 if key:
                     keys_to_remove.append(key)
             
