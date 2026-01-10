@@ -78,12 +78,12 @@ class PathInputField(Input):
 
 
 class FilteredDirectoryTree(DirectoryTree):
-    """DirectoryTree with fuzzy filter support."""
+    """DirectoryTree with prefix filter support (Linux-style)."""
     
     filter_text: reactive[str] = reactive("", init=False)
     
     def filter_paths(self, paths):
-        """Filter paths based on current filter text."""
+        """Filter paths based on current filter text using prefix matching (Linux-style)."""
         if not self.filter_text:
             return paths
         
@@ -92,19 +92,8 @@ class FilteredDirectoryTree(DirectoryTree):
         
         for path in paths:
             name_lower = path.name.lower()
-            # Fuzzy subsequence match
-            match = True
-            last_idx = -1
-            for char in filter_lower:
-                try:
-                    idx = name_lower.index(char, last_idx + 1)
-                    last_idx = idx
-                except ValueError:
-                    match = False
-                    break
-            
-            # Only show matching items (both files and directories)
-            if match:
+            # Linux-style prefix match
+            if name_lower.startswith(filter_lower):
                 result.append(path)
         
         return result
@@ -352,21 +341,52 @@ class PathInput(Widget):
     def action_autocomplete(self) -> None:
         """Handle Tab key for completion."""
 
-        # Tree mode: Tab enters the highlighted directory or selects file
+        # Tree mode: Tab always completes to first match in filter results
         if self.tree_mode:
             try:
                 tree = self.query_one("#tree-view", FilteredDirectoryTree)
-                cursor_node = tree.cursor_node
-                if cursor_node and cursor_node.data:
-                    cursor_path = cursor_node.data.path
-                    if cursor_path.is_dir():
-                        new_path = str(cursor_path) + os.sep
-                        self.query_one(PathInputField).value = new_path
-                        self.query_one(PathInputField).cursor_position = len(new_path)
-                        tree.path = cursor_path
-                        tree.filter_text = ""
-                    elif cursor_path.is_file():
-                        self._validate_and_submit(str(cursor_path))
+                input_field = self.query_one(PathInputField)
+                tree_path = Path(tree.path)
+                filter_text = tree.filter_text or ""
+                
+                if tree_path.is_dir():
+                    # Find matching items using prefix matching (Linux-style)
+                    matches = []
+                    filter_lower = filter_text.lower()
+                    
+                    try:
+                        for item in tree_path.iterdir():
+                            if not filter_lower:
+                                matches.append(item)
+                                continue
+                            
+                            name_lower = item.name.lower()
+                            # Linux-style prefix match
+                            if name_lower.startswith(filter_lower):
+                                matches.append(item)
+                    except PermissionError:
+                        pass
+                    
+                    if matches:
+                        # Sort: directories first, then by name
+                        matches.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
+                        first_match = matches[0]
+                        
+                        if first_match.is_dir():
+                            new_path = str(first_match) + os.sep
+                            input_field.value = new_path
+                            input_field.cursor_position = len(new_path)
+                            tree.path = first_match
+                            tree.filter_text = ""
+                        else:
+                            new_path = str(first_match)
+                            input_field.value = new_path
+                            input_field.cursor_position = len(new_path)
+                            self.notify(f"Completed: {first_match.name}. Press Enter to confirm.", severity="information")
+                        return
+                    elif filter_text:
+                        self.notify(f"No match for: {filter_text}", severity="warning")
+                        return
             except Exception:
                 pass
             return
@@ -525,10 +545,13 @@ class PathInput(Widget):
 
     @on(DirectoryTree.FileSelected)
     def on_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        """Handle file selection from tree."""
+        """Handle file selection from tree - update input field instead of auto-submitting."""
         event.stop()
         selected_path = str(event.path)
-        self._validate_and_submit(selected_path)
+        input_field = self.query_one(PathInputField)
+        input_field.value = selected_path
+        input_field.cursor_position = len(selected_path)
+        self.notify(f"Selected: {event.path.name}. Press Enter to confirm.", severity="information")
 
     @on(DirectoryTree.DirectorySelected) 
     def on_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
