@@ -99,8 +99,10 @@ def select_bags_interactive(
     choices = []
     if cached_options:
         choices.extend(cached_options)
+    # Always add "Load new bag..." option at the end
+    choices.append(Answer(text="Load new bag...", id=LOAD_NEW_VAL))
     
-    if not cached_options:
+    if len(choices) == 1:
         selected_values = [LOAD_NEW_VAL]
     else:
         out.print("Select bag(s) to process:")

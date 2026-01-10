@@ -12,7 +12,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive, var
 from textual.widget import Widget
-from textual.widgets import Input, Label, OptionList
+from textual.widgets import Input, Label, OptionList, DirectoryTree
 from textual.widgets.option_list import Option
 
 
@@ -22,6 +22,7 @@ GLOBAL_BINDINGS = [
     Binding("down", "cursor_down", "Down", show=True),
     Binding("up", "cursor_up", "Up", show=True),
     Binding("enter", "submit", "Select"),
+    Binding("ctrl+t", "toggle_tree", "Toggle View"),
     Binding("ctrl+c", "quit", "Quit"),
     Binding("escape", "dismiss", "Dismiss"),
 ]
@@ -75,6 +76,44 @@ class PathInputField(Input):
     # We explicitly bind enter here so it shows up in Footer while Input handles the event
     BINDINGS = GLOBAL_BINDINGS
 
+
+class FilteredDirectoryTree(DirectoryTree):
+    """DirectoryTree with fuzzy filter support."""
+    
+    filter_text: reactive[str] = reactive("", init=False)
+    
+    def filter_paths(self, paths):
+        """Filter paths based on current filter text."""
+        if not self.filter_text:
+            return paths
+        
+        filter_lower = self.filter_text.lower()
+        result = []
+        
+        for path in paths:
+            name_lower = path.name.lower()
+            # Fuzzy subsequence match
+            match = True
+            last_idx = -1
+            for char in filter_lower:
+                try:
+                    idx = name_lower.index(char, last_idx + 1)
+                    last_idx = idx
+                except ValueError:
+                    match = False
+                    break
+            
+            # Only show matching items (both files and directories)
+            if match:
+                result.append(path)
+        
+        return result
+    
+    def watch_filter_text(self, old_val: str, new_val: str) -> None:
+        """Reload tree when filter changes."""
+        if old_val != new_val:
+            self.reload()
+
 class PathInput(Widget):
     """
     A widget for path input with auto-completion and directory navigation.
@@ -85,6 +124,7 @@ class PathInput(Widget):
 
     path = reactive("")
     suggestions = reactive([])
+    tree_mode = reactive(False)  # Toggle between suggestion and tree mode
     
     DEFAULT_CSS = """
     PathInput {
@@ -137,6 +177,26 @@ class PathInput(Widget):
         color: $text;
         text-style: bold;
     }
+
+    /* Tree view mode */
+    PathInput > DirectoryTree {
+        display: none;
+        height: auto;
+        max-height: 15;
+        width: 100%;
+        background: $surface;
+        border: round $primary;
+        margin-top: 0;
+        padding: 0;
+    }
+
+    PathInput.tree-mode > DirectoryTree {
+        display: block;
+    }
+
+    PathInput.tree-mode > OptionList {
+        display: none;
+    }
     """
 
     
@@ -150,24 +210,50 @@ class PathInput(Widget):
         """Input cancelled."""
         pass
 
+    class TreeModeRequested(Message):
+        """User requested to switch to tree mode."""
+        def __init__(self, current_path: str) -> None:
+            self.current_path = current_path
+            super().__init__()
+
     def __init__(
         self, 
         value: str = "", 
         id: str | None = None,
-        validator: Optional[Callable[[str], Optional[str]]] = None
+        validator: Optional[Callable[[str], Optional[str]]] = None,
+        default_tree_mode: bool = True,
     ) -> None:
         super().__init__(id=id)
         self.initial_value = value
         self._suggestion_paths: List[str] = []
         self.validator = validator
+        self._default_tree_mode = default_tree_mode
 
     def compose(self) -> ComposeResult:
-        yield PathInputField(value=self.initial_value, id="path-input", placeholder="Enter path relative to ./ or absolute...")
+        yield PathInputField(value=self.initial_value, id="path-input", placeholder="Enter path... (Ctrl+T to toggle view)")
         yield OptionList(id="suggestions")
+        # Start tree at current working directory or initial value
+        start_dir = self._get_start_dir()
+        yield FilteredDirectoryTree(start_dir, id="tree-view")
+
+    def _get_start_dir(self) -> str:
+        """Get starting directory for tree view."""
+        if self.initial_value:
+            expanded = self._get_expanded_path(self.initial_value)
+            if os.path.isdir(expanded):
+                return expanded
+            elif os.path.isfile(expanded):
+                return os.path.dirname(expanded)
+        return os.getcwd()
 
     def on_mount(self) -> None:
         self.query_one(PathInputField).focus()
         self.path = self.initial_value
+        
+        # Apply default view mode
+        if self._default_tree_mode:
+            self.tree_mode = True
+            self.add_class("tree-mode")
 
     def _get_expanded_path(self, path_str: str) -> str:
         """Expand user and vars in path."""
@@ -179,7 +265,31 @@ class PathInput(Widget):
     @on(Input.Changed)
     def on_input_changed(self, event: Input.Changed) -> None:
         self.path = event.value
-        self._update_suggestions(self.path)
+        if self.tree_mode:
+            self._filter_tree(self.path)
+        else:
+            self._update_suggestions(self.path)
+
+    def _filter_tree(self, filter_text: str) -> None:
+        """Filter tree view based on input text."""
+        try:
+            tree = self.query_one("#tree-view", FilteredDirectoryTree)
+            
+            # Check if input is a valid directory path - navigate to it
+            if filter_text:
+                expanded = self._get_expanded_path(filter_text)
+                if os.path.isdir(expanded) and expanded != str(tree.path):
+                    tree.path = expanded
+                    tree.filter_text = ""  # Clear filter when navigating
+                    return
+            
+            # Otherwise, use as fuzzy filter for current directory
+            # Extract just the filename portion for filtering
+            basename = os.path.basename(filter_text) if filter_text else ""
+            tree.filter_text = basename
+        except Exception:
+            pass
+
     def _update_suggestions(self, input_path: str) -> None:
         """Scan directory and update suggestions."""
         # Hide if input is empty
@@ -241,6 +351,25 @@ class PathInput(Widget):
 
     def action_autocomplete(self) -> None:
         """Handle Tab key for completion."""
+
+        # Tree mode: Tab enters the highlighted directory or selects file
+        if self.tree_mode:
+            try:
+                tree = self.query_one("#tree-view", FilteredDirectoryTree)
+                cursor_node = tree.cursor_node
+                if cursor_node and cursor_node.data:
+                    cursor_path = cursor_node.data.path
+                    if cursor_path.is_dir():
+                        new_path = str(cursor_path) + os.sep
+                        self.query_one(PathInputField).value = new_path
+                        self.query_one(PathInputField).cursor_position = len(new_path)
+                        tree.path = cursor_path
+                        tree.filter_text = ""
+                    elif cursor_path.is_file():
+                        self._validate_and_submit(str(cursor_path))
+            except Exception:
+                pass
+            return
         # Bubble up from Input
         
         # Check if suggestions visible
@@ -265,17 +394,21 @@ class PathInput(Widget):
         
         self._apply_completion(selection)
 
-    # Navigation actions (bubbled from Input or handled by Parent if Input ignores?)
-    # Input doesn't use Up/Down, so they should bubble to PathInput.
-    def action_cursor_down(self) -> None:
-        """Move cursor in suggestion list."""
-        if self.has_class("show-suggestions"):
-            self.query_one(OptionList).action_cursor_down()
-
     def action_cursor_up(self) -> None:
-        """Move cursor in suggestion list."""
-        if self.has_class("show-suggestions"):
+        """Move cursor in suggestion list or tree."""
+        if self.tree_mode:
+            tree = self.query_one("#tree-view", FilteredDirectoryTree)
+            tree.action_cursor_up()
+        elif self.has_class("show-suggestions"):
             self.query_one(OptionList).action_cursor_up()
+
+    def action_cursor_down(self) -> None:
+        """Move cursor in suggestion list or tree."""
+        if self.tree_mode:
+            tree = self.query_one("#tree-view", FilteredDirectoryTree)
+            tree.action_cursor_down()
+        elif self.has_class("show-suggestions"):
+            self.query_one(OptionList).action_cursor_down()
 
     @on(Input.Submitted)
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -366,3 +499,43 @@ class PathInput(Widget):
 
     def action_dismiss(self) -> None:
         self.post_message(self.Cancelled())
+
+    def action_toggle_tree(self) -> None:
+        """Toggle between suggestion and tree view mode."""
+        self.tree_mode = not self.tree_mode
+        
+        if self.tree_mode:
+            self.add_class("tree-mode")
+            self.remove_class("show-suggestions")
+            # Update tree path based on current input
+            current_path = self.query_one(PathInputField).value
+            expanded = self._get_expanded_path(current_path) if current_path else os.getcwd()
+            if os.path.isdir(expanded):
+                try:
+                    tree = self.query_one("#tree-view", FilteredDirectoryTree)
+                    tree.path = expanded
+                    tree.filter_text = ""  # Clear filter when switching modes
+                except:
+                    pass
+            self.notify("Tree view mode (Ctrl+E to switch back)", severity="information")
+        else:
+            self.remove_class("tree-mode")
+            self._update_suggestions(self.path)
+            self.notify("Suggestion mode", severity="information")
+
+    @on(DirectoryTree.FileSelected)
+    def on_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
+        """Handle file selection from tree."""
+        event.stop()
+        selected_path = str(event.path)
+        self._validate_and_submit(selected_path)
+
+    @on(DirectoryTree.DirectorySelected) 
+    def on_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
+        """Handle directory selection from tree - update input field."""
+        event.stop()
+        selected_path = str(event.path) + os.sep
+        self.query_one(PathInputField).value = selected_path
+        self.query_one(PathInputField).cursor_position = len(selected_path)
+
+
