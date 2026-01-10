@@ -173,6 +173,7 @@ def load_orchestrator(patterns: List[str], build_index: bool = False, force: boo
                     'cached': True,
                     'bag_info': cached_info
                 }
+                yield ResultEvent(success=True, data=result)
             
             results.append(result)
 

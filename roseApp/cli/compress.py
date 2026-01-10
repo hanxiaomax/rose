@@ -23,7 +23,7 @@ app = typer.Typer(name="compress", help="Compress ROS bag files with different c
 
 @app.command()
 def compress(
-    input_bags: List[str] = typer.Argument(..., help="Bag file patterns (supports glob and regex)"),
+    input_bags: Optional[List[str]] = typer.Argument(None, help="Bag file patterns (supports glob and regex)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output pattern (use {input} for input filename, {timestamp} for timestamp, {compression} for compression type)"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of parallel workers (default: CPU count / 2, max 4) (NOTE: Currently runs sequentially in new architecture)"),
     compression: str = typer.Option("lz4", "--compression", "-c", help="Compression type: bz2, lz4"),
@@ -31,6 +31,7 @@ def compress(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed compression information"),
     load: bool = typer.Option(False, "--load", help="Load bags if not cached (without building index)"),
     load_index: bool = typer.Option(False, "--load-index", help="Load bags with index building if not cached"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive file selection"),
 ):
     """
     Compress ROS bag files with different compression algorithms (supports multiple files and patterns).
@@ -50,6 +51,24 @@ def compress(
         raise typer.Exit(1)
         
     try:
+        # Auto-enable interactive if no input provided
+        if not input_bags and not interactive:
+            interactive = True
+
+        # Interactive selection
+        if interactive:
+            from .interactive import select_bags_interactive
+            if not input_bags:
+                 # If no bag provided, select bag first
+                 selected_files, idx_choice = select_bags_interactive(input_bags, load_index)
+                 input_bags = selected_files
+                 if idx_choice:
+                     load_index = True
+
+        if not input_bags:
+            out.error("No bag files specified. Use arguments or --interactive.")
+            raise typer.Exit(1)
+
         # Validate compression option
         valid_compression = ["bz2", "lz4"]
         if compression not in valid_compression:

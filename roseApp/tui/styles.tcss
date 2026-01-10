@@ -1,0 +1,45 @@
+/* Global Styles */
+Screen {
+    background: $surface;
+}
+
+/* Question Widget Styles */
+Question {
+    border: heavy $accent;
+    margin: 1 2;
+}
+
+OptionItem {
+    padding: 1;
+}
+
+OptionItem:hover {
+    background: $accent 20%;
+}
+
+/* Menu Widget Styles */
+Menu {
+    align: right top;
+    offset: -2 2;
+}
+
+#menu-list {
+    background: $surface-lighten-1;
+    border: wide $secondary;
+}
+
+MenuItem {
+    padding: 1 2;
+}
+
+MenuItem:hover {
+    background: $secondary;
+    color: $text;
+}
+
+/* PathSearch Styles */
+PathSearch {
+    max-height: 50%;
+    margin: 1;
+}
+

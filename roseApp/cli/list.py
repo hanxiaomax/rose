@@ -13,8 +13,10 @@ from typing import Optional, List
 import typer
 
 from ..core.cache import get_cache
-from ..core.model import ComprehensiveBagInfo
+from ..core.model import BagInfo
 from ..core.output import get_output
+from ..tui.dialogs import ask_multi_selection
+from ..tui.widgets.question import Answer
 
 app = typer.Typer(name="list", help="List and manage cached bag files")
 
@@ -56,14 +58,54 @@ def list_export(
 
 @app.command("remove")
 def list_remove(
-    bag_path: str = typer.Argument(..., help="Bag file path or ID to remove from cache"),
+    bag_path: Optional[str] = typer.Argument(None, help="Bag file path or ID to remove from cache"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation")
 ):
     """Remove a specific bag file from cache"""
     out = get_output()
     try:
         cache = get_cache()
-        _remove_cache_entry(cache, bag_path, yes, out)
+        
+        if bag_path is None:
+            # Interactive mode
+            all_entries = _get_all_cache_entries(cache)
+            if not all_entries:
+                out.info("Cache is empty")
+                raise typer.Exit(0)
+                
+            selection_items = []
+            for idx, (key, value, _) in enumerate(all_entries, 1):
+                name = key
+                if isinstance(value, BagInfo):
+                    # Match the display format of 'rose list' somewhat
+                    bag_name = Path(getattr(value, 'file_path', key)).name
+                    name = f"[{idx}] {bag_name}"
+                else:
+                    name = f"[{idx}] {key}"
+                    
+                selection_items.append(Answer(text=name, id=str(idx)))
+            
+            selected = ask_multi_selection("Select caches to remove (Space to toggle, Enter to confirm):", selection_items)
+            
+            if not selected:
+                out.info("No cache entries selected")
+                raise typer.Exit(0)
+            
+            # Map selected numeric IDs back to Cache Keys to ensure safe deletion 
+            # (indices shift after deletion, so we can't use IDs sequentially)
+            id_to_key_map = {str(idx): key for idx, (key, _, _) in enumerate(all_entries, 1)}
+            
+            keys_to_remove = []
+            for answer in selected:
+                key = id_to_key_map.get(answer.id)
+                if key:
+                    keys_to_remove.append(key)
+            
+            for key in keys_to_remove:
+                 # We skip individual confirmation since user selected them in TUI
+                _remove_cache_entry(cache, key, True, out)
+        else:
+            _remove_cache_entry(cache, bag_path, yes, out)
     except Exception as e:
         out.error(f"Error removing cache entry: {str(e)}")
         raise typer.Exit(1)
@@ -109,7 +151,7 @@ def _show_cache_info(cache, show_content, verbose, out):
             "Memory entries": stats.get('memory_entries', 0),
             "Disk entries": stats.get('entry_count', 0),
             "Total size": f"{total_size_mb:.2f} MB",
-            "Cache directory": cache_dir
+            "Cache directory": out.format_path(cache_dir)
         })
         
         if entry_count == 0:
@@ -127,7 +169,7 @@ def _show_cache_info(cache, show_content, verbose, out):
                     "location": cache_type
                 }
                 
-                if isinstance(value, ComprehensiveBagInfo):
+                if isinstance(value, BagInfo):
                     bag_info = value
                     entry_dict.update({
                         "bag_path": str(getattr(bag_info, 'file_path', 'Unknown')),
@@ -152,12 +194,12 @@ def _show_cache_info(cache, show_content, verbose, out):
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
                 rows.append([
-                    str(e['id']),
-                    bag_name,
+                    f"[{out.theme.highlight}]{e['id']}[/{out.theme.highlight}]",
+                    f"[{out.theme.path}]{bag_name}[/{out.theme.path}]",
                     str(e.get('topics_count', '-')),
                     f"{e.get('duration_sec', 0):.1f}s",
-                    f"{e.get('size_mb', 0):.1f} MB",
-                    "Yes" if e.get('has_index') else "No",
+                    f"[{out.theme.muted}]{e.get('size_mb', 0):.1f} MB[/{out.theme.muted}]",
+                    f"[{out.theme.success}]Yes[/{out.theme.success}]" if e.get('has_index') else f"[{out.theme.muted}]No[/{out.theme.muted}]",
                     e['location']
                 ])
             out.table(None, columns, rows)
@@ -166,8 +208,11 @@ def _show_cache_info(cache, show_content, verbose, out):
             for e in entries_data:
                 bag_name = Path(e.get('bag_path', e['key'])).name
                 size_mb = e.get('size_mb', 0)
-                idx_str = " [Indexed]" if e.get('has_index') else ""
-                out.print(f"  [{e['id']}] {bag_name} ({size_mb:.1f} MB){idx_str}")
+                idx_str = f" [{out.theme.success}][Indexed][/{out.theme.success}]" if e.get('has_index') else ""
+                
+                out.print(f"  [{out.theme.highlight}][{e['id']}][/{out.theme.highlight}] "
+                         f"[{out.theme.path}]{bag_name}[/{out.theme.path}] "
+                         f"([{out.theme.muted}]{size_mb:.1f} MB[/{out.theme.muted}]){idx_str}")
         
         out.newline()
         out.info(f"Use 'rose list remove <id|path>' to remove a specific entry")
@@ -200,10 +245,10 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
         # Not a number, treat as path - need to find the ID
         identifier_path = Path(identifier)
         for idx, (key, value, cache_type) in enumerate(all_entries, 1):
-            if isinstance(value, ComprehensiveBagInfo):
+            if isinstance(value, BagInfo):
                 bag_info = value
                 bag_path = Path(getattr(bag_info, 'file_path', ''))
-                if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path):
+                if bag_path.name == identifier_path.name or str(bag_path) == str(identifier_path) or key == identifier:
                     target_entry = (key, value, cache_type)
                     target_key = key
                     target_id = idx
@@ -222,7 +267,7 @@ def _remove_cache_entry(cache, identifier, skip_confirm, out):
     entry_details = {}
     cache_size_bytes = 0
     
-    if isinstance(value, ComprehensiveBagInfo):
+    if isinstance(value, BagInfo):
         bag_info = value
         bag_name = Path(getattr(bag_info, 'file_path', key)).name
         bag_path_str = getattr(bag_info, 'file_path', 'Unknown')
@@ -339,7 +384,7 @@ def _clear_all_cache(cache, skip_confirm, out):
             'cache_file_path': None
         }
         
-        if isinstance(value, ComprehensiveBagInfo):
+        if isinstance(value, BagInfo):
             bag_info = value
             entry_info['bag_name'] = Path(getattr(bag_info, 'file_path', key)).name
             entry_info['bag_path'] = getattr(bag_info, 'file_path', 'Unknown')
@@ -407,14 +452,14 @@ def _clear_all_cache(cache, skip_confirm, out):
         
         entry_display = {
             "ID": idx,
-            "File": entry_info['bag_name'],
-            "Bag path": entry_info['bag_path'],
+            "File": out.format_path(entry_info['bag_name']),
+            "Bag path": out.format_path(entry_info['bag_path']),
             "Cache size": freed_size
         }
         
         # Add cache file path if available
         if entry_info['cache_file_path']:
-            entry_display["Cache file"] = entry_info['cache_file_path']
+            entry_display["Cache file"] = out.format_path(entry_info['cache_file_path'])
         
         out.key_value(entry_display)
         if idx < len(entries_info):  # Add separator between entries
@@ -543,7 +588,7 @@ def _prepare_export_data(all_entries, include_messages):
                 'timestamp': time.time()
             }
             
-            if isinstance(value, ComprehensiveBagInfo):
+            if isinstance(value, BagInfo):
                 entry_data['content'] = _bag_cache_to_dict(value, include_messages)
             else:
                 content_str = str(value)

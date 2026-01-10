@@ -37,13 +37,17 @@ More than mere retro styling, this approach serves as poetic resistance to digit
   - Full-featured terminal UI with Plotting and Data Tree
   - Real-time visualization with zoom/pan
   - Tabbed interface for Data and Plots
+- 🌟 **Interactive Selection Widgets**:
+  - **PathInput**: File picker with auto-completion and tree view (Ctrl+T to toggle)
+  - **Question/MultiQuestion**: Single/multi-select widgets with fuzzy search
+  - Keyboard navigation: Tab, Space, Enter, Arrow keys
 - 🌟 Multi-file batch processing with parallel workers
 - 🌟 Docker support for cross-platform usage
 - 🌟 Customizable cassette futurism theme via YAML configuration
 
 ## Documentation
 
-For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md).
+For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md) and [Detailed Design](docs/design.md).
 
 ## Getting Started
 
@@ -399,5 +403,6 @@ project_root/
 
 - **[Rich](https://rich.readthedocs.io/)**: For beautiful CLI output, tables, and progress indicators.
 - **[Typer](https://typer.tiangolo.com/)**: For building the command-line interface.
+- **[Textual](https://textual.textualize.io/)**: For building the TUI (Terminal User Interface) components.
 - **[rosbags](https://pypi.org/project/rosbags/)**: High-performance pure Python library for reading/writing ROS bags.
-- **[InquirerPy](https://github.com/kazhala/InquirerPy)**: For interactive prompts (e.g., in `inspect` command).
+- **[plotext](https://github.com/piccolomo/plotext)**: For terminal-based plotting in the inspector TUI.

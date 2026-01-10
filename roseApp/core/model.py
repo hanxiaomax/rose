@@ -327,7 +327,7 @@ class TimeRange:
 
 
 @dataclass
-class ComprehensiveBagInfo:
+class BagInfo:
     """
     Optimized comprehensive bag information data structure
     

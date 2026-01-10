@@ -1,0 +1,201 @@
+/* Global reset for interactive dialogs */
+
+Footer {
+    margin-top: 1;
+}
+
+Hints {
+    background: transparent;
+    width: 100%;
+    display: block;
+    text-align: left;
+}
+
+/* --- PathInput --- */
+
+PathInput {
+    height: auto;
+    width: 100%;
+    background: $surface;
+}
+
+PathInput > Input {
+    width: 100%;
+    border: round $primary;
+    padding: 0 1;
+    background: $surface;
+    height: auto;
+    margin: 0;
+}
+
+PathInput > Input:focus {
+    border: none;
+    background: $surface;
+    padding: 0;
+    margin: 0;
+}
+
+PathInput > OptionList {
+    height: auto;
+    max-height: 10;
+    width: 100%;
+    display: none;
+    background: $surface;
+    border: none;
+    margin-top: 0;
+    padding: 0;
+}
+
+PathInput.show-suggestions > OptionList {
+    display: block;
+    border: round $primary;
+    margin-top: 0;
+}
+
+/* When suggestions are shown, merge borders */
+PathInput.show-suggestions > Input {
+    border: none;
+    height: auto;
+}
+
+PathInput > OptionList > .option-list--option-highlighted {
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+
+/* --- MultiQuestion --- */
+
+MultiQuestion {
+    width: 1fr;
+    height: auto;
+    padding: 0 1;
+    background: transparent;
+}
+
+MultiQuestion #prompt {
+    margin-bottom: 1;
+    color: $text-primary;
+}
+
+MultiQuestion.-blink MultiOption.-active #caret {
+    opacity: 0.2;
+}
+
+MultiQuestion:blur #checkbox,
+MultiQuestion:blur #caret {
+    opacity: 0.3;
+}
+
+/* MultiOption styles */
+MultiOption {
+    background: transparent;
+    color: $text-muted;
+}
+
+MultiOption:hover {
+    background: $boost;
+}
+
+MultiOption #caret {
+    visibility: hidden;
+    padding: 0 1;
+}
+
+MultiOption #checkbox {
+    padding-right: 1;
+}
+
+MultiOption #label {
+    width: 1fr;
+}
+
+MultiOption.-active {            
+    color: $text-accent;
+}
+
+MultiOption.-active #caret {
+    visibility: visible;
+}
+
+MultiOption.-checked {
+    /* No text color change for checked, keep default */
+}
+
+MultiOption.-checked #checkbox {
+    color: $accent;
+}
+
+
+/* --- Question --- */
+
+Question {
+    width: 1fr;
+    height: auto;
+    padding: 0 1; 
+    background: transparent;
+}
+
+Question #prompt {
+    margin-bottom: 1;
+    color: $text-primary;
+}
+
+Question.-blink Option.-active #caret {
+    opacity: 0.2;
+}
+
+Question:blur #index,
+Question:blur #caret {
+    opacity: 0.3;
+}
+
+/* Question Option styles */
+Option {
+    background: transparent;
+    color: $text-muted;
+}
+
+Option:hover {
+    background: $boost;
+}
+
+Option #caret {
+    visibility: hidden;
+    padding: 0 1;
+}
+
+Option #index {
+    padding-right: 1;
+}
+
+Option #label {
+    width: 1fr;
+}
+
+Option.-active {            
+    color: $text-accent;
+}
+
+Option.-active #caret {
+    visibility: visible;
+}
+
+Option.-selected {
+    opacity: 0.5;
+}
+
+Option.-active.-selected {
+    opacity: 1.0;
+    background: transparent;
+    color: $text-accent;            
+}
+
+Option.-active.-selected #label {
+    text-style: underline;
+}
+
+Option.-active.-selected #caret {
+    visibility: hidden;
+}

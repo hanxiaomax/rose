@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import logging
 
 from roseApp.core.logging import get_logger
-from .model import ComprehensiveBagInfo
+from .model import BagInfo
 from .config import get_cache_dir
 
 _logger = get_logger("cache")
@@ -21,7 +21,7 @@ _logger = get_logger("cache")
 
 # ===== UNIFIED CACHE SYSTEM =====
 
-class UnifiedCache:
+class Cache:
     """Simplified cache system with file persistence"""
     
     def __init__(self, cache_dir: Optional[Path] = None):
@@ -31,7 +31,7 @@ class UnifiedCache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        _logger.debug(f"Initialized UnifiedCache with dir: {cache_dir}")
+        _logger.debug(f"Initialized Cache with dir: {cache_dir}")
     
     def _get_file_path(self, key: str) -> Path:
         """Get file path for cache key"""
@@ -89,7 +89,7 @@ class UnifiedCache:
         """Generate cache key for bag file"""
         return f"bag_{hashlib.md5(str(bag_path.absolute()).encode()).hexdigest()}"
     
-    def get_bag_analysis(self, bag_path: Path) -> Optional[ComprehensiveBagInfo]:
+    def get_bag_analysis(self, bag_path: Path) -> Optional[BagInfo]:
         """Get cached bag analysis data"""
         if not bag_path.exists():
             return None
@@ -97,7 +97,7 @@ class UnifiedCache:
         cache_key = self.get_bag_cache_key(bag_path)
         cached_data = self.get(cache_key)
         
-        if cached_data and isinstance(cached_data, ComprehensiveBagInfo):
+        if cached_data and isinstance(cached_data, BagInfo):
             # Validate cache against current file state
             stat = bag_path.stat()
             if (cached_data.file_size == stat.st_size and 
@@ -110,7 +110,7 @@ class UnifiedCache:
         
         return None
     
-    def put_bag_analysis(self, bag_path: Path, bag_info: ComprehensiveBagInfo, **kwargs) -> None:
+    def put_bag_analysis(self, bag_path: Path, bag_info: BagInfo, **kwargs) -> None:
         """Store bag analysis data in cache"""
         if not bag_path.exists():
             return
@@ -140,14 +140,14 @@ class UnifiedCache:
 
 # ===== GLOBAL CACHE INSTANCE =====
 
-_global_cache: Optional[UnifiedCache] = None
+_global_cache: Optional[Cache] = None
 
 
-def get_cache() -> UnifiedCache:
+def get_cache() -> Cache:
     """Get or create global cache instance"""
     global _global_cache
     if _global_cache is None:
-        _global_cache = UnifiedCache()
+        _global_cache = Cache()
     return _global_cache
 
 
@@ -161,14 +161,14 @@ def get_cache_stats() -> Dict[str, Any]:
 class BagCacheManager:
     """Simplified interface for bag-specific caching operations"""
     
-    def __init__(self, cache: Optional[UnifiedCache] = None):
+    def __init__(self, cache: Optional[Cache] = None):
         self.cache = cache or get_cache()
     
-    def get_analysis(self, bag_path: Path) -> Optional[ComprehensiveBagInfo]:
+    def get_analysis(self, bag_path: Path) -> Optional[BagInfo]:
         """Get cached bag analysis"""
         return self.cache.get_bag_analysis(bag_path)
     
-    def put_analysis(self, bag_path: Path, bag_info: ComprehensiveBagInfo, **kwargs) -> None:
+    def put_analysis(self, bag_path: Path, bag_info: BagInfo, **kwargs) -> None:
         """Store bag analysis in cache"""
         self.cache.put_bag_analysis(bag_path, bag_info)
     

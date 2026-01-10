@@ -29,7 +29,8 @@ def load(
     verbose: Optional[bool] = typer.Option(None, "--verbose", "-v", help="Show detailed loading information (default: from config)"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be loaded without actually loading"),
-    build_index: Optional[bool] = typer.Option(None, "--build-index", help="Build message index as pandas DataFrame (default: from config)")
+    build_index: Optional[bool] = typer.Option(None, "--build-index", help="Build message index as pandas DataFrame (default: from config)"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive file selection with path completion")
 ):
     """
     Load ROS bag files into cache for faster operations.
@@ -45,11 +46,23 @@ def load(
         # Get configuration with defaults
         config = get_config()
         
+        # Auto-enable interactive if no input provided
+        if not input and not interactive:
+            interactive = True
+
+        # Interactive selection
+        if interactive:
+            from .interactive import select_bags_interactive
+            selected_files, idx_choice = select_bags_interactive(input, build_index, ignore_cache=True)
+            input = selected_files
+            if idx_choice:
+                build_index = True
+        
         # Check for input
         if not input:
             out.error(
                 "No bag files specified",
-                details="Provide bag file patterns: rose load '*.bag'"
+                details="Provide bag file patterns: rose load '*.bag' or use --interactive"
             )
             raise typer.Exit(1)
         
@@ -139,17 +152,17 @@ def load(
                             if loaded:
                                 loaded_count += 1
                                 level = res.get('level', 'unknown')
-                                steps.complete_item(bag_path, f"Loaded {os.path.basename(bag_path)}", status="done", details=f"({level}, {elapsed:.2f}s)")
+                                steps.complete_item(bag_path, f"Loaded {out.format_path(bag_path)}", status="done", details=f"({level}, {elapsed:.2f}s)")
                             elif cached:
                                 cached_count += 1
-                                steps.complete_item(bag_path, f"Cached {os.path.basename(bag_path)}", status="skip", details="(cached)")
+                                steps.complete_item(bag_path, f"Skipped {out.format_path(bag_path)}", status="skip", details="(already cached)")
                             else:
                                 # Fallback
                                 loaded_count += 1
-                                steps.complete_item(bag_path, f"Processed {os.path.basename(bag_path)}", status="done")
+                                steps.complete_item(bag_path, f"Processed {out.format_path(bag_path)}", status="done")
                         else:
                             error_count += 1
-                            steps.error_item(bag_path, f"Failed {os.path.basename(bag_path)}", error=msg)
+                            steps.error_item(bag_path, f"Failed {out.format_path(bag_path)}", error=msg)
                         
                         results.append(res)
         
