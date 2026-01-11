@@ -28,11 +28,11 @@ app = typer.Typer(help="ROS bag filter utility - A powerful tool for ROS bag man
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context):
     """ROS bag filter utility - A powerful tool for ROS bag manipulation"""
-    # If no subcommand is provided, show error
+    # If no subcommand is provided, launch interactive TUI
     if ctx.invoked_subcommand is None:
-        out = get_output()
-        out.error("No command specified", details="Use --help for usage")
-        raise typer.Exit(1)
+        from roseApp.tui.main_app import main_tui_loop
+        main_tui_loop()
+        raise typer.Exit(0)
 
 
 # Add subcommands

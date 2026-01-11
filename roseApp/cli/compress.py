@@ -58,19 +58,63 @@ def compress(
         # Interactive selection
         if interactive:
             from .interactive import select_bags_interactive
+            from ..tui.dialogs import ask_question
+            from ..tui.widgets.question import Answer
+            from ..core.config import get_config
+            
             if not input_bags:
                  # If no bag provided, select bag first
                  selected_files, idx_choice = select_bags_interactive(input_bags, load_index)
                  input_bags = selected_files
                  if idx_choice:
                      load_index = True
+            
+            # Ask for compression algorithm
+            config = get_config()
+            default_algo = getattr(config, 'compression_default', 'lz4') or 'lz4'
+            
+            # Build options with default first
+            valid_algorithms = ["lz4", "bz2", "none"]
+            algo_descriptions = {
+                "lz4": "LZ4 (Fast, good compression)",
+                "bz2": "BZ2 (Slower, better compression)",
+                "none": "No compression (uncompressed)"
+            }
+            
+            options = []
+            # Add default first
+            if default_algo in valid_algorithms:
+                options.append(Answer(
+                    f"{algo_descriptions.get(default_algo, default_algo)} [default]", 
+                    default_algo
+                ))
+            
+            # Add other options
+            for algo in valid_algorithms:
+                if algo != default_algo:
+                    options.append(Answer(algo_descriptions.get(algo, algo), algo))
+            
+            # Add cancel option
+            options.append(Answer("Cancel", "cancel"))
+            
+            out.newline()
+            algo_answer = ask_question(
+                question="Select compression algorithm:",
+                options=options
+            )
+            
+            if not algo_answer or algo_answer.id == "cancel":
+                out.info("Cancelled")
+                raise typer.Exit(0)
+            
+            compression = algo_answer.id
 
         if not input_bags:
             out.error("No bag files specified. Use arguments or --interactive.")
             raise typer.Exit(1)
 
         # Validate compression option
-        valid_compression = ["bz2", "lz4"]
+        valid_compression = ["bz2", "lz4", "none"]
         if compression not in valid_compression:
             out.error(
                 f"Invalid compression: {compression}",

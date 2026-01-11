@@ -345,12 +345,6 @@ Rose uses a simple YAML-based theme system to customize UI colors. By default, R
 
    ```
    
-## Documentation
-
-*   [**API Reference**](roseApp/docs/api_reference.md): Detailed module documentation.
-*   [**Configuration Guide**](roseApp/docs/configuration.md): Settings and options.
-*   [**Theming & Colors**](roseApp/docs/theming.md): Customizing the look and feel (Base16 support).
-
 ## Development
 
 ### Run locally
@@ -382,17 +376,27 @@ project_root/
 │   │   ├── compress.py     # Compress command
 │   │   ├── inspect.py      # Inspect command
 │   │   ├── list.py         # List/Cache command
-│   │   └── config.py       # Config command
+│   │   ├── config.py       # Config command
+│   │   └── interactive.py  # Interactive mode helpers
 │   ├── core/               # Core functionality
 │   │   ├── parser.py       # Bag file reader (BagReader)
 │   │   ├── writer.py       # Bag file writer (BagWriter)
 │   │   ├── pipeline.py     # Command orchestration
-│   │   ├── steps.py        # Progress tracking
 │   │   ├── cache.py        # Caching system
 │   │   ├── events.py       # Event system
-│   │   ├── output.py       # UI/Output
-│   │   └── ...
-│   ├── tests/              # Test files
+│   │   ├── model.py        # Data models
+│   │   ├── config.py       # Configuration management
+│   │   └── output.py       # UI/Output
+│   ├── tui/                # TUI applications
+│   │   ├── inspect_app.py  # Bag inspector TUI
+│   │   ├── config_app.py   # Configuration TUI
+│   │   ├── list_app.py     # Cache management TUI
+│   │   ├── dialogs.py      # Modal dialogs
+│   │   └── widgets/        # Custom TUI widgets
+│   │       ├── question.py       # Single-select widget
+│   │       ├── multi_question.py # Multi-select widget
+│   │       └── path_search.py    # File picker widget
+│   └── tests/              # Test files
 ├── docker/                 # Docker support
 ├── docs/                   # Documentation
 ├── pyproject.toml          # Project metadata and dependencies

@@ -8,6 +8,22 @@ This document covers the low-level design of the Rose application, including cla
 
 ```mermaid
 classDiagram
+    class AnalysisLevel {
+        <<enumeration>>
+        NONE
+        QUICK
+        INDEX
+    }
+
+    class TimeRange {
+        +Tuple[int, int] start_time
+        +Tuple[int, int] end_time
+        +get_start_ns() int
+        +get_end_ns() int
+        +get_duration_seconds() float
+        +contains_time(timestamp) bool
+    }
+
     class BagInfo {
         +str file_path
         +int file_size
@@ -27,12 +43,28 @@ classDiagram
         +float message_frequency
         +int total_size_bytes
         +List~MessageIndex~ message_index
+        +set_dataframe(df)
+        +get_dataframe()
+        +get_statistics_summary()
     }
 
-    class MsgTypeInfo {
-        +str name
-        +List~FieldInfo~ fields
+    class MessageTypeInfo {
+        +str message_type
+        +str definition
+        +str md5sum
+        +List~MessageFieldInfo~ fields
         +get_all_field_paths() List~str~
+        +find_field(name)
+    }
+
+    class MessageFieldInfo {
+        +str field_name
+        +str field_type
+        +bool is_array
+        +int array_size
+        +bool is_builtin
+        +List~MessageFieldInfo~ nested_fields
+        +get_flattened_paths(prefix)
     }
 
     class Cache {
@@ -44,7 +76,10 @@ classDiagram
     }
 
     BagInfo *-- TopicInfo : contains
-    BagInfo *-- MsgTypeInfo : contains
+    BagInfo *-- MessageTypeInfo : contains
+    BagInfo *-- TimeRange : contains
+    BagInfo --> AnalysisLevel : uses
+    MessageTypeInfo *-- MessageFieldInfo : contains
     Cache ..> BagInfo : manages
 ```
 
@@ -244,6 +279,65 @@ sequenceDiagram
     Reader-->>App: List[Timestamp, Value]
     App->>Plot: update_plot(x, y)
     Plot-->>User: Render ASCII chart
+```
+
+### 5. Config TUI Workflow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as config.py
+    participant App as ConfigApp
+    participant Config as ConfigManager
+    participant File as YAML File
+
+    User->>CLI: rose config
+    CLI->>App: Launch ConfigApp
+    App->>Config: load_config()
+    Config->>File: Read YAML
+    File-->>Config: Config data
+    Config-->>App: AppConfig object
+    App-->>User: Display settings form
+    
+    loop Edit Settings
+        User->>App: Modify value
+        App->>App: Mark as modified
+    end
+    
+    User->>App: Press Ctrl+S (Save)
+    App->>Config: save_config(modified)
+    Config->>File: Write YAML
+    File-->>Config: Success
+    App-->>User: Show save confirmation
+```
+
+### 6. List TUI Workflow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as list.py
+    participant App as ListApp
+    participant Mgr as BagCacheManager
+    participant Cache as Cache
+
+    User->>CLI: rose list
+    CLI->>App: Launch ListApp
+    App->>Mgr: list_cached_bags()
+    Mgr->>Cache: get_all_entries()
+    Cache-->>Mgr: List[CacheEntry]
+    Mgr-->>App: Bag info list
+    App-->>User: Display cache table
+    
+    User->>App: Select bag entry
+    App->>App: Show details panel
+    
+    alt Remove Entry
+        User->>App: Press Delete
+        App->>Mgr: remove_entry(bag_path)
+        Mgr->>Cache: delete(key)
+        App-->>User: Update table
+    end
 ```
 
 ## Key Bindings Summary

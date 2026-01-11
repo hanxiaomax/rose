@@ -58,6 +58,16 @@ class SettingRow(VerticalGroup):
         color: $warning;
         text-style: bold;
     }
+    
+    SettingRow #modified-marker {
+        display: none;
+        color: $warning;
+        margin-left: 1;
+    }
+    
+    SettingRow.-modified #modified-marker {
+        display: block;
+    }
     """
     
     class Selected(Message):
@@ -71,6 +81,7 @@ class SettingRow(VerticalGroup):
         self.key = key
         self.label_text = label
         self.current_value = value
+        self.original_value = value  # Track original value
         self.setting_type = setting_type  # "toggle", "select", "path", "input"
         self.options = options or []
         
@@ -80,14 +91,23 @@ class SettingRow(VerticalGroup):
             padded_label = self.label_text.ljust(self.LABEL_WIDTH)
             yield Label(padded_label, id="label")
             yield Label(self._format_value(), id="value")
+            yield Label("●", id="modified-marker")
     
     def _format_value(self) -> str:
         if self.setting_type == "toggle":
             return "[ON]" if self.current_value else "[OFF]"
         return str(self.current_value)
     
+    def _update_modified_state(self) -> None:
+        """Update modified class based on current vs original value."""
+        if self.current_value != self.original_value:
+            self.add_class("-modified")
+        else:
+            self.remove_class("-modified")
+    
     def update_display(self) -> None:
         self.query_one("#value", Label).update(self._format_value())
+        self._update_modified_state()
     
     def toggle(self) -> bool:
         """Toggle value if this is a toggle type. Returns True if toggled."""
@@ -412,11 +432,30 @@ class ConfigApp(App):
         background: $surface;
     }
     
+    #header-row {
+        height: auto;
+        width: 100%;
+        align: center middle;
+        padding: 1 0;
+    }
+    
     #title {
         text-align: center;
         text-style: bold;
         color: $primary;
-        padding: 1 0;
+    }
+    
+    #modified-pill {
+        display: none;
+        margin-left: 2;
+        padding: 0 1;
+        background: $warning;
+        color: $surface;
+        text-style: bold;
+    }
+    
+    #modified-pill.-visible {
+        display: block;
     }
     
     #hint {
@@ -471,17 +510,21 @@ class ConfigApp(App):
     _dirty: reactive[bool] = reactive(False)
 
     def watch__dirty(self, dirty: bool) -> None:
-        """Update title when dirty state changes."""
+        """Update modified pill visibility when dirty state changes."""
         try:
-            title = "Rose Configuration"
+            pill = self.query_one("#modified-pill", Label)
             if dirty:
-                title += " [yellow][Modified][/yellow]"
-            self.query_one("#title", Label).update(title)
+                pill.add_class("-visible")
+            else:
+                pill.remove_class("-visible")
         except Exception:
             pass
     
     def compose(self) -> ComposeResult:
-        yield Label("Rose Configuration", id="title", markup=True)
+        from textual.containers import Horizontal
+        with Horizontal(id="header-row"):
+            yield Label("Rose Configuration", id="title")
+            yield Label("MODIFIED", id="modified-pill")
         yield Label("Tab Switch  Space Toggle  Enter Edit/Save  Esc Cancel", id="hint")
         
         # Build settings
@@ -588,7 +631,8 @@ class ConfigApp(App):
     def _show_select_dialog(self, setting: SettingRow) -> None:
         """Show select dialog for setting."""
         def handle_result(result: Optional[str]) -> None:
-            if result is not None:
+            if result is not None and result != str(setting.current_value):
+                self._dirty = True
                 # Convert to int if needed
                 value = result
                 if setting.key in ["parallel_workers", "memory_limit_mb"]:

@@ -21,6 +21,7 @@ graph TD
         CmdLoad["load.py"]
         CmdCompress["compress.py"]
         CmdList["list.py"]
+        CmdConfig["config.py"]
         Interactive["interactive.py"]
     end
     
@@ -36,6 +37,8 @@ graph TD
     
     subgraph "TUI Layer"
         InspectApp["InspectApp"]
+        ConfigApp["ConfigApp"]
+        ListApp["ListApp"]
         Dialogs["Dialogs"]
         Widgets["Widgets"]
     end
@@ -49,6 +52,8 @@ graph TD
     User --> CmdInspect
     User --> CmdExtract
     User --> CmdLoad
+    User --> CmdConfig
+    User --> CmdList
     
     CmdInspect --> Orchestrator
     CmdExtract --> Orchestrator
@@ -65,7 +70,11 @@ graph TD
     BagMgr --> Reader
     
     CmdInspect -.->|Interactive| InspectApp
+    CmdConfig -.->|Interactive| ConfigApp
+    CmdList -.->|Interactive| ListApp
     InspectApp --> BagMgr
+    ConfigApp --> Config
+    ListApp --> BagMgr
 ```
 
 ## Component Details
@@ -98,6 +107,8 @@ graph TD
 | Component     | File                        | Description                        |
 | ------------- | --------------------------- | ---------------------------------- |
 | InspectApp    | `inspect_app.py`            | Main TUI inspector application     |
+| ConfigApp     | `config_app.py`             | Configuration management TUI       |
+| ListApp       | `list_app.py`               | Cache management TUI               |
 | Dialogs       | `dialogs.py`                | Modal dialogs for user interaction |
 | Question      | `widgets/question.py`       | Single-select prompt widget        |
 | MultiQuestion | `widgets/multi_question.py` | Multi-select prompt widget         |
