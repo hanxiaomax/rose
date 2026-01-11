@@ -129,11 +129,28 @@ class Question(Widget, can_focus=True):
 
     BINDING_GROUP_TITLE = "Question"
     ALLOW_SELECT = False
+    
+    # Map answer kinds to display keys
+    DEFAULT_KINDS = {
+        "allow_once": "y",
+        "allow_always": "a", 
+        "reject": "n",
+        "modify": "m",
+        # Add shortcut keys for main menu
+        "l": "l",
+        "i": "i",
+        "e": "e",
+        "c": "c",
+        "m": "m",
+        "o": "o",
+        "q": "q",
+    }
+    
     BINDINGS = [
         Binding("up", "selection_up", "Up"),
         Binding("down", "selection_down", "Down"),
         Binding("enter", "select", "Select"),
-            Binding("escape", "quit", "Cancel"),
+        Binding("escape", "quit", "Cancel"),
     ]
 
     DEFAULT_CSS = """

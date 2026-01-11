@@ -24,36 +24,28 @@ app = typer.Typer(name="list", help="List and manage cached bag files")
 @app.callback(invoke_without_command=True)
 def list_default(
     ctx: typer.Context,
-    show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
+    show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content (CLI mode)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information (CLI mode)")
 ):
     """List all cached bag files (default command)"""
     if ctx.invoked_subcommand is None:
         out = get_output()
         try:
+            # If no flags passed, launch TUI
+            if not show_content and not verbose:
+                from ..tui.list_app import run_list_app
+                run_list_app()
+                raise typer.Exit(0)
+            
+            # Otherwise, show CLI output
             cache = get_cache()
             _show_cache_info(cache, show_content, verbose, out)
         except Exception as e:
+            if isinstance(e, typer.Exit):
+                raise
             out.error(f"Error showing cache: {str(e)}")
             raise typer.Exit(1)
 
-
-@app.command("export")
-def list_export(
-    output_file: str = typer.Argument(..., help="Output file path"),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="Cache key or bag file name to export"),
-    bag_path: Optional[str] = typer.Option(None, "--bag", "-b", help="Original bag file path to find cache for"),
-    format: str = typer.Option("json", "--format", "-f", help="Export format: json, yaml, pickle"),
-    include_messages: bool = typer.Option(False, "--messages", "-m", help="Include cached message data")
-):
-    """Export cache entries to file"""
-    out = get_output()
-    try:
-        cache = get_cache()
-        _export_cache_entries(cache, output_file, name, bag_path, format, include_messages, out)
-    except Exception as e:
-        out.error(f"Error exporting cache: {str(e)}")
-        raise typer.Exit(1)
 
 
 @app.command("remove")
