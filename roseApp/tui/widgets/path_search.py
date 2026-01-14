@@ -341,7 +341,7 @@ class PathInput(Widget):
     def action_autocomplete(self) -> None:
         """Handle Tab key for completion."""
 
-        # Tree mode: Tab always completes to first match in filter results
+        # Tree mode: Tab completes based on cursor position
         if self.tree_mode:
             try:
                 tree = self.query_one("#tree-view", FilteredDirectoryTree)
@@ -349,17 +349,31 @@ class PathInput(Widget):
                 tree_path = Path(tree.path)
                 filter_text = tree.filter_text or ""
                 
-                if tree_path.is_dir():
+                # First, check if cursor is on a specific node
+                cursor_node = tree.cursor_node
+                if cursor_node is not None and cursor_node.data and hasattr(cursor_node.data, 'path'):
+                    selected_path = cursor_node.data.path
+                    if selected_path.is_dir():
+                        new_path = str(selected_path) + os.sep
+                        input_field.value = new_path
+                        input_field.cursor_position = len(new_path)
+                        tree.path = selected_path
+                        tree.filter_text = ""
+                    else:
+                        new_path = str(selected_path)
+                        input_field.value = new_path
+                        input_field.cursor_position = len(new_path)
+                        self.notify(f"Completed: {selected_path.name}. Press Enter to confirm.", severity="information")
+                    return
+                
+                # No cursor selection: fall back to first match if filter is active
+                if tree_path.is_dir() and filter_text:
                     # Find matching items using prefix matching (Linux-style)
                     matches = []
                     filter_lower = filter_text.lower()
                     
                     try:
                         for item in tree_path.iterdir():
-                            if not filter_lower:
-                                matches.append(item)
-                                continue
-                            
                             name_lower = item.name.lower()
                             # Linux-style prefix match
                             if name_lower.startswith(filter_lower):
@@ -384,7 +398,7 @@ class PathInput(Widget):
                             input_field.cursor_position = len(new_path)
                             self.notify(f"Completed: {first_match.name}. Press Enter to confirm.", severity="information")
                         return
-                    elif filter_text:
+                    else:
                         self.notify(f"No match for: {filter_text}", severity="warning")
                         return
             except Exception:

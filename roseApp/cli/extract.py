@@ -97,10 +97,13 @@ def extract(
             all_topics = set()
             manager = create_bag_cache_manager()
             
+            # Resolve all files to absolute paths for consistent cache lookup
+            files = [f.resolve() for f in files]
+            
             with out.spinner("Scanning bags for topics..."):
                 for f in files:
                     try:
-                        # Try cache first
+                        # Try cache first (using absolute path)
                         info = manager.get_analysis(f)
                         if info and info.topics:
                             for t in info.topics:
