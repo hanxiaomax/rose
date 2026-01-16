@@ -126,6 +126,7 @@ def select_bags_interactive(
 
     # Process Selection
     final_files = []
+    cached_files = []  # Track files from cache (already loaded)
     launch_picker = False
     
     for val in selected_values:
@@ -133,6 +134,7 @@ def select_bags_interactive(
             launch_picker = True
         elif val: # Valid cached path
             final_files.append(val)
+            cached_files.append(val)  # Mark as from cache
             
     if launch_picker:
         # Launch File Picker Logic
@@ -160,6 +162,30 @@ def select_bags_interactive(
         out.print(f"  - {out.format_path(f)}")
     if len(final_files) > display_limit:
         out.print(f"  ... and {len(final_files)-display_limit} more")
+    
+    # If ALL files are from cache, skip the load prompt entirely
+    all_from_cache = set(final_files) == set(cached_files) and len(cached_files) > 0
+    
+    if all_from_cache:
+        # Check if all cached bags have index
+        all_indexed = False
+        try:
+            cache = get_cache()
+            indexed_count = 0
+            for fpath in final_files:
+                bag_p = Path(fpath)
+                if hasattr(cache, 'get_bag_analysis'):
+                    info = cache.get_bag_analysis(bag_p)
+                    if info and info.has_message_index():
+                        indexed_count += 1
+            
+            if indexed_count == len(final_files):
+                all_indexed = True
+        except:
+            pass
+        
+        out.info("Using cached bags (already loaded).")
+        return final_files, all_indexed
     
     # Check if all selected bags are already indexed in cache
     all_indexed = False

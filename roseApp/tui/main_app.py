@@ -14,6 +14,25 @@ from .theme import ALL_THEMES
 from ..core.config import get_config
 
 
+# Package Info - read from pyproject.toml via importlib.metadata
+try:
+    from importlib.metadata import metadata
+    _meta = metadata("rose-bag")
+    __version__ = _meta.get("Version", "dev")
+    # Author is in Author-email format: "Name <email>" or just in Author
+    _author_email = _meta.get("Author-email", "")
+    if _author_email and "<" in _author_email:
+        __author__ = _author_email.split("<")[0].strip()
+    else:
+        __author__ = _meta.get("Author", "Lingfeng_ai")
+    # Extract repo from project URLs
+    _urls = _meta.get_all("Project-URL") or []
+    __repo__ = next((u.split(", ")[1] for u in _urls if u.startswith("Homepage")), "")
+except Exception:
+    __version__ = "dev"
+    __author__ = "Lingfeng_ai"
+    __repo__ = "https://github.com/hanxiaomax/rose"
+
 # ASCII Art Banner
 ROSE_BANNER = r"""
   ██████╗  ██████╗ ███████╗███████╗
@@ -45,6 +64,12 @@ class MainApp(App):
     }
     
     #subtitle {
+        text-align: center;
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+    
+    #info {
         text-align: center;
         color: $text-muted;
         margin-bottom: 2;
@@ -91,6 +116,7 @@ class MainApp(App):
         with Vertical(id="banner-container"):
             yield Static(ROSE_BANNER, id="banner")
             yield Label("Yet Another ROS Bag Picker & Analyzer", id="subtitle")
+            yield Label(f"v{__version__} · {__author__} · {__repo__}", id="info")
         
         with Container(id="menu-container"):
             yield Question(
