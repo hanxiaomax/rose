@@ -157,6 +157,7 @@ class ListApp(App):
     ENABLE_COMMAND_PALETTE = False
     
     BINDINGS = [
+        Binding("space", "show_details", "Details", show=True),
         Binding("d", "delete_selected", "Delete", show=True),
         Binding("delete", "delete_selected", "Delete", show=False),
         Binding("r", "refresh", "Refresh", show=True),
@@ -230,7 +231,7 @@ class ListApp(App):
             table.cursor_type = "row"
             yield table
         
-        yield Label("↑↓ Navigate  D Delete  R Refresh  C Clear All  Esc Exit", id="hint")
+        yield Label("↑↓ Navigate  Space Details  D Delete  R Refresh  C Clear All  Esc Exit", id="hint")
         yield Footer()
     
     def _get_stats_text(self) -> str:
@@ -284,6 +285,36 @@ class ListApp(App):
         self._load_entries()
         self._populate_table()
         self.notify("Cache refreshed", severity="information")
+    
+    def action_show_details(self) -> None:
+        """Show details for the currently selected cache entry."""
+        table = self.query_one("#cache-table", DataTable)
+        
+        if not table.row_count:
+            self.notify("No entries to show", severity="warning")
+            return
+        
+        row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+        if row_key is None:
+            return
+        
+        # Find entry by key
+        entry = next((e for e in self.entries if e.key == row_key.value), None)
+        if not entry:
+            return
+        
+        # Build details message
+        index_status = "Yes" if entry.has_index else "No"
+        details = (
+            f"File: {entry.bag_name}\n"
+            f"Path: {entry.bag_path}\n"
+            f"Size: {entry.size_mb:.2f} MB\n"
+            f"Topics: {entry.topics_count}\n"
+            f"Duration: {entry.duration_sec:.2f}s\n"
+            f"Message Index: {index_status}"
+        )
+        
+        self.notify(details, title="Bag Details", timeout=10)
     
     def action_delete_selected(self) -> None:
         """Delete selected cache entry."""
