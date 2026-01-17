@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 # Parse command line arguments for test scripts
 parse_test_args() {
     # Default values
-    DEFAULT_TEST_BAG="roseApp/tests/test.bag"
+    DEFAULT_TEST_BAG="roseApp/tests/bash_tests/demo.bag"
     TEST_BAG="$DEFAULT_TEST_BAG"
     VERBOSE_TESTS=false
     
