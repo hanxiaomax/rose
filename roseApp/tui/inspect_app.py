@@ -7,11 +7,18 @@ except ImportError:
     PLOTEXT_AVAILABLE = False
     from textual.widgets import Static
     class PlotextPlot(Static):
+        """Fallback widget when textual-plotext is not installed."""
         def __init__(self, *args, **kwargs):
-            super().__init__("Plotting requires 'textual-plotext'.\nInstall with: pip install textual-plotext", *args, **kwargs)
+            super().__init__(
+                "Plotting requires 'textual-plotext'.\nInstall with: pip install textual-plotext",
+                *args, **kwargs
+            )
             self.plt = None
 
-from textual.widgets import Header, Footer, Input, Label, Static, Button, ListView, ListItem, Tree, TabbedContent, TabPane
+from textual.widgets import (
+    Header, Footer, Input, Label, Static, Button, ListView, ListItem,
+    Tree, TabbedContent, TabPane
+)
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.message import Message
@@ -22,14 +29,16 @@ from rich.text import Text
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from itertools import islice
+import logging
 import re
 from typing import Optional, List, Tuple, Any
 from datetime import datetime
 
 from ..core.model import BagInfo, TopicInfo
 from ..core.output import ThemeColors
-from ..core.config import get_config
-from .theme import ALL_THEMES
+from .theme import setup_app_theme
+
+logger = logging.getLogger(__name__)
 
 class Timeline(Static):
     """Interactive timeline widget."""
@@ -63,6 +72,9 @@ class Timeline(Static):
 
 class SearchModal(ModalScreen[Tuple[Optional[str], str]]):
     """Modal screen for searching topics and fields."""
+
+    # Configuration constants
+    MAX_SEARCH_RESULTS = 100
 
     CSS = """
     SearchModal {
@@ -170,7 +182,7 @@ class SearchModal(ModalScreen[Tuple[Optional[str], str]]):
             matches.sort(key=lambda x: (-x[0], x[1]))
             
             # Increased limit to 100
-            for _, display_name, topic, field_filter in matches[:100]:
+            for _, display_name, topic, field_filter in matches[:self.MAX_SEARCH_RESULTS]:
                 item_value = f"{topic.name}|{field_filter}"
                 # If user typed an index, append it to the filter for the result
                 # This is tricky: we matched "foo" against "foo", but user wanted "foo[1]".
@@ -445,10 +457,13 @@ class InspectApp(App):
     current_field_filter = reactive("")
     current_plot_field: str = ""
     
-    # Plotting Data
     plot_data_x: List[float] = []
     plot_data_y: List[float] = []
     current_plot_point: Optional[Tuple[float, float]] = None
+
+    # Configuration constants
+    MAX_PLOT_POINTS = 500
+    ARRAY_COLLAPSE_THRESHOLD = 20
 
     def _get_field_value(self, msg: Any, path: str) -> Tuple[Any, bool]:
         """
@@ -490,30 +505,17 @@ class InspectApp(App):
 
     SearchItem = Tuple[str, TopicInfo, str]
 
-    def __init__(self, bag_path: str, bag_info: BagInfo, theme: ThemeColors, initial_topic: Optional[str] = None, **kwargs):
+    def __init__(
+        self,
+        bag_path: str,
+        bag_info: BagInfo,
+        theme: ThemeColors,
+        initial_topic: Optional[str] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        for t in ALL_THEMES.values():
-            self.register_theme(t)
-            
-        # Determine theme name from config
-        config = get_config()
-        theme_file = config.theme_file
-        # theme_file is like "rose.theme.nord.yaml" -> extract "nord"
-        # Or just match logic in theme.py
-        theme_name = "claude" # fallback
-        
-        # Try to parse name from filename
-        parts = theme_file.split('.')
-        if len(parts) >= 3 and parts[0] == "rose" and parts[1] == "theme":
-            theme_name = parts[2]
-            
-        if theme_name in ALL_THEMES:
-            self.theme = theme_name
-        elif "claude" in ALL_THEMES:
-            self.theme = "claude"
-        elif "default" in ALL_THEMES:
-            self.theme = "default"
-            
+        setup_app_theme(self)
+
         self.bag_path = bag_path
         self.bag_info = bag_info
         self.rose_theme = theme
@@ -522,7 +524,7 @@ class InspectApp(App):
         self.current_topic: Optional[TopicInfo] = None
         self.reader = AnyReader([Path(bag_path)])
         self.reader.open()
-        
+
         self.search_index: List[InspectApp.SearchItem] = []
         self._build_search_index()
 
@@ -699,8 +701,7 @@ class InspectApp(App):
         self.plot_data_y = []
         
         # Performance: Limit number of points to prevent TUI freeze
-        MAX_POINTS = 500
-        step = max(1, self.current_topic.message_count // MAX_POINTS)
+        step = max(1, self.current_topic.message_count // self.MAX_PLOT_POINTS)
         
         start_ts = 0.0
         if self.current_topic.first_message_time:
@@ -739,29 +740,19 @@ class InspectApp(App):
     def on_mount(self) -> None:
         """Apply theme colors to UI elements dynamically."""
         try:
-            # Map rose_theme colors to UI
             primary = self.rose_theme.primary
             accent = self.rose_theme.accent
-            
-            # Update borders
-            # self.query_one("#data-pane").styles.border_right = ("solid", primary) # Removed for tabs
-            self.query_one("#topic-bar").styles.border_bottom = ("solid", primary)
-            self.query_one("#bottom-bar").styles.border_top = ("solid", accent)
-            
-            # Style Tabs?
-            # from textual.widgets import Tabs
-            # self.query_one(Tabs).styles.color = primary 
-            # self.query_one(Tabs).styles.background = ... # Textual defaults are okay usually
 
+            # Apply border styles
             self.query_one("#topic-bar").styles.border_bottom = ("solid", primary)
             self.query_one("#bottom-bar").styles.border_top = ("solid", accent)
-            
-            # Update labels
+
+            # Apply label colors
             self.query_one("#frame-counter").styles.color = primary
             self.query_one("#percent-display").styles.color = primary
-            
-        except Exception:
-            pass
+
+        except Exception as e:
+            logger.debug("Could not apply theme styles: %s", e)
 
         # Handle Initial Topic Selection
         if self.initial_topic:
@@ -987,9 +978,8 @@ class InspectApp(App):
             if not skip_tree:
                 tree.root.add(Text(f"Error: {e}", style=f"bold {self.rose_theme.error}"))
 
-    def build_tree(self, node: Tree, data: any, path_prefix: str = "") -> None:
+    def build_tree(self, node: Tree, data: Any, path_prefix: str = "") -> None:
         """Recursively add nodes to the tree."""
-        from rich.text import Text
         
         # 1. Handle ROS Message objects (slots or dicts)
         if hasattr(data, '__slots__'):
@@ -1010,7 +1000,7 @@ class InspectApp(App):
         # 3. Handle Lists/Arrays
         elif isinstance(data, (list, tuple)):
             # Optimization: Collapse large primitive arrays
-            if len(data) > 0 and isinstance(data[0], (int, float, bool)) and len(data) > 20:
+            if len(data) > 0 and isinstance(data[0], (int, float, bool)) and len(data) > self.ARRAY_COLLAPSE_THRESHOLD:
                  # Show summary
                  summary = f"<Array[{len(data)}] {data[:5]}...>"
                  # Arrays themselves can be plotted if index is selected
@@ -1024,9 +1014,8 @@ class InspectApp(App):
              # Leaf node data is already set by parent via _add_child_node
              node.add(Text(str(data), style=self.rose_theme.info), data=path_prefix)
 
-    def _add_child_node(self, parent: Tree, label: str, value: any, path_prefix: str) -> None:
+    def _add_child_node(self, parent: Tree, label: str, value: Any, path_prefix: str) -> None:
         """Helper to format and add a child node."""
-        from rich.text import Text
         
         # Construct full path for this node
         new_path = ""

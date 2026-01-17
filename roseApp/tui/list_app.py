@@ -16,9 +16,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import pickle
 
-from .theme import ALL_THEMES
+from .theme import setup_app_theme
 from .widgets.question import Question, Answer
-from ..core.config import get_config
 from ..core.cache import get_cache
 from ..core.model import BagInfo
 
@@ -170,25 +169,11 @@ class ListApp(App):
     
     def __init__(self):
         super().__init__()
-        
+
         # Instance variable for entries (not class variable)
         self.entries: List[CacheEntryRow] = []
-        
-        # Register themes
-        for name, theme in ALL_THEMES.items():
-            self.register_theme(theme)
-        
-        # Set current theme
-        config = get_config()
-        theme_name = "claude"
-        parts = config.theme_file.split('.')
-        if len(parts) >= 3:
-            theme_name = parts[2]
-        
-        if theme_name in ALL_THEMES:
-            self.theme = theme_name
-        elif "claude" in ALL_THEMES:
-            self.theme = "claude"
+
+        setup_app_theme(self)
     
     def _load_entries(self) -> None:
         """Load cache entries."""

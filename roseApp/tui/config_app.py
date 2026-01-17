@@ -16,8 +16,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 import yaml
 
-from .theme import ALL_THEMES
-from ..core.config import get_config
+from .theme import ALL_THEMES, setup_app_theme
 
 
 class SettingRow(VerticalGroup):
@@ -489,23 +488,9 @@ class ConfigApp(App):
         self.themes = themes
         self.result = None
         self._settings_panel: Optional[SettingsPanel] = None
-        self._dirty = False # Initial state
-        
-        # Register themes
-        for name, theme in ALL_THEMES.items():
-            self.register_theme(theme)
-            
-        # Set current theme
-        config = get_config()
-        theme_name = "claude"
-        parts = config.theme_file.split('.')
-        if len(parts) >= 3:
-            theme_name = parts[2]
-            
-        if theme_name in ALL_THEMES:
-            self.theme = theme_name
-        elif "claude" in ALL_THEMES:
-            self.theme = "claude"
+        self._dirty = False  # Initial state
+
+        setup_app_theme(self)
 
     _dirty: reactive[bool] = reactive(False)
 
