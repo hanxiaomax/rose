@@ -45,12 +45,11 @@ More than mere retro styling, this approach serves as poetic resistance to digit
   - **Question/MultiQuestion**: Single/multi-select widgets with fuzzy search
   - Keyboard navigation: Tab, Space, Enter, Arrow keys
 - 🌟 Multi-file batch processing with parallel workers
-- 🌟 Docker support for cross-platform usage
 - 🌟 Customizable cassette futurism theme via YAML configuration
 
 ## Documentation
 
-For detailed information about the internal software design, please see the [Software Architecture](docs/architecture.md) and [Detailed Design](docs/design.md).
+For detailed information about the internal software design, please see the [Software Architecture](roseApp/docs/architecture.md) and [Detailed Design](roseApp/docs/design.md).
 
 ## Getting Started
 
@@ -71,40 +70,6 @@ cd rose
 
 # Install dependencies
 pip install -r requirements.txt
-```
-
-#### Option 3: Docker Installation
-
-For cross-platform usage or isolated environments:
-
-```bash
-# Clone the repository
-git clone https://github.com/hanxiaomax/rose.git
-cd rose
-
-# Build Docker image
-./docker/build.sh
-
-# Run Rose in Docker container
-./docker/go_docker.sh
-```
-
-The Docker container includes:
-- All required dependencies pre-installed
-- ROS bag processing libraries (rosbags, rosbag)
-- Volume mounting for accessing local bag files
-
-**Docker Usage Examples:**
-
-```bash
-# After running ./docker/go_docker.sh, you're inside the container
-
-# Process bag files in your mounted directory
-rose load *.bag
-rose inspect demo.bag
-rose inspect demo.bag --topic /gps/fix  # Inspect specific topic (Tree view or TUI)
-rose extract input.bag --topics gps imu
-rose extract *.bag -i                   # Interactive extract (Fuzzy search)
 ```
 
 To uninstall Rose, run:
@@ -264,11 +229,11 @@ rose inspect demo.bag --load --force
 List and manage cached bag metadata:
 
 ```bash
-# Show all cached bags
+# Show all cached bags (Table view)
 rose list
 
-# Show detailed content
-rose list --content
+# Interactive management (TUI)
+rose list -i
 
 # Remove a specific bag from cache
 rose list remove demo.bag
@@ -291,16 +256,16 @@ Rose supports compression of bag files to significantly reduce file sizes. This 
 
 ### Configuration
 
-Rose uses a unified configuration system with automatic validation. Configuration is loaded from `rose.config.yaml` in your project directory.
+Rose uses a unified configuration system with automatic validation. The easiest way to configure Rose is via the interactive TUI:
 
-**Quick Start:**
+![Configuration TUI](configuration.png)
+
 ```bash
-# Copy example configuration
-cp rose.config.yaml.example rose.config.yaml
-
-# Edit configuration
-nano rose.config.yaml
+# Launch interactive configuration manager
+rose config
 ```
+
+This interface lets you modify settings, toggle features, and switch themes with immediate visual feedback. Changes are validated and saved to `rose.config.yaml`.
 
 **Example Configuration:**
 ```yaml
@@ -346,8 +311,6 @@ Rose uses a simple YAML-based theme system to customize UI colors. By default, R
    theme_file: rose.theme.custom.yaml
    ```
 
-   ```
-   
 ## Development
 
 ### Run locally
@@ -394,14 +357,14 @@ project_root/
 │   │   ├── inspect_app.py  # Bag inspector TUI
 │   │   ├── config_app.py   # Configuration TUI
 │   │   ├── list_app.py     # Cache management TUI
+│   │   ├── theme.py        # Theme manager
 │   │   ├── dialogs.py      # Modal dialogs
 │   │   └── widgets/        # Custom TUI widgets
 │   │       ├── question.py       # Single-select widget
 │   │       ├── multi_question.py # Multi-select widget
 │   │       └── path_search.py    # File picker widget
-│   └── tests/              # Test files
-├── docker/                 # Docker support
-├── docs/                   # Documentation
+│   ├── tests/              # Test files
+│   └── docs/               # Documentation
 ├── pyproject.toml          # Project metadata and dependencies
 └── README.md               # Project documentation
 ```
@@ -413,3 +376,4 @@ project_root/
 - **[Textual](https://textual.textualize.io/)**: For building the TUI (Terminal User Interface) components.
 - **[rosbags](https://pypi.org/project/rosbags/)**: High-performance pure Python library for reading/writing ROS bags.
 - **[plotext](https://github.com/piccolomo/plotext)**: For terminal-based plotting in the inspector TUI.
+- **[pandas](https://pandas.pydata.org/)**: For data manipulation and analysis.
