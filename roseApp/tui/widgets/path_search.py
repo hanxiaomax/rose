@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import glob
 from pathlib import Path
@@ -14,6 +15,8 @@ from textual.reactive import reactive, var
 from textual.widget import Widget
 from textual.widgets import Input, Label, OptionList, DirectoryTree
 from textual.widgets.option_list import Option
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -245,10 +248,11 @@ class PathInput(Widget):
             self.add_class("tree-mode")
 
     def _get_expanded_path(self, path_str: str) -> str:
-        """Expand user and vars in path."""
+        """Expand user and env vars in path."""
         try:
             return os.path.expanduser(os.path.expandvars(path_str))
-        except:
+        except (TypeError, ValueError) as e:
+            logger.debug("Path expansion failed for %s: %s", path_str, e)
             return path_str
 
     @on(Input.Changed)
@@ -276,8 +280,8 @@ class PathInput(Widget):
             # Extract just the filename portion for filtering
             basename = os.path.basename(filter_text) if filter_text else ""
             tree.filter_text = basename
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Filter tree error: %s", e)
 
     def _update_suggestions(self, input_path: str) -> None:
         """Scan directory and update suggestions."""
@@ -338,95 +342,144 @@ class PathInput(Widget):
         else:
             self.remove_class("show-suggestions")
 
-    def action_autocomplete(self) -> None:
-        """Handle Tab key for completion."""
+    # =========================================================================
+    # TAB COMPLETION BEHAVIOR SPECIFICATION
+    # =========================================================================
+    #
+    # The Tab key triggers path completion. Behavior depends on:
+    #   1. Current view mode (tree_mode or suggestion mode)
+    #   2. Which widget has focus (input field or list/tree)
+    #   3. Whether there is active filter/input text
+    #
+    # UNIFIED LOGIC (same for both modes):
+    # ┌─────────────────┬────────────────────┬───────────────────────────────┐
+    # │ Focus           │ Filter Active?     │ Action                        │
+    # ├─────────────────┼────────────────────┼───────────────────────────────┤
+    # │ Input field     │ Yes (typing)       │ Complete first matching item  │
+    # │ Input field     │ No                 │ Complete highlighted/cursor   │
+    # │ List/Tree       │ -                  │ Complete highlighted/cursor   │
+    # └─────────────────┴────────────────────┴───────────────────────────────┘
+    #
+    # COMPLETION RESULT:
+    # - If completed item is a directory: Navigate into it, clear filter
+    # - If completed item is a file: Fill path, prompt user to press Enter
+    # =========================================================================
 
-        # Tree mode: Tab completes based on cursor position
+    def action_autocomplete(self) -> None:
+        """
+        Handle Tab key for path completion.
+        
+        See the behavior specification in the class comments above this method.
+        """
         if self.tree_mode:
-            try:
-                tree = self.query_one("#tree-view", FilteredDirectoryTree)
-                input_field = self.query_one(PathInputField)
-                tree_path = Path(tree.path)
-                filter_text = tree.filter_text or ""
-                
-                # First, check if cursor is on a specific node
-                cursor_node = tree.cursor_node
-                if cursor_node is not None and cursor_node.data and hasattr(cursor_node.data, 'path'):
-                    selected_path = cursor_node.data.path
-                    if selected_path.is_dir():
-                        new_path = str(selected_path) + os.sep
-                        input_field.value = new_path
-                        input_field.cursor_position = len(new_path)
-                        tree.path = selected_path
-                        tree.filter_text = ""
-                    else:
-                        new_path = str(selected_path)
-                        input_field.value = new_path
-                        input_field.cursor_position = len(new_path)
-                        self.notify(f"Completed: {selected_path.name}. Press Enter to confirm.", severity="information")
-                    return
-                
-                # No cursor selection: fall back to first match if filter is active
-                if tree_path.is_dir() and filter_text:
-                    # Find matching items using prefix matching (Linux-style)
-                    matches = []
-                    filter_lower = filter_text.lower()
-                    
-                    try:
-                        for item in tree_path.iterdir():
-                            name_lower = item.name.lower()
-                            # Linux-style prefix match
-                            if name_lower.startswith(filter_lower):
-                                matches.append(item)
-                    except PermissionError:
-                        pass
-                    
-                    if matches:
-                        # Sort: directories first, then by name
-                        matches.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
-                        first_match = matches[0]
-                        
-                        if first_match.is_dir():
-                            new_path = str(first_match) + os.sep
-                            input_field.value = new_path
-                            input_field.cursor_position = len(new_path)
-                            tree.path = first_match
-                            tree.filter_text = ""
-                        else:
-                            new_path = str(first_match)
-                            input_field.value = new_path
-                            input_field.cursor_position = len(new_path)
-                            self.notify(f"Completed: {first_match.name}. Press Enter to confirm.", severity="information")
-                        return
-                    else:
-                        self.notify(f"No match for: {filter_text}", severity="warning")
-                        return
-            except Exception:
-                pass
-            return
-        # Bubble up from Input
-        
-        # Check if suggestions visible
-        if not self.has_class("show-suggestions"):
-            return # Nothing to complete
-            
-        option_list = self.query_one(OptionList)
-        if option_list.highlighted is not None and 0 <= option_list.highlighted < len(self._suggestion_paths):
-            # Complete with the HIGHLIGHTED suggestion
-             selection = self._suggestion_paths[option_list.highlighted]
+            self._autocomplete_tree_mode()
         else:
-            # Standard: fill with common prefix first
-            if not self._suggestion_paths:
-                return
-            common = os.path.commonprefix(self._suggestion_paths)
-            if len(common) > len(os.path.basename(self.path)):
-                 selection = common
-            elif len(self._suggestion_paths) == 1:
-                 selection = self._suggestion_paths[0]
+            self._autocomplete_suggestion_mode()
+
+    def _autocomplete_tree_mode(self) -> None:
+        """Handle Tab completion in tree view mode."""
+        try:
+            tree = self.query_one("#tree-view", FilteredDirectoryTree)
+            input_field = self.query_one(PathInputField)
+            tree_path = Path(tree.path)
+            filter_text = tree.filter_text or ""
+
+            if input_field.has_focus:
+                # Input focused: complete based on filter or cursor
+                if filter_text:
+                    self._complete_first_match(input_field, tree, tree_path, filter_text)
+                else:
+                    self._complete_cursor_node(input_field, tree)
             else:
-                 return 
+                # Tree focused: complete cursor node
+                self._complete_cursor_node(input_field, tree)
+
+        except Exception as e:
+            logger.debug("Tree autocomplete error: %s", e)
+
+    def _autocomplete_suggestion_mode(self) -> None:
+        """Handle Tab completion in suggestion list mode."""
+        if not self.has_class("show-suggestions") or not self._suggestion_paths:
+            return
+
+        try:
+            option_list = self.query_one(OptionList)
+            input_field = self.query_one(PathInputField)
+            
+            # Priority: always use highlighted item if user has navigated to one
+            # This respects the user's explicit selection via arrow keys
+            idx = option_list.highlighted
+            if idx is not None and 0 <= idx < len(self._suggestion_paths):
+                # User has highlighted an item - use it
+                selection = self._suggestion_paths[idx]
+            else:
+                # No highlighted item - use first suggestion as fallback
+                selection = self._suggestion_paths[0]
+
+            self._apply_completion(selection)
+
+        except Exception as e:
+            logger.debug("Suggestion autocomplete error: %s", e)
+
+    def _complete_first_match(
+        self,
+        input_field: PathInputField,
+        tree: FilteredDirectoryTree,
+        tree_path: Path,
+        filter_text: str,
+    ) -> None:
+        """Find and complete the first matching item in the current directory."""
+        matches = []
+        filter_lower = filter_text.lower()
+
+        try:
+            for item in tree_path.iterdir():
+                if item.name.lower().startswith(filter_lower):
+                    matches.append(item)
+        except PermissionError:
+            return
+
+        if matches:
+            # Sort: directories first, then alphabetically
+            matches.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
+            self._apply_tree_completion(input_field, tree, matches[0])
+        else:
+            self.notify(f"No match for: {filter_text}", severity="warning")
+
+    def _complete_cursor_node(
+        self, input_field: PathInputField, tree: FilteredDirectoryTree
+    ) -> None:
+        """Complete the currently selected node in the tree."""
+        cursor_node = tree.cursor_node
+        if cursor_node is not None and cursor_node.data and hasattr(cursor_node.data, "path"):
+            self._apply_tree_completion(input_field, tree, cursor_node.data.path)
+
+    def _apply_tree_completion(
+        self,
+        input_field: PathInputField,
+        tree: FilteredDirectoryTree,
+        selected_path: Path,
+    ) -> None:
+        """
+        Apply completion for a tree item.
         
-        self._apply_completion(selection)
+        - Directory: Navigate into it and clear filter
+        - File: Fill path and notify user
+        """
+        if selected_path.is_dir():
+            new_path = str(selected_path) + os.sep
+            input_field.value = new_path
+            input_field.cursor_position = len(new_path)
+            tree.path = selected_path
+            tree.filter_text = ""
+        else:
+            new_path = str(selected_path)
+            input_field.value = new_path
+            input_field.cursor_position = len(new_path)
+            self.notify(
+                f"Completed: {selected_path.name}. Press Enter to confirm.",
+                severity="information",
+            )
 
     def action_cursor_up(self) -> None:
         """Move cursor in suggestion list or tree."""
@@ -549,8 +602,8 @@ class PathInput(Widget):
                     tree = self.query_one("#tree-view", FilteredDirectoryTree)
                     tree.path = expanded
                     tree.filter_text = ""  # Clear filter when switching modes
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug("Tree mode toggle error: %s", e)
             self.notify("Tree view mode (Ctrl+E to switch back)", severity="information")
         else:
             self.remove_class("tree-mode")
