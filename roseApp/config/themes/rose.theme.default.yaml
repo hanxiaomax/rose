@@ -1,21 +1,17 @@
 # Rose Theme - Orange (Default Cassette Futurism)
 # Retro-futurism inspired by cassette tapes and 1980s computing
 
-# Primary colors - Signature orange accent
-primary: orange1
-accent: orange1
+# Primary UI colors - Signature orange accent
+primary: "#ff8c00"
+secondary: "#ffa500"
+accent: "#ffd700"
+
+# Background colors - Dark cassette aesthetic
+background: "#1a1a1a"
+surface: "#2d2d2d"
+foreground: "#e0e0e0"
 
 # Status colors - Clear visual feedback
-success: dark_cyan
-warning: bright_yellow
-error: bright_red
-info: bright_cyan
-
-# UI colors - Minimalist contrast
-muted: bright_black
-highlight: bright_white
-
-# Semantic colors - Context-specific styling
-path: bright_cyan  # For file and directory paths
-
-
+success: "#00d787"
+warning: "#ffff00"
+error: "#ff5f5f"

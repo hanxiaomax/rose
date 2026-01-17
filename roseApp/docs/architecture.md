@@ -1,107 +1,213 @@
-# Rose System Architecture
+# Software Architecture
 
-## 1. Core Philosophy: Cache-First
-Rose follows a strict **"Load → Cache → Process"** philosophy to ensure high performance and consistency.
+Rose is designed with a layered architecture focusing on modularity, performance, and aesthetic consistency.
 
-- **Single Source of Truth**: All operations (`inspect`, `extract`, `compress`) operate on the **Cached Metadata** (`BagInfo`), not directly on raw files.
-- **Decoupled Loading**: Loading (Parsing) is a distinct prerequisite step. Processing logic never implicitly loads a bag; it requests data from the cache.
+## Overview
 
-## 2. Key Components
+The system is divided into three main layers:
+1.  **Core Layer**: Handles data processing, caching, and ROS bag interaction.
+2.  **CLI Layer**: Provides command-line interface and terminal output styling.
+3.  **TUI Layer**: Offers interactive visual inspection and widgets using Textual.
 
-### A. BagReader (`core/parser.py`)
-*   **Role**: The "Loader". Responsible for reading raw bag files and populating the cache.
-*   **Input**: `path: str`, `level: AnalysisLevel`
-*   **Output**: `BagInfo` (Populated into Cache)
-*   **Key Method**: 
-    ```python
-    async def load_bag_async(self, path: str, level: AnalysisLevel) -> BagInfo
-    ```
+## System Diagram
 
-### B. BagWriter (`core/writer.py`)
-*   **Role**: The "Processor". Responsible for checking cached metadata and writing new outputs (Extraction, Compression).
-*   **Input**: `source_info: BagInfo`, `output_path: str`, `options: WriterOption`
-*   **Output**: New Bag File
-*   **Key Method**:
-    ```python
-    def write(self, source_info, output_bag, options) -> Tuple[str, float]
-    ```
-
-### C. Cache (`core/cache.py`)
-*   **Role**: Manages persistence of analysis results.
-*   **Storage**: filesystem-based (pickled `BagInfo`).
-*   **Validation**: Validation via file hash/size/mtime to ensure cache freshness.
-
-### D. Pipeline Orchestrators (`core/pipeline.py`)
-*   **Role**: The glue between CLI and Core logic. Enforces the workflow.
-*   **Pattern**:
-    1.  **Check Cache**: Ask `CacheManager` for existing analysis.
-    2.  **Load (If Missing)**: If not found, invoke `BagReader` to load it.
-    3.  **Process**: Pass the valid `BagInfo` to `BagWriter` or consume it for `inspect`.
-
-## 3. Data Model (`core/model.py`)
-The system centers around the `BagInfo` data structure, optimized for memory and access speed.
-
-### BagInfo
-The master object containing all known data about a bag file.
-- **Metadata**: `file_path`, `file_size`, `analysis_level`, `last_updated`
-- **Topic Data**: `topics: List[TopicInfo]`, `message_types: List[MessageTypeInfo]`
-- **Time Data**: `start_time`, `end_time`, `duration`
-- **Optimization**: Uses simple lists instead of heavy dictionaries where possible to reduce memory footprint.
-
-### Analysis Levels
-- **NONE**: No analysis.
-- **QUICK**: Basic metadata (topics, counts, duration). Sufficient for `compress` and basic `inspect`.
-- **INDEX**: Full message indexing (DataFrames). Required for complex analysis.
-
-## 4. Workflows
-
-### Standard Process Flow
 ```mermaid
 graph TD
-    CLI[CLI Command] --> Orch[Pipeline Orchestrator]
-    Orch -->|1. Check| Cache[Cache]
+    User(["User"])
     
-    subgraph "Phase 1: Ensure Cache"
-        Cache -- Miss --> Reader[BagReader]
-        Reader -- Load --> RawBag[(Raw Bag)]
-        Reader -- Save --> Cache
+    subgraph "CLI Layer"
+        CmdInspect["inspect.py"]
+        CmdExtract["extract.py"]
+        CmdLoad["load.py"]
+        CmdCompress["compress.py"]
+        CmdList["list.py"]
+        CmdConfig["config.py"]
+        Interactive["interactive.py"]
     end
     
-    subgraph "Phase 2: Process"
-        Cache -- Hit/Ready --> Info[BagInfo]
-        Info --> Writer[BagWriter]
-        Writer -->|Write| Output[(New Bag)]
+    subgraph "Core Layer"
+        Orchestrator["Pipeline Orchestrator"]
+        Cache["Cache (Pickle)"]
+        BagMgr["Bag Cache Manager"]
+        Reader["Bag Reader (rosbags)"]
+        Writer["Bag Writer"]
+        Output["Output (Rich)"]
+        Config["Config Manager"]
     end
+    
+    subgraph "TUI Layer"
+        InspectApp["InspectApp"]
+        ConfigApp["ConfigApp"]
+        ListApp["ListApp"]
+        Dialogs["Dialogs"]
+        Widgets["Widgets"]
+    end
+    
+    subgraph "TUI Widgets"
+        Question["Question"]
+        MultiQuestion["MultiQuestion"]
+        PathInput["PathInput"]
+    end
+    
+    User --> CmdInspect
+    User --> CmdExtract
+    User --> CmdLoad
+    User --> CmdConfig
+    User --> CmdList
+    
+    CmdInspect --> Orchestrator
+    CmdExtract --> Orchestrator
+    CmdLoad --> Orchestrator
+    
+    Interactive --> Dialogs
+    Dialogs --> Widgets
+    Widgets --> Question
+    Widgets --> MultiQuestion
+    Widgets --> PathInput
+    
+    Orchestrator --> BagMgr
+    BagMgr --> Cache
+    BagMgr --> Reader
+    
+    CmdInspect -.->|Interactive| InspectApp
+    CmdConfig -.->|Interactive| ConfigApp
+    CmdList -.->|Interactive| ListApp
+    InspectApp --> BagMgr
+    ConfigApp --> Config
+    ListApp --> BagMgr
 ```
 
-### Command Specifics
+## Component Details
 
-#### `rose load`
-- **Goal**: Populate Cache.
-- **Flow**: `Orchestrator` -> `BagReader` -> `Cache`.
+### Core Layer
 
-#### `rose inspect`
-- **Goal**: View Metadata.
-- **Flow**: `Orchestrator` -> `Cache` -> (Print Results).
-- *Note*: If uncached, prompts user or auto-loads via `BagReader`.
+| Component             | File          | Description                                          |
+| --------------------- | ------------- | ---------------------------------------------------- |
+| Pipeline Orchestrator | `pipeline.py` | Generator-based pipelines for async event processing |
+| Cache Manager         | `cache.py`    | Pickle-based caching with file hash validation       |
+| Bag Reader            | `parser.py`   | Unified reader supporting ROS1/ROS2 formats          |
+| Bag Writer            | `writer.py`   | Writing filtered/compressed bags                     |
+| Output                | `output.py`   | Rich-based terminal output with theming              |
+| Config                | `config.py`   | YAML configuration management                        |
+| Model                 | `model.py`    | Data models (BagInfo, TopicInfo, etc.)               |
 
-#### `rose extract / compress`
-- **Goal**: Create new dataset.
-- **Flow**: `Orchestrator` -> `Cache` -> `BagWriter`.
+### CLI Layer
 
-## 5. Directory Structure
+| Component   | File             | Description                    |
+| ----------- | ---------------- | ------------------------------ |
+| Load        | `load.py`        | Load bags into cache           |
+| Extract     | `extract.py`     | Filter and extract topics      |
+| Compress    | `compress.py`    | Compress bag files             |
+| Inspect     | `inspect.py`     | Inspect bag contents (CLI/TUI) |
+| List        | `list.py`        | Cache management               |
+| Interactive | `interactive.py` | Interactive mode helpers       |
+
+### TUI Layer
+
+| Component     | File                        | Description                             |
+| ------------- | --------------------------- | --------------------------------------- |
+| InspectApp    | `inspect_app.py`            | Main TUI inspector application          |
+| ConfigApp     | `config_app.py`             | Configuration management TUI            |
+| ListApp       | `list_app.py`               | Cache management TUI                    |
+| Dialogs       | `dialogs.py`                | Modal dialogs for user interaction      |
+| Question      | `widgets/question.py`       | Single-select prompt widget             |
+| MultiQuestion | `widgets/multi_question.py` | Multi-select prompt widget              |
+| PathInput     | `widgets/path_search.py`    | File picker with tree view              |
+| Theme Manager | `theme.py`                  | Centralized theme loading & application |
+
+## Widget Architecture
+
+```mermaid
+classDiagram
+    class Answer {
+        +str text
+        +str id
+        +str kind
+    }
+    
+    class Question {
+        +str question
+        +List~Answer~ options
+        +reactive selection
+        +action_confirm()
+    }
+    
+    class MultiQuestion {
+        +str question
+        +List~Answer~ options
+        +Set~int~ checked_indices
+        +action_toggle()
+        +action_select_all()
+        +action_invert_selection()
+    }
+    
+    class PathInput {
+        +str path
+        +bool tree_mode
+        +FilteredDirectoryTree tree
+        +action_autocomplete()
+        +action_toggle_tree()
+    }
+    
+    class FilteredDirectoryTree {
+        +str filter_text
+        +filter_paths()
+    }
+    
+    Question --> Answer : uses
+    MultiQuestion --> Answer : uses
+    PathInput --> FilteredDirectoryTree : contains
 ```
-roseApp/
-├── cli/            # Interface Layer (Typer)
-│   ├── main.py
-│   ├── load.py
-│   ├── inspect.py
-│   └── ...
-├── core/           # Business Logic
-│   ├── parser.py   # BagReader
-│   ├── writer.py   # BagWriter
-│   ├── cache.py    # Caching System
-│   ├── pipeline.py # Orchestrators
-│   └── model.py    # Data Structures
-└── ...
+
+## Key Design Patterns
+
+### Generator-Based Pipelines
+
+All heavy operations use generator pipelines that yield events:
+
+```python
+for event in load_orchestrator(bag_path):
+    if isinstance(event, LogEvent):
+        # Handle log messages
+    elif isinstance(event, ProgressEvent):
+        # Update progress bar
+    elif isinstance(event, ResultEvent):
+        # Process result
 ```
+
+### Reactive Widget State
+
+TUI widgets use Textual's reactive properties for automatic UI updates:
+
+```python
+class Question(Widget):
+    selection: reactive[int] = reactive(0)
+    
+    def watch_selection(self, old, new):
+        # Automatically called when selection changes
+        self._update_highlight()
+```
+
+### Event-Driven Architecture
+
+Components communicate via Textual messages:
+
+```python
+@dataclass
+class Answers(Message):
+    indices: List[int]
+    answers: List[Answer]
+
+# Post message when user confirms
+self.post_message(self.Answers(indices=selected, answers=selected_answers))
+```
+
+### Theming Architecture
+
+The application supports a centralized theming system driven by YAML configuration files.
+
+- **Theme Definition**: Themes are defined in `roseApp/config/themes/*.yaml`.
+- **Loading**: `theme.py` scans and loads available themes at startup.
+- **Application**: The `setup_app_theme` utility injects the selected theme into Textual apps (`InspectApp`, `ConfigApp`, etc.).
+- **Consistency**: All widgets reference the global theme object for coloring (e.g., `theme.primary`, `theme.surface`), ensuring visual consistency across the TUI.
+

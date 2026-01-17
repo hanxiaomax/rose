@@ -10,8 +10,7 @@ from textual.containers import Vertical, Container
 from textual.widgets import Static, Footer, Label
 
 from .widgets.question import Question, Answer
-from .theme import ALL_THEMES
-from ..core.config import get_config
+from .theme import setup_app_theme
 
 
 # Package Info - read from pyproject.toml via importlib.metadata
@@ -93,23 +92,7 @@ class MainApp(App):
     
     def __init__(self):
         super().__init__()
-        
-        # Register themes
-        for name, theme in ALL_THEMES.items():
-            self.register_theme(theme)
-        
-        # Set current theme
-        config = get_config()
-        theme_name = "claude"
-        parts = config.theme_file.split('.')
-        if len(parts) >= 3:
-            theme_name = parts[2]
-        
-        if theme_name in ALL_THEMES:
-            self.theme = theme_name
-        elif "claude" in ALL_THEMES:
-            self.theme = "claude"
-        
+        setup_app_theme(self)
         self.selected_command = None
     
     def compose(self) -> ComposeResult:

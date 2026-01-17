@@ -24,22 +24,23 @@ app = typer.Typer(name="list", help="List and manage cached bag files")
 @app.callback(invoke_without_command=True)
 def list_default(
     ctx: typer.Context,
-    show_content: bool = typer.Option(False, "--content", "-c", help="Show detailed cache content (CLI mode)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information (CLI mode)")
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Run interactive list manager (TUI)"),
 ):
     """List all cached bag files (default command)"""
     if ctx.invoked_subcommand is None:
         out = get_output()
         try:
-            # If no flags passed, launch TUI
-            if not show_content and not verbose:
+            # If interactive flag, launch TUI
+            if interactive:
                 from ..tui.list_app import run_list_app
+                # TUI takes over screen, no context manager needed usually, but just in case
                 run_list_app()
                 raise typer.Exit(0)
             
-            # Otherwise, show CLI output
+            # Otherwise, show CLI output (Default behavior)
             cache = get_cache()
-            _show_cache_info(cache, show_content, verbose, out)
+            # We want to show content by default (table view)
+            _show_cache_info(cache, show_content=True, verbose=False, out=out)
         except Exception as e:
             if isinstance(e, typer.Exit):
                 raise

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from textual.app import ComposeResult
 from textual import events, on
@@ -13,13 +13,11 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Label
 
-from dataclasses import dataclass
-from typing import Optional
 
 @dataclass
 class Answer:
     text: str
-    id: str = "" 
+    id: str = ""
     kind: Optional[str] = None
 
 Options = list[Answer]
