@@ -1,7 +1,10 @@
 # ROSE - Yet Another ROS Bag Filter
 
 
+![image](image.png)
+
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
+
 
 
 ## Aesthetic 

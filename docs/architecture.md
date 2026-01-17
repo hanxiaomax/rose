@@ -104,15 +104,16 @@ graph TD
 
 ### TUI Layer
 
-| Component     | File                        | Description                        |
-| ------------- | --------------------------- | ---------------------------------- |
-| InspectApp    | `inspect_app.py`            | Main TUI inspector application     |
-| ConfigApp     | `config_app.py`             | Configuration management TUI       |
-| ListApp       | `list_app.py`               | Cache management TUI               |
-| Dialogs       | `dialogs.py`                | Modal dialogs for user interaction |
-| Question      | `widgets/question.py`       | Single-select prompt widget        |
-| MultiQuestion | `widgets/multi_question.py` | Multi-select prompt widget         |
-| PathInput     | `widgets/path_search.py`    | File picker with tree view         |
+| Component     | File                        | Description                             |
+| ------------- | --------------------------- | --------------------------------------- |
+| InspectApp    | `inspect_app.py`            | Main TUI inspector application          |
+| ConfigApp     | `config_app.py`             | Configuration management TUI            |
+| ListApp       | `list_app.py`               | Cache management TUI                    |
+| Dialogs       | `dialogs.py`                | Modal dialogs for user interaction      |
+| Question      | `widgets/question.py`       | Single-select prompt widget             |
+| MultiQuestion | `widgets/multi_question.py` | Multi-select prompt widget              |
+| PathInput     | `widgets/path_search.py`    | File picker with tree view              |
+| Theme Manager | `theme.py`                  | Centralized theme loading & application |
 
 ## Widget Architecture
 
@@ -200,3 +201,13 @@ class Answers(Message):
 # Post message when user confirms
 self.post_message(self.Answers(indices=selected, answers=selected_answers))
 ```
+
+### Theming Architecture
+
+The application supports a centralized theming system driven by YAML configuration files.
+
+- **Theme Definition**: Themes are defined in `roseApp/config/themes/*.yaml`.
+- **Loading**: `theme.py` scans and loads available themes at startup.
+- **Application**: The `setup_app_theme` utility injects the selected theme into Textual apps (`InspectApp`, `ConfigApp`, etc.).
+- **Consistency**: All widgets reference the global theme object for coloring (e.g., `theme.primary`, `theme.surface`), ensuring visual consistency across the TUI.
+

@@ -371,3 +371,38 @@ sequenceDiagram
 | `Enter`  | Select file / Enter directory   |
 | `Ctrl+T` | Toggle tree/suggestion view     |
 | `Escape` | Cancel                          |
+
+## Theme System Design
+
+```mermaid
+classDiagram
+    class Theme {
+        +str name
+        +str primary
+        +str secondary
+        +str accent
+        +str surface
+        +str error
+        +str warning
+        +str success
+        +to_color_system()
+    }
+    
+    class ThemeManager {
+        <<module>>
+        +load_themes(dir) List~Theme~
+        +setup_app_theme(app, theme_name)
+        +DEFAULT_THEME
+    }
+    
+    class AppConfig {
+        +str theme
+    }
+    
+    ThemeManager ..> Theme : creates
+    ThemeManager ..> AppConfig : reads
+    ThemeManager ..> TextualApp : configures
+    
+    note for ThemeManager "Parses YAML -> Theme -> Textual DesignSystem"
+```
+
