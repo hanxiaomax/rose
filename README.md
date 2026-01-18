@@ -1,7 +1,7 @@
 # ROSE - Yet Another ROS Bag Filter
 
 
-![image](image.png)
+![image](screenshots/image.png)
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
@@ -193,7 +193,7 @@ rose compress "*.bag" --compression bz2 --dry-run
 
 Inspect bag file contents and display comprehensive analysis:
 
-![inspect](cli-inspect.png)
+![inspect](screenshots/cli-inspect.png)
 
 ```bash
 # ========== Basic Inspection ==========
@@ -229,9 +229,9 @@ rose inspect demo.bag --load --show-fields --sort frequency # Full analysis
 rose inspect demo.bag --load-index --plot /vel.twist.linear.x  # Load + plot
 ```
 
-|         CLI Plot          |         TUI Plot          |
-| :-----------------------: | :-----------------------: |
-| ![CLI Plot](cli-plot.png) | ![TUI Plot](tui-plot.png) |
+|               CLI Plot                |               TUI Plot                |
+| :-----------------------------------: | :-----------------------------------: |
+| ![CLI Plot](screenshots/cli-plot.png) | ![TUI Plot](screenshots/tui-plot.png) |
 
 **Options:**
 - `--topics, -t`: Filter topics by regex pattern
@@ -282,7 +282,7 @@ Rose uses a unified configuration system with automatic validation It loads conf
 -   Create this directory if it doesn't exist to customize settings.
 
 
-![Configuration TUI](configuration.png)
+![Configuration TUI](screenshots/configuration.png)
 
 ```bash
 # Launch interactive configuration manager
