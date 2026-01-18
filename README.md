@@ -1,9 +1,17 @@
-# ROSE - Yet Another ROS Bag Filter
+# Rose
 
+**Yet another ROS bag editor/filter**
 
 ![image](screenshots/image.png)
 
->inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
+Rose is a modern CLI/TUI tool designed to revolutionize how you interact with ROS bag files.
+
+- **Blazing Fast**: Engineered for high-speed processing and filtering.
+- **Cross-Platform**: Runs seamlessly on macOS, Linux, and Windows.
+- **No ROS Dependencies**: Completely standalone - no need to source setup.bash or install ROS.
+- **Interactive TUI**: Precise control through an intuitive Terminal User Interface.
+
+> Inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
 
 
