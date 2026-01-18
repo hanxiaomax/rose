@@ -28,19 +28,7 @@ def _find_themes() -> List[str]:
 
 
 def _get_config_path() -> Path:
-    """Get or create config file path."""
-    # Search in priority order
-    search_paths = [
-        Path("rose.config.yaml"),
-        Path(__file__).parent.parent / "config" / "rose.config.yaml",
-        Path.home() / ".rose" / "rose.config.yaml",
-    ]
-    
-    for path in search_paths:
-        if path.exists():
-            return path
-    
-    # Default to user config
+    """Get the global config file path (~/.rose/rose.config.yaml)."""
     return Path.home() / ".rose" / "rose.config.yaml"
 
 
@@ -112,56 +100,68 @@ def config(ctx: typer.Context):
     Edit Rose configuration interactively.
     
     Opens inline TUI for editing configuration.
-    Use Tab to switch sections, Space to toggle, ←→ to adjust values.
+    Configuration is stored in ~/.rose/rose.config.yaml
     """
     out = get_output()
     
-    # Get or create config file
+    # Global config path
     config_path = _get_config_path()
+    config_created = False
     
-    if not _ensure_config_exists(config_path):
-        out.error("Could not find or create configuration file")
-        raise typer.Exit(1)
+    # Ensure config exists
+    if not config_path.exists():
+        if _ensure_config_exists(config_path):
+            config_created = True
+            out.success(f"Created new config: {config_path}")
+        else:
+            out.error("Could not create configuration file")
+            raise typer.Exit(1)
     
-    # Load current config
-    config_data = _load_config(config_path)
+    # Load configuration using core config system
+    from ..core.config import RoseConfig
+    loaded_config = RoseConfig.load(config_path)
     
-    # Fill defaults
-    defaults = {
-        "parallel_workers": 4,
-        "memory_limit_mb": 512,
-        "compression_default": "none",
-        "verbose_default": False,
-        "build_index_default": False,
-        "log_level": "INFO",
-        "log_to_file": True,
-        "theme_file": "rose.theme.default.yaml",
-        "enable_colors": True,
-        "output_directory": "output",
-    }
+    # Convert loaded config to dict for TUI
+    # Include all fields from the config object
+    config_data = {}
+    for field_name in loaded_config.__fields__.keys():
+        value = getattr(loaded_config, field_name, None)
+        # Convert enums to their string values
+        if hasattr(value, 'value'):
+            value = value.value
+        # Convert Path to string
+        elif isinstance(value, Path):
+            value = str(value)
+        config_data[field_name] = value
     
-    for key, default in defaults.items():
+    # Also load raw YAML to preserve any extra user-defined fields
+    raw_yaml = _load_config(config_path)
+    for key, value in raw_yaml.items():
         if key not in config_data:
-            config_data[key] = default
+            config_data[key] = value
     
     # Get available themes
     themes = _find_themes()
     
+    # Show active config file
+    out.section("Configuration")
+    out.key_value({"Active config": out.format_path(str(config_path))})
+    out.newline()
+    
     # Run TUI
     from ..tui.config_app import run_config_app
     
-    steps = StepManager()
-    steps.section("Configuration")
-    steps.add_item("edit", f"Editing: {out.format_path(config_path)}")
-    
-    result = run_config_app(config_data, themes)
+    result = run_config_app(config_data, themes, config_path=str(config_path))
     
     if result:
-        # Merge with defaults for any missing keys
-        final_config = {**defaults, **result}
+        # Merge result with any extra fields from raw YAML
+        final_config = {**raw_yaml}
+        for key, value in result.items():
+            final_config[key] = value
         _save_config(config_path, final_config)
-        steps.complete_item("edit", f"Saved to {out.format_path(config_path)}")
         out.newline()
-        out.success(f"Configuration updated successfully")
+        out.success(f"Configuration saved to {out.format_path(str(config_path))}")
     else:
-        steps.complete_item("edit", "Configuration unchanged", status="skip")
+        out.newline()
+        out.info("Configuration unchanged")
+

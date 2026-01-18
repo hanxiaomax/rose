@@ -123,7 +123,7 @@ def extract(
             # Interactive Selection
             sorted_topics = sorted(list(all_topics))
             
-            from ..tui.dialogs import ask_multi_selection
+            from ..tui.dialogs import ask_multi_selection, ask_path
             from ..tui.widgets.question import Answer
             
             selection_items = [Answer(t, t) for t in sorted_topics]
@@ -140,6 +140,26 @@ def extract(
                 raise typer.Exit(0)
             
             topics = [a.id for a in selected_answers]
+            
+            # Interactive Output Selection
+            if not output:
+                # Suggest a default name based on first input bag
+                default_output = f"extracted.bag"
+                if input_bags:
+                     first_bag = Path(input_bags[0]).name
+                     if first_bag.endswith(".bag"):
+                         default_output = first_bag.replace(".bag", "_extracted.bag")
+                     else:
+                         default_output = f"{first_bag}_extracted.bag"
+                
+                output = ask_path(
+                    message="Enter output filename or pattern (e.g. {input}_filtered.bag):",
+                    start_path=default_output
+                )
+                
+                if not output:
+                     out.info("Output selection cancelled.")
+                     raise typer.Exit(0)
         
         # Run Orchestrator
         pipeline = extract_orchestrator(

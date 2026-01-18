@@ -1,7 +1,7 @@
 # ROSE - Yet Another ROS Bag Filter
 
 
-![image](image.png)
+![image](screenshots/image.png)
 
 >inspired by [rosbag_editor](https://github.com/facontidavide/rosbag_editor)
 
@@ -193,34 +193,54 @@ rose compress "*.bag" --compression bz2 --dry-run
 
 Inspect bag file contents and display comprehensive analysis:
 
+![inspect](screenshots/cli-inspect.png)
+
 ```bash
-# Inspect a bag file
-rose inspect demo.bag
+# ========== Basic Inspection ==========
+rose inspect demo.bag                    # Quick view (requires cached bag)
+rose inspect demo.bag --load             # Auto-load if not in cache
+rose inspect demo.bag --load --force     # Force reload even if cached
+rose inspect demo.bag --load-index       # Load with message index for plotting
 
-# Filter specific topics
-rose inspect demo.bag --topics gps imu
+# ========== Topic Filtering ==========
+rose inspect demo.bag --topics "gps"           # Filter topics containing 'gps'
+rose inspect demo.bag --topics "gps|imu|tf"    # Regex: multiple patterns
+rose inspect demo.bag --topics "^/sensor"      # Regex: starts with /sensor
 
-# Show field analysis for messages
-rose inspect demo.bag --show-fields
+# ========== Display Options ==========
+rose inspect demo.bag --show-fields            # Show message field analysis
+rose inspect demo.bag --sort name              # Sort by topic name
+rose inspect demo.bag --sort count             # Sort by message count
+rose inspect demo.bag --sort frequency         # Sort by publish frequency
+rose inspect demo.bag --sort size --reverse    # Sort by size, descending
 
-# Sort topics by different criteria
-rose inspect demo.bag --sort frequency --reverse
+# ========== CLI Plotting ==========
+rose inspect demo.bag --plot /gps/fix.latitude              # Plot single field
+rose inspect demo.bag --plot /imu/data.linear_acceleration.x  # Plot nested field
+rose inspect demo.bag --plot /odom.pose.pose.position.x     # Deep nested field
 
-# Save inspection results to file
-rose inspect demo.bag -o report.txt
+# ========== TUI Mode ==========
+rose inspect demo.bag -i                                    # Open interactive TUI
+rose inspect demo.bag --plot /gps/fix.latitude -i           # TUI with pre-selected field
+rose inspect demo.bag --topics "gps" -i                     # TUI with topic filter
 
-# Force reload or load if missing
-rose inspect demo.bag --load
-rose inspect demo.bag --load --force
+# ========== Combined Examples ==========
+rose inspect demo.bag --load --show-fields --sort frequency # Full analysis
+rose inspect demo.bag --load-index --plot /vel.twist.linear.x  # Load + plot
 ```
 
+|               CLI Plot                |               TUI Plot                |
+| :-----------------------------------: | :-----------------------------------: |
+| ![CLI Plot](screenshots/cli-plot.png) | ![TUI Plot](screenshots/tui-plot.png) |
+
 **Options:**
-- `--topics, -t`: Filter specific topics
+- `--topics, -t`: Filter topics by regex pattern
 - `--show-fields`: Show field analysis for messages
 - `--sort`: Sort topics by (name, count, frequency, size) [default: size]
 - `--reverse`: Reverse sort order
-- `--output, -o`: Save output to file
-- `--load`: Load bag if not cached (quick mode)
+- `--plot, -P`: Plot field (format: /topic.field)
+- `--interactive, -i`: Open TUI instead of CLI output
+- `--load`: Load bag if not cached
 - `--load-index`: Load bag with message index building
 - `--force`: Force reload even if cached
 
@@ -256,42 +276,22 @@ Rose supports compression of bag files to significantly reduce file sizes. This 
 
 ### Configuration
 
-Rose uses a unified configuration system with automatic validation. The easiest way to configure Rose is via the interactive TUI:
+Rose uses a unified configuration system with automatic validation It loads configuration from: `~/.rose/rose.config.yaml`
 
-![Configuration TUI](configuration.png)
+-   The `~/.rose/` directory is the standard location for global configuration.
+-   Create this directory if it doesn't exist to customize settings.
+
+
+![Configuration TUI](screenshots/configuration.png)
 
 ```bash
 # Launch interactive configuration manager
 rose config
 ```
 
-This interface lets you modify settings, toggle features, and switch themes with immediate visual feedback. Changes are validated and saved to `rose.config.yaml`.
+This interface lets you modify settings, toggle features, and switch themes with immediate visual feedback. Unsaved changes are clearly highlighted with visual indicators, ensuring you know exactly what has been modified before saving. Changes are validated and saved to `rose.config.yaml`.
 
-**Example Configuration:**
-```yaml
-# Performance Settings
-parallel_workers: 4
-memory_limit_mb: 512
 
-# Feature Toggles
-enable_cache: true
-
-# Default Behavior
-compression_default: none
-verbose_default: false
-build_index_default: false
-
-# Logging Settings
-log_level: INFO
-log_to_file: true
-
-# UI Settings
-theme_file: rose.theme.default.yaml
-enable_colors: true
-
-# Directory Settings
-output_directory: output
-```
 
 ## Theme System
 
