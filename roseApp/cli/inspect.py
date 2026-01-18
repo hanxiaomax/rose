@@ -31,6 +31,46 @@ def filter_topics(topic_list, pattern, exclude_pattern=None):
     return topic_list
 
 
+def _get_field_value(msg, path: str):
+    """
+    Navigate message using path with support for array indexing.
+    Same logic as TUI _get_field_value for consistency.
+    Returns (value, success).
+    """
+    if not path:
+        return msg, True
+    current = msg
+    try:
+        parts = path.split('.')
+        for part in parts:
+            match = re.match(r"(\w+)\[(\d+)\]", part)
+            if match:
+                field_name = match.group(1)
+                index = int(match.group(2))
+                
+                if hasattr(current, field_name):
+                    current = getattr(current, field_name)
+                elif isinstance(current, dict) and field_name in current:
+                    current = current[field_name]
+                else:
+                    return None, False
+                    
+                if isinstance(current, (list, tuple)) and 0 <= index < len(current):
+                    current = current[index]
+                else:
+                    return None, False
+            else:
+                if hasattr(current, part):
+                    current = getattr(current, part)
+                elif isinstance(current, dict) and part in current:
+                    current = current[part]
+                else:
+                    return None, False
+        return current, True
+    except Exception:
+        return None, False
+
+
 def inspect(
     bag_path: Optional[Path] = typer.Argument(None, help="Path to the ROS bag file"),
     topics_filter: Optional[str] = typer.Option(None, "--topics", "-t", help="Filter topics by regex pattern"),
@@ -43,7 +83,7 @@ def inspect(
     load_index: bool = typer.Option(False, "--load-index", help="Load bag with index building if not cached"),
     force: bool = typer.Option(False, "--force", "-f", help="Force reload even if already cached"),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode (TUI)"),
-    topic: Optional[str] = typer.Option(None, "--topic", help="Auto-select exact matching topic in interactive mode"),
+    plot: Optional[str] = typer.Option(None, "--plot", "-P", help="Plot field in CLI (format: /topic.field, e.g., /gps/fix.latitude)"),
 ):
 
     """
@@ -53,11 +93,10 @@ def inspect(
     This command uses cached bag analysis for fast inspection.
     
     Examples:
-        rose inspect demo.bag                      # Show basic bag info
-        rose inspect demo.bag --load               # Auto load if not cached
-        rose inspect demo.bag --load --force       # Force reload
-        rose inspect demo.bag --load-index         # Auto load with index building
-        rose inspect demo.bag -i --topic /gps/fix  # Open TUI with /gps/fix selected
+        rose inspect demo.bag                       # Show basic bag info
+        rose inspect demo.bag --load                # Auto load if not cached
+        rose inspect demo.bag -i                    # Open TUI
+        rose inspect demo.bag --plot /gps/fix.latitude  # Plot latitude field
     """
     out = get_output()
     steps = create_step_manager()
@@ -69,13 +108,37 @@ def inspect(
             details="Use --load for quick load without index, or --load-index to build index"
         )
         raise typer.Exit(1)
+    
+    # Validate --plot format and parse topic.field
+    plot_topic = None
+    plot_field = None
+    if plot:
+        # Parse /topic.field format
+        # Example: /gps/fix.latitude -> topic=/gps/fix, field=latitude
+        # Example: /imu/data.linear_acceleration.x -> topic=/imu/data, field=linear_acceleration.x
+        if '.' not in plot:
+            out.error(
+                f"Invalid --plot format: '{plot}'",
+                details="Use format: /topic.field (e.g., --plot /gps/fix.latitude)"
+            )
+            raise typer.Exit(1)
         
-    if topic and topics_filter:
-        out.error(
-            "Options --topic and --topics are mutually exclusive",
-            details="--topic is for exact single topic match, --topics is for regex filtering."
-        )
-        raise typer.Exit(1)
+        # Find last topic segment (topics can have multiple /) then first field
+        # Strategy: split by '.', first part is topic, rest is field path
+        parts = plot.split('.', 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            out.error(
+                f"Invalid --plot format: '{plot}'",
+                details="Use format: /topic.field (e.g., --plot /gps/fix.latitude)"
+            )
+            raise typer.Exit(1)
+        
+        plot_topic = parts[0]  # e.g., /gps/fix
+        plot_field = parts[1]  # e.g., latitude or linear_acceleration.x
+        
+        # Plot mode requires message index
+        if not load_index and not load:
+            load_index = True  # Auto-enable index loading for plot
     
     # Auto-enable interactive if no bag path provided
     if bag_path is None and not interactive:
@@ -283,75 +346,120 @@ def inspect(
                 out.info("Cancelled")
                 raise typer.Exit(0)
 
-
-        # Handle --topic non-interactive mode (Rich Tree output)
-        if topic and not interactive:
-            # Find exact topic
-            target_topic = next((t for t in bag_info.topics if t.name == topic), None)
+        # Handle --plot mode
+        # If -i is present, pass to TUI; otherwise do CLI plot
+        if plot and plot_topic and plot_field and not interactive:
+            # CLI plotting mode (no TUI)
+            # Find the topic
+            target_topic = next((t for t in bag_info.topics if t.name == plot_topic), None)
             if not target_topic:
-                 out.error(f"Topic '{topic}' not found in bag.")
-                 # Fuzzy Match
-                 all_names = [t.name for t in bag_info.topics]
-                 matches = difflib.get_close_matches(topic, all_names, n=5, cutoff=0.3)
-                 if matches:
-                     out.info(f"Did you mean: {', '.join(matches)}?")
-                 else:
-                     out.info(f"Available topics: {', '.join(all_names[:5])}...")
-                 raise typer.Exit(1)
+                out.error(f"Topic '{plot_topic}' not found in bag.")
+                all_names = [t.name for t in bag_info.topics]
+                matches = difflib.get_close_matches(plot_topic, all_names, n=5, cutoff=0.3)
+                if matches:
+                    out.info(f"Did you mean: {', '.join(matches)}?")
+                raise typer.Exit(1)
             
-            # Create Rich Tree
-            root = Tree(f"[bold {out.theme.primary}]{target_topic.name}[/]")
-            root.add(f"Type: [{out.theme.muted}]{target_topic.message_type}[/]")
-            root.add(f"Count: {target_topic.message_count}")
-            
-            # Get Fields
-            msg_type_info = bag_info.find_message_type(target_topic.message_type)
-            if msg_type_info and msg_type_info.fields:
-                fields_node = root.add(f"[bold {out.theme.accent}]Fields[/]")
+            # Read messages directly using rosbags (same approach as TUI)
+            try:
+                from rosbags.highlevel import AnyReader
+                import plotext as plt
                 
-                paths = msg_type_info.get_all_field_paths()
-                paths.sort()
+                steps.section(f"Plotting {plot}")
                 
-                # Build tree from paths
-                # Map path -> Tree Node
-                node_map = {"": fields_node} 
+                plot_data_x = []
+                plot_data_y = []
                 
-                for path in paths:
-                    parts = path.split('.')
-                    # Ensure all parents check?
-                    # Since paths might not include intermediate parents if they are just field names?
-                    # get_all_field_paths usually returns leaves?
-                    # If it returns leaves 'a.b.c', we need 'a' and 'a.b' nodes.
+                # Get start time for relative timestamps
+                start_ts = 0.0
+                if target_topic.first_message_time:
+                    start_ts = target_topic.first_message_time[0]
+                
+                with AnyReader([bag_path]) as reader:
+                    # Filter connections for target topic
+                    connections = [c for c in reader.connections if c.topic == plot_topic]
                     
-                    current_path = ""
-                    parent_node = fields_node
+                    if not connections:
+                        out.error(f"No messages found for topic '{plot_topic}'")
+                        raise typer.Exit(1)
                     
-                    for part in parts:
-                        prev_path = current_path
-                        current_path = f"{current_path}.{part}" if current_path else part
+                    # Limit points to prevent slow rendering
+                    max_points = 1000
+                    message_count = target_topic.message_count or 0
+                    step = max(1, message_count // max_points)
+                    
+                    out.info(f"Reading {message_count} messages (sampling every {step})...")
+                    
+                    for i, (conn, ts, rawdata) in enumerate(reader.messages(connections=connections)):
+                        if i % step != 0:
+                            continue
+                            
+                        ts_sec = ts / 1_000_000_000
+                        rel_time = ts_sec - start_ts
                         
-                        if current_path not in node_map:
-                            # Add new node to parent
-                            # Style leaf differently?
-                            # If it's the full path, it might be a leaf.
-                            # But we are iterating, so we are building down.
-                            # We don't know if it's a leaf yet easily, but Rich Tree handles it.
-                            new_node = parent_node.add(f"[{out.theme.info}]{part}[/]")
-                            node_map[current_path] = new_node
-                            parent_node = new_node
-                        else:
-                            parent_node = node_map[current_path]
+                        # Deserialize message
+                        msg = reader.deserialize(rawdata, conn.msgtype)
+                        
+                        # Extract field value using same logic as TUI
+                        val, valid = _get_field_value(msg, plot_field)
+                        
+                        if valid and isinstance(val, (int, float)):
+                            plot_data_x.append(rel_time)
+                            plot_data_y.append(float(val))
+                
+                if not plot_data_x:
+                    out.error(
+                        f"No numeric data found for field '{plot_field}'",
+                        details="The field may not exist or contains non-numeric values"
+                    )
+                    raise typer.Exit(1)
+                
+                # Render plot with 16:9 aspect ratio
+                plt.clear_figure()
+                plt.plotsize(width=80, height=25)  # 16:9 ratio (80/25 ≈ 3.2, accounts for terminal char aspect)
+                plt.plot(plot_data_x, plot_data_y, marker='braille')
+                plt.title(f"{plot_topic}.{plot_field}")
+                plt.xlabel("Time (s)")
+                plt.ylabel(plot_field)
+                plt.theme('pro')
+                
+                # Statistics
+                out.newline()
+                out.key_value({
+                    "Topic": plot_topic,
+                    "Field": plot_field,
+                    "Points": len(plot_data_y),
+                    "Min": f"{min(plot_data_y):.4f}",
+                    "Max": f"{max(plot_data_y):.4f}",
+                    "Mean": f"{sum(plot_data_y)/len(plot_data_y):.4f}",
+                }, title="Plot Statistics")
+                out.newline()
+                
+                plt.show()
+                
+            except typer.Exit:
+                raise  # Re-raise typer.Exit to avoid being caught
+            except ImportError as e:
+                if 'plotext' in str(e):
+                    out.error("plotext is not installed", details="Install with: pip install plotext")
+                else:
+                    out.error(f"Missing dependency: {e}")
+                raise typer.Exit(1)
+            except Exception as e:
+                out.error(f"Error plotting data: {str(e)}")
+                logger.error(f"Plot error: {e}")
+                raise typer.Exit(1)
             
-            out.print(root)
             raise typer.Exit(0)
-            
+
         if interactive:
             from ..tui.inspect_app import InspectApp
             app = InspectApp(
                 bag_path=str(bag_path), 
                 bag_info=bag_info, 
                 theme=out.theme,
-                initial_topic=topic
+                initial_topic=plot_topic,  # Pre-select topic from --plot
+                initial_field=plot_field   # Pre-select field from --plot
             )
             app.run()
             raise typer.Exit(0)

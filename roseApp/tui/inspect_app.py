@@ -511,6 +511,7 @@ class InspectApp(App):
         bag_info: BagInfo,
         theme: ThemeColors,
         initial_topic: Optional[str] = None,
+        initial_field: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -520,6 +521,7 @@ class InspectApp(App):
         self.bag_info = bag_info
         self.rose_theme = theme
         self.initial_topic = initial_topic
+        self.initial_field = initial_field
         self.topics = sorted(bag_info.topics, key=lambda t: t.name)
         self.current_topic: Optional[TopicInfo] = None
         self.reader = AnyReader([Path(bag_path)])
@@ -759,9 +761,15 @@ class InspectApp(App):
             # Find exact match
             match = next((t for t in self.topics if t.name == self.initial_topic), None)
             if match:
-                self.select_topic(match)
+                # Pass initial_field if provided to pre-select plot field
+                self.select_topic(match, field_filter=self.initial_field)
                 # Auto focus tree for immediate traversal
                 self.query_one("#data-tree").focus()
+                # Switch to Plot tab if field is specified
+                if self.initial_field:
+                    try:
+                        self.query_one(TabbedContent).active = "plot-tab"
+                    except: pass
             else:
                 self.notify(f"Topic '{self.initial_topic}' not found.", severity="error")
 

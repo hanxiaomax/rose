@@ -112,56 +112,66 @@ def config(ctx: typer.Context):
     Edit Rose configuration interactively.
     
     Opens inline TUI for editing configuration.
-    Use Tab to switch sections, Space to toggle, ←→ to adjust values.
+    Use Tab to switch sections, Space to toggle, arrows to adjust values.
     """
     out = get_output()
     
-    # Get or create config file
-    config_path = _get_config_path()
+    # Load configuration using core config system (reads real YAML)
+    from ..core.config import RoseConfig
     
-    if not _ensure_config_exists(config_path):
-        out.error("Could not find or create configuration file")
-        raise typer.Exit(1)
+    loaded_config = RoseConfig.load()
+    config_path = getattr(loaded_config, '_loaded_config_path', None)
     
-    # Load current config
-    config_data = _load_config(config_path)
+    # If no config found, create one
+    if config_path is None:
+        config_path = _get_config_path()
+        if not _ensure_config_exists(config_path):
+            out.error("Could not find or create configuration file")
+            raise typer.Exit(1)
+        # Reload after creating
+        loaded_config = RoseConfig.load(config_path)
     
-    # Fill defaults
-    defaults = {
-        "parallel_workers": 4,
-        "memory_limit_mb": 512,
-        "compression_default": "none",
-        "verbose_default": False,
-        "build_index_default": False,
-        "log_level": "INFO",
-        "log_to_file": True,
-        "theme_file": "rose.theme.default.yaml",
-        "enable_colors": True,
-        "output_directory": "output",
-    }
+    # Convert loaded config to dict for TUI
+    # Include all fields from the config object
+    config_data = {}
+    for field_name in loaded_config.__fields__.keys():
+        value = getattr(loaded_config, field_name, None)
+        # Convert enums to their string values
+        if hasattr(value, 'value'):
+            value = value.value
+        # Convert Path to string
+        elif isinstance(value, Path):
+            value = str(value)
+        config_data[field_name] = value
     
-    for key, default in defaults.items():
+    # Also load raw YAML to preserve any extra user-defined fields
+    raw_yaml = _load_config(config_path)
+    for key, value in raw_yaml.items():
         if key not in config_data:
-            config_data[key] = default
+            config_data[key] = value
     
     # Get available themes
     themes = _find_themes()
     
+    # Show active config file
+    out.section("Configuration")
+    out.key_value({"Active config": out.format_path(str(config_path))})
+    out.newline()
+    
     # Run TUI
     from ..tui.config_app import run_config_app
-    
-    steps = StepManager()
-    steps.section("Configuration")
-    steps.add_item("edit", f"Editing: {out.format_path(config_path)}")
     
     result = run_config_app(config_data, themes)
     
     if result:
-        # Merge with defaults for any missing keys
-        final_config = {**defaults, **result}
+        # Merge result with any extra fields from raw YAML
+        final_config = {**raw_yaml}
+        for key, value in result.items():
+            final_config[key] = value
         _save_config(config_path, final_config)
-        steps.complete_item("edit", f"Saved to {out.format_path(config_path)}")
         out.newline()
-        out.success(f"Configuration updated successfully")
+        out.success(f"Configuration saved to {out.format_path(str(config_path))}")
     else:
-        steps.complete_item("edit", "Configuration unchanged", status="skip")
+        out.newline()
+        out.info("Configuration unchanged")
+
