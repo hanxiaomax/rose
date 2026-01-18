@@ -1,5 +1,5 @@
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, Container
+from textual.containers import Horizontal, Vertical, Container, VerticalScroll
 try:
     from textual_plotext import PlotextPlot
     PLOTEXT_AVAILABLE = True
@@ -17,7 +17,7 @@ except ImportError:
 
 from textual.widgets import (
     Header, Footer, Input, Label, Static, Button, ListView, ListItem,
-    Tree, TabbedContent, TabPane
+    Tree, TabbedContent, TabPane, Markdown
 )
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -442,6 +442,11 @@ class InspectApp(App):
         width: auto;
         min-width: 20;
     }
+
+    #help-scroll {
+        height: 100%;
+        width: 100%;
+    }
     """
 
     BINDINGS = [
@@ -583,6 +588,10 @@ class InspectApp(App):
                         yield PlotextPlot(id="plot-graph")
                     else:
                         yield Static("\n[bold red]Dependency Missing[/]\n\nPlease install 'textual-plotext' to view plots.\n\nRun:\npip install textual-plotext", id="plot-graph", classes="error-msg")
+
+            with TabPane("Help", id="help-tab"):
+                with VerticalScroll(id="help-scroll"):
+                    yield Markdown(id="help-markdown")
 
         with Vertical(id="bottom-bar"):
             # Row 1: Current Time/Frame Info
@@ -739,6 +748,22 @@ class InspectApp(App):
         else:
             plot_label.update("No numeric data found for field.")
 
+    def load_help_content(self) -> None:
+        """Load help documentation from markdown file."""
+        try:
+            # Locate help file relative to this file: roseApp/tui/manual/inspect_help.md
+            # inspect_app.py is in roseApp/tui
+            tui_root = Path(__file__).parent
+            help_path = tui_root / "manual" / "inspect_help.md"
+            
+            if help_path.exists():
+                content = help_path.read_text(encoding="utf-8")
+                self.query_one("#help-markdown", Markdown).update(content)
+            else:
+                self.query_one("#help-markdown", Markdown).update("# Help\n\nDocumentation file not found.")
+        except Exception as e:
+             self.query_one("#help-markdown", Markdown).update(f"# Error\n\nCould not load help: {e}")
+
     def on_mount(self) -> None:
         """Apply theme colors to UI elements dynamically."""
         try:
@@ -755,6 +780,9 @@ class InspectApp(App):
 
         except Exception as e:
             logger.debug("Could not apply theme styles: %s", e)
+
+        # Load Help Content
+        self.load_help_content()
 
         # Handle Initial Topic Selection
         if self.initial_topic:
