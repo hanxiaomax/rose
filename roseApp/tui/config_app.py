@@ -94,7 +94,8 @@ class SettingRow(VerticalGroup):
     
     def _format_value(self) -> str:
         if self.setting_type == "toggle":
-            return "[ON]" if self.current_value else "[OFF]"
+            # Use escaped brackets or ASCII symbols to avoid Rich markup interpretation
+            return "ON" if self.current_value else "OFF"
         return str(self.current_value)
     
     def _update_modified_state(self) -> None:
@@ -129,6 +130,11 @@ class SettingsPanel(Vertical):
     SettingsPanel {
         height: auto;
         padding: 1;
+        border: heavy transparent;
+    }
+    
+    SettingsPanel.-dirty {
+        border: heavy $warning;
     }
     """
     
@@ -174,6 +180,10 @@ class SettingsPanel(Vertical):
     
     def get_values(self) -> Dict[str, Any]:
         return {s.key: s.current_value for s in self._settings}
+    
+    def has_modifications(self) -> bool:
+        """Check if any setting has been modified from its original value."""
+        return any(s.current_value != s.original_value for s in self._settings)
 
 
 class AboutPanel(Vertical):
@@ -444,19 +454,6 @@ class ConfigApp(App):
         color: $primary;
     }
     
-    #modified-pill {
-        display: none;
-        margin-left: 2;
-        padding: 0 1;
-        background: $warning;
-        color: $surface;
-        text-style: bold;
-    }
-    
-    #modified-pill.-visible {
-        display: block;
-    }
-    
     #hint {
         text-align: center;
         color: $text-muted;
@@ -470,6 +467,27 @@ class ConfigApp(App):
     TabPane {
         padding: 0;
     }
+    
+    #status-bar {
+        height: 1;
+        width: 100%;
+        background: $surface-darken-1;
+        padding: 0 2;
+        margin-bottom: 1;
+    }
+    
+    #status-bar Horizontal {
+        height: 1;
+        width: 100%;
+    }
+    
+    #status-path {
+        color: $text-muted;
+    }
+    
+    Footer {
+        dock: bottom;
+    }
     """
     
     BINDINGS = [
@@ -482,10 +500,11 @@ class ConfigApp(App):
         Binding("q", "cancel", "Quit", show=False),
     ]
     
-    def __init__(self, config_data: Dict[str, Any], themes: List[str]):
+    def __init__(self, config_data: Dict[str, Any], themes: List[str], config_path: str = None):
         super().__init__()
         self.config_data = config_data
         self.themes = themes
+        self.config_path = config_path or "(not saved yet)"
         self.result = None
         self._settings_panel: Optional[SettingsPanel] = None
         self._dirty = False  # Initial state
@@ -495,13 +514,16 @@ class ConfigApp(App):
     _dirty: reactive[bool] = reactive(False)
 
     def watch__dirty(self, dirty: bool) -> None:
-        """Update modified pill visibility when dirty state changes."""
+        """Update status bar appearance when dirty state changes."""
         try:
-            pill = self.query_one("#modified-pill", Label)
+            settings_panel = self.query_one("SettingsPanel")
+            
             if dirty:
-                pill.add_class("-visible")
+                settings_panel.add_class("-dirty")
+                settings_panel.border_title = "MODIFIED"
             else:
-                pill.remove_class("-visible")
+                settings_panel.remove_class("-dirty")
+                settings_panel.border_title = None
         except Exception:
             pass
     
@@ -509,7 +531,6 @@ class ConfigApp(App):
         from textual.containers import Horizontal
         with Horizontal(id="header-row"):
             yield Label("Rose Configuration", id="title")
-            yield Label("MODIFIED", id="modified-pill")
         yield Label("Tab Switch  Space Toggle  Enter Edit/Save  Esc Cancel", id="hint")
         
         # Build settings
@@ -525,7 +546,7 @@ class ConfigApp(App):
                       self.config_data.get("log_level", "INFO"), "select", 
                       ["DEBUG", "INFO", "WARNING", "ERROR"]),
             SettingRow("theme_file", "Theme File", 
-                      self.config_data.get("theme_file", "rose.theme.default.yaml"), "select", 
+                      self.config_data.get("theme_file", "rose.theme.claude.yaml"), "select", 
                       self.themes),
             SettingRow("output_directory", "Output Directory", 
                       self.config_data.get("output_directory", "output"), "path"),
@@ -547,6 +568,11 @@ class ConfigApp(App):
             with TabPane("About", id="about"):
                 yield AboutPanel()
         
+        # Status bar above footer
+        with Container(id="status-bar"):
+            with Horizontal():
+                yield Label(f"Config: {self.config_path}", id="status-path")
+        
         yield Footer()
     
     def action_cursor_up(self) -> None:
@@ -561,10 +587,15 @@ class ConfigApp(App):
         """Toggle current setting if it's a toggle type."""
         if self._settings_panel:
             if self._settings_panel.toggle_current():
-                self._dirty = True
+                self._update_dirty_state()
             else:
                 # Not a toggle, show edit dialog
                 self._edit_current()
+    
+    def _update_dirty_state(self) -> None:
+        """Update dirty state based on actual modifications."""
+        if self._settings_panel:
+            self._dirty = self._settings_panel.has_modifications()
     
     def action_edit(self) -> None:
         """Edit current setting."""
@@ -588,7 +619,7 @@ class ConfigApp(App):
             self._show_input_dialog(setting)
         elif setting.setting_type == "toggle":
             if setting.toggle():
-                self._dirty = True
+                self._update_dirty_state()
     
     def _show_input_dialog(self, setting: SettingRow) -> None:
         """Show text/numeric input dialog."""
@@ -601,9 +632,8 @@ class ConfigApp(App):
                     except ValueError:
                         return # Ignore invalid input
                 
-                if value != setting.current_value:
-                    self._dirty = True
-                    setting.set_value(value)
+                setting.set_value(value)
+                self._update_dirty_state()
         
         self.push_screen(
             InputDialog(
@@ -616,8 +646,7 @@ class ConfigApp(App):
     def _show_select_dialog(self, setting: SettingRow) -> None:
         """Show select dialog for setting."""
         def handle_result(result: Optional[str]) -> None:
-            if result is not None and result != str(setting.current_value):
-                self._dirty = True
+            if result is not None:
                 # Convert to int if needed
                 value = result
                 if setting.key in ["parallel_workers", "memory_limit_mb"]:
@@ -626,6 +655,7 @@ class ConfigApp(App):
                     except ValueError:
                         pass
                 setting.set_value(value)
+                self._update_dirty_state()
         
         self.push_screen(
             SelectDialog(
@@ -639,9 +669,9 @@ class ConfigApp(App):
     def _show_path_dialog(self, setting: SettingRow) -> None:
         """Show path input dialog."""
         def handle_result(result: Optional[str]) -> None:
-            if result and result != setting.current_value:
-                self._dirty = True
+            if result:
                 setting.set_value(result)
+                self._update_dirty_state()
         
         self.push_screen(
             PathDialog(
@@ -671,8 +701,8 @@ class ConfigApp(App):
             self.exit(None)
 
 
-def run_config_app(config_data: Dict[str, Any], themes: List[str]) -> Optional[Dict[str, Any]]:
+def run_config_app(config_data: Dict[str, Any], themes: List[str], config_path: str = None) -> Optional[Dict[str, Any]]:
     """Run the config app and return new configuration or None if cancelled."""
-    app = ConfigApp(config_data, themes)
+    app = ConfigApp(config_data, themes, config_path)
     app.run(inline=True)
     return app.result

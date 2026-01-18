@@ -28,19 +28,7 @@ def _find_themes() -> List[str]:
 
 
 def _get_config_path() -> Path:
-    """Get or create config file path."""
-    # Search in priority order
-    search_paths = [
-        Path("rose.config.yaml"),
-        Path(__file__).parent.parent / "config" / "rose.config.yaml",
-        Path.home() / ".rose" / "rose.config.yaml",
-    ]
-    
-    for path in search_paths:
-        if path.exists():
-            return path
-    
-    # Default to user config
+    """Get the global config file path (~/.rose/rose.config.yaml)."""
     return Path.home() / ".rose" / "rose.config.yaml"
 
 
@@ -112,24 +100,26 @@ def config(ctx: typer.Context):
     Edit Rose configuration interactively.
     
     Opens inline TUI for editing configuration.
-    Use Tab to switch sections, Space to toggle, arrows to adjust values.
+    Configuration is stored in ~/.rose/rose.config.yaml
     """
     out = get_output()
     
-    # Load configuration using core config system (reads real YAML)
-    from ..core.config import RoseConfig
+    # Global config path
+    config_path = _get_config_path()
+    config_created = False
     
-    loaded_config = RoseConfig.load()
-    config_path = getattr(loaded_config, '_loaded_config_path', None)
-    
-    # If no config found, create one
-    if config_path is None:
-        config_path = _get_config_path()
-        if not _ensure_config_exists(config_path):
-            out.error("Could not find or create configuration file")
+    # Ensure config exists
+    if not config_path.exists():
+        if _ensure_config_exists(config_path):
+            config_created = True
+            out.success(f"Created new config: {config_path}")
+        else:
+            out.error("Could not create configuration file")
             raise typer.Exit(1)
-        # Reload after creating
-        loaded_config = RoseConfig.load(config_path)
+    
+    # Load configuration using core config system
+    from ..core.config import RoseConfig
+    loaded_config = RoseConfig.load(config_path)
     
     # Convert loaded config to dict for TUI
     # Include all fields from the config object
@@ -161,7 +151,7 @@ def config(ctx: typer.Context):
     # Run TUI
     from ..tui.config_app import run_config_app
     
-    result = run_config_app(config_data, themes)
+    result = run_config_app(config_data, themes, config_path=str(config_path))
     
     if result:
         # Merge result with any extra fields from raw YAML

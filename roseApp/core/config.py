@@ -94,7 +94,7 @@ class RoseConfig(BaseSettings):
     
     # ===== UI Settings =====
     theme_file: str = Field(
-        default="rose.theme.default.yaml",
+        default="rose.theme.claude.yaml",
         description="Path to theme YAML file (name in config dir or absolute path)"
     )
     
@@ -221,7 +221,7 @@ class RoseConfig(BaseSettings):
             path: Path to save config (default: rose.config.yaml)
         """
         if path is None:
-            path = Path("rose.config.yaml")
+            path = Path.home() / ".rose" / "rose.config.yaml"
         
         # Ensure parent directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -267,17 +267,7 @@ class RoseConfig(BaseSettings):
         
         # Determine config file path
         if path is None:
-            # Search in priority order
-            search_paths = [
-                Path("rose.config.yaml"),  # Current directory
-                Path(__file__).parent.parent / "config" / "rose.config.yaml", # App config path
-                Path.home() / ".rose" / "rose.config.yaml",  # User config
-            ]
-            
-            for search_path in search_paths:
-                if search_path.exists():
-                    path = search_path
-                    break
+            path = Path.home() / ".rose" / "rose.config.yaml"
         
         # Try to load from file if found
         if path and path.exists():

@@ -276,7 +276,11 @@ Rose supports compression of bag files to significantly reduce file sizes. This 
 
 ### Configuration
 
-Rose uses a unified configuration system with automatic validation. The easiest way to configure Rose is via the interactive TUI:
+Rose uses a unified configuration system with automatic validation It loads configuration from: `~/.rose/rose.config.yaml`
+
+-   The `~/.rose/` directory is the standard location for global configuration.
+-   Create this directory if it doesn't exist to customize settings.
+
 
 ![Configuration TUI](configuration.png)
 
@@ -285,33 +289,9 @@ Rose uses a unified configuration system with automatic validation. The easiest 
 rose config
 ```
 
-This interface lets you modify settings, toggle features, and switch themes with immediate visual feedback. Changes are validated and saved to `rose.config.yaml`.
+This interface lets you modify settings, toggle features, and switch themes with immediate visual feedback. Unsaved changes are clearly highlighted with visual indicators, ensuring you know exactly what has been modified before saving. Changes are validated and saved to `rose.config.yaml`.
 
-**Example Configuration:**
-```yaml
-# Performance Settings
-parallel_workers: 4
-memory_limit_mb: 512
 
-# Feature Toggles
-enable_cache: true
-
-# Default Behavior
-compression_default: none
-verbose_default: false
-build_index_default: false
-
-# Logging Settings
-log_level: INFO
-log_to_file: true
-
-# UI Settings
-theme_file: rose.theme.default.yaml
-enable_colors: true
-
-# Directory Settings
-output_directory: output
-```
 
 ## Theme System
 
